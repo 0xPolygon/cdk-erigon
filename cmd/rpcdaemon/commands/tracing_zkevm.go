@@ -21,23 +21,12 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	"github.com/ledgerwatch/erigon/eth/tracers"
 	"github.com/ledgerwatch/erigon/rpc"
-	"github.com/ledgerwatch/erigon/turbo/adapter/ethapi"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/transactions"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 
-// TraceBlockByNumber implements debug_traceBlockByNumber. Returns Geth style block traces.
-func (api *PrivateDebugAPIImpl) TraceBlockByNumber(ctx context.Context, blockNum rpc.BlockNumber, config *tracers.TraceConfig, stream *jsoniter.Stream) error {
-	return api.traceBlock(ctx, rpc.BlockNumberOrHashWithNumber(blockNum), config, stream)
-}
-
-// TraceBlockByHash implements debug_traceBlockByHash. Returns Geth style block traces.
-func (api *PrivateDebugAPIImpl) TraceBlockByHash(ctx context.Context, hash common.Hash, config *tracers.TraceConfig, stream *jsoniter.Stream) error {
-	return api.traceBlock(ctx, rpc.BlockNumberOrHashWithHash(hash, true), config, stream)
-}
-
-func (api *PrivateDebugAPIImpl) traceBlock_deprecated(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, config *tracers.TraceConfig, stream *jsoniter.Stream) error {
+func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, config *tracers.TraceConfig, stream *jsoniter.Stream) error {
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
 		stream.WriteNil()
@@ -176,156 +165,7 @@ func (api *PrivateDebugAPIImpl) traceBlock_deprecated(ctx context.Context, block
 	return nil
 }
 
-// TraceTransaction implements debug_traceTransaction. Returns Geth style transaction traces.
-func (api *PrivateDebugAPIImpl) TraceTransaction(ctx context.Context, hash common.Hash, config *tracers.TraceConfig, stream *jsoniter.Stream) error {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-	defer tx.Rollback()
-	chainConfig, err := api.chainConfig(tx)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-	// Retrieve the transaction and assemble its EVM context
-	blockNum, ok, err := api.txnLookup(ctx, tx, hash)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-	if !ok {
-		stream.WriteNil()
-		return nil
-	}
-
-	// check pruning to ensure we have history at this block level
-	err = api.BaseAPI.checkPruneHistory(tx, blockNum)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-
-	// Private API returns 0 if transaction is not found.
-	if blockNum == 0 && chainConfig.Bor != nil {
-		blockNumPtr, err := rawdb.ReadBorTxLookupEntry(tx, hash)
-		if err != nil {
-			stream.WriteNil()
-			return err
-		}
-		if blockNumPtr == nil {
-			stream.WriteNil()
-			return nil
-		}
-		blockNum = *blockNumPtr
-	}
-	block, err := api.blockByNumberWithSenders(tx, blockNum)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-	if block == nil {
-		stream.WriteNil()
-		return nil
-	}
-	var txnIndex uint64
-	var txn types.Transaction
-	for i, transaction := range block.Transactions() {
-		if transaction.Hash() == hash {
-			txnIndex = uint64(i)
-			txn = transaction
-			break
-		}
-	}
-	if txn == nil {
-		var borTx types.Transaction
-		borTx, _, _, _, err = rawdb.ReadBorTransaction(tx, hash)
-		if err != nil {
-			stream.WriteNil()
-			return err
-		}
-
-		if borTx != nil {
-			stream.WriteNil()
-			return nil
-		}
-		stream.WriteNil()
-		return fmt.Errorf("transaction %#x not found", hash)
-	}
-	engine := api.engine()
-
-	msg, blockCtx, txCtx, ibs, _, err := transactions.ComputeTxEnv_ZkEvm(ctx, engine, block, chainConfig, api._blockReader, tx, int(txnIndex), api.historyV3(tx))
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
-	// Trace the transaction and return
-	return transactions.TraceTx(ctx, msg, blockCtx, txCtx, ibs, config, chainConfig, stream, api.evmCallTimeout)
-}
-
-func (api *PrivateDebugAPIImpl) TraceCall(ctx context.Context, args ethapi.CallArgs, blockNrOrHash rpc.BlockNumberOrHash, config *tracers.TraceConfig, stream *jsoniter.Stream) error {
-	dbtx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return fmt.Errorf("create ro transaction: %v", err)
-	}
-	defer dbtx.Rollback()
-
-	chainConfig, err := api.chainConfig(dbtx)
-	if err != nil {
-		return fmt.Errorf("read chain config: %v", err)
-	}
-	engine := api.engine()
-
-	blockNumber, hash, _, err := rpchelper.GetBlockNumber(blockNrOrHash, dbtx, api.filters)
-	if err != nil {
-		return fmt.Errorf("get block number: %v", err)
-	}
-
-	err = api.BaseAPI.checkPruneHistory(dbtx, blockNumber)
-	if err != nil {
-		return err
-	}
-
-	stateReader, err := rpchelper.CreateStateReader(ctx, dbtx, blockNrOrHash, 0, api.filters, api.stateCache, api.historyV3(dbtx), chainConfig.ChainName)
-	if err != nil {
-		return fmt.Errorf("create state reader: %v", err)
-	}
-	header, err := api._blockReader.Header(context.Background(), dbtx, hash, blockNumber)
-	if err != nil {
-		return fmt.Errorf("could not fetch header %d(%x): %v", blockNumber, hash, err)
-	}
-	if header == nil {
-		return fmt.Errorf("block %d(%x) not found", blockNumber, hash)
-	}
-	ibs := state.New(stateReader)
-
-	if config != nil && config.StateOverrides != nil {
-		if err := config.StateOverrides.Override(ibs); err != nil {
-			return fmt.Errorf("override state: %v", err)
-		}
-	}
-
-	var baseFee *uint256.Int
-	if header != nil && header.BaseFee != nil {
-		var overflow bool
-		baseFee, overflow = uint256.FromBig(header.BaseFee)
-		if overflow {
-			return fmt.Errorf("header.BaseFee uint256 overflow")
-		}
-	}
-	msg, err := args.ToMessage(api.GasCap, baseFee)
-	if err != nil {
-		return fmt.Errorf("convert args to msg: %v", err)
-	}
-
-	blockCtx := transactions.NewEVMBlockContext(engine, header, blockNrOrHash.RequireCanonical, dbtx, api._blockReader)
-	txCtx := core.NewEVMTxContext(msg)
-	// Trace the transaction and return
-	return transactions.TraceTx(ctx, msg, blockCtx, txCtx, ibs, config, chainConfig, stream, api.evmCallTimeout)
-}
-
-func (api *PrivateDebugAPIImpl) TraceCallMany_deprecated(ctx context.Context, bundles []Bundle, simulateContext StateContext, config *tracers.TraceConfig, stream *jsoniter.Stream) error {
+func (api *PrivateDebugAPIImpl) TraceCallMany(ctx context.Context, bundles []Bundle, simulateContext StateContext, config *tracers.TraceConfig, stream *jsoniter.Stream) error {
 	var (
 		hash               common.Hash
 		replayTransactions types.Transactions
@@ -444,31 +284,25 @@ func (api *PrivateDebugAPIImpl) TraceCallMany_deprecated(ctx context.Context, bu
 	}
 
 	// Get a new instance of the EVM
-	evm = vm.NewEVM(blockCtx, txCtx, st, chainConfig, vm.Config{Debug: false})
-	signer := types.MakeSigner(chainConfig, blockNum)
-	rules := chainConfig.Rules(blockNum, blockCtx.Time)
+
+	hermezReader := hermez_db.NewHermezDbReader(tx)
 
 	// Setup the gas pool (also for unmetered requests)
 	// and apply the message.
 	gp := new(core.GasPool).AddGas(math.MaxUint64)
 	for idx, txn := range replayTransactions {
-		st.Prepare(txn.Hash(), block.Hash(), idx)
-		msg, err := txn.AsMessage(*signer, block.BaseFee(), rules)
+		//evm = vm.NewEVM(blockCtx, txCtx, evm.IntraBlockState(), chainConfig, vm.Config{Debug: false})
+		txHash := txn.Hash()
+		evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(chainConfig, &vm.Config{}, &blockCtx, hermezReader, evm.IntraBlockState().(*state.IntraBlockState), block, &txHash, idx)
 		if err != nil {
 			stream.WriteNil()
 			return err
 		}
 
-		txCtx = core.NewEVMTxContext(msg)
-		evm = vm.NewEVM(blockCtx, txCtx, evm.IntraBlockState(), chainConfig, vm.Config{Debug: false})
-		// Execute the transaction message
-		_, err = core.ApplyMessage(evm, msg, gp, true /* refunds */, false /* gasBailout */)
-		if err != nil {
+		if _, _, err := core.ApplyTransaction_zkevm(chainConfig, api.engine(), evm, gp, st, state.NewNoopWriter(), parent, txn, nil, effectiveGasPricePercentage); err != nil {
 			stream.WriteNil()
 			return err
 		}
-		_ = st.FinalizeTx(rules, state.NewNoopWriter())
-
 	}
 
 	// after replaying the txns, we want to overload the state
@@ -504,7 +338,7 @@ func (api *PrivateDebugAPIImpl) TraceCallMany_deprecated(ctx context.Context, bu
 				return err
 			}
 
-			_ = ibs.FinalizeTx(rules, state.NewNoopWriter())
+			_ = ibs.FinalizeTx(evm.ChainRules(), state.NewNoopWriter())
 
 			if txn_index < len(bundle.Transactions)-1 {
 				stream.WriteMore()
@@ -520,9 +354,4 @@ func (api *PrivateDebugAPIImpl) TraceCallMany_deprecated(ctx context.Context, bu
 	}
 	stream.WriteArrayEnd()
 	return nil
-}
-
-func newBoolPtr(bb bool) *bool {
-	b := bb
-	return &b
 }

@@ -22,55 +22,10 @@ import (
 	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/turbo/adapter/ethapi"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 )
 
-type BlockOverrides struct {
-	BlockNumber *hexutil.Uint64
-	Coinbase    *common.Address
-	Timestamp   *hexutil.Uint64
-	GasLimit    *hexutil.Uint
-	Difficulty  *hexutil.Uint
-	BaseFee     *uint256.Int
-	BlockHash   *map[uint64]common.Hash
-}
-
-type Bundle struct {
-	Transactions  []ethapi.CallArgs
-	BlockOverride BlockOverrides
-}
-
-type StateContext struct {
-	BlockNumber      rpc.BlockNumberOrHash
-	TransactionIndex *int
-}
-
-func blockHeaderOverride(blockCtx *evmtypes.BlockContext, blockOverride BlockOverrides, overrideBlockHash map[uint64]common.Hash) {
-	if blockOverride.BlockNumber != nil {
-		blockCtx.BlockNumber = uint64(*blockOverride.BlockNumber)
-	}
-	if blockOverride.BaseFee != nil {
-		blockCtx.BaseFee = blockOverride.BaseFee
-	}
-	if blockOverride.Coinbase != nil {
-		blockCtx.Coinbase = *blockOverride.Coinbase
-	}
-	if blockOverride.Difficulty != nil {
-		blockCtx.Difficulty = big.NewInt(int64(*blockOverride.Difficulty))
-	}
-	if blockOverride.Timestamp != nil {
-		blockCtx.Time = uint64(*blockOverride.Timestamp)
-	}
-	if blockOverride.GasLimit != nil {
-		blockCtx.GasLimit = uint64(*blockOverride.GasLimit)
-	}
-	if blockOverride.BlockHash != nil {
-		for blockNum, hash := range *blockOverride.BlockHash {
-			overrideBlockHash[blockNum] = hash
-		}
-	}
-}
-
-func (api *APIImpl) CallMany_deprecated(ctx context.Context, bundles []Bundle, simulateContext StateContext, stateOverride *ethapi.StateOverrides, timeoutMilliSecondsPtr *int64) ([][]map[string]interface{}, error) {
+func (api *APIImpl) CallMany(ctx context.Context, bundles []Bundle, simulateContext StateContext, stateOverride *ethapi.StateOverrides, timeoutMilliSecondsPtr *int64) ([][]map[string]interface{}, error) {
 	var (
 		hash               common.Hash
 		replayTransactions types.Transactions
@@ -203,6 +158,8 @@ func (api *APIImpl) CallMany_deprecated(ctx context.Context, bundles []Bundle, s
 		evm.Cancel()
 	}()
 
+	hermezReader := hermez_db.NewHermezDbReader(tx)
+
 	// Setup the gas pool (also for unmetered requests)
 	// and apply the message.
 	gp := new(core.GasPool).AddGas(math.MaxUint64)
@@ -212,7 +169,11 @@ func (api *APIImpl) CallMany_deprecated(ctx context.Context, bundles []Bundle, s
 		if err != nil {
 			return nil, err
 		}
-
+		effectiveGasPricePercentage, err := hermezReader.GetEffectiveGasPricePercentage(txn.Hash())
+		if err != nil {
+			return nil, err
+		}
+		msg.SetEffectiveGasPricePercentage(effectiveGasPricePercentage)
 		txCtx = core.NewEVMTxContext(msg)
 		evm = vm.NewEVM(blockCtx, txCtx, evm.IntraBlockState(), chainConfig, vm.Config{Debug: false})
 		// Execute the transaction message
