@@ -93,14 +93,15 @@ type TxSlot struct {
 	Nonce          uint64      // Nonce of the transaction
 	DataLen        int         // Length of transaction's data (for calculation of intrinsic gas)
 	DataNonZeroLen int
-	AlAddrCount    int      // Number of addresses in the access list
-	AlStorCount    int      // Number of storage keys in the access list
-	Gas            uint64   // Gas limit of the transaction
-	IDHash         [32]byte // Transaction hash for the purposes of using it as a transaction Id
-	Traced         bool     // Whether transaction needs to be traced throughout transaction pool code and generate debug printing
-	Creation       bool     // Set to true if "To" field of the transaction is not set
-	Type           byte     // Transaction type
-	Size           uint32   // Size of the payload (without the RLP string envelope for typed transactions)
+	AlAddrCount    int            // Number of addresses in the access list
+	AlStorCount    int            // Number of storage keys in the access list
+	Gas            uint64         // Gas limit of the transaction
+	IDHash         [32]byte       // Transaction hash for the purposes of using it as a transaction Id
+	Traced         bool           // Whether transaction needs to be traced throughout transaction pool code and generate debug printing
+	Creation       bool           // Set to true if "To" field of the transaction is not set
+	Type           byte           // Transaction type
+	Size           uint32         // Size of the payload (without the RLP string envelope for typed transactions)
+	To             common.Address // Destination address of the transaction
 
 	// EIP-4844: Shard Blob Transactions
 	BlobFeeCap  uint256.Int // max_fee_per_blob_gas
@@ -108,7 +109,7 @@ type TxSlot struct {
 	Blobs       [][]byte
 	Commitments []gokzg4844.KZGCommitment
 	Proofs      []gokzg4844.KZGProof
-	To          common.Address
+	BlobTo      common.Address
 }
 
 const (
@@ -225,7 +226,7 @@ func (ctx *TxParseContext) ParseTransaction(payload []byte, pos int, slot *TxSlo
 		}
 
 		dataPos, dataLen, err = rlp.List(payload, p)
-		slot.To = common.BytesToAddress(payload[dataPos : dataPos+dataLen])
+		slot.BlobTo = common.BytesToAddress(payload[dataPos : dataPos+dataLen])
 		if err != nil {
 			return 0, fmt.Errorf("%w: blobs len: %s", ErrParseTxn, err) //nolint
 		}
@@ -369,6 +370,7 @@ func (ctx *TxParseContext) parseTransactionBody(payload []byte, pos, p0 int, slo
 	}
 	// Next follows the destination address (if present)
 	dataPos, dataLen, err := rlp.String(payload, p)
+	slot.To = common.BytesToAddress(payload[dataPos : dataPos+dataLen])
 	if err != nil {
 		return 0, fmt.Errorf("%w: to len: %s", ErrParseTxn, err) //nolint
 	}
