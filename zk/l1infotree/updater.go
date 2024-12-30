@@ -1,20 +1,21 @@
 package l1infotree
 
 import (
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	zkTypes "github.com/ledgerwatch/erigon/zk/types"
-	"github.com/ledgerwatch/erigon/core/types"
-	"time"
-	"github.com/ledgerwatch/erigon/zk/contracts"
-	"github.com/ledgerwatch/log/v3"
+	"errors"
 	"fmt"
 	"sort"
-	"github.com/ledgerwatch/erigon-lib/common"
+	"time"
+
 	"github.com/iden3/go-iden3-crypto/keccak256"
-	"errors"
+	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/zk/contracts"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	zkTypes "github.com/ledgerwatch/erigon/zk/types"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type Syncer interface {
@@ -73,7 +74,7 @@ func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
 
 	u.progress = progress
 
-	latestUpdate, _, err := hermezDb.GetLatestL1InfoTreeUpdate()
+	latestUpdate, err := hermezDb.GetLatestL1InfoTreeUpdate()
 	if err != nil {
 		return err
 	}
@@ -137,9 +138,9 @@ LOOP:
 	defer ticker.Stop()
 	processed := 0
 
-	tree, err := initialiseL1InfoTree(hermezDb)
+	tree, err := InitialiseL1InfoTree(hermezDb)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("InitialiseL1InfoTree: %w", err)
 	}
 
 	// process the logs in chunks
@@ -152,7 +153,7 @@ LOOP:
 
 		headersMap, err := u.syncer.L1QueryHeaders(chunk)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("L1QueryHeaders: %w", err)
 		}
 
 		for _, l := range chunk {
@@ -162,13 +163,13 @@ LOOP:
 				if header == nil {
 					header, err = u.syncer.GetHeader(l.BlockNumber)
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("GetHeader: %w", err)
 					}
 				}
 
 				tmpUpdate, err := createL1InfoTreeUpdate(l, header)
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("createL1InfoTreeUpdate: %w", err)
 				}
 
 				leafHash := HashLeafData(tmpUpdate.GER, tmpUpdate.ParentHash, tmpUpdate.Timestamp)
@@ -184,7 +185,7 @@ LOOP:
 
 				newRoot, err := tree.AddLeaf(uint32(u.latestUpdate.Index), leafHash)
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("tree.AddLeaf: %w", err)
 				}
 				log.Debug("New L1 Index",
 					"index", u.latestUpdate.Index,
@@ -196,13 +197,13 @@ LOOP:
 				)
 
 				if err = handleL1InfoTreeUpdate(hermezDb, u.latestUpdate); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("handleL1InfoTreeUpdate: %w", err)
 				}
 				if err = hermezDb.WriteL1InfoTreeLeaf(u.latestUpdate.Index, leafHash); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("WriteL1InfoTreeLeaf: %w", err)
 				}
 				if err = hermezDb.WriteL1InfoTreeRoot(common.BytesToHash(newRoot[:]), u.latestUpdate.Index); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("WriteL1InfoTreeRoot: %w", err)
 				}
 
 				processed++
@@ -217,7 +218,7 @@ LOOP:
 		u.progress = allLogs[len(allLogs)-1].BlockNumber + 1
 	}
 	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("SaveStageProgress: %w", err)
 	}
 
 	return allLogs, nil
@@ -238,10 +239,10 @@ func chunkLogs(slice []types.Log, chunkSize int) [][]types.Log {
 	return chunks
 }
 
-func initialiseL1InfoTree(hermezDb *hermez_db.HermezDb) (*L1InfoTree, error) {
+func InitialiseL1InfoTree(hermezDb *hermez_db.HermezDb) (*L1InfoTree, error) {
 	leaves, err := hermezDb.GetAllL1InfoTreeLeaves()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GetAllL1InfoTreeLeaves: %w", err)
 	}
 
 	allLeaves := make([][32]byte, len(leaves))
@@ -251,7 +252,7 @@ func initialiseL1InfoTree(hermezDb *hermez_db.HermezDb) (*L1InfoTree, error) {
 
 	tree, err := NewL1InfoTree(32, allLeaves)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("NewL1InfoTree: %w", err)
 	}
 
 	return tree, nil
@@ -288,10 +289,10 @@ func handleL1InfoTreeUpdate(
 ) error {
 	var err error
 	if err = hermezDb.WriteL1InfoTreeUpdate(update); err != nil {
-		return err
+		return fmt.Errorf("WriteL1InfoTreeUpdate: %w", err)
 	}
 	if err = hermezDb.WriteL1InfoTreeUpdateToGer(update); err != nil {
-		return err
+		return fmt.Errorf("WriteL1InfoTreeUpdateToGer: %w", err)
 	}
 	return nil
 }

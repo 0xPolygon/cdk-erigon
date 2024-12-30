@@ -44,6 +44,7 @@ type PrivateDebugAPI interface {
 	GetRawHeader(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (hexutility.Bytes, error)
 	GetRawBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (hexutility.Bytes, error)
 	TraceTransactionCounters(ctx context.Context, hash common.Hash, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error
+	TraceBatchByNumber(ctx context.Context, number rpc.BlockNumber, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error
 }
 
 // PrivateDebugAPIImpl is implementation of the PrivateDebugAPI interface based on remote Db access
@@ -375,7 +376,8 @@ func (api *PrivateDebugAPIImpl) GetRawHeader(ctx context.Context, blockNrOrHash 
 		return nil, err
 	}
 	defer tx.Rollback()
-	n, h, _, err := rpchelper.GetBlockNumber(blockNrOrHash, tx, api.filters)
+
+	n, h, _, err := rpchelper.GetBlockNumber_zkevm(blockNrOrHash, tx, api.filters)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +397,7 @@ func (api *PrivateDebugAPIImpl) GetRawBlock(ctx context.Context, blockNrOrHash r
 		return nil, err
 	}
 	defer tx.Rollback()
-	n, h, _, err := rpchelper.GetBlockNumber(blockNrOrHash, tx, api.filters)
+	n, h, _, err := rpchelper.GetBlockNumber_zkevm(blockNrOrHash, tx, api.filters)
 	if err != nil {
 		return nil, err
 	}

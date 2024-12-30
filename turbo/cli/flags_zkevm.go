@@ -3,16 +3,18 @@ package cli
 import (
 	"fmt"
 	"math"
-
+	"strconv"
 	"strings"
-
 	"time"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/turbo/logging"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	utils2 "github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/log/v3"
+
 	"github.com/urfave/cli/v2"
 )
 
@@ -69,10 +71,23 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		panic(fmt.Sprintf("could not parse l2 datastreamer timeout value %s", l2DataStreamTimeoutVal))
 	}
 
+	l2ShortCircuitToVerifiedBatchVal := ctx.Bool(utils.L2ShortCircuitToVerifiedBatchFlag.Name)
+
 	sequencerBlockSealTimeVal := ctx.String(utils.SequencerBlockSealTime.Name)
 	sequencerBlockSealTime, err := time.ParseDuration(sequencerBlockSealTimeVal)
 	if err != nil {
 		panic(fmt.Sprintf("could not parse sequencer block seal time timeout value %s", sequencerBlockSealTimeVal))
+	}
+
+	var sequencerEmptyBlockSealTime time.Duration
+	sequencerEmptyBlockSealTimeVal := ctx.String(utils.SequencerEmptyBlockSealTime.Name)
+	if sequencerEmptyBlockSealTimeVal == "" {
+		sequencerEmptyBlockSealTime = sequencerBlockSealTime
+	} else {
+		sequencerEmptyBlockSealTime, err = time.ParseDuration(sequencerEmptyBlockSealTimeVal)
+		if err != nil {
+			panic(fmt.Sprintf("could not parse sequencer empty block seal time timeout value %s", sequencerEmptyBlockSealTimeVal))
+		}
 	}
 
 	sequencerBatchSealTimeVal := ctx.String(utils.SequencerBatchSealTime.Name)
@@ -112,11 +127,53 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 
 	witnessMemSize := utils.DatasizeFlagValue(ctx, utils.WitnessMemdbSize.Name)
 
+	badBatchStrings := strings.Split(ctx.String(utils.BadBatches.Name), ",")
+	badBatches := make([]uint64, 0)
+	for _, s := range badBatchStrings {
+		if s == "" {
+			// if there are no entries then we can just ignore it and move on
+			continue
+		}
+		// parse the string as uint64
+		val, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("could not parse bad batch number %s", s))
+		}
+		badBatches = append(badBatches, val)
+	}
+
+	// witness cache flags
+	// if dicabled, set limit to 0 and only check for it to be 0 or not
+	witnessCacheEnabled := ctx.Bool(utils.WitnessCacheEnable.Name)
+	witnessCacheLimit := ctx.Uint64(utils.WitnessCacheLimit.Name)
+	if !witnessCacheEnabled {
+		witnessCacheLimit = 0
+	}
+	var witnessInclusion []libcommon.Address
+	for _, s := range strings.Split(ctx.String(utils.WitnessContractInclusion.Name), ",") {
+		if s == "" {
+			// if there are no entries then we can just ignore it and move on
+			continue
+		}
+		witnessInclusion = append(witnessInclusion, libcommon.HexToAddress(s))
+	}
+
+	logLevel, lErr := logging.TryGetLogLevel(ctx.String(logging.LogConsoleVerbosityFlag.Name))
+	if lErr != nil {
+		// try verbosity flag
+		logLevel, lErr = logging.TryGetLogLevel(ctx.String(logging.LogVerbosityFlag.Name))
+		if lErr != nil {
+			logLevel = log.LvlInfo
+		}
+	}
+
 	cfg.Zk = &ethconfig.Zk{
 		L2ChainId:                              ctx.Uint64(utils.L2ChainIdFlag.Name),
 		L2RpcUrl:                               ctx.String(utils.L2RpcUrlFlag.Name),
 		L2DataStreamerUrl:                      ctx.String(utils.L2DataStreamerUrlFlag.Name),
+		L2DataStreamerUseTLS:                   ctx.Bool(utils.L2DataStreamerUseTLSFlag.Name),
 		L2DataStreamerTimeout:                  l2DataStreamTimeout,
+		L2ShortCircuitToVerifiedBatch:          l2ShortCircuitToVerifiedBatchVal,
 		L1SyncStartBlock:                       ctx.Uint64(utils.L1SyncStartBlock.Name),
 		L1SyncStopBatch:                        ctx.Uint64(utils.L1SyncStopBatch.Name),
 		L1ChainId:                              ctx.Uint64(utils.L1ChainIdFlag.Name),
@@ -143,6 +200,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		IncrementTreeAlways:                    ctx.Bool(utils.IncrementTreeAlways.Name),
 		SmtRegenerateInMemory:                  ctx.Bool(utils.SmtRegenerateInMemory.Name),
 		SequencerBlockSealTime:                 sequencerBlockSealTime,
+		SequencerEmptyBlockSealTime:            sequencerEmptyBlockSealTime,
 		SequencerBatchSealTime:                 sequencerBatchSealTime,
 		SequencerBatchVerificationTimeout:      sequencerBatchVerificationTimeout,
 		SequencerBatchVerificationRetries:      ctx.Int(utils.SequencerBatchVerificationRetries.Name),
@@ -184,9 +242,21 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		DataStreamWriteTimeout:                 ctx.Duration(utils.DataStreamWriteTimeout.Name),
 		DataStreamInactivityTimeout:            ctx.Duration(utils.DataStreamInactivityTimeout.Name),
 		VirtualCountersSmtReduction:            ctx.Float64(utils.VirtualCountersSmtReduction.Name),
+		BadBatches:                             badBatches,
+		IgnoreBadBatchesCheck:                  ctx.Bool(utils.IgnoreBadBatchesCheck.Name),
 		InitialBatchCfgFile:                    ctx.String(utils.InitialBatchCfgFile.Name),
 		ACLPrintHistory:                        ctx.Int(utils.ACLPrintHistory.Name),
 		InfoTreeUpdateInterval:                 ctx.Duration(utils.InfoTreeUpdateInterval.Name),
+		SealBatchImmediatelyOnOverflow:         ctx.Bool(utils.SealBatchImmediatelyOnOverflow.Name),
+		MockWitnessGeneration:                  ctx.Bool(utils.MockWitnessGeneration.Name),
+		WitnessCacheLimit:                      witnessCacheLimit,
+		WitnessContractInclusion:               witnessInclusion,
+		GasPriceCheckFrequency:                 ctx.Duration(utils.GasPriceCheckFrequency.Name),
+		GasPriceHistoryCount:                   ctx.Uint64(utils.GasPriceHistoryCount.Name),
+		RejectLowGasPriceTransactions:          ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
+		RejectLowGasPriceTolerance:             ctx.Float64(utils.RejectLowGasPriceTolerance.Name),
+		LogLevel:                               logLevel,
+		PanicOnReorg:                           ctx.Bool(utils.PanicOnReorg.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

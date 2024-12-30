@@ -73,7 +73,7 @@ but can be controlled via the following flags:
 To transplant the cache between datadirs, the `l1cache` dir can be copied. To use an upstream cdk-erigon node's L1 cache, the zkevm.l1-cache-enabled can be set to false, and the node provided the endpoint of the cache,
 instead of a regular L1 URL. e.g. `zkevm.l1-rpc-url=http://myerigonnode:6969?endpoint=http%3A%2F%2Fsepolia-rpc.com&chainid=2440`. NB: this node must be syncing the same network for any benefit!
 
-## Sequencer (WIP)
+## Sequencer
 
 Enable Sequencer: `CDK_ERIGON_SEQUENCER=1 ./build/bin/cdk-erigon <flags>`
 [Golang version >= 1.21](https://golang.org/doc/install); GCC 10+ or Clang; On Linux: kernel > v4
@@ -85,6 +85,10 @@ on the L1 from the sequencer contract that contains the `sequenceBatches` event.
 the L1 data into the cdk-erigon database and use this during execution rather than waiting for transactions from the txpool, effectively
 rebuilding the chain from the L1 data.  This can be used in tandem with unwinding the chain, or using the `zkevm.sync-limit` flag
 to limit the chain to a certain block height before starting the L1 recovery (useful if you have an RPC node available to speed up the process).
+
+**Important Note:**
+**This mode is not supported for pre-forkid8 networks. In their case, the node should be synced up to forkid8 and then switch to sequencer recover mode.**
+
 
 **Important Note:**
 **If using the `zkevm.sync-limit` flag you need to go to the boundary of a batch+1 block so if batch 41 ends at block 99
@@ -200,6 +204,7 @@ Sequencer specific config:
 - `zkevm.executor-strict`: Defaulted to true, but can be set to false when running the sequencer without verifications (use with extreme caution)
 - `zkevm.witness-full`: Defaulted to false.  Controls whether the full or partial witness is used with the executor.
 - `zkevm.reject-smart-contract-deployments`: Defaulted to false.  Controls whether smart contract deployments are rejected by the TxPool.
+- `zkevm.ignore-bad-batches-check`: Defaulted to false.  Controls whether the sequencer will ignore bad batches and continue to the next batch. <strong style='color:red'>WARNING: this is a very specific and dangerous mode of operation!</strong>
 
 Resource Utilisation config:
 - `zkevm.smt-regenerate-in-memory`: As documented above, allows SMT regeneration in memory if machine has enough RAM, for a speedup in initial sync.
@@ -207,6 +212,16 @@ Resource Utilisation config:
 Useful config entries:
 - `zkevm.sync-limit`: This will ensure the network only syncs to a given block height.
 - `debug.timers`: This will enable debug timers in the logs to help with performance tuning. Recording timings of witness generation, etc. at INFO level.
+- `zkevm.panic-on-reorg`: Useful when the state should be preserved on history reorg
+
+Metrics and pprof configuration flags:
+
+- `metrics:` Enables or disables the metrics collection. Set to true to enable.
+- `metrics.addr`: The address on which the metrics server will listen. Default is "0.0.0.0".
+- `metrics.port`: The port on which the metrics server will listen. Default is 6060.
+- `pprof`: Enables or disables the pprof profiling. Set to true to enable.
+- `pprof.addr`: The address on which the pprof server will listen. Default is "0.0.0.0".
+- `pprof.port`: The port on which the pprof server will listen. Default is 6061.
 
 ***
 

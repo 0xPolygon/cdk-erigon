@@ -5,13 +5,16 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type Zk struct {
 	L2ChainId                              uint64
 	L2RpcUrl                               string
 	L2DataStreamerUrl                      string
+	L2DataStreamerUseTLS                   bool
 	L2DataStreamerTimeout                  time.Duration
+	L2ShortCircuitToVerifiedBatch          bool
 	L1SyncStartBlock                       uint64
 	L1SyncStopBatch                        uint64
 	L1ChainId                              uint64
@@ -36,6 +39,7 @@ type Zk struct {
 	RpcGetBatchWitnessConcurrencyLimit     int
 	DatastreamVersion                      int
 	SequencerBlockSealTime                 time.Duration
+	SequencerEmptyBlockSealTime            time.Duration
 	SequencerBatchSealTime                 time.Duration
 	SequencerBatchVerificationTimeout      time.Duration
 	SequencerBatchVerificationRetries      int
@@ -60,12 +64,15 @@ type Zk struct {
 	DefaultGasPrice                        uint64
 	MaxGasPrice                            uint64
 	GasPriceFactor                         float64
+	GasPriceCheckFrequency                 time.Duration
+	GasPriceHistoryCount                   uint64
 	DAUrl                                  string
 	DataStreamHost                         string
 	DataStreamPort                         uint
 	DataStreamWriteTimeout                 time.Duration
 	DataStreamInactivityTimeout            time.Duration
 	DataStreamInactivityCheckInterval      time.Duration
+	PanicOnReorg                           bool
 
 	RebuildTreeAfter      uint64
 	IncrementTreeAlways   bool
@@ -87,9 +94,19 @@ type Zk struct {
 
 	TxPoolRejectSmartContractDeployments bool
 
-	InitialBatchCfgFile    string
-	ACLPrintHistory        int
-	InfoTreeUpdateInterval time.Duration
+	InitialBatchCfgFile            string
+	ACLPrintHistory                int
+	InfoTreeUpdateInterval         time.Duration
+	BadBatches                     []uint64
+	IgnoreBadBatchesCheck          bool
+	SealBatchImmediatelyOnOverflow bool
+	MockWitnessGeneration          bool
+	WitnessCacheEnabled            bool
+	WitnessCacheLimit              uint64
+	WitnessContractInclusion       []common.Address
+	RejectLowGasPriceTransactions  bool
+	RejectLowGasPriceTolerance     float64
+	LogLevel                       log.Lvl
 }
 
 var DefaultZkConfig = &Zk{}
@@ -105,4 +122,8 @@ func (c *Zk) HasExecutors() bool {
 // ShouldImportInitialBatch returns true in case initial batch config file name is non-empty string.
 func (c *Zk) ShouldImportInitialBatch() bool {
 	return c.InitialBatchCfgFile != ""
+}
+
+func (c *Zk) IsL1Recovery() bool {
+	return c.L1SyncStartBlock > 0
 }

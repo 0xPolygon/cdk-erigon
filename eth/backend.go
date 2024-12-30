@@ -129,8 +129,10 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/contracts"
 	"github.com/ledgerwatch/erigon/zk/datastream/client"
+	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/l1_cache"
+	"github.com/ledgerwatch/erigon/zk/l1infotree"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
@@ -139,8 +141,9 @@ import (
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/etherman"
-	"github.com/ledgerwatch/erigon/zk/l1infotree"
 )
+
+var dataStreamServerFactory = server.NewZkEVMDataStreamServerFactory()
 
 // Config contains the configuration options of the ETH protocol.
 // Deprecated: use ethconfig.Config instead.
@@ -219,7 +222,7 @@ type Ethereum struct {
 	logger         log.Logger
 
 	// zk
-	dataStream      *datastreamer.StreamServer
+	streamServer    server.StreamServer
 	l1Syncer        *syncer.L1Syncer
 	etherManClients []*etherman.Client
 	l1Cache         *l1_cache.L1Cache
@@ -234,6 +237,7 @@ type Ethereum struct {
 
 	polygonSyncService polygonsync.Service
 	stopNode           func() error
+	gasTracker         *jsonrpc.RecurringL1GasPriceTracker
 }
 
 func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {
@@ -967,6 +971,17 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 	}
 
 	if backend.config.Zk != nil {
+		// setup the gas tracker and start it
+		backend.gasTracker = jsonrpc.NewRecurringL1GasPriceTracker(
+			backend.config.AllowFreeTransactions,
+			backend.config.GasPriceFactor,
+			backend.config.DefaultGasPrice,
+			backend.config.MaxGasPrice,
+			backend.config.L1RpcUrl,
+			backend.config.GasPriceCheckFrequency,
+			backend.config.GasPriceHistoryCount,
+		)
+
 		// zkevm: create a data stream server if we have the appropriate config for one.  This will be started on the call to Init
 		// alongside the http server
 		httpCfg := stack.Config().Http
@@ -977,8 +992,9 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				Level:       "warn",
 				Outputs:     nil,
 			}
+
 			// todo [zkevm] read the stream version from config and figure out what system id is used for
-			backend.dataStream, err = datastreamer.NewServer(uint16(httpCfg.DataStreamPort), uint8(backend.config.DatastreamVersion), 1, datastreamer.StreamType(1), file, httpCfg.DataStreamWriteTimeout, httpCfg.DataStreamInactivityTimeout, httpCfg.DataStreamInactivityCheckInterval, logConfig)
+			backend.streamServer, err = dataStreamServerFactory.CreateStreamServer(uint16(httpCfg.DataStreamPort), uint8(backend.config.DatastreamVersion), 1, datastreamer.StreamType(1), file, httpCfg.DataStreamWriteTimeout, httpCfg.DataStreamInactivityTimeout, httpCfg.DataStreamInactivityCheckInterval, logConfig)
 			if err != nil {
 				return nil, err
 			}
@@ -986,7 +1002,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			// recovery here now, if the stream got into a bad state we want to be able to delete the file and have
 			// the stream re-populated from scratch.  So we check the stream for the latest header and if it is
 			// 0 we can just set the datastream progress to 0 also which will force a re-population of the stream
-			latestHeader := backend.dataStream.GetHeader()
+			latestHeader := backend.streamServer.GetHeader()
 			if latestHeader.TotalEntries == 0 {
 				log.Info("[dataStream] setting the stream progress to 0")
 				backend.preStartTasks.WarmUpDataStream = true
@@ -1024,7 +1040,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		isSequencer := sequencer.IsSequencer()
 
 		// if the L1 block sync is set we're in recovery so can't run as a sequencer
-		if cfg.L1SyncStartBlock > 0 {
+		if cfg.IsL1Recovery() {
 			if !isSequencer {
 				panic("you cannot launch in l1 sync mode as an RPC node")
 			}
@@ -1032,8 +1048,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		}
 
 		seqAndVerifTopics := [][]libcommon.Hash{{
-			contracts.SequencedBatchTopicPreEtrog,
-			contracts.SequencedBatchTopicEtrog,
+			contracts.SequenceBatchesTopicPreEtrog,
+			contracts.SequenceBatchesTopicEtrog,
 			contracts.RollbackBatchesTopic,
 			contracts.VerificationTopicPreEtrog,
 			contracts.VerificationTopicEtrog,
@@ -1100,6 +1116,11 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		l1InfoTreeUpdater := l1infotree.NewUpdater(cfg.Zk, l1InfoTreeSyncer)
 
+		var dataStreamServer server.DataStreamServer
+		if backend.streamServer != nil {
+			dataStreamServer = dataStreamServerFactory.CreateDataStreamServer(backend.streamServer, backend.chainConfig.ChainID.Uint64())
+		}
+
 		if isSequencer {
 			// if we are sequencing transactions, we do the sequencing loop...
 			witnessGenerator := witness.NewGenerator(
@@ -1110,6 +1131,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.chainConfig,
 				backend.config.Zk,
 				backend.engine,
+				backend.config.WitnessContractInclusion,
 			)
 
 			var legacyExecutors []*legacy_executor_verifier.Executor = make([]*legacy_executor_verifier.Executor, 0, len(cfg.ExecutorUrls))
@@ -1129,10 +1151,9 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			verifier := legacy_executor_verifier.NewLegacyExecutorVerifier(
 				*cfg.Zk,
 				legacyExecutors,
-				backend.chainConfig,
 				backend.chainDB,
 				witnessGenerator,
-				backend.dataStream,
+				dataStreamServer,
 			)
 
 			if cfg.Zk.Limbo {
@@ -1149,7 +1170,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				ethermanClients,
 				[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup},
 				[][]libcommon.Hash{{
-					contracts.SequenceBatchesTopic,
+					contracts.SequenceBatchesTopicEtrog,
 				}},
 				cfg.L1BlockRange,
 				cfg.L1QueryDelay,
@@ -1167,7 +1188,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.agg,
 				backend.forkValidator,
 				backend.engine,
-				backend.dataStream,
+				dataStreamServer,
 				backend.l1Syncer,
 				seqVerSyncer,
 				l1BlockSyncer,
@@ -1209,7 +1230,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.engine,
 				backend.l1Syncer,
 				streamClient,
-				backend.dataStream,
+				dataStreamServer,
 				l1InfoTreeUpdater,
 			)
 
@@ -1281,7 +1302,7 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Clien
 
 // creates a datastream client with default parameters
 func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk, latestForkId uint16) *client.StreamClient {
-	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout, latestForkId)
+	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.L2DataStreamerUseTLS, cfg.DatastreamVersion, cfg.L2DataStreamerTimeout, latestForkId)
 }
 
 func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig *chain.Config) error {
@@ -1330,7 +1351,11 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 	// apiList := jsonrpc.APIList(chainKv, borDb, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine, config, backend.l1Syncer)
 	// authApiList := jsonrpc.AuthAPIList(chainKv, ethRpcClient, txPoolRpcClient, miningRpcClient, ff, stateCache, blockReader, backend.agg, httpRpcCfg, backend.engine, config)
 
-	s.apiList = jsonrpc.APIList(chainKv, ethRpcClient, txPoolRpcClient, s.txPool2, miningRpcClient, ff, stateCache, blockReader, s.agg, &httpRpcCfg, s.engine, config, s.l1Syncer, s.logger, s.dataStream)
+	var dataStreamServer server.DataStreamServer
+	if s.streamServer != nil {
+		dataStreamServer = dataStreamServerFactory.CreateDataStreamServer(s.streamServer, config.Zk.L2ChainId)
+	}
+	s.apiList = jsonrpc.APIList(chainKv, ethRpcClient, txPoolRpcClient, s.txPool2, miningRpcClient, ff, stateCache, blockReader, s.agg, &httpRpcCfg, s.engine, config, s.l1Syncer, s.logger, dataStreamServer, s.gasTracker)
 
 	if config.SilkwormRpcDaemon && httpRpcCfg.Enabled {
 		interface_log_settings := silkworm.RpcInterfaceLogSettings{
@@ -1364,11 +1389,11 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 	}
 
 	if chainConfig.Bor == nil {
-		go s.engineBackendRPC.Start(ctx, &httpRpcCfg, s.chainDB, s.blockReader, ff, stateCache, s.agg, s.engine, ethRpcClient, txPoolRpcClient, miningRpcClient)
+		go s.engineBackendRPC.Start(ctx, &httpRpcCfg, s.chainDB, s.blockReader, ff, stateCache, s.agg, s.engine, ethRpcClient, txPoolRpcClient, miningRpcClient, s.gasTracker)
 	}
 
 	go func() {
-		if err := cli.StartDataStream(s.dataStream); err != nil {
+		if err := cli.StartDataStream(s.streamServer); err != nil {
 			log.Error(err.Error())
 			return
 		}
@@ -1391,8 +1416,9 @@ func (s *Ethereum) PreStart() error {
 		// we don't know when the server has actually started as it doesn't expose a signal that is has spun up
 		// so here we loop and take a brief pause waiting for it to be ready
 		attempts := 0
+		dataStreamServer := dataStreamServerFactory.CreateDataStreamServer(s.streamServer, s.chainConfig.ChainID.Uint64())
 		for {
-			_, err = zkStages.CatchupDatastream(s.sentryCtx, "stream-catchup", tx, s.dataStream, s.chainConfig.ChainID.Uint64())
+			_, err = zkStages.CatchupDatastream(s.sentryCtx, "stream-catchup", tx, dataStreamServer)
 			if err != nil {
 				if errors.Is(err, datastreamer.ErrAtomicOpNotAllowed) {
 					attempts++
@@ -1890,6 +1916,8 @@ func (s *Ethereum) Start() error {
 		s.engine.(*bor.Bor).Start(s.chainDB)
 	}
 
+	s.gasTracker.Start()
+
 	// if s.silkwormRPCDaemonService != nil {
 	// 	if err := s.silkwormRPCDaemonService.Start(); err != nil {
 	// 		s.logger.Error("silkworm.StartRpcDaemon error", "err", err)
@@ -1945,6 +1973,8 @@ func (s *Ethereum) Stop() error {
 		s.agg.Close()
 	}
 	s.chainDB.Close()
+
+	s.gasTracker.Stop()
 
 	if s.silkwormRPCDaemonService != nil {
 		if err := s.silkwormRPCDaemonService.Stop(); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,6 +93,15 @@ func policyTransactionSliceEqual(a, b []PolicyTransaction) bool {
 	}
 
 	return true
+}
+
+func containsSubstring(slice []string, substring string) bool {
+	for _, str := range slice {
+		if strings.Contains(str, substring) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCheckDBsCreation(t *testing.T) {
@@ -239,20 +249,33 @@ func TestPolicyMapping(t *testing.T) {
 	var policiesNone []byte
 	var pListNone []Policy
 
+	// Expected outcomes - these are stored in []string, because reading policies doesn't guarantee order, and the returned values may be in arbitrary order.
+	// Therefore a []string is used to check if the returned values are within the expected combinations stored within the string slice.
+	var expectedAll []string
+	var expectedSendTx []string
+	var expectedDeploy []string
+	var expectedNone []string
+
+	expectedAll = append(expectedAll, "\tsendTx: true\n\tdeploy: true")
+	expectedAll = append(expectedAll, "\tdeploy: true\n\tsendTx: true")
+	expectedSendTx = append(expectedSendTx, "\tsendTx: true")
+	expectedDeploy = append(expectedDeploy, "\tdeploy: true")
+	expectedNone = append(expectedNone, "")
+
 	var tests = []struct {
 		policies []byte
 		pList    []Policy
-		want     string
+		want     []string
 	}{
-		{policiesAll, pListAll, "\tsendTx: true\n\tdeploy: true"},
-		{policiesSendTx, pListSendTx, "\tsendTx: true"},
-		{policiesDeploy, pListDeploy, "\tdeploy: true"},
-		{policiesNone, pListNone, ""},
+		{policiesAll, pListAll, expectedAll},
+		{policiesSendTx, pListSendTx, expectedSendTx},
+		{policiesDeploy, pListDeploy, expectedDeploy},
+		{policiesNone, pListNone, expectedNone},
 	}
 	for _, tt := range tests {
 		t.Run("PolicyMapping", func(t *testing.T) {
 			ans := policyMapping(tt.policies, tt.pList)
-			if ans != tt.want {
+			if !containsSubstring(tt.want, ans) {
 				t.Errorf("got %v, want %v", ans, tt.want)
 			}
 		})
@@ -623,4 +646,54 @@ func TestIsActionAllowed(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, allowed) // In disabled mode, all actions are allowed
 	})
+}
+
+func TestListContentAtACL(t *testing.T) {
+	db := newTestACLDB(t, "")
+	ctx := context.Background()
+
+	// Populate different tables in ACL
+	// Create a test address and policy for allowlist table
+	addrAllowlist := common.HexToAddress("0x1234567890abcdef")
+	policyAllowlist := SendTx
+
+	err := AddPolicy(ctx, db, "allowlist", addrAllowlist, policyAllowlist)
+	require.NoError(t, err)
+
+	// Create a test address and policy for blocklist table
+	addrBlocklist := common.HexToAddress("0x1234567890abcdef")
+	policyBlocklist := SendTx
+
+	err = AddPolicy(ctx, db, "blocklist", addrBlocklist, policyBlocklist)
+	require.NoError(t, err)
+
+	var tests = []struct {
+		wantAllowlist string
+		wantBlockList string
+	}{
+		{"\nAllowlist\nKey: 0000000000000000000000001234567890abcdef, Value: {\n\tdeploy: false\n\tsendTx: true\n}\n", "\nBlocklist\nKey: 0000000000000000000000001234567890abcdef, Value: {\n\tsendTx: true\n\tdeploy: false\n}\n"},
+	}
+	// ListContentAtACL will return []string in the following order:
+	// [buffer.String(), bufferConfig.String(), bufferBlockList.String(), bufferAllowlist.String()]
+	ans, err := ListContentAtACL(ctx, db)
+	for _, tt := range tests {
+		t.Run("ListContentAtACL", func(t *testing.T) {
+			switch {
+			case err != nil:
+				t.Errorf("ListContentAtACL did not execute successfully: %v", err)
+			case !strings.Contains(ans[3], "\nAllowlist\nKey: 0000000000000000000000001234567890abcdef"):
+				t.Errorf("got %v, want %v", ans, tt.wantAllowlist)
+			case !strings.Contains(ans[3], "sendTx: true"):
+				t.Errorf("got %v, want %v", ans, tt.wantAllowlist)
+			case !strings.Contains(ans[3], "deploy: false"):
+				t.Errorf("got %v, want %v", ans, tt.wantAllowlist)
+			case !strings.Contains(ans[2], "\nBlocklist\nKey: 0000000000000000000000001234567890abcdef"):
+				t.Errorf("got %v, want %v", ans, tt.wantBlockList)
+			case !strings.Contains(ans[2], "sendTx: true"):
+				t.Errorf("got %v, want %v", ans, tt.wantBlockList)
+			case !strings.Contains(ans[2], "deploy: false"):
+				t.Errorf("got %v, want %v", ans, tt.wantBlockList)
+			}
+		})
+	}
 }

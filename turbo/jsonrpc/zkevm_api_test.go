@@ -17,7 +17,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon-lib/kv/kvcache"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind/backends"
-	"github.com/ledgerwatch/erigon/cmd/rpcdaemon/commands/mocks"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
@@ -30,6 +29,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	rpctypes "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 	"github.com/ledgerwatch/erigon/zk/syncer"
+	"github.com/ledgerwatch/erigon/zk/syncer/mocks"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/log/v3"
 	"github.com/stretchr/testify/assert"
@@ -60,6 +60,19 @@ var (
 	transferAddr2     = "70a08231" + "000000000000000000000000" + address1.Hex()[2:] + "0000000000000000000000000000000000000000000000000000000000000064"
 )
 
+type mockL1GasPriceTracker struct {
+}
+
+func (t *mockL1GasPriceTracker) GetLatestPrice() (*big.Int, error) {
+	return big.NewInt(1), nil
+}
+
+func (t *mockL1GasPriceTracker) GetLowestPrice() *big.Int {
+	return big.NewInt(1)
+}
+
+var defaultL1GasPriceTracker = &mockL1GasPriceTracker{}
+
 func TestLatestConsolidatedBlockNumber(t *testing.T) {
 	assert := assert.New(t)
 	////////////////
@@ -73,7 +86,7 @@ func TestLatestConsolidatedBlockNumber(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -106,7 +119,7 @@ func TestIsBlockConsolidated(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	isConsolidated, err := zkEvmImpl.IsBlockConsolidated(ctx, 11)
@@ -148,7 +161,7 @@ func TestIsBlockVirtualized(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	isVirtualized, err := zkEvmImpl.IsBlockVirtualized(ctx, 50)
@@ -196,7 +209,7 @@ func TestBatchNumberByBlockNumber(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	batchNumber, err := zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(10))
@@ -251,7 +264,7 @@ func TestBatchNumber(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -288,7 +301,7 @@ func TestVirtualBatchNumber(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -325,7 +338,7 @@ func TestVerifiedBatchNumber(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -362,7 +375,7 @@ func TestGetBatchByNumber(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -504,7 +517,7 @@ func TestGetBatchDataByNumber(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -641,7 +654,7 @@ func TestGetExitRootsByGER(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -716,7 +729,7 @@ func TestLatestGlobalExitRoot(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -788,7 +801,7 @@ func TestGetVersionHistory(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 
@@ -830,7 +843,7 @@ func TestGetExitRootTable(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -904,7 +917,7 @@ func TestGetFullBlockByNumber(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -1078,7 +1091,7 @@ func TestGetFullBlockByHash(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, nil, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -1248,7 +1261,7 @@ func TestGetForkId(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -1290,7 +1303,7 @@ func TestGetForkIdByBatchNumber(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -1336,7 +1349,7 @@ func TestGetForkById(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -1403,7 +1416,7 @@ func TestGetForks(t *testing.T) {
 	agg := contractBackend.Agg()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New())
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
 	tx, err := db.BeginRw(ctx)
@@ -1447,4 +1460,78 @@ func TestGetForks(t *testing.T) {
 	assert.Equal(forks[2].ToBatchNumber, hexutil.Uint64(math.MaxUint64))
 	assert.Equal(forks[2].Version, "")
 	assert.Equal(forks[2].BlockNumber, hexutil.Uint64(3000))
+}
+
+func TestGetRollupAddress(t *testing.T) {
+	assert := assert.New(t)
+
+	//////////////
+	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
+	defer contractBackend.Close()
+	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+	contractBackend.Commit()
+	///////////
+
+	db := contractBackend.DB()
+	agg := contractBackend.Agg()
+
+	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
+	var l1Syncer *syncer.L1Syncer
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
+
+	// Call the GetRollupAddress method and check that the result matches the default value.
+	var result common.Address
+	rollupAddress, err := zkEvmImpl.GetRollupAddress(ctx)
+	assert.NoError(err)
+
+	err = json.Unmarshal(rollupAddress, &result)
+	assert.NoError(err)
+	assert.Equal(result, common.HexToAddress("0x0"))
+
+	// Modify the ZkConfig and retry calling the method.
+	zkEvmImpl.config.AddressZkevm = common.HexToAddress("0x1")
+	rollupAddress, err = zkEvmImpl.GetRollupAddress(ctx)
+	assert.NoError(err)
+
+	err = json.Unmarshal(rollupAddress, &result)
+	assert.NoError(err)
+	assert.Equal(result, common.HexToAddress("0x1"))
+}
+
+func TestGetRollupManagerAddress(t *testing.T) {
+	assert := assert.New(t)
+
+	//////////////
+	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
+	defer contractBackend.Close()
+	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
+	contractBackend.Commit()
+	///////////
+
+	db := contractBackend.DB()
+	agg := contractBackend.Agg()
+
+	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker)
+	var l1Syncer *syncer.L1Syncer
+	zkEvmImpl := NewZkEvmAPI(ethImpl, db, 100_000, &ethconfig.Defaults, l1Syncer, "", nil)
+
+	// Call the GetRollupManagerAddress method and check that the result matches the default value.
+	var result common.Address
+	rollupManagerAddress, err := zkEvmImpl.GetRollupManagerAddress(ctx)
+	assert.NoError(err)
+
+	err = json.Unmarshal(rollupManagerAddress, &result)
+	assert.NoError(err)
+	assert.Equal(result, common.HexToAddress("0x0"))
+
+	// Modify the ZkConfig and retry calling the method.
+	zkEvmImpl.config.AddressRollup = common.HexToAddress("0x1")
+	rollupManagerAddress, err = zkEvmImpl.GetRollupManagerAddress(ctx)
+	assert.NoError(err)
+
+	err = json.Unmarshal(rollupManagerAddress, &result)
+	assert.NoError(err)
+	assert.Equal(result, common.HexToAddress("0x1"))
 }

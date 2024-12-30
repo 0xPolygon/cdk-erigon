@@ -32,7 +32,7 @@ type ethApiStub struct {
 	syncingError  error
 }
 
-func (e *ethApiStub) GetBlockByNumber(_ context.Context, _ rpc.BlockNumber, _ bool) (map[string]interface{}, error) {
+func (e *ethApiStub) GetBlockByNumber(_ context.Context, _ rpc.BlockNumber, _ *bool) (map[string]interface{}, error) {
 	return e.blockResult, e.blockError
 }
 
@@ -245,7 +245,7 @@ func TestProcessHealthcheckIfNeeded_HeadersTests(t *testing.T) {
 			netApiResponse: hexutil.Uint(1),
 			netApiError:    nil,
 			ethApiBlockResult: map[string]interface{}{
-				"timestamp": uint64(time.Now().Add(-10 * time.Second).Unix()),
+				"timestamp": hexutil.Uint64(time.Now().Add(-10 * time.Second).Unix()),
 			},
 			ethApiBlockError:    nil,
 			ethApiSyncingResult: false,
@@ -264,7 +264,7 @@ func TestProcessHealthcheckIfNeeded_HeadersTests(t *testing.T) {
 			netApiResponse: hexutil.Uint(1),
 			netApiError:    nil,
 			ethApiBlockResult: map[string]interface{}{
-				"timestamp": uint64(time.Now().Add(-1 * time.Hour).Unix()),
+				"timestamp": hexutil.Uint64(time.Now().Add(-1 * time.Hour).Unix()),
 			},
 			ethApiBlockError:    nil,
 			ethApiSyncingResult: false,
@@ -283,7 +283,7 @@ func TestProcessHealthcheckIfNeeded_HeadersTests(t *testing.T) {
 			netApiResponse: hexutil.Uint(1),
 			netApiError:    nil,
 			ethApiBlockResult: map[string]interface{}{
-				"timestamp": uint64(time.Now().Add(1 * time.Hour).Unix()),
+				"timestamp": hexutil.Uint64(time.Now().Add(1 * time.Hour).Unix()),
 			},
 			ethApiBlockError:    nil,
 			ethApiSyncingResult: false,
@@ -319,7 +319,7 @@ func TestProcessHealthcheckIfNeeded_HeadersTests(t *testing.T) {
 			netApiResponse: hexutil.Uint(10),
 			netApiError:    nil,
 			ethApiBlockResult: map[string]interface{}{
-				"timestamp": uint64(time.Now().Add(1 * time.Second).Unix()),
+				"timestamp": hexutil.Uint64(time.Now().Add(1 * time.Second).Unix()),
 			},
 			ethApiBlockError:    nil,
 			ethApiSyncingResult: false,

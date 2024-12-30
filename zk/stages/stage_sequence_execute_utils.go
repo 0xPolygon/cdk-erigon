@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -10,11 +11,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	libstate "github.com/ledgerwatch/erigon-lib/state"
 
-	"math/big"
-
-	"fmt"
-
-	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -33,13 +29,13 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/l1infotree"
 	verifier "github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
-	"github.com/ledgerwatch/erigon/zk/l1infotree"
 )
 
 const (
@@ -49,7 +45,6 @@ const (
 
 var (
 	noop                 = state.NewNoopWriter()
-	blockDifficulty      = new(big.Int).SetUint64(0)
 	SpecialZeroIndexHash = common.HexToHash("0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757")
 )
 
@@ -75,8 +70,7 @@ type SequenceBlockCfg struct {
 	syncCfg          ethconfig.Sync
 	genesis          *types.Genesis
 	agg              *libstate.Aggregator
-	stream           *datastreamer.StreamServer
-	datastreamServer *server.DataStreamServer
+	dataStreamServer server.DataStreamServer
 	zk               *ethconfig.Zk
 	miningConfig     *params.MiningConfig
 
@@ -107,7 +101,7 @@ func StageSequenceBlocksCfg(
 	genesis *types.Genesis,
 	syncCfg ethconfig.Sync,
 	agg *libstate.Aggregator,
-	stream *datastreamer.StreamServer,
+	dataStreamServer server.DataStreamServer,
 	zk *ethconfig.Zk,
 	miningConfig *params.MiningConfig,
 
@@ -135,8 +129,7 @@ func StageSequenceBlocksCfg(
 		historyV3:        historyV3,
 		syncCfg:          syncCfg,
 		agg:              agg,
-		stream:           stream,
-		datastreamServer: server.NewDataStreamServer(stream, chainConfig.ChainID.Uint64()),
+		dataStreamServer: dataStreamServer,
 		zk:               zk,
 		miningConfig:     miningConfig,
 		txPool:           txPool,
@@ -173,10 +166,10 @@ func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockC
 
 func validateIfDatastreamIsAheadOfExecution(
 	s *stagedsync.StageState,
-// u stagedsync.Unwinder,
+	// u stagedsync.Unwinder,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
-// historyCfg stagedsync.HistoryCfg,
+	// historyCfg stagedsync.HistoryCfg,
 ) error {
 	roTx, err := cfg.db.BeginRo(ctx)
 	if err != nil {
@@ -189,7 +182,7 @@ func validateIfDatastreamIsAheadOfExecution(
 		return err
 	}
 
-	lastDatastreamBlock, err := cfg.datastreamServer.GetHighestBlockNumber()
+	lastDatastreamBlock, err := cfg.dataStreamServer.GetHighestBlockNumber()
 	if err != nil {
 		return err
 	}
@@ -201,7 +194,8 @@ func validateIfDatastreamIsAheadOfExecution(
 	return nil
 }
 
-type forkDb interface {
+//go:generate mockgen -typed=true -destination=./fork_db_mock.go -package=stages . ForkDb
+type ForkDb interface {
 	GetAllForkHistory() ([]uint64, []uint64, error)
 	GetLatestForkHistory() (uint64, uint64, error)
 	GetForkId(batch uint64) (uint64, error)
@@ -209,10 +203,7 @@ type forkDb interface {
 	WriteForkId(batch, forkId uint64) error
 }
 
-func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, error) {
-	var err error
-	var latest uint64
-
+func prepareForkId(lastBatch, executionAt uint64, hermezDb ForkDb) (latest uint64, err error) {
 	// get all history and find the fork appropriate for the batch we're processing now
 	allForks, allBatches, err := hermezDb.GetAllForkHistory()
 	if err != nil {
@@ -229,6 +220,11 @@ func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, erro
 	}
 
 	if latest == 0 {
+		// this means the first forkid we have is ahead of us
+		// this will happen if the first block on the network is pre forkid 8
+		if len(allBatches) > 0 {
+			panic("Last batch is behind the first recorded with fork id. This probably means the network started at fork id lower than 8.")
+		}
 		// not an error, need to wait for the block to finalize on the L1
 		return 0, nil
 	}
@@ -341,78 +337,64 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, prop
 	return
 }
 
-func prepareTickers(cfg *SequenceBlockCfg) (*time.Ticker, *time.Ticker, *time.Ticker, *time.Ticker) {
+func prepareTickers(cfg *SequenceBlockCfg) (*time.Ticker, *time.Ticker, *time.Ticker, *time.Ticker, *time.Ticker) {
 	batchTicker := time.NewTicker(cfg.zk.SequencerBatchSealTime)
 	logTicker := time.NewTicker(10 * time.Second)
 	blockTicker := time.NewTicker(cfg.zk.SequencerBlockSealTime)
+	emptyBlockTicker := time.NewTicker(cfg.zk.SequencerEmptyBlockSealTime)
 	infoTreeTicker := time.NewTicker(cfg.zk.InfoTreeUpdateInterval)
 
-	return batchTicker, logTicker, blockTicker, infoTreeTicker
+	return batchTicker, logTicker, blockTicker, emptyBlockTicker, infoTreeTicker
 }
 
 // will be called at the start of every new block created within a batch to figure out if there is a new GER
 // we can use or not.  In the special case that this is the first block we just return 0 as we need to use the
 // 0 index first before we can use 1+
-func calculateNextL1TreeUpdateToUse(lastInfoIndex uint64, hermezDb *hermez_db.HermezDb, proposedTimestamp uint64) (uint64, *zktypes.L1InfoTreeUpdate, error) {
+func calculateNextL1TreeUpdateToUse(recentlyUsed uint64, hermezDb *hermez_db.HermezDb, proposedTimestamp uint64) (uint64, *zktypes.L1InfoTreeUpdate, error) {
 	// always default to 0 and only update this if the next available index has reached finality
-	var (
-		nextL1Index uint64 = 0
-		l1Info      *zktypes.L1InfoTreeUpdate
-		err         error
-	)
+	var nextL1Index uint64 = 0
 
-	if lastInfoIndex == 0 {
-		// potentially at the start of the chain so get the latest info tree index in the DB and work
-		// backwards until we find a valid one to use
-		l1Info, err = getNetworkStartInfoTreeIndex(hermezDb, proposedTimestamp)
-		if err != nil || l1Info == nil {
-			return 0, nil, err
+	/*
+		get the progress of the chain so far, then get the latest available data for the next index.
+		If these values are the same info tree update we return 0 as no-change. If the next index is
+		higher we return that one so long as it is valid.
+	*/
+
+	latestIndex, err := hermezDb.GetLatestL1InfoTreeUpdate()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	if latestIndex == nil || latestIndex.Index <= recentlyUsed {
+		// no change
+		return 0, nil, nil
+	}
+
+	// now verify that the latest known index is valid and work backwards until we find one that is
+	// or, we reach the most recently used index or 0
+	for {
+		if latestIndex.Timestamp <= proposedTimestamp {
+			nextL1Index = latestIndex.Index
+			break
 		}
-		nextL1Index = l1Info.Index
-	} else {
-		// check if the next index is there and if it has reached finality or not
-		l1Info, err = hermezDb.GetL1InfoTreeUpdate(lastInfoIndex + 1)
+
+		if latestIndex.Index == 0 || latestIndex.Index <= recentlyUsed {
+			// end of the line
+			return 0, nil, nil
+		}
+
+		latestIndex, err = hermezDb.GetL1InfoTreeUpdate(latestIndex.Index - 1)
 		if err != nil {
 			return 0, nil, err
 		}
 
-		// ensure that we are above the min timestamp for this index to use it
-		if l1Info != nil && l1Info.Timestamp <= proposedTimestamp {
-			nextL1Index = l1Info.Index
+		if latestIndex == nil {
+			return 0, nil, nil
 		}
+
 	}
 
-	return nextL1Index, l1Info, nil
-}
-
-func getNetworkStartInfoTreeIndex(hermezDb *hermez_db.HermezDb, proposedTimestamp uint64) (*zktypes.L1InfoTreeUpdate, error) {
-	l1Info, found, err := hermezDb.GetLatestL1InfoTreeUpdate()
-	if err != nil || !found || l1Info == nil {
-		return nil, err
-	}
-
-	if l1Info.Timestamp > proposedTimestamp {
-		// not valid so move back one index - we need one less than or equal to the proposed timestamp
-		lastIndex := l1Info.Index
-		for lastIndex > 0 {
-			lastIndex = lastIndex - 1
-			l1Info, err = hermezDb.GetL1InfoTreeUpdate(lastIndex)
-			if err != nil {
-				return nil, err
-			}
-			if l1Info != nil && l1Info.Timestamp <= proposedTimestamp {
-				break
-			}
-		}
-	}
-
-	// final check that the l1Info is actually valid before returning, index 0 or 1 might be invalid for
-	// some strange reason so just use index 0 in this case - it is always safer to use a 0 index
-	if l1Info == nil || l1Info.Timestamp > proposedTimestamp {
-		return nil, nil
-	}
-
-	return l1Info, nil
+	return nextL1Index, latestIndex, nil
 }
 
 func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, unwinding bool) error {

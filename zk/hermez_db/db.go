@@ -51,7 +51,8 @@ const FORK_HISTORY = "fork_history"                                     // index
 const JUST_UNWOUND = "just_unwound"                                     // batch number -> true
 const PLAIN_STATE_VERSION = "plain_state_version"                       // batch number -> true
 const ERIGON_VERSIONS = "erigon_versions"                               // erigon version -> timestamp of startup
-const BATCH_ENDS = "batch_ends"                                         //
+const BATCH_ENDS = "batch_ends"                                         // batch number -> true
+const WITNESS_CACHE = "witness_cache"                                   // block number -> witness for 1 block
 
 var HermezDbTables = []string{
 	L1VERIFICATIONS,
@@ -88,6 +89,7 @@ var HermezDbTables = []string{
 	PLAIN_STATE_VERSION,
 	ERIGON_VERSIONS,
 	BATCH_ENDS,
+	WITNESS_CACHE,
 }
 
 type HermezDb struct {
@@ -1255,32 +1257,32 @@ func (db *HermezDbReader) GetL1InfoTreeUpdate(idx uint64) (*types.L1InfoTreeUpda
 	return update, nil
 }
 
-func (db *HermezDbReader) GetLatestL1InfoTreeUpdate() (*types.L1InfoTreeUpdate, bool, error) {
+func (db *HermezDbReader) GetLatestL1InfoTreeUpdate() (*types.L1InfoTreeUpdate, error) {
 	cursor, err := db.tx.Cursor(L1_INFO_TREE_UPDATES)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	defer cursor.Close()
 
 	count, err := cursor.Count()
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	if count == 0 {
-		return nil, false, nil
+		return nil, nil
 	}
 
 	_, v, err := cursor.Last()
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	if len(v) == 0 {
-		return nil, false, nil
+		return nil, nil
 	}
 
 	result := &types.L1InfoTreeUpdate{}
 	result.Unmarshall(v)
-	return result, true, nil
+	return result, nil
 }
 
 func (db *HermezDb) WriteBlockL1InfoTreeIndex(blockNumber uint64, l1Index uint64) error {
@@ -1886,4 +1888,21 @@ func (db *HermezDbReader) getForkIntervals(forkIdFilter *uint64) ([]types.ForkIn
 	})
 
 	return forkIntervals, nil
+}
+
+func (db *HermezDb) WriteWitnessCache(blockNo uint64, witnessBytes []byte) error {
+	key := Uint64ToBytes(blockNo)
+	return db.tx.Put(WITNESS_CACHE, key, witnessBytes)
+}
+
+func (db *HermezDbReader) GetWitnessCache(blockNo uint64) ([]byte, error) {
+	v, err := db.tx.GetOne(WITNESS_CACHE, Uint64ToBytes(blockNo))
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (db *HermezDb) DeleteWitnessCaches(from, to uint64) error {
+	return db.deleteFromBucketWithUintKeysRange(WITNESS_CACHE, from, to)
 }

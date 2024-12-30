@@ -35,6 +35,8 @@ const (
 	sequencedBatchesMapSignature    = "0xb4d63f58"
 )
 
+//go:generate mockgen -typed=true -destination=./mocks/etherman_mock.go -package=mocks . IEtherman
+
 type IEtherman interface {
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethTypes.Header, error)
 	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethTypes.Block, error)
@@ -102,11 +104,8 @@ func (s *L1Syncer) getNextEtherman() IEtherman {
 	s.ethermanMtx.Lock()
 	defer s.ethermanMtx.Unlock()
 
-	if s.ethermanIndex >= uint8(len(s.etherMans)) {
-		s.ethermanIndex = 0
-	}
-
-	etherman := s.etherMans[s.ethermanIndex]
+	// Use modulo to ensure the index wraps around automatically
+	etherman := s.etherMans[s.ethermanIndex%uint8(len(s.etherMans))]
 	s.ethermanIndex++
 
 	return etherman
@@ -205,17 +204,17 @@ func (s *L1Syncer) RunQueryBlocks(lastCheckedBlock uint64) {
 
 func (s *L1Syncer) GetHeader(number uint64) (*ethTypes.Header, error) {
 	em := s.getNextEtherman()
-	return em.HeaderByNumber(context.Background(), new(big.Int).SetUint64(number))
+	return em.HeaderByNumber(s.ctx, new(big.Int).SetUint64(number))
 }
 
 func (s *L1Syncer) GetBlock(number uint64) (*ethTypes.Block, error) {
 	em := s.getNextEtherman()
-	return em.BlockByNumber(context.Background(), new(big.Int).SetUint64(number))
+	return em.BlockByNumber(s.ctx, new(big.Int).SetUint64(number))
 }
 
 func (s *L1Syncer) GetTransaction(hash common.Hash) (ethTypes.Transaction, bool, error) {
 	em := s.getNextEtherman()
-	return em.TransactionByHash(context.Background(), hash)
+	return em.TransactionByHash(s.ctx, hash)
 }
 
 func (s *L1Syncer) GetPreElderberryAccInputHash(ctx context.Context, addr *common.Address, batchNum uint64) (common.Hash, error) {
@@ -480,10 +479,6 @@ func (s *L1Syncer) callSequencedBatchesMap(ctx context.Context, addr *common.Add
 	em := s.getNextEtherman()
 
 	resp, err := em.StorageAt(ctx, *addr, mkh, nil)
-	if err != nil {
-		return
-	}
-
 	if err != nil {
 		return
 	}

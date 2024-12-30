@@ -142,6 +142,10 @@ func (bcc *BatchCounterCollector) processBatchLevelData() error {
 
 // CheckForOverflow returns true in the case that any counter has less than 0 remaining
 func (bcc *BatchCounterCollector) CheckForOverflow(verifyMerkleProof bool) (bool, error) {
+	// unlimited counters shouldn't overflow
+	if bcc.unlimitedCounters {
+		return false, nil
+	}
 	combined, err := bcc.CombineCollectors(verifyMerkleProof)
 	if err != nil {
 		return false, err
@@ -271,12 +275,15 @@ func (bcc *BatchCounterCollector) CombineCollectorsNoChanges() Counters {
 		}
 	}
 
+	txCounters := NewCounters()
 	for _, tx := range bcc.transactions {
-		txCounters := tx.CombineCounters()
+		_ = tx.CombineCountersInto(&txCounters)
 		for k, v := range txCounters {
 			combined[k].used += v.used
 			combined[k].remaining -= v.used
 		}
+
+		txCounters.NullateUsed()
 	}
 
 	return combined

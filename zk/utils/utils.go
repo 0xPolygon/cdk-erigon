@@ -3,6 +3,7 @@ package utils
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
@@ -20,7 +21,7 @@ import (
 // if current sync is before verified batch - short circuit to verified batch, otherwise to enx of next batch
 // if there is no new fully downloaded batch - do not short circuit
 // returns (shouldShortCircuit, blockNumber, error)
-func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string) (bool, uint64, error) {
+func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string, l2ShortCircuitToVerifiedBatch bool) (bool, uint64, error) {
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	// get highest verified batch
@@ -48,10 +49,10 @@ func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string) (bool, uint64, er
 	var shortCircuitBatch, shortCircuitBlock, cycle uint64
 
 	// this is so empty batches work
-	for shortCircuitBlock == 0 {
+	for shortCircuitBlock == 0 || (!l2ShortCircuitToVerifiedBatch && executedBatch+cycle < downloadedBatch) {
 		cycle++
-		// if executed lower than verified, short curcuit up to verified
-		if executedBatch < highestVerifiedBatchNo {
+		// if executed lower than verified, short circuit up to verified (only if l2ShortCircuitToVerifiedBatch is true)
+		if executedBatch < highestVerifiedBatchNo && l2ShortCircuitToVerifiedBatch {
 			if downloadedBatch < highestVerifiedBatchNo {
 				shortCircuitBatch = downloadedBatch
 			} else {
@@ -59,7 +60,7 @@ func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string) (bool, uint64, er
 			}
 		} else if executedBatch+cycle <= downloadedBatch { // else short circuit up to next downloaded batch
 			shortCircuitBatch = executedBatch + cycle
-		} else { // if we don't have at least one more full downlaoded batch, don't short circuit and just execute to latest block
+		} else { // if we don't have at least one more full downloaded batch, don't short circuit and just execute to latest block
 			return false, 0, nil
 		}
 
@@ -87,7 +88,7 @@ type DbReader interface {
 	GetHighestBlockInBatch(batchNo uint64) (uint64, bool, error)
 }
 
-func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix string) error {
+func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix string, shouldPrintTrace bool) error {
 	var lastSetBlockNum uint64 = 0
 	var foundAny bool = false
 
@@ -101,10 +102,14 @@ func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix st
 			lastSetBlockNum = blockNum
 			foundAny = true
 		} else if !foundAny {
-			log.Trace(fmt.Sprintf("[%s] No block number found for fork id %v and no previous block number set", logPrefix, forkId))
+			if shouldPrintTrace {
+				log.Trace(fmt.Sprintf("[%s] No block number found for fork id %v and no previous block number set", logPrefix, forkId))
+			}
 			continue
 		} else {
-			log.Trace(fmt.Sprintf("[%s] No block number found for fork id %v, using last set block number: %v", logPrefix, forkId, lastSetBlockNum))
+			if shouldPrintTrace {
+				log.Trace(fmt.Sprintf("[%s] No block number found for fork id %v, using last set block number: %v", logPrefix, forkId, lastSetBlockNum))
+			}
 		}
 
 		if err := cfg.SetForkIdBlock(forkId, lastSetBlockNum); err != nil {
@@ -226,4 +231,14 @@ func CalculateBatchData(batchBlockData []BatchBlockData) (batchL2Data []byte, er
 	}
 
 	return batchL2Data, err
+}
+
+type LogLevel string
+
+// function to check if log level is trace
+func (ll *LogLevel) IsTraceLogLevelSet() bool {
+	if ll == nil {
+		return false
+	}
+	return strings.ToLower(string(*ll)) == "trace"
 }

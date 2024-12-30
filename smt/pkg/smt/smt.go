@@ -23,6 +23,7 @@ type DB interface {
 	InsertKeySource(key utils.NodeKey, value []byte) error
 	DeleteKeySource(key utils.NodeKey) error
 	InsertHashKey(key utils.NodeKey, value utils.NodeKey) error
+	AddCode(code []byte) error
 	DeleteHashKey(key utils.NodeKey) error
 	Delete(string) error
 	DeleteByNodeKey(key utils.NodeKey) error
@@ -297,7 +298,9 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 				if err != nil {
 					return nil, err
 				}
-				s.Db.InsertHashKey(newLeafHash, k)
+				if err := s.Db.InsertHashKey(newLeafHash, k); err != nil {
+					return nil, err
+				}
 				if level >= 0 {
 					for j := 0; j < 4; j++ {
 						siblings[level][keys[level]*4+j] = new(big.Int).SetUint64(newLeafHash[j])
@@ -500,7 +503,9 @@ func (s *SMT) insert(k utils.NodeKey, v utils.NodeValue8, newValH [4]uint64, old
 
 	utils.RemoveOver(siblings, level+1)
 
-	s.updateDepth(len(siblings))
+	if err := s.updateDepth(len(siblings)); err != nil {
+		return nil, fmt.Errorf("updateDepth: %w", err)
+	}
 
 	for level >= 0 {
 		hashValueIn, err := utils.NodeValue8FromBigIntArray(siblings[level][0:8])
@@ -636,7 +641,7 @@ func (s *SMT) CheckOrphanedNodes(ctx context.Context) int {
 	return len(orphanedNodes)
 }
 
-func (s *SMT) updateDepth(newDepth int) {
+func (s *SMT) updateDepth(newDepth int) error {
 	oldDepth, err := s.Db.GetDepth()
 	if err != nil {
 		oldDepth = 0
@@ -649,8 +654,11 @@ func (s *SMT) updateDepth(newDepth int) {
 
 	newDepthAsByte := byte(newDepth & 0xFF)
 	if oldDepth < newDepthAsByte {
-		s.Db.SetDepth(newDepthAsByte)
+		if err := s.Db.SetDepth(newDepthAsByte); err != nil {
+			return fmt.Errorf("s.Db.SetDepth: %w", err)
+		}
 	}
+	return nil
 }
 
 /*
@@ -710,7 +718,6 @@ func (s *RoSMT) traverse(ctx context.Context, node *big.Int, action TraverseActi
 		childPrefix[len(prefix)] = byte(i)
 		err := s.traverse(ctx, child.ToBigInt(), action, childPrefix)
 		if err != nil {
-			fmt.Println(err)
 			return err
 		}
 	}
@@ -727,4 +734,91 @@ func (s *RoSMT) traverseAndMark(ctx context.Context, node *big.Int, visited Visi
 		visited[utils.ConvertBigIntToHex(k.ToBigInt())] = true
 		return true, nil
 	})
+}
+
+// InsertHashNode inserts a hash node into the SMT. The SMT should not contain any other leaf nodes with the same path prefix. Otherwise, the new root hash will be incorrect.
+// TODO: Support insertion of hash nodes even if there are leaf nodes with the same path prefix in SMT.
+func (s *SMT) InsertHashNode(path []int, hash *big.Int) (*big.Int, error) {
+	s.clearUpMutex.Lock()
+	defer s.clearUpMutex.Unlock()
+
+	or, err := s.getLastRoot()
+	if err != nil {
+		return nil, err
+	}
+
+	h := utils.ScalarToArray(hash)
+
+	var nodeHash [4]uint64
+	copy(nodeHash[:], h[:4])
+
+	lastRoot, err := s.insertHashNode(path, nodeHash, or)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = s.setLastRoot(lastRoot); err != nil {
+		return nil, err
+	}
+
+	return lastRoot.ToBigInt(), nil
+}
+
+func (s *SMT) insertHashNode(path []int, hash [4]uint64, root utils.NodeKey) (utils.NodeKey, error) {
+	if len(path) == 0 {
+		newValHBig := utils.ArrayToScalar(hash[:])
+		v := utils.ScalarToNodeValue8(newValHBig)
+
+		err := s.hashSave(v.ToUintArray(), utils.LeafCapacity, hash)
+		if err != nil {
+			return utils.NodeKey{}, err
+		}
+
+		return hash, nil
+	}
+
+	rootVal := utils.NodeValue12{}
+
+	if !root.IsZero() {
+		v, err := s.Db.Get(root)
+		if err != nil {
+			return utils.NodeKey{}, err
+		}
+
+		rootVal = v
+	}
+
+	childIndex := path[0]
+
+	childOldRoot := rootVal[childIndex*4 : childIndex*4+4]
+
+	childNewRoot, err := s.insertHashNode(path[1:], hash, utils.NodeKeyFromBigIntArray(childOldRoot))
+
+	if err != nil {
+		return utils.NodeKey{}, err
+	}
+
+	var newIn [8]uint64
+
+	emptyRootVal := utils.NodeValue12{}
+
+	if childIndex == 0 {
+		var sibling [4]uint64
+		if rootVal == emptyRootVal {
+			sibling = [4]uint64{0, 0, 0, 0}
+		} else {
+			sibling = *rootVal.Get4to8()
+		}
+		newIn = utils.ConcatArrays4(childNewRoot, sibling)
+	} else {
+		var sibling [4]uint64
+		if rootVal == emptyRootVal {
+			sibling = [4]uint64{0, 0, 0, 0}
+		} else {
+			sibling = *rootVal.Get0to4()
+		}
+		newIn = utils.ConcatArrays4(sibling, childNewRoot)
+	}
+
+	return s.hashcalcAndSave(newIn, utils.BranchCapacity)
 }

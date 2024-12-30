@@ -16,9 +16,13 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"github.com/stretchr/testify/require"
+	"gotest.tools/v3/assert"
 )
 
 func prepareSMT(t *testing.T) (*smt.SMT, *trie.RetainList) {
+	t.Helper()
+
 	contract := libcommon.HexToAddress("0x71dd1027069078091B3ca48093B00E4735B20624")
 	balance := uint256.NewInt(1000000000)
 	sKey := libcommon.HexToHash("0x5")
@@ -28,7 +32,7 @@ func prepareSMT(t *testing.T) (*smt.SMT, *trie.RetainList) {
 
 	tds := state.NewTrieDbState(libcommon.Hash{}, tx, 0, state.NewPlainStateReader(tx))
 
-	w := tds.TrieStateWriter()
+	w := tds.NewTrieStateWriter()
 
 	intraBlockState := state.New(tds)
 
@@ -43,46 +47,47 @@ func prepareSMT(t *testing.T) (*smt.SMT, *trie.RetainList) {
 	intraBlockState.AddBalance(contract, balance)
 	intraBlockState.SetState(contract, &sKey, *sVal)
 
-	if err := intraBlockState.FinalizeTx(&chain.Rules{}, tds.TrieStateWriter()); err != nil {
-		t.Errorf("error finalising 1st tx: %v", err)
-	}
-	if err := intraBlockState.CommitBlock(&chain.Rules{}, w); err != nil {
-		t.Errorf("error committing block: %v", err)
-	}
+	err := intraBlockState.FinalizeTx(&chain.Rules{}, tds.NewTrieStateWriter())
+	require.NoError(t, err, "error finalising 1st tx")
 
-	rl, err := tds.ResolveSMTRetainList()
+	err = intraBlockState.CommitBlock(&chain.Rules{}, w)
+	require.NoError(t, err, "error committing block")
 
-	if err != nil {
-		t.Errorf("error resolving state trie: %v", err)
-	}
+	inclusions := make(map[libcommon.Address][]libcommon.Hash)
+	rl, err := tds.ResolveSMTRetainList(inclusions)
+	require.NoError(t, err, "error resolving state trie")
 
 	memdb := db.NewMemDb()
 
 	smtTrie := smt.NewSMT(memdb, false)
 
-	smtTrie.SetAccountState(contract.String(), balance.ToBig(), uint256.NewInt(1).ToBig())
-	smtTrie.SetContractBytecode(contract.String(), hex.EncodeToString(code))
-	err = memdb.AddCode(code)
+	_, err = smtTrie.SetAccountState(contract.String(), balance.ToBig(), uint256.NewInt(1).ToBig())
+	require.NoError(t, err)
 
-	if err != nil {
-		t.Errorf("error adding code to memdb: %v", err)
-	}
+	err = smtTrie.SetContractBytecode(contract.String(), hex.EncodeToString(code))
+	require.NoError(t, err)
+
+	err = memdb.AddCode(code)
+	require.NoError(t, err, "error adding code to memdb")
 
 	storage := make(map[string]string, 0)
 
 	for i := 0; i < 100; i++ {
-		k := libcommon.HexToHash(fmt.Sprintf("0x%d", i))
-		storage[k.String()] = k.String()
+		k := libcommon.HexToHash(fmt.Sprintf("0x%d", i)).String()
+		storage[k] = k
 	}
 
 	storage[sKey.String()] = sVal.String()
 
-	smtTrie.SetContractStorage(contract.String(), storage, nil)
+	_, err = smtTrie.SetContractStorage(contract.String(), storage, nil)
+	require.NoError(t, err)
 
 	return smtTrie, rl
 }
 
 func findNode(t *testing.T, w *trie.Witness, addr libcommon.Address, storageKey libcommon.Hash, nodeType int) []byte {
+	t.Helper()
+
 	for _, operator := range w.Operators {
 		switch op := operator.(type) {
 		case *trie.OperatorSMTLeafValue:
@@ -108,24 +113,20 @@ func TestSMTWitnessRetainList(t *testing.T) {
 	sKey := libcommon.HexToHash("0x5")
 	sVal := uint256.NewInt(0xdeadbeef)
 
-	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
-
-	if err != nil {
-		t.Errorf("error building witness: %v", err)
-	}
+	witness, err := smtTrie.BuildWitness(rl, context.Background())
+	require.NoError(t, err, "error building witness")
 
 	foundCode := findNode(t, witness, contract, libcommon.Hash{}, utils.SC_CODE)
 	foundBalance := findNode(t, witness, contract, libcommon.Hash{}, utils.KEY_BALANCE)
 	foundNonce := findNode(t, witness, contract, libcommon.Hash{}, utils.KEY_NONCE)
 	foundStorage := findNode(t, witness, contract, sKey, utils.SC_STORAGE)
 
-	if foundCode == nil || foundBalance == nil || foundNonce == nil || foundStorage == nil {
-		t.Errorf("witness does not contain all expected operators")
-	}
+	require.NotNil(t, foundCode)
+	require.NotNil(t, foundBalance)
+	require.NotNil(t, foundNonce)
+	require.NotNil(t, foundStorage)
 
-	if !bytes.Equal(foundStorage, sVal.Bytes()) {
-		t.Errorf("witness contains unexpected storage value")
-	}
+	require.Equal(t, foundStorage, sVal.Bytes(), "witness contains unexpected storage value")
 }
 
 func TestSMTWitnessRetainListEmptyVal(t *testing.T) {
@@ -136,25 +137,135 @@ func TestSMTWitnessRetainListEmptyVal(t *testing.T) {
 	sKey := libcommon.HexToHash("0x5")
 
 	// Set nonce to 0
-	smtTrie.SetAccountState(contract.String(), balance.ToBig(), uint256.NewInt(0).ToBig())
+	_, err := smtTrie.SetAccountState(contract.String(), balance.ToBig(), uint256.NewInt(0).ToBig())
+	require.NoError(t, err)
 
-	witness, err := smt.BuildWitness(smtTrie, rl, context.Background())
-
-	if err != nil {
-		t.Errorf("error building witness: %v", err)
-	}
+	witness, err := smtTrie.BuildWitness(rl, context.Background())
+	require.NoError(t, err, "error building witness")
 
 	foundCode := findNode(t, witness, contract, libcommon.Hash{}, utils.SC_CODE)
 	foundBalance := findNode(t, witness, contract, libcommon.Hash{}, utils.KEY_BALANCE)
 	foundNonce := findNode(t, witness, contract, libcommon.Hash{}, utils.KEY_NONCE)
 	foundStorage := findNode(t, witness, contract, sKey, utils.SC_STORAGE)
 
-	if foundCode == nil || foundBalance == nil || foundStorage == nil {
-		t.Errorf("witness does not contain all expected operators")
-	}
+	// Code, balance and storage should be present in the witness
+	require.NotNil(t, foundCode)
+	require.NotNil(t, foundBalance)
+	require.NotNil(t, foundStorage)
 
 	// Nonce should not be in witness
-	if foundNonce != nil {
-		t.Errorf("witness contains unexpected operator")
+	require.Nil(t, foundNonce, "witness contains unexpected operator")
+}
+
+// TestWitnessToSMT tests that the SMT built from a witness matches the original SMT
+func TestWitnessToSMT(t *testing.T) {
+	smtTrie, rl := prepareSMT(t)
+
+	witness, err := smtTrie.BuildWitness(rl, context.Background())
+	require.NoError(t, err, "error building witness")
+
+	newSMT, err := smt.BuildSMTFromWitness(witness)
+	require.NoError(t, err, "error building SMT from witness")
+
+	root, err := newSMT.Db.GetLastRoot()
+	require.NoError(t, err, "error getting last root from db")
+
+	// newSMT.Traverse(context.Background(), root, func(prefix []byte, k utils.NodeKey, v utils.NodeValue12) (bool, error) {
+	// 	fmt.Printf("[After] path: %v, hash: %x\n", prefix, libcommon.BigToHash(k.ToBigInt()))
+	// 	return true, nil
+	// })
+
+	expectedRoot, err := smtTrie.Db.GetLastRoot()
+	require.NoError(t, err, "error getting last root")
+
+	// assert that the roots are the same
+	require.Equal(t, expectedRoot, root, "SMT root mismatch")
+}
+
+// TestWitnessToSMTStateReader tests that the SMT built from a witness matches the state
+func TestWitnessToSMTStateReader(t *testing.T) {
+	smtTrie, rl := prepareSMT(t)
+
+	sKey := libcommon.HexToHash("0x5")
+
+	expectedRoot, err := smtTrie.Db.GetLastRoot()
+	require.NoError(t, err, "error getting last root")
+
+	witness, err := smtTrie.BuildWitness(rl, context.Background())
+	require.NoError(t, err, "error building witness")
+
+	newSMT, err := smt.BuildSMTFromWitness(witness)
+	require.NoError(t, err, "error building SMT from witness")
+
+	_, err = newSMT.BuildWitness(rl, context.Background())
+	require.NoError(t, err, "error rebuilding witness")
+
+	root, err := newSMT.Db.GetLastRoot()
+	require.NoError(t, err, "error getting the last root from db")
+
+	require.Equal(t, expectedRoot, root, "SMT root mismatch")
+
+	contract := libcommon.HexToAddress("0x71dd1027069078091B3ca48093B00E4735B20624")
+
+	expectedAcc, err := smtTrie.ReadAccountData(contract)
+	require.NoError(t, err)
+
+	newAcc, err := newSMT.ReadAccountData(contract)
+	require.NoError(t, err)
+
+	expectedAccCode, err := smtTrie.ReadAccountCode(contract, 0, expectedAcc.CodeHash)
+	require.NoError(t, err)
+
+	newAccCode, err := newSMT.ReadAccountCode(contract, 0, newAcc.CodeHash)
+	require.NoError(t, err)
+
+	expectedAccCodeSize, err := smtTrie.ReadAccountCodeSize(contract, 0, expectedAcc.CodeHash)
+	require.NoError(t, err)
+
+	newAccCodeSize, err := newSMT.ReadAccountCodeSize(contract, 0, newAcc.CodeHash)
+	require.NoError(t, err)
+
+	expectedStorageValue, err := smtTrie.ReadAccountStorage(contract, 0, &sKey)
+	require.NoError(t, err)
+
+	newStorageValue, err := newSMT.ReadAccountStorage(contract, 0, &sKey)
+	require.NoError(t, err)
+
+	// assert that the account data is the same
+	require.Equal(t, expectedAcc, newAcc)
+
+	// assert that account code is the same
+	require.Equal(t, expectedAccCode, newAccCode)
+
+	// assert that the account code size is the same
+	require.Equal(t, expectedAccCodeSize, newAccCodeSize)
+
+	// assert that the storage value is the same
+	require.Equal(t, expectedStorageValue, newStorageValue)
+}
+
+func TestBlockWitnessLarge(t *testing.T) {
+	witnessBytes, err := hex.DecodeString(smt.Witness1)
+	require.NoError(t, err, "error decoding witness")
+
+	w, err := trie.NewWitnessFromReader(bytes.NewReader(witnessBytes), false /* trace */)
+	if err != nil {
+		t.Error(err)
 	}
+
+	smt1, err := smt.BuildSMTFromWitness(w)
+	require.NoError(t, err, "Could not restore trie from the block witness: %v", err)
+
+	rl := &trie.AlwaysTrueRetainDecider{}
+	w2, err := smt1.BuildWitness(rl, context.Background())
+	require.NoError(t, err, "error building witness")
+
+	//create writer
+	var buff bytes.Buffer
+	w.WriteDiff(w2, &buff)
+	diff := buff.String()
+	if len(diff) > 0 {
+		fmt.Println(diff)
+	}
+	assert.Equal(t, 0, len(diff), "witnesses should be equal")
 }

@@ -31,8 +31,14 @@ func calcProtocolBaseFee(baseFee uint64) uint64 {
 	return 0
 }
 
+func (p *TxPool) Trace(msg string, ctx ...interface{}) {
+	if p.logLevel == log.LvlTrace {
+		log.Trace(msg, ctx...)
+	}
+}
+
 // onSenderStateChange is the function that recalculates ephemeral fields of transactions and determines
-// which sub pool they will need to go to. Sice this depends on other transactions from the same sender by with lower
+// which sub pool they will need to go to. Since this depends on other transactions from the same sender by with lower
 // nonces, and also affect other transactions from the same sender with higher nonce, it loops through all transactions
 // for a given senderID
 func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, senderBalance uint256.Int, byNonce *BySenderAndNonce,
@@ -154,12 +160,14 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 	defer p.lock.Unlock()
 
 	if p.isDeniedYieldingTransactions() {
+		p.Trace("Denied yielding transactions, cannot proceed")
 		return false, 0, nil
 	}
 
 	// First wait for the corresponding block to arrive
 	if p.lastSeenBlock.Load() < onTopOf {
-		return false, 0, nil // Too early
+		p.Trace("Block not yet arrived, too early to process", "lastSeenBlock", p.lastSeenBlock.Load(), "requiredBlock", onTopOf)
+		return false, 0, nil
 	}
 
 	isShanghai := p.isShanghai()
@@ -180,8 +188,10 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		}
 
 		mt := best.ms[i]
+		p.Trace("Processing transaction", "txID", mt.Tx.IDHash)
 
 		if toSkip.Contains(mt.Tx.IDHash) {
+			p.Trace("Skipping transaction, already in toSkip", "txID", mt.Tx.IDHash)
 			continue
 		}
 
@@ -189,26 +199,31 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 			// remove ldn txs when not in london
 			toRemove = append(toRemove, mt)
 			toSkip.Add(mt.Tx.IDHash)
+			p.Trace("Removing London transaction in non-London environment", "txID", mt.Tx.IDHash)
 			continue
 		}
 
 		if mt.Tx.Gas > transactionGasLimit {
 			// Skip transactions with very large gas limit, these shouldn't enter the pool at all
 			log.Debug("found a transaction in the pending pool with too high gas for tx - clear the tx pool")
+			p.Trace("Skipping transaction with too high gas", "txID", mt.Tx.IDHash, "gas", mt.Tx.Gas)
 			continue
 		}
 		rlpTx, sender, isLocal, err := p.getRlpLocked(tx, mt.Tx.IDHash[:])
 		if err != nil {
+			p.Trace("Error getting RLP of transaction", "txID", mt.Tx.IDHash, "error", err)
 			return false, count, err
 		}
 		if len(rlpTx) == 0 {
 			toRemove = append(toRemove, mt)
+			p.Trace("Removing transaction with empty RLP", "txID", mt.Tx.IDHash)
 			continue
 		}
 
 		// Skip transactions that require more blob gas than is available
 		blobCount := uint64(len(mt.Tx.BlobHashes))
 		if blobCount*fixedgas.BlobGasPerBlob > availableBlobGas {
+			p.Trace("Skipping transaction due to insufficient blob gas", "txID", mt.Tx.IDHash, "requiredBlobGas", blobCount*fixedgas.BlobGasPerBlob, "availableBlobGas", availableBlobGas)
 			continue
 		}
 		availableBlobGas -= blobCount * fixedgas.BlobGasPerBlob
@@ -219,6 +234,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		intrinsicGas, _ := CalcIntrinsicGas(uint64(mt.Tx.DataLen), uint64(mt.Tx.DataNonZeroLen), nil, mt.Tx.Creation, true, true, isShanghai)
 		if intrinsicGas > availableGas {
 			// we might find another TX with a low enough intrinsic gas to include so carry on
+			p.Trace("Skipping transaction due to insufficient gas", "txID", mt.Tx.IDHash, "intrinsicGas", intrinsicGas, "availableGas", availableGas)
 			continue
 		}
 
@@ -226,6 +242,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 			availableGas -= intrinsicGas
 		}
 
+		p.Trace("Including transaction", "txID", mt.Tx.IDHash)
 		txs.Txs[count] = rlpTx
 		txs.TxIds[count] = mt.Tx.IDHash
 		copy(txs.Senders.At(count), sender.Bytes())
@@ -238,6 +255,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 	if len(toRemove) > 0 {
 		for _, mt := range toRemove {
 			p.pending.Remove(mt)
+			p.Trace("Removed transaction from pending pool", "txID", mt.Tx.IDHash)
 		}
 	}
 	return true, count, nil
@@ -265,6 +283,60 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 			break
 		}
 	}
+}
+
+func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGasLimit uint64, ids []common.Hash) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	cache := p.cache()
+
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	toDelete := make([]*metaTx, 0)
+
+	p.all.ascendAll(func(mt *metaTx) bool {
+		for _, id := range ids {
+			if bytes.Equal(mt.Tx.IDHash[:], id[:]) {
+				toDelete = append(toDelete, mt)
+				switch mt.currentSubPool {
+				case PendingSubPool:
+					p.pending.Remove(mt)
+				case BaseFeeSubPool:
+					p.baseFee.Remove(mt)
+				case QueuedSubPool:
+					p.queued.Remove(mt)
+				default:
+					//already removed
+				}
+			}
+		}
+		return true
+	})
+
+	sendersWithChangedState := make(map[uint64]struct{})
+	for _, mt := range toDelete {
+		p.discardLocked(mt, Mined)
+		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
+	}
+
+	baseFee := p.pendingBaseFee.Load()
+
+	cacheView, err := cache.View(ctx, tx)
+	if err != nil {
+		return err
+	}
+	for senderID := range sendersWithChangedState {
+		nonce, balance, err := p.senders.info(cacheView, senderID)
+		if err != nil {
+			return err
+		}
+		p.onSenderStateChange(senderID, nonce, balance, p.all,
+			baseFee, blockGasLimit, p.pending, p.baseFee, p.queued, p.discardLocked)
+
+	}
+	return nil
 }
 
 // discards the transactions that are in overflowZkCoutners from pending

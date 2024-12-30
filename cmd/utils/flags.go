@@ -237,6 +237,16 @@ var (
 		Usage: "How often transactions should be committed to the storage",
 		Value: txpoolcfg.DefaultConfig.CommitEvery,
 	}
+	TxpoolPurgeEveryFlag = cli.DurationFlag{
+		Name:  "txpool.purge.every",
+		Usage: "How often transactions should be purged from the storage",
+		Value: txpoolcfg.DefaultConfig.PurgeEvery,
+	}
+	TxpoolPurgeDistanceFlag = cli.DurationFlag{
+		Name:  "txpool.purge.distance",
+		Usage: "Transactions older than this distance will be purged",
+		Value: txpoolcfg.DefaultConfig.PurgeDistance,
+	}
 	// Miner settings
 	MiningEnabledFlag = cli.BoolFlag{
 		Name:  "mine",
@@ -405,10 +415,20 @@ var (
 		Usage: "L2 datastreamer endpoint",
 		Value: "",
 	}
+	L2DataStreamerUseTLSFlag = cli.BoolFlag{
+		Name:  "zkevm.l2-datastreamer-use-tls",
+		Usage: "Use TLS connection to L2 datastreamer endpoint",
+		Value: false,
+	}
 	L2DataStreamerTimeout = cli.StringFlag{
 		Name:  "zkevm.l2-datastreamer-timeout",
 		Usage: "The time to wait for data to arrive from the stream before reporting an error (0s doesn't check)",
-		Value: "0s",
+		Value: "3s",
+	}
+	L2ShortCircuitToVerifiedBatchFlag = cli.BoolFlag{
+		Name:  "zkevm.l2-short-circuit-to-verified-batch",
+		Usage: "Short circuit block execution up to the batch after the latest verified batch (default: true). When disabled, the sequencer will execute all downloaded batches",
+		Value: true,
 	}
 	L1SyncStartBlock = cli.Uint64Flag{
 		Name:  "zkevm.l1-sync-start-block",
@@ -531,6 +551,11 @@ var (
 		Usage: "Block seal time. Defaults to 6s",
 		Value: "6s",
 	}
+	SequencerEmptyBlockSealTime = cli.StringFlag{
+		Name:  "zkevm.sequencer-empty-block-seal-time",
+		Usage: "Empty block seal time. Defaults to zkevm.sequencer-block-seal-time",
+		Value: "",
+	}
 	SequencerBatchSealTime = cli.StringFlag{
 		Name:  "zkevm.sequencer-batch-seal-time",
 		Usage: "Batch seal time. Defaults to 12s",
@@ -652,6 +677,16 @@ var (
 		Usage: "Allow the sequencer to proceed transactions with 0 gas price",
 		Value: false,
 	}
+	RejectLowGasPriceTransactions = cli.BoolFlag{
+		Name:  "zkevm.reject-low-gas-price-transactions",
+		Usage: "Reject the sequencer to proceed transactions with low gas price",
+		Value: false,
+	}
+	RejectLowGasPriceTolerance = cli.Float64Flag{
+		Name:  "zkevm.reject-low-gas-price-tolerance",
+		Usage: "Value between 0 and 1 that defines the tolerance for low gas price transactions, this percentage will be removed from the lowest price to determine rejection",
+		Value: 0,
+	}
 	AllowPreEIP155Transactions = cli.BoolFlag{
 		Name:  "zkevm.allow-pre-eip155-transactions",
 		Usage: "Allow the sequencer to proceed pre-EIP155 transactions",
@@ -691,6 +726,16 @@ var (
 	GasPriceFactor = cli.Float64Flag{
 		Name:  "zkevm.gas-price-factor",
 		Usage: "Apply factor to L1 gas price to calculate l2 gasPrice",
+		Value: 1,
+	}
+	GasPriceCheckFrequency = cli.DurationFlag{
+		Name:  "zkevm.gas-price-check-frequency",
+		Usage: "The frequency at which to check the L1 for the latest gas price",
+		Value: 0,
+	}
+	GasPriceHistoryCount = cli.Uint64Flag{
+		Name:  "zkevm.gas-price-history-count",
+		Usage: "The number of historical gas prices to keep",
 		Value: 1,
 	}
 	WitnessFullFlag = cli.BoolFlag{
@@ -733,6 +778,16 @@ var (
 		Usage: "The multiplier to reduce the SMT depth by when calculating virtual counters",
 		Value: 0.6,
 	}
+	BadBatches = cli.StringFlag{
+		Name:  "zkevm.bad-batches",
+		Usage: "A comma separated list of batch numbers that are known bad on the L1. These will automatically be marked as bad during L1 recovery",
+		Value: "",
+	}
+	IgnoreBadBatchesCheck = cli.BoolFlag{
+		Name:  "zkevm.ignore-bad-batches-check",
+		Usage: "Ignore bad batches",
+		Value: false,
+	}
 	InitialBatchCfgFile = cli.StringFlag{
 		Name:  "zkevm.initial-batch.config",
 		Usage: "The file that contains the initial (injected) batch data.",
@@ -742,6 +797,36 @@ var (
 		Name:  "zkevm.info-tree-update-interval",
 		Usage: "The interval at which the sequencer checks the L1 for new GER information",
 		Value: 1 * time.Minute,
+	}
+	SealBatchImmediatelyOnOverflow = cli.BoolFlag{
+		Name:  "zkevm.seal-batch-immediately-on-overflow",
+		Usage: "Seal the batch immediately when detecting a counter overflow",
+		Value: false,
+	}
+	MockWitnessGeneration = cli.BoolFlag{
+		Name:  "zkevm.mock-witness-generation",
+		Usage: "Mock the witness generation",
+		Value: false,
+	}
+	WitnessCacheEnable = cli.BoolFlag{
+		Name:  "zkevm.witness-cache-enable",
+		Usage: "Enable witness cache",
+		Value: false,
+	}
+	WitnessCacheLimit = cli.UintFlag{
+		Name:  "zkevm.witness-cache-limit",
+		Usage: "Amount of blocks behind the last executed one to keep witnesses for. Needs a lot of HDD space. Default value 10 000.",
+		Value: 10000,
+	}
+	WitnessContractInclusion = cli.StringFlag{
+		Name:  "zkevm.witness-contract-inclusion",
+		Usage: "Contracts that will have all of their storage added to the witness every time",
+		Value: "",
+	}
+	PanicOnReorg = cli.BoolFlag{
+		Name:  "zkevm.panic-on-reorg",
+		Usage: "Crash on reorg instead of attempting to recover",
+		Value: false,
 	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
@@ -1894,6 +1979,12 @@ func setTxPool(ctx *cli.Context, fullCfg *ethconfig.Config) {
 		fullCfg.TxPool.BlobPriceBump = ctx.Uint64(TxPoolBlobPriceBumpFlag.Name)
 	}
 	cfg.CommitEvery = common2.RandomizeDuration(ctx.Duration(TxPoolCommitEveryFlag.Name))
+
+	purgeEvery := ctx.Duration(TxpoolPurgeEveryFlag.Name)
+	purgeDistance := ctx.Duration(TxpoolPurgeDistanceFlag.Name)
+
+	fullCfg.TxPool.PurgeEvery = common2.RandomizeDuration(purgeEvery)
+	fullCfg.TxPool.PurgeDistance = purgeDistance
 }
 
 func setEthash(ctx *cli.Context, datadir string, cfg *ethconfig.Config) {

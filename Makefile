@@ -159,6 +159,13 @@ db-tools:
 	rm -rf vendor
 	@echo "Run \"$(GOBIN)/mdbx_stat -h\" to get info about mdbx db file."
 
+
+## test-unwind:                       run the unwind tests
+test-unwind:
+	make cdk-erigon
+	./zk/tests/unwinds/unwind.sh
+
+
 test-erigon-lib:
 	@cd erigon-lib && $(MAKE) test
 
@@ -193,6 +200,9 @@ lint:
 	@cd erigon-lib && $(MAKE) lint
 	@./erigon-lib/tools/golangci_lint.sh
 	@./erigon-lib/tools/mod_tidy_check.sh
+
+cpu_monitor:
+	@.github/scripts/cpu_monitor.sh
 
 ## clean:                             cleans the go cache, build dir, libmdbx db dir
 clean:
