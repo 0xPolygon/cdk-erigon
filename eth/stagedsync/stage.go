@@ -47,6 +47,10 @@ type StageState struct {
 	BlockNumber uint64 // BlockNumber is the current block number of the stage at the beginning of the state execution.
 }
 
+func (s *StageState) PrevUnwindPoint() *uint64 {
+	return s.state.PrevUnwindPoint()
+}
+
 func (s *StageState) LogPrefix() string { return s.state.LogPrefix() }
 
 // Update updates the stage state (current block number) in the database. Can be called multiple times during stage execution.
