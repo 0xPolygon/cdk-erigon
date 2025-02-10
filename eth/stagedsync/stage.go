@@ -48,6 +48,9 @@ type StageState struct {
 }
 
 func (s *StageState) PrevUnwindPoint() *uint64 {
+	if s.state == nil {
+		return nil
+	}
 	return s.state.PrevUnwindPoint()
 }
 

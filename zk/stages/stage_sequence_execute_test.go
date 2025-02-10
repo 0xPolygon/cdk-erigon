@@ -9,6 +9,7 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	cMocks "github.com/ledgerwatch/erigon-lib/kv/kvcache/mocks"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon-lib/txpool/txpoolcfg"
@@ -163,6 +164,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 		txPoolDb:         txPoolDb,
 		engine:           engineMock,
 		legacyVerifier:   legacyVerifier,
+		doneHook:         &MockDoneHook{},
 	}
 	historyCfg := stagedsync.StageHistoryCfg(db1, prune.DefaultMode, "")
 	quiet := true
@@ -198,6 +200,13 @@ func TestSpawnSequencingStage(t *testing.T) {
 	// batch/block sealing timeouts are small, so it could happen that an extra block is not added to the batch
 	// No requirement prevents adding and extra block to the batch or not adding it. For more specific cases, create a separate test.
 	assert.True(t, expectedBlockNum <= blockNumber && blockNumber <= expectedBlockNum+1, "value is not in range")
-	assert.Equal(t, uint64(1), stateVersion)
+	assert.Equal(t, uint64(2), stateVersion)
 	tx.Rollback()
+}
+
+type MockDoneHook struct {
+}
+
+func (m *MockDoneHook) AfterRun(tx kv.Tx, finishProgressBefore uint64, prevUnwindPoint *uint64) error {
+	return nil
 }
