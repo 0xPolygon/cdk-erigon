@@ -146,7 +146,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 	zkCfg := &ethconfig.Zk{
 		SequencerResequence: false,
 		// lower batch close time ensures only 1 block will be created on 1 turn, as the test expects
-		SequencerBatchSealTime:      3 * time.Millisecond, // normally it is greater that block seal time, allows one more block to be added to the batch
+		SequencerBatchSealTime:      2 * time.Millisecond, // normally it is greater that block seal time, allows one more block to be added to the batch
 		SequencerBlockSealTime:      2 * time.Millisecond,
 		SequencerEmptyBlockSealTime: 2 * time.Millisecond,
 		InfoTreeUpdateInterval:      2 * time.Millisecond,
@@ -200,7 +200,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 	// batch/block sealing timeouts are small, so it could happen that an extra block is not added to the batch
 	// No requirement prevents adding and extra block to the batch or not adding it. For more specific cases, create a separate test.
 	assert.True(t, expectedBlockNum <= blockNumber && blockNumber <= expectedBlockNum+1, "value is not in range")
-	assert.Equal(t, uint64(2), stateVersion)
+	assert.Equal(t, uint64(1), stateVersion)
 	tx.Rollback()
 }
 
