@@ -92,5 +92,7 @@ func ConvertToFullL2Block(block *datastream.L2Block) *FullL2Block {
 		BlockGasLimit:   block.GetBlockGasLimit(),
 		BlockInfoRoot:   libcommon.BytesToHash(block.GetBlockInfoRoot()),
 		Debug:           ProcessDebug(block.GetDebug()),
+		ForkId:          block.GetForkId(),
+		ParentHash:      libcommon.BytesToHash(block.GetParentHash()),
 	}
 }

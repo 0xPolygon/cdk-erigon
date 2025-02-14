@@ -337,7 +337,7 @@ func createFullBlockStreamEntriesProto(
 	}
 
 	// L2 BLOCK
-	entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot))
+	entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot, forkId))
 
 	var transaction DataStreamEntryProto
 	isEtrog := forkId <= EtrogBatchNumber

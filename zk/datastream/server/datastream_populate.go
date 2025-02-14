@@ -385,7 +385,7 @@ func (srv *ZkEVMDataStreamServer) WriteGenesisToStream(
 	batchBookmark := newBatchBookmarkEntryProto(genesis.NumberU64())
 	l2BlockBookmark := newL2BlockBookmarkEntryProto(genesis.NumberU64())
 
-	l2Block := newL2BlockProto(genesis, genesis.Hash().Bytes(), batchNo, ger, 0, 0, common.Hash{}, 0, common.Hash{})
+	l2Block := newL2BlockProto(genesis, genesis.Hash().Bytes(), batchNo, ger, 0, 0, common.Hash{}, 0, common.Hash{}, 0)
 	l2BlockEnd := newL2BlockEndProto(0)
 	batchStart := newBatchStartProto(batchNo, srv.chainId, GenesisForkId, datastream.BatchType_BATCH_TYPE_REGULAR)
 

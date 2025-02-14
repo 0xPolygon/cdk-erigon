@@ -34,6 +34,8 @@ message L2Block {
   uint64 block_gas_limit = 12;
   bytes block_info_root = 13;
   Debug debug = 14;
+  uint64 fork_id = 15;
+  bytes parent_hash = 16;
 }
 
 
