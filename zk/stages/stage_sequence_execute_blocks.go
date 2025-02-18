@@ -2,6 +2,7 @@ package stages
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -17,6 +18,7 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/metrics"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/secp256k1"
 )
@@ -156,9 +158,11 @@ func finaliseBlock(
 		txHash2SenderCache[tx.Hash()] = sender
 	}
 
+	pbStateStart := time.Now()
 	if err := postBlockStateHandling(*batchContext.cfg, ibs, batchContext.sdb.hermezDb, newHeader, ger, l1BlockHash, parentBlock.Root(), txInfos); err != nil {
 		return nil, err
 	}
+	metrics.GetLogStatistics().CumulativeTiming(metrics.PbStateTiming, time.Since(pbStateStart))
 
 	var withdrawals []*types.Withdrawal
 	if batchContext.cfg.chainConfig.IsShanghai(newHeader.Number.Uint64()) {
@@ -184,6 +188,7 @@ func finaliseBlock(
 		return nil, err
 	}
 
+	zkIncStart := time.Now()
 	quit := batchContext.ctx.Done()
 	batchContext.sdb.eridb.OpenBatch(quit)
 	// this is actually the interhashes stage
@@ -197,6 +202,9 @@ func finaliseBlock(
 		return nil, err
 	}
 
+	metrics.GetLogStatistics().CumulativeTiming(metrics.ZkIncIntermediateHashesTiming, time.Since(zkIncStart))
+
+	doFinStart := time.Now()
 	finalHeader := finalBlock.HeaderNoCopy()
 	finalHeader.Root = newRoot
 	finalHeader.Coinbase = batchState.getCoinbase(batchContext.cfg)
@@ -242,6 +250,8 @@ func finaliseBlock(
 	if err := batchContext.sdb.hermezDb.WriteBlockBatch(newNum.Uint64(), batchState.batchNumber); err != nil {
 		return nil, fmt.Errorf("write block batch error: %v", err)
 	}
+
+	metrics.GetLogStatistics().CumulativeTiming(metrics.FinaliseBlockWriteTiming, time.Since(doFinStart))
 
 	// write batch counters
 	err = batchContext.sdb.hermezDb.WriteBatchCounters(newNum.Uint64(), batchCounters.CombineCollectorsNoChanges().UsedAsArray())

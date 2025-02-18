@@ -21,6 +21,7 @@ import (
 	erigonapp "github.com/ledgerwatch/erigon/turbo/app"
 	erigoncli "github.com/ledgerwatch/erigon/turbo/cli"
 	"github.com/ledgerwatch/erigon/turbo/node"
+	"github.com/ledgerwatch/erigon/zk/metrics"
 )
 
 func main() {
@@ -66,6 +67,10 @@ func runErigon(cliCtx *cli.Context) error {
 	logger := log.New()
 	nodeCfg := node.NewNodConfigUrfave(cliCtx, logger)
 	ethCfg := node.NewEthConfigUrfave(cliCtx, nodeCfg, logger)
+
+	if cliCtx.Bool(utils.MetricsEnabledFlag.Name) {
+		metrics.Init()
+	}
 
 	ethNode, err := node.New(cliCtx.Context, nodeCfg, ethCfg, logger)
 	if err != nil {
