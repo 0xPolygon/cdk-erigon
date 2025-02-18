@@ -427,12 +427,12 @@ func sequencingBatchStep(
 				var allConditionsOK bool
 				var newTransactions []types.Transaction
 				var newIds []common.Hash
-
+				getTxTime := time.Now()
 				newTransactions, newIds, allConditionsOK, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
 				if err != nil {
 					return err
 				}
-
+				metrics.GetLogStatistics().CumulativeTiming(metrics.GetTxTiming, time.Since(getTxTime))
 				batchState.blockState.transactionsForInclusion = append(batchState.blockState.transactionsForInclusion, newTransactions...)
 				for idx, tx := range newTransactions {
 					batchState.blockState.transactionHashesToSlots[tx.Hash()] = newIds[idx]
@@ -446,7 +446,7 @@ func sequencingBatchStep(
 						time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool / 5) // we do not need to sleep too long for txpool not ready
 					}
 					metrics.GetLogStatistics().CumulativeCounting(metrics.GetTxPauseCounter)
-					metrics.GetLogStatistics().CumulativeTiming(metrics.ProcessingPauseTiming, time.Since(pauseTime))
+					metrics.GetLogStatistics().CumulativeTiming(metrics.GetTxPauseTiming, time.Since(pauseTime))
 				} else {
 					log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 				}
@@ -456,7 +456,7 @@ func sequencingBatchStep(
 				pauseTime := time.Now()
 				time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
 				metrics.GetLogStatistics().CumulativeCounting(metrics.GetTxPauseCounter)
-				metrics.GetLogStatistics().CumulativeTiming(metrics.ProcessingPauseTiming, time.Since(pauseTime))
+				metrics.GetLogStatistics().CumulativeTiming(metrics.GetTxPauseTiming, time.Since(pauseTime))
 			} else {
 				log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 			}
@@ -505,6 +505,7 @@ func sequencingBatchStep(
 				backupDataSizeChecker := *blockDataSizeChecker
 				receipt, execResult, txCounters, anyOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, batchState.isL1Recovery(), batchState.forkId, l1TreeUpdateIndex, &backupDataSizeChecker, ethBlockGasPool)
 				if err != nil {
+					metrics.GetLogStatistics().CumulativeCounting(metrics.ProcessingInvalidTxCounter)
 					if batchState.isLimboRecovery() {
 						panic("limbo transaction has already been executed once so they must not fail while re-executing")
 					}
@@ -552,6 +553,7 @@ func sequencingBatchStep(
 
 				switch anyOverflow {
 				case overflowCounters:
+					metrics.GetLogStatistics().CumulativeCounting(metrics.ZKOverflowBlockCounter)
 					if batchState.isLimboRecovery() {
 						panic("limbo transaction has already been executed once so they must not overflow counters while re-executing")
 					}
@@ -600,7 +602,6 @@ func sequencingBatchStep(
 							batchState.newOverflowTransaction()
 							transactionNotAddedText := fmt.Sprintf("[%s] transaction %s was not included in this batch because it overflowed.", logPrefix, txHash)
 							ocs, _ := batchCounters.CounterStats(l1TreeUpdateIndex != 0)
-							metrics.GetLogStatistics().CumulativeCounting(metrics.ZKOverflowBlockCounter)
 							log.Info(transactionNotAddedText, "Counters context:", ocs, "overflow transactions", batchState.overflowTransactions)
 							if batchState.reachedOverflowTransactionLimit() || cfg.zk.SealBatchImmediatelyOnOverflow {
 								log.Info(fmt.Sprintf("[%s] closing batch due to overflow counters", logPrefix), "counters: ", batchState.overflowTransactions, "immediate", cfg.zk.SealBatchImmediatelyOnOverflow)
@@ -623,6 +624,7 @@ func sequencingBatchStep(
 						return fmt.Errorf("strict mode enabled, but resequenced batch %d overflowed counters on block %d", batchState.batchNumber, blockNumber)
 					}
 				case overflowGas:
+					metrics.GetLogStatistics().CumulativeCounting(metrics.FailTxGasOverCounter)
 					if batchState.isAnyRecovery() {
 						panic(fmt.Sprintf("block gas limit overflow in recovery block: %d", blockNumber))
 					}
