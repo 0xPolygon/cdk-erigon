@@ -89,7 +89,7 @@ func (msg *jsonrpcMessage) namespace() string {
 }
 
 func (msg *jsonrpcMessage) String() string {
-	b, _ := json.Marshal(msg)
+	b, _ := sonnet.Marshal(msg)
 	return string(b)
 }
 
@@ -100,7 +100,7 @@ func (msg *jsonrpcMessage) errorResponse(err error) *jsonrpcMessage {
 }
 
 func (msg *jsonrpcMessage) response(result interface{}) *jsonrpcMessage {
-	enc, err := json.Marshal(result)
+	enc, err := sonnet.Marshal(result)
 	if err != nil {
 		// TODO: wrap with 'internal server error'
 		return msg.errorResponse(err)
