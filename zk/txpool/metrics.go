@@ -34,7 +34,7 @@ func (m *Metrics) Update(pool *TxPool) {
 		out = 0
 	}
 
-	var waitTimes []time.Duration
+	waitTimes := make([]time.Duration, 0, pool.all.tree.Len())
 	pool.all.ascendAll(func(mt *metaTx) bool {
 		created := time.Unix(int64(mt.created), 0)
 		waitTimes = append(waitTimes, time.Since(created))
