@@ -1,9 +1,19 @@
 package txpool
 
 import (
-	"sort"
+	"fmt"
+	"github.com/ledgerwatch/erigon-lib/metrics"
 	"time"
 )
+
+var PoolMetrics = map[string]metrics.Gauge{}
+
+func init() {
+	PoolMetrics["txpool_size"] = metrics.GetOrCreateGauge(fmt.Sprintf(`txpool{metric="pool_size"}`))
+	PoolMetrics["txpool_tx_in"] = metrics.GetOrCreateGauge(fmt.Sprintf(`txpool{metric="tx-in-1m"}`))
+	PoolMetrics["txpool_tx_out"] = metrics.GetOrCreateGauge(fmt.Sprintf(`txpool{metric="tx-out-1m"}`))
+	PoolMetrics["txpool_median_wait_time_seconds"] = metrics.GetOrCreateGauge(fmt.Sprintf(`txpool{metric="median-wait-seconds-1m"}`))
+}
 
 const MetricsRunTime = 1 * time.Minute
 
@@ -43,9 +53,6 @@ func (m *Metrics) Update(pool *TxPool) {
 
 	medianWaitTime := 0
 	if len(waitTimes) > 0 {
-		sort.Slice(waitTimes, func(i, j int) bool {
-			return waitTimes[i] < waitTimes[j]
-		})
 		mid := len(waitTimes) / 2
 		var median time.Duration
 		if len(waitTimes)%2 == 0 {
@@ -64,5 +71,21 @@ func (m *Metrics) Update(pool *TxPool) {
 	m.TxOut = out
 	m.MedianWaitTimeSeconds = uint64(medianWaitTime)
 
+	m.UpdatePrometheusMetrics(currentPoolSize)
 	m.ResetCounter()
+}
+
+func (m *Metrics) UpdatePrometheusMetrics(poolSize uint64) {
+	for id, pm := range PoolMetrics {
+		switch id {
+		case "txpool_size":
+			pm.SetUint64(poolSize)
+		case "txpool_tx_in":
+			pm.SetUint64(m.TxIn)
+		case "txpool_tx_out":
+			pm.SetUint64(m.TxOut)
+		case "txpool_median_wait_time_seconds":
+			pm.SetUint64(m.MedianWaitTimeSeconds)
+		}
+	}
 }
