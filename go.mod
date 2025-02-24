@@ -43,7 +43,6 @@ require (
 	github.com/edsrzf/mmap-go v1.1.0
 	github.com/emicklei/dot v1.6.1
 	github.com/fjl/gencodec v0.0.0-20220412091415-8bb9e558978c
-	github.com/gateway-fm/vectorized-poseidon-gold v1.0.0
 	github.com/gballet/go-verkle v0.0.0-20221121182333-31427a1f2d35
 	github.com/gfx-labs/sse v0.0.0-20231226060816-f747e26a9baa
 	github.com/go-chi/chi/v5 v5.0.12
@@ -65,7 +64,7 @@ require (
 	github.com/holiman/uint256 v1.3.1
 	github.com/huandu/xstrings v1.4.0
 	github.com/huin/goupnp v1.2.0
-	github.com/iden3/go-iden3-crypto v0.0.15
+	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/jackc/pgx/v4 v4.18.2
 	github.com/jackpal/go-nat-pmp v1.0.2
 	github.com/jedib0t/go-pretty/v6 v6.5.9
@@ -81,6 +80,7 @@ require (
 	github.com/multiformats/go-multiaddr v0.12.1
 	github.com/nsf/jsondiff v0.0.0-20230430225905-43f6cf3098c1
 	github.com/nxadm/tail v1.4.9-0.20211216163028-4472660a31a6
+	github.com/okx/poseidongold v0.0.3
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pelletier/go-toml/v2 v2.2.1
 	github.com/pion/randutil v0.1.0
