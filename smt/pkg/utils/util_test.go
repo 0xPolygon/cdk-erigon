@@ -79,8 +79,7 @@ func BenchmarkHashContractBytecode(b *testing.B) {
 	})
 }
 
-func TestHashContractBytecodeConsistency(t *testing.T) {
-	size := 1234 // not divisible by 56
+func runTestHashContractBytecodeConsistency(size int, t *testing.T) {
 	data := make([]byte, size)
 	rand.Read(data)
 	strData := hex.EncodeToString(data)
@@ -96,6 +95,13 @@ func TestHashContractBytecodeConsistency(t *testing.T) {
 	if h1.Cmp(h3) != 0 {
 		t.Errorf("(upper case) Expected %v, but got %v", h1, h3)
 	}
+}
+
+func TestHashContractBytecodeConsistency(t *testing.T) {
+	runTestHashContractBytecodeConsistency(1234, t) // not divisible by 56
+	runTestHashContractBytecodeConsistency(37, t)   // not divisible by 56
+	runTestHashContractBytecodeConsistency(56, t)   // divisible by 56
+	runTestHashContractBytecodeConsistency(560, t)  // divisible by 56
 }
 
 func TestConvertBigIntToHex(t *testing.T) {
