@@ -449,7 +449,7 @@ func (s *L1Syncer) getSequencedLogs(jobs <-chan fetchJob, results chan jobResult
 					log.Debug("getSequencedLogs retry error", "err", err)
 					retry++
 					if retry > 5 {
-						log.Error("L1 syncer (getSequencedLogs) exceeded 5 retries", "err", err)
+						log.Error("L1 syncer (getSequencedLogs) exceeded 5 retries", "retry", retry, "err", err)
 					}
 					if retry > 20 {
 						panic("L1 syncer (getSequencedLogs) exceeded 20 retries")
