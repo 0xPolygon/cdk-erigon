@@ -79,7 +79,8 @@ func BenchmarkHashContractBytecode(b *testing.B) {
 	})
 }
 
-func runTestHashContractBytecodeConsistency(size int, t *testing.T) {
+// for input strings of even size
+func runTestHashContractBytecodeConsistencyEven(size int, t *testing.T) {
 	data := make([]byte, size)
 	rand.Read(data)
 	strData := hex.EncodeToString(data)
@@ -97,11 +98,30 @@ func runTestHashContractBytecodeConsistency(size int, t *testing.T) {
 	}
 }
 
+// for input strings of odd size
+func runTestHashContractBytecodeConsistencyOdd(size int, t *testing.T) {
+	data := make([]byte, size)
+	rand.Read(data)
+	strData := hex.EncodeToString(data)
+	strData = strData[:len(strData)-1]
+	h1 := HashContractBytecodeBigIntV1(strings.ToLower(strData))
+	h2 := HashContractBytecodeBigInt(strData)
+	if h1.Cmp(h2) != 0 {
+		t.Errorf("(lower case) Expected %v, but got %v", h1, h2)
+	}
+	h3 := HashContractBytecodeBigInt(strings.ToUpper(strData))
+	if h1.Cmp(h3) != 0 {
+		t.Errorf("(upper case) Expected %v, but got %v", h1, h3)
+	}
+}
+
 func TestHashContractBytecodeConsistency(t *testing.T) {
-	runTestHashContractBytecodeConsistency(1234, t) // not divisible by 56
-	runTestHashContractBytecodeConsistency(37, t)   // not divisible by 56
-	runTestHashContractBytecodeConsistency(56, t)   // divisible by 56
-	runTestHashContractBytecodeConsistency(560, t)  // divisible by 56
+	runTestHashContractBytecodeConsistencyEven(1234, t)
+	runTestHashContractBytecodeConsistencyEven(37, t)
+	runTestHashContractBytecodeConsistencyEven(111, t) // edge case, the actual size is divisible by 56*2
+	runTestHashContractBytecodeConsistencyOdd(37, t)
+	runTestHashContractBytecodeConsistencyOdd(1, t)
+	runTestHashContractBytecodeConsistencyOdd(111, t) // edge case, the actual size is divisible by 56*2
 }
 
 func TestConvertBigIntToHex(t *testing.T) {

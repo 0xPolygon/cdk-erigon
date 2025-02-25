@@ -847,13 +847,17 @@ func HashContractBytecodeBigInt(bc string) *big.Int {
 
 	// MT is 56 (multiplier)
 	MT := BYTECODE_ELEMENTS_HASH * BYTECODE_BYTES_ELEMENT
-	bb := make([]byte, MT*(((len(bytecode)/2+1)/MT)+1))
+	lenBytecode := len(bytecode)/2 + 1 // + 1 because we append 01
+	if lenBytecode%MT != 0 {
+		lenBytecode += MT - lenBytecode%MT // padding
+	}
+	bb := make([]byte, lenBytecode)
 	for i := 0; i < len(bytecode)/2; i++ {
 		// use strconv.ParseInt
 		// x, _ := strconv.ParseInt(bytecode[2*i:2*i+2], 16, 64)
 		// bb[i] = byte(x)
 		// simple
-		bb[i] = byte(charToDigit(bytecode[2*i])<<4 + charToDigit(bytecode[2*i+1]))
+		bb[i] = byte((charToDigit(bytecode[2*i]) << 4) + charToDigit(bytecode[2*i+1]))
 	}
 	for i := len(bytecode) / 2; i < len(bb); i++ {
 		bb[i] = 0
