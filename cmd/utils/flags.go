@@ -601,6 +601,16 @@ var (
 		Usage: "Reuse the L1 info index for resequencing",
 		Value: true,
 	}
+	SequencerDecodedTxCacheSize = cli.IntFlag{
+		Name:  "zkevm.sequencer-decoded-tx-cache-size",
+		Usage: "Sequencer decoded transaction cache size",
+		Value: 4096,
+	}
+	SequencerDecodedTxCacheTTL = cli.DurationFlag{
+		Name:  "zkevm.sequencer-decoded-tx-cache-ttl",
+		Usage: "Sequencer decoded transaction cache time-to-live",
+		Value: 600 * time.Second,
+	}
 	ExecutorUrls = cli.StringFlag{
 		Name:  "zkevm.executor-urls",
 		Usage: "A comma separated list of grpc addresses that host executors",
@@ -883,10 +893,25 @@ var (
 		Name:  "zkevm.genesis-config-path",
 		Usage: "File path for the zk config containing allocs, chainspec, and other zk specific configurations.",
 	}
+	L2InfoTreeUpdatesBatchSize = cli.Uint64Flag{
+		Name:  "zkevm.l2-info-tree-updates-batch-size",
+		Usage: "Size of the batch of L2 info tree updates to retrieve at a time. L2 info tree updates must be enabled to use this.",
+		Value: 500,
+	}
+	L2InfoTreeUpdatesEnabled = cli.BoolFlag{
+		Name:  "zkevm.l2-info-tree-updates-enabled",
+		Usage: "When enabled a RPC node can use the L2 to build the InfoTree.",
+		Value: false,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",
 		Value: 10,
+	}
+	ACLJsonLocation = cli.StringFlag{
+		Name:  "acl.json-location",
+		Usage: "Location of the ACL JSON file",
+		Value: "",
 	}
 	DebugTimers = cli.BoolFlag{
 		Name:  "debug.timers",

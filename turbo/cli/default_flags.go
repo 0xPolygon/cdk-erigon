@@ -216,6 +216,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.SequencerResequence,
 	&utils.SequencerResequenceStrict,
 	&utils.SequencerResequenceReuseL1InfoIndex,
+	&utils.SequencerDecodedTxCacheSize,
+	&utils.SequencerDecodedTxCacheTTL,
 	&utils.ExecutorUrls,
 	&utils.ExecutorStrictMode,
 	&utils.ExecutorRequestTimeout,
@@ -253,6 +255,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.PanicOnReorg,
 	&utils.ShadowSequencer,
 	&utils.ZKGenesisConfigPathFlag,
+	&utils.L2InfoTreeUpdatesBatchSize,
+	&utils.L2InfoTreeUpdatesEnabled,
 
 	&utils.SilkwormExecutionFlag,
 	&utils.SilkwormRpcDaemonFlag,
@@ -299,6 +303,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.InitialBatchCfgFile,
 
 	&utils.ACLPrintHistory,
+	&utils.ACLJsonLocation,
 	&utils.InfoTreeUpdateInterval,
 	&utils.SealBatchImmediatelyOnOverflow,
 	&utils.MockWitnessGeneration,

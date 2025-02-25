@@ -409,11 +409,10 @@ func sequencingBatchStep(
 				}
 			} else if !batchState.isL1Recovery() {
 
-				var allConditionsOK bool
 				var newTransactions []types.Transaction
 				var newIds []common.Hash
 
-				newTransactions, newIds, allConditionsOK, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
+				newTransactions, newIds, _, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
 				if err != nil {
 					return err
 				}
@@ -422,19 +421,10 @@ func sequencingBatchStep(
 				for idx, tx := range newTransactions {
 					batchState.blockState.transactionHashesToSlots[tx.Hash()] = newIds[idx]
 				}
-
-				if len(batchState.blockState.transactionsForInclusion) == 0 {
-					if allConditionsOK {
-						time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
-					} else {
-						time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool / 5) // we do not need to sleep too long for txpool not ready
-					}
-				} else {
-					log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
-				}
 			}
 
 			if len(batchState.blockState.transactionsForInclusion) == 0 {
+				log.Trace(fmt.Sprintf("[%s] Sleep on SequencerTimeoutOnEmptyTxPool", logPrefix), "time in ms", batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool.Milliseconds())
 				time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
 			} else {
 				log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
@@ -716,6 +706,14 @@ func sequencingBatchStep(
 			return err
 		}
 
+		// remove the decoded transactions from the cache
+		for _, txHash := range batchState.blockState.builtBlockElements.txSlots {
+			cfg.decodedTxCache.Remove(txHash)
+		}
+		for _, txHash := range batchState.blockState.transactionsToDiscard {
+			cfg.decodedTxCache.Remove(txHash)
+		}
+
 		// now trigger sender state changes in the pool where we encountered nonce issues during execution
 		if err := cfg.txPool.TriggerSenderStateChanges(ctx, sdb.tx, header.GasLimit, sendersToTriggerStatechanges); err != nil {
 			return err
@@ -759,6 +757,17 @@ func sequencingBatchStep(
 		if err != nil || needsUnwind {
 			return err
 		}
+
+		if _, err := rawdb.IncrementStateVersionByBlockNumberIfNeeded(batchContext.sdb.tx, block.NumberU64()); err != nil {
+			return fmt.Errorf("writing plain state version: %w", err)
+		}
+
+		// notify the done hook that we have finished processing this block - will notify subscribers etc.
+		// here we -1 the block number as we know we have just created a new block so can simulate that the last block notified
+		// was the previous block created
+		if err := cfg.doneHook.AfterRun(batchContext.sdb.tx, block.NumberU64()-1, s.PrevUnwindPoint()); err != nil {
+			return err
+		}
 	}
 
 	/*
@@ -768,14 +777,6 @@ func sequencingBatchStep(
 		- it is also handled property in doCheckForBadBatch
 		- it is unwound correctly
 	*/
-
-	if block != nil { // block is nil here if no transactions mined
-		// TODO: It is 99% sure that there is no need to write this in any of processInjectedInitialBatch, alignExecutionToDatastream, doCheckForBadBatch but it is worth double checknig
-		// the unwind of this value is handed by UnwindExecutionStageDbWrites
-		if _, err := rawdb.IncrementStateVersionByBlockNumberIfNeeded(batchContext.sdb.tx, block.NumberU64()); err != nil {
-			return fmt.Errorf("writing plain state version: %w", err)
-		}
-	}
 
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", batchContext.s.LogPrefix(), batchState.batchNumber))
 

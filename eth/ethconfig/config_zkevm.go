@@ -48,6 +48,8 @@ type Zk struct {
 	SequencerResequence                    bool
 	SequencerResequenceStrict              bool
 	SequencerResequenceReuseL1InfoIndex    bool
+	SequencerDecodedTxCacheSize            int
+	SequencerDecodedTxCacheTTL             time.Duration
 	ExecutorUrls                           []string
 	ExecutorStrictMode                     bool
 	ExecutorRequestTimeout                 time.Duration
@@ -101,6 +103,7 @@ type Zk struct {
 
 	InitialBatchCfgFile            string
 	ACLPrintHistory                int
+	ACLJsonLocation                string
 	InfoTreeUpdateInterval         time.Duration
 	BadBatches                     []uint64
 	IgnoreBadBatchesCheck          bool
@@ -117,6 +120,8 @@ type Zk struct {
 	BadTxAllowance                 uint64
 	BadTxStoreValue                uint64
 	BadTxPurge                     bool
+	L2InfoTreeUpdatesBatchSize     uint64
+	L2InfoTreeUpdatesEnabled       bool
 }
 
 var DefaultZkConfig = &Zk{}

@@ -32,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ledgerwatch/erigon/zk/acl"
+
 	"github.com/VictoriaMetrics/metrics"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/go-stack/stack"
@@ -72,6 +74,10 @@ var (
 	queuedSubCounter        = metrics.GetOrCreateCounter(`txpool_queued`)
 	basefeeSubCounter       = metrics.GetOrCreateCounter(`txpool_basefee`)
 )
+
+type PolicyValidator interface {
+	IsActionAllowed(ctx context.Context, addr common.Address, policy byte) (bool, error)
+}
 
 // Pool is interface for the transaction pool
 // This interface exists for the convenience of testing, and not yet because
@@ -327,6 +333,7 @@ type TxPool struct {
 	isPostShanghai          atomic.Bool
 	ethCfg                  *ethconfig.Config
 	aclDB                   kv.RwDB
+	policyValidator         PolicyValidator
 
 	// we cannot be in a flushing state whilst getting transactions from the pool, so we have this mutex which is
 	// exposed publicly so anything wanting to get "best" transactions can ensure a flush isn't happening and
@@ -337,6 +344,10 @@ type TxPool struct {
 	limbo *Limbo
 
 	logLevel log.Lvl
+
+	// PoolMetrics contains metrics for tx/s in and out of the pool
+	// and a median wait time of tx/s waiting in the pool
+	metrics *Metrics
 }
 
 func CreateTxPoolBuckets(tx kv.RwTx) error {
@@ -372,6 +383,18 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		logLevel = ethCfg.Zk.LogLevel
 	}
 
+	var policyValidator PolicyValidator
+	if ethCfg.Zk != nil && len(ethCfg.Zk.ACLJsonLocation) > 0 {
+		log.Info("[ACL] Using JSON ACL file", "path", ethCfg.Zk.ACLJsonLocation)
+		aclData, err := acl.UnmarshalAcl(ethCfg.Zk.ACLJsonLocation)
+		if err != nil {
+			return nil, err
+		}
+		policyValidator = acl.NewPolicyValidator(aclData)
+	} else {
+		policyValidator = NewPolicyValidator(aclDB)
+	}
+
 	return &TxPool{
 		lock:                    &sync.Mutex{},
 		byHash:                  map[string]*metaTx{},
@@ -397,6 +420,8 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		aclDB:                   aclDB,
 		limbo:                   newLimbo(),
 		logLevel:                logLevel,
+		policyValidator:         policyValidator,
+		metrics:                 &Metrics{},
 	}, nil
 }
 
@@ -793,7 +818,7 @@ func (p *TxPool) validateTx(txn *types.TxSlot, isLocal bool, stateCache kvcache.
 	switch resolvePolicy(txn) {
 	case SendTx:
 		var allow bool
-		allow, err := p.isActionAllowed(context.TODO(), from, SendTx)
+		allow, err := p.policyValidator.IsActionAllowed(context.TODO(), from, SendTx.ToByte())
 		if err != nil {
 			panic(err)
 		}
@@ -803,7 +828,7 @@ func (p *TxPool) validateTx(txn *types.TxSlot, isLocal bool, stateCache kvcache.
 	case Deploy:
 		var allow bool
 		// check that sender may deploy contracts
-		allow, err := p.isActionAllowed(context.TODO(), from, Deploy)
+		allow, err := p.policyValidator.IsActionAllowed(context.TODO(), from, Deploy.ToByte())
 		if err != nil {
 			panic(err)
 		}
@@ -1405,6 +1430,8 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 	defer logEvery.Stop()
 	purgeEvery := time.NewTicker(p.cfg.PurgeEvery)
 	defer purgeEvery.Stop()
+	txIoTicker := time.NewTicker(MetricsRunTime)
+	defer txIoTicker.Stop()
 
 	for {
 		select {
@@ -1422,6 +1449,8 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 			return
 		case <-logEvery.C:
 			p.logStats()
+		case <-txIoTicker.C:
+			p.metrics.Update(p)
 		case <-processRemoteTxsEvery.C:
 			if !p.Started() {
 				continue
@@ -1449,6 +1478,7 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 				log.Debug("[txpool] Commit", "written_kb", written/1024, "in", time.Since(t))
 			}
 		case announcements := <-newTxs:
+			p.metrics.IncrementCounter()
 			go func() {
 				for i := 0; i < 16; i++ { // drain more events from channel, then merge and dedup them
 					select {
@@ -1820,6 +1850,9 @@ func (p *TxPool) logStats() {
 		"pending", p.pending.Len(),
 		"baseFee", p.baseFee.Len(),
 		"queued", p.queued.Len(),
+		"tx-in/1m", p.metrics.TxIn,
+		"tx-out/1m", p.metrics.TxIn,
+		"median-wait/1m", fmt.Sprintf("%v/s", p.metrics.MedianWaitTimeSeconds),
 	}
 	cacheKeys := p._stateCache.Len()
 	if cacheKeys > 0 {
