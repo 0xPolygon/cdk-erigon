@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -21,30 +22,34 @@ func GetLogStatistics() Statistics {
 
 type statisticsInstance struct {
 	newRoundTime time.Time
-	statistics   map[logTag]int64 // value maybe the counter or time.Duration(ms)
-	tags         map[logTag]string
+	statistics   map[LogTag]int64 // value maybe the counter or time.Duration(ms)
+	tags         map[LogTag]string
 }
 
-func (l *statisticsInstance) CumulativeCounting(tag logTag) {
+func (l *statisticsInstance) CumulativeCounting(tag LogTag) {
 	l.statistics[tag]++
 }
 
-func (l *statisticsInstance) CumulativeValue(tag logTag, value int64) {
+func (l *statisticsInstance) CumulativeValue(tag LogTag, value int64) {
 	l.statistics[tag] += value
 }
 
-func (l *statisticsInstance) CumulativeTiming(tag logTag, duration time.Duration) {
+func (l *statisticsInstance) CumulativeTiming(tag LogTag, duration time.Duration) {
 	l.statistics[tag] += duration.Milliseconds()
 }
 
-func (l *statisticsInstance) SetTag(tag logTag, value string) {
+func (l *statisticsInstance) CumulativeMicroTiming(tag LogTag, duration time.Duration) {
+	l.statistics[tag] += duration.Microseconds()
+}
+
+func (l *statisticsInstance) SetTag(tag LogTag, value string) {
 	l.tags[tag] = value
 }
 
 func (l *statisticsInstance) resetStatistics() {
 	l.newRoundTime = time.Now()
-	l.statistics = make(map[logTag]int64)
-	l.tags = make(map[logTag]string)
+	l.statistics = make(map[LogTag]int64)
+	l.tags = make(map[LogTag]string)
 }
 
 func (l *statisticsInstance) Summary() string {
@@ -66,21 +71,31 @@ func (l *statisticsInstance) Summary() string {
 	pbStateTiming := "PbStateTiming<" + strconv.Itoa(int(l.statistics[PbStateTiming])) + "ms>, "
 	zkIncIntermediateHashesTiming := "ZkIncIntermediateHashesTiming<" + strconv.Itoa(int(l.statistics[ZkIncIntermediateHashesTiming])) + "ms>, "
 	finaliseBlockWriteTiming := "FinaliseBlockWriteTiming<" + strconv.Itoa(int(l.statistics[FinaliseBlockWriteTiming])) + "ms>, "
-	batchCloseReason := "BatchCloseReason<" + l.tags[BatchCloseReason] + ">"
+	batchCloseReason := "BatchCloseReason<" + l.tags[BatchCloseReason] + ">,"
+	zkHashAccCount := "zkHashAccCount<acc:" + strconv.Itoa(int(l.statistics[ZKHashAccountCount])) + ", store:" + strconv.Itoa(int(l.statistics[ZKHashStoreCount])) + ", code:" + strconv.Itoa(int(l.statistics[ZKHashCodeCount])) + ">, "
+	zkHashSMTCount := "zkHashSMTCount<delByNode:" + strconv.Itoa(int(l.statistics[ZKHashSMTDeleteByNodeKey])) + "-" + fmt.Sprintf("%.0f", float64(l.statistics[ZKHashSMTDeleteByNodeKeyTiming])/1000.0) + "ms, delHash:" + strconv.Itoa(int(l.statistics[ZKHashSMTDeleteHashKey])) + "-" + fmt.Sprintf("%.0f", float64(l.statistics[ZKHashSMTDeleteHashKeyTiming])/1000.0) + "ms, ins:" + strconv.Itoa(int(l.statistics[ZKHashSMTInsertKey])) + "-" + fmt.Sprintf("%.0f", float64(l.statistics[ZKHashSMTInsertKeyTiming])/1000.0) + "ms, get:" + strconv.Itoa(int(l.statistics[ZKHashSMTGetKey])) + "-" + fmt.Sprintf("%.0f", float64(l.statistics[ZKHashSMTGetKeyTiming])/1000.0) + "ms>, "
+	zkHermezSmtMetadata := "HermezSmtMetadata<" + l.tags[HermezSmtMetadata] + "," + strconv.Itoa(int(l.statistics[HermezSmtMetadata])) + "ms>, "
+	zkHermezSmtStats := "HermezSmtStats<" + l.tags[HermezSmtStats] + "," + strconv.Itoa(int(l.statistics[HermezSmtStats])) + "ms>, "
+	zkHermezSmt := "HermezSmt<" + l.tags[HermezSmt] + "," + strconv.Itoa(int(l.statistics[HermezSmt])) + "ms>, "
+	zkHermezSmtHashKey := "HermezSmtHashKey<" + l.tags[HermezSmtHashKey] + "," + strconv.Itoa(int(l.statistics[HermezSmtHashKey])) + "ms>, "
+	deleteLog := "Delete<" + fmt.Sprintf("%.0f", float64(l.statistics[Delete])/1000.0) + "ms>, "
+	appendLog := "Append<" + fmt.Sprintf("%.0f", float64(l.statistics[Append])/1000.0) + "ms>, "
+	putLog := "Put<" + fmt.Sprintf("%.0f", float64(l.statistics[Put])/1000.0) + "ms>"
 
 	result := batch + totalDuration + gasUsed + blockCount + tx + getTxPause +
 		reprocessTx + gasOverTx + zkOverflowBlock + invalidTx + sequencingBatchTiming + getTxTiming + processTxTiming + getTxPauseTiming + pbStateTiming +
 		zkIncIntermediateHashesTiming + finaliseBlockWriteTiming + batchCommitDBTiming +
-		batchCloseReason
+		batchCloseReason + zkHashAccCount + zkHashSMTCount + zkHermezSmtMetadata + zkHermezSmtStats + zkHermezSmt + zkHermezSmtHashKey +
+		deleteLog + appendLog + putLog
 	log.Info(result)
 	l.resetStatistics()
 	return result
 }
 
-func (l *statisticsInstance) GetTag(tag logTag) string {
+func (l *statisticsInstance) GetTag(tag LogTag) string {
 	return l.tags[tag]
 }
 
-func (l *statisticsInstance) GetStatistics(tag logTag) int64 {
+func (l *statisticsInstance) GetStatistics(tag LogTag) int64 {
 	return l.statistics[tag]
 }

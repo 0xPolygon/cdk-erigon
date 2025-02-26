@@ -12,6 +12,7 @@ import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/ledgerwatch/erigon/zk/metrics"
 )
 
 // SetAccountState sets the balance and nonce of an account
@@ -210,7 +211,9 @@ func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[l
 	if len(storageChanges) == 0 && len(accChanges) == 0 && len(codeChanges) == 0 {
 		return nil, nil, nil
 	}
-
+	metrics.GetLogStatistics().CumulativeValue(metrics.ZKHashAccountCount, int64(len(accChanges)))
+	metrics.GetLogStatistics().CumulativeValue(metrics.ZKHashStoreCount, int64(len(storageChanges)))
+	metrics.GetLogStatistics().CumulativeValue(metrics.ZKHashCodeCount, int64(len(codeChanges)))
 	var isDelete bool
 	var err error
 
