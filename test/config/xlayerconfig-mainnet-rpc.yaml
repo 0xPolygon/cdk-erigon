@@ -8,6 +8,7 @@ zkevm.l2-datastreamer-url: stream.xlayer.tech:8800
 zkevm.l1-chain-id: 1
 zkevm.l1-rpc-url: https://rpc.ankr.com/eth
 zkevm.increment-tree-always: true
+zkevm.l1-cache-enabled: true
 
 zkevm.data-stream-host: "localhost"
 zkevm.data-stream-port: 6900

@@ -79,9 +79,9 @@ func replay(
 	if cfg.zk.SequencerReplayHaltOnBatchNumber > 0 {
 		haltBatch = cfg.zk.SequencerReplayHaltOnBatchNumber
 		if haltBatch <= lastBatch {
-			panic(fmt.Sprintf("[%s] The zkevm.sequencer-resequence-halt-on-batch-number is set lower than the last batch number.", s.LogPrefix()))
+			panic(fmt.Sprintf("[%s] The zkevm.sequencer-replay-halt-on-batch-number is set lower than the last batch number.", s.LogPrefix()))
 		} else if haltBatch > highestBatchInDs {
-			panic(fmt.Sprintf("[%s] The zkevm.sequencer-resequence-halt-on-batch-number is set higher than the highest batch in datastream.", s.LogPrefix()))
+			panic(fmt.Sprintf("[%s] The zkevm.sequencer-replay-halt-on-batch-number is set higher than the highest batch in datastream.", s.LogPrefix()))
 		}
 	} else {
 		haltBatch = highestBatchInDs
