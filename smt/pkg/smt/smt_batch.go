@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/dgravesa/go-parallel/parallel"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/zk"
+	"github.com/ledgerwatch/erigon/zk/metrics"
 )
 
 type InsertBatchConfig struct {
@@ -263,12 +265,18 @@ func (s *SMT) deleteBatchedNodeValues(
 		for _, mapLevel1 := range mapLevel0 {
 			for _, mapLevel2 := range mapLevel1 {
 				for _, nodeHash := range mapLevel2 {
+					metrics.GetLogStatistics().CumulativeValue(metrics.ZKHashSMTDeleteByNodeKey, 1)
+					start := time.Now()
 					if err := s.Db.DeleteByNodeKey(*nodeHash); err != nil {
 						return fmt.Errorf("DeleteByNodeKey: %w", err)
 					}
+					metrics.GetLogStatistics().CumulativeMicroTiming(metrics.ZKHashSMTDeleteByNodeKeyTiming, time.Since(start))
+					metrics.GetLogStatistics().CumulativeValue(metrics.ZKHashSMTDeleteHashKey, 1)
+					start = time.Now()
 					if err := s.Db.DeleteHashKey(*nodeHash); err != nil {
 						return fmt.Errorf("DeleteHashKey: %w", err)
 					}
+					metrics.GetLogStatistics().CumulativeMicroTiming(metrics.ZKHashSMTDeleteHashKeyTiming, time.Since(start))
 				}
 			}
 		}
@@ -592,8 +600,10 @@ func (s *SMT) fetchNodeDataFromDb(nodeHash *utils.NodeKey, parentNode *smtBatchN
 	if nodeHash.IsZero() {
 		return nil, nil
 	}
-
+	metrics.GetLogStatistics().CumulativeValue(metrics.ZKHashSMTGetKey, 1)
+	start := time.Now()
 	dbNodeValue, err := s.Db.Get(*nodeHash)
+	metrics.GetLogStatistics().CumulativeMicroTiming(metrics.ZKHashSMTGetKeyTiming, time.Since(start))
 	if err != nil {
 		return nil, err
 	}
@@ -750,13 +760,19 @@ func (sdh *smtDfsHelper) startConsumersLoop(s *SMT) error {
 
 		switch castedDataStruct := dataStruct.value.(type) {
 		case *utils.NodeKey:
+			start := time.Now()
+			metrics.GetLogStatistics().CumulativeValue(metrics.ZKHashSMTInsertKey, 1)
 			if err := s.Db.InsertHashKey(*dataStruct.key, *castedDataStruct); err != nil {
 				return fmt.Errorf("calculating and saving hashes dfs: %w", err)
 			}
+			metrics.GetLogStatistics().CumulativeMicroTiming(metrics.ZKHashSMTInsertKeyTiming, time.Since(start))
 		case *utils.NodeValue12:
+			start := time.Now()
+			metrics.GetLogStatistics().CumulativeValue(metrics.ZKHashSMTInsertKey, 1)
 			if err := s.Db.Insert(*dataStruct.key, *castedDataStruct); err != nil {
 				return fmt.Errorf("calculating and saving hashes dfs: %w", err)
 			}
+			metrics.GetLogStatistics().CumulativeMicroTiming(metrics.ZKHashSMTInsertKeyTiming, time.Since(start))
 		}
 	}
 }
