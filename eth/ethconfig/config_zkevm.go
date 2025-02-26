@@ -80,11 +80,12 @@ type Zk struct {
 	SyncLimit             uint64
 	Gasless               bool
 
-	DebugTimers    bool
-	DebugNoSync    bool
-	DebugLimit     uint64
-	DebugStep      uint64
-	DebugStepAfter uint64
+	DebugTimers                bool
+	DebugNoSync                bool
+	DebugLimit                 uint64
+	DebugStep                  uint64
+	DebugStepAfter             uint64
+	DebugDisableStateRootCheck bool
 
 	PoolManagerUrl              string
 	DisableVirtualCounters      bool
