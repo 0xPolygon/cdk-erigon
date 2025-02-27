@@ -49,6 +49,7 @@ type StreamClient struct {
 
 	// atomic
 	lastWrittenTime      atomic.Int64
+	lastWrittenEntryNum  atomic.Uint64
 	mtxStreaming         *sync.Mutex
 	streaming            bool
 	progress             atomic.Uint64
@@ -273,6 +274,10 @@ func (c *StreamClient) getLatestL2Block() (l2Block *types.FullL2Block, err error
 	}
 
 	return l2Block, nil
+}
+
+func (c *StreamClient) GetLastWrittenEntryAtomic() *atomic.Uint64 {
+	return &c.lastWrittenEntryNum
 }
 
 func (c *StreamClient) GetLastWrittenTimeAtomic() *atomic.Int64 {
@@ -541,6 +546,7 @@ LOOP:
 			readNewProto = false
 		}
 		c.lastWrittenTime.Store(time.Now().UnixNano())
+		c.lastWrittenEntryNum.Store(entryNum)
 
 		switch parsedProto := parsedProto.(type) {
 		case *types.BookmarkProto:

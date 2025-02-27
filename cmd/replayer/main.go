@@ -24,22 +24,44 @@ var (
 		Usage:       "Url of the RPC server",
 		Destination: &rpcUrl,
 	}
+	txBinFlag = &cli.StringFlag{
+		Name:        "tx-bin",
+		Usage:       "Location of the tx binary file",
+		Destination: &txBin,
+	}
+	txBin     string
 	remoteUrl string
 	rpcUrl    string
+
+	Replayer = cli.Command{
+		Action: runReplayer,
+		Name:   "replayer",
+		Usage:  "Replay datastream",
+		Flags: []cli.Flag{
+			remoteUrlFlag,
+			rpcUrlFlag,
+		},
+	}
+	Send = cli.Command{
+		Action: runSend,
+		Name:   "send",
+		Usage:  "Read from tx binary file.",
+		Flags: []cli.Flag{
+			txBinFlag,
+		},
+	}
 )
 
 func main() {
 	app := cli2.NewApp(params.GitCommit, "Datastream Replayer")
 	app.Name = "ds-replayer"
 	app.UsageText = app.Name + ` [command] [flags]`
-	app.Flags = []cli.Flag{
-		remoteUrlFlag,
-		rpcUrlFlag,
-	}
 	app.Before = preStartReplayer
 	app.After = finishReplayer
-	app.Action = runReplayer
-	app.Commands = []*cli.Command{}
+	app.Commands = []*cli.Command{
+		&Replayer,
+		&Send,
+	}
 
 	if err := app.Run(os.Args); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
@@ -52,17 +74,6 @@ func preStartReplayer(cliCtx *cli.Context) error {
 	logger := log.Root()
 	consoleHandler := log.LvlFilterHandler(logLvl, log.StreamHandler(os.Stdout, log.TerminalFormat()))
 	logger.SetHandler(consoleHandler)
-
-	dsUrl := cliCtx.String(remoteUrlFlag.Name)
-	if strings.Count(dsUrl, ":") == 0 {
-		return fmt.Errorf("invalid address for flag %s: %s", remoteUrlFlag.Name, dsUrl)
-	}
-
-	_, _, err := net.SplitHostPort(dsUrl)
-	if err != nil {
-		return fmt.Errorf("invalid address for flag %s: %s", remoteUrlFlag.Name, dsUrl)
-	}
-
 	log.Info("Starting Datastream Replayer")
 	return nil
 }
@@ -75,7 +86,22 @@ func finishReplayer(cliCtx *cli.Context) error {
 
 func runReplayer(cliCtx *cli.Context) error {
 	log.Info("Running Datastream Replayer")
-	ds := cliCtx.String(remoteUrlFlag.Name)
+	dsUrl := cliCtx.String(remoteUrlFlag.Name)
+	if strings.Count(dsUrl, ":") == 0 {
+		return fmt.Errorf("invalid address for flag %s: %s", remoteUrlFlag.Name, dsUrl)
+	}
+
+	_, _, err := net.SplitHostPort(dsUrl)
+	if err != nil {
+		return fmt.Errorf("invalid address for flag %s: %s", remoteUrlFlag.Name, dsUrl)
+	}
+
 	rpc := cliCtx.String(rpcUrlFlag.Name)
-	return replayer.New(ds, rpc).Run(cliCtx.Context)
+	return replayer.New(dsUrl, rpc).Run(cliCtx.Context)
+}
+
+func runSend(cliCtx *cli.Context) error {
+	log.Info("Running Send")
+	binLocation := cliCtx.String(txBinFlag.Name)
+	return replayer.NewSender(binLocation).Run(cliCtx.Context)
 }
