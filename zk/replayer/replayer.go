@@ -47,9 +47,20 @@ func (r *Replayer) Run(ctx context.Context) error {
 	var progress uint64
 
 	go func() {
-		if err := dsClient.ReadAllEntriesToChannel(); err != nil {
-			log.Error("Failed to read all entries to channel", "error", err)
-			return
+		for {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Error("Recovered from panic in ReadAllEntriesToChannel", "panic", r)
+					}
+				}()
+
+				if err := dsClient.ReadAllEntriesToChannel(); err != nil {
+					log.Error("Failed to read all entries to channel, retrying...", "error", err)
+					time.Sleep(1 * time.Second)
+					return
+				}
+			}()
 		}
 	}()
 
