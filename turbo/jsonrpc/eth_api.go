@@ -381,6 +381,7 @@ type APIImpl struct {
 	BadTxAllowance                uint64
 	SenderLocks                   *SenderLock
 	LogsMaxRange                  uint64
+	DisableVirtualCounters        bool
 }
 
 // NewEthAPI returns APIImpl instance
@@ -419,6 +420,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		LogsMaxRange:                  LogsMaxRange,
 		gasTracker:                    gasTracker,
 		RejectLowGasPriceTolerance:    ethCfg.RejectLowGasPriceTolerance,
+		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
 	}
 }
 
