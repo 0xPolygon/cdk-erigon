@@ -359,24 +359,25 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.51.2
-    user: ${DOCKER_UID:-1000}:${DOCKER_GID:-1000} # Uses erigon user from Dockerfile
-    command: --log.level=warn --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=150d --web.console.libraries=/usr/share/prometheus/console_libraries --web.console.templates=/usr/share/prometheus/consoles
+    command: 
+      - --log.level=warn
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=150d
     ports:
       - 9099:9090
     volumes:
       - ../cmd/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ${XDG_DATA_HOME:-~/.local/share}/erigon-prometheus:/prometheus
     restart: unless-stopped
 
   grafana:
     image: grafana/grafana:10.4.2
-    user: "472:0" # required for grafana version >= 7.3
+    user: "472:0"
     ports:
       - 3000:3000
     volumes:
       - ../cmd/prometheus/datasources:/etc/grafana/provisioning/datasources
       - ../cmd/prometheus/dashboards:/etc/grafana/provisioning/dashboards
-      - ${XDG_DATA_HOME:-~/.local/share}/erigon-grafana:/var/lib/grafana
     restart: unless-stopped
 
   xlayer-mainnet-seq:
@@ -394,4 +395,3 @@ services:
       - ./config/xlayerconfig-mainnet.yaml:/usr/src/app/config.yaml
     command: >
       cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
-
