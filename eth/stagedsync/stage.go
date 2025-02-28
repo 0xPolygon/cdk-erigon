@@ -45,12 +45,13 @@ type StageState struct {
 	state       *Sync
 	ID          stages.SyncStage
 	BlockNumber uint64 // BlockNumber is the current block number of the stage at the beginning of the state execution.
-	SmtCache    map[string]map[string][]byte
 }
 
-func (s *StageState) GetSmtCache() map[string]map[string][]byte { return s.SmtCache }
+func (s *StageState) GetSmtCache() map[string]map[string][]byte { return s.state.GetSmtCache() }
 
-func (s *StageState) SetSmtCache(cache map[string]map[string][]byte) { s.SmtCache = cache }
+func (s *StageState) SetSmtCache(cache map[string]map[string][]byte) {
+	s.state.SetSmtCache(cache)
+}
 
 func (s *StageState) LogPrefix() string { return s.state.LogPrefix() }
 

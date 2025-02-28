@@ -34,6 +34,8 @@ type Sync struct {
 	logPrefixes   []string
 	logger        log.Logger
 	stagesIdsList []string
+
+	SmtCache map[string]map[string][]byte
 }
 
 type Timing struct {
@@ -42,6 +44,10 @@ type Timing struct {
 	stage    stages.SyncStage
 	took     time.Duration
 }
+
+func (s *Sync) GetSmtCache() map[string]map[string][]byte { return s.SmtCache }
+
+func (s *Sync) SetSmtCache(cache map[string]map[string][]byte) { s.SmtCache = cache }
 
 func (s *Sync) Len() int {
 	return len(s.stages)
@@ -214,6 +220,7 @@ func New(cfg ethconfig.Sync, stagesList []*Stage, unwindOrder UnwindOrder, prune
 		logPrefixes:   logPrefixes,
 		logger:        logger,
 		stagesIdsList: stagesIdsList,
+		SmtCache:      make(map[string]map[string][]byte),
 	}
 }
 
@@ -238,7 +245,7 @@ func (s *Sync) StageState(stage stages.SyncStage, tx kv.Tx, db kv.RoDB) (*StageS
 		}
 	}
 
-	return &StageState{s, stage, blockNum, make(map[string]map[string][]byte)}, nil
+	return &StageState{s, stage, blockNum}, nil
 }
 
 func (s *Sync) RunUnwind(db kv.RwDB, txc wrap.TxContainer) error {
