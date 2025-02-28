@@ -56,3 +56,10 @@ type DataStreamServerFactory interface {
 	CreateStreamServer(port uint16, version uint8, systemID uint64, streamType datastreamer.StreamType, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config) (StreamServer, error)
 	CreateDataStreamServer(stream StreamServer, chainId uint64) DataStreamServer
 }
+
+type DatastreamRelay interface {
+	CommitEntryToStream(entryType datastreamer.EntryType, data []byte) error
+	CommitBookmarkToStream(bookmark []byte) error
+	GetHighestBlockBookmarkEntry() (uint64, uint64, error)
+	TruncateFromFile(entryNum uint64) error
+}

@@ -16,16 +16,11 @@ import (
 	"time"
 )
 
-type ReplayHandler interface {
-	CommitEntryToStream(entryType datastreamer.EntryType, data []byte) error
-	CommitBookmarkToStream(bookmark []byte) error
-}
-
 type Relay struct {
-	ctx           context.Context
-	client        *client.StreamClient
-	server        server.StreamServer
-	replayHandler ReplayHandler
+	ctx         context.Context
+	client      *client.StreamClient
+	server      server.StreamServer
+	serverRelay server.DatastreamRelay
 }
 
 func NewRelay(ctx context.Context, remoteDsUrl string, relayPort uint, streamDir string) (*Relay, error) {
@@ -42,7 +37,7 @@ func NewRelay(ctx context.Context, remoteDsUrl string, relayPort uint, streamDir
 	logConfig := &log2.Config{
 		Environment: "production",
 		Level:       "info",
-		Outputs:     []string{"stdout"},
+		Outputs:     []string{},
 	}
 
 	streamServer, err := serverFactory.CreateStreamServer(uint16(relayPort), 1, datastreamer.StreamType(1), path, 5*time.Second, 10*time.Second, 60*time.Second, logConfig)
@@ -51,13 +46,13 @@ func NewRelay(ctx context.Context, remoteDsUrl string, relayPort uint, streamDir
 		return nil, err
 	}
 
-	streamReplay := server.CreateStreamRelayServer(streamServer)
+	serverRelay := server.CreateStreamRelayServer(streamServer)
 
 	return &Relay{
-		ctx:           ctx,
-		client:        remoteClient,
-		server:        streamServer,
-		replayHandler: streamReplay,
+		ctx:         ctx,
+		client:      remoteClient,
+		server:      streamServer,
+		serverRelay: serverRelay,
 	}, nil
 }
 
@@ -67,9 +62,31 @@ func (r *Relay) Run() error {
 		return err
 	}
 
-	//h := r.server.GetHeader()
-	//
-	//fmt.Println("Header: ", h.TotalEntries)
+	localHead := r.server.GetHeader()
+
+	log.Info("Reading local datastream entries", "entries", localHead.TotalEntries)
+
+	if localHead.TotalEntries > 0 {
+		blockNum, entryNum, err := r.serverRelay.GetHighestBlockBookmarkEntry()
+		if err != nil {
+			log.Error("Failed to get highest block number", "error", err)
+			return err
+		}
+
+		if blockNum > 0 {
+			log.Info("Truncating file", "blockNum", blockNum, "entryNum", entryNum)
+
+			if err = r.serverRelay.TruncateFromFile(entryNum); err != nil {
+				log.Error("Failed to truncate file", "error", err)
+			}
+
+			r.client.GetProgressAtomic().Store(blockNum)
+		}
+
+		newLocalHead := r.server.GetHeader()
+
+		log.Info("Local datastream entries after truncation", "entries", newLocalHead.TotalEntries)
+	}
 
 	defer r.client.Stop()
 	if err := r.client.Start(); err != nil {
@@ -113,8 +130,6 @@ func (r *Relay) Run() error {
 			log.Info(fmt.Sprintf("Datastream entries processed: %d/%d (%d%%)", r.client.GetLastWrittenEntryAtomic().Load(), r.client.GetEntryNumberLimit(), (r.client.GetLastWrittenEntryAtomic().Load()*100)/r.client.GetEntryNumberLimit()))
 		}
 	}
-
-	return nil
 }
 
 func (r *Relay) commitFileEntry(file *types.FileEntry) error {
@@ -135,7 +150,7 @@ func (r *Relay) commitFileEntry(file *types.FileEntry) error {
 		bookmarkProto := types.NewBookmarkProto(blockNum.L2BlockNumber, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
 		bookmark, err = bookmarkProto.Marshal()
 
-		if err = r.replayHandler.CommitBookmarkToStream(bookmark); err != nil {
+		if err = r.serverRelay.CommitBookmarkToStream(bookmark); err != nil {
 			return err
 		}
 
@@ -147,7 +162,7 @@ func (r *Relay) commitFileEntry(file *types.FileEntry) error {
 	case types.BookmarkEntryType:
 		et = 176
 
-		if err = r.replayHandler.CommitEntryToStream(et, file.Data); err != nil {
+		if err = r.serverRelay.CommitEntryToStream(et, file.Data); err != nil {
 			return err
 		}
 	case types.EntryTypeBatchStart:
@@ -164,7 +179,7 @@ func (r *Relay) commitFileEntry(file *types.FileEntry) error {
 		bookmarkProto := types.NewBookmarkProto(batchNum.Number, datastream.BookmarkType_BOOKMARK_TYPE_BATCH)
 		bookmark, err = bookmarkProto.Marshal()
 
-		if err = r.replayHandler.CommitBookmarkToStream(bookmark); err != nil {
+		if err = r.serverRelay.CommitBookmarkToStream(bookmark); err != nil {
 			return err
 		}
 	case types.EntryTypeL2Tx:
@@ -181,7 +196,7 @@ func (r *Relay) commitFileEntry(file *types.FileEntry) error {
 		log.Error("Unexpected entry type", "entryType", file.EntryType)
 	}
 
-	return r.replayHandler.CommitEntryToStream(et, file.Data)
+	return r.serverRelay.CommitEntryToStream(et, file.Data)
 }
 
 func (r *Relay) progressBookmark() *types.BookmarkProto {
