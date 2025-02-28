@@ -238,7 +238,7 @@ func (s *Sync) StageState(stage stages.SyncStage, tx kv.Tx, db kv.RoDB) (*StageS
 		}
 	}
 
-	return &StageState{s, stage, blockNum}, nil
+	return &StageState{s, stage, blockNum, make(map[string]map[string][]byte)}, nil
 }
 
 func (s *Sync) RunUnwind(db kv.RwDB, txc wrap.TxContainer) error {

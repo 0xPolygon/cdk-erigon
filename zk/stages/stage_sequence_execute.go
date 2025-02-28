@@ -692,9 +692,17 @@ func sequencingBatchStep(
 			break
 		}
 
+		quit := batchContext.ctx.Done()
+		batchContext.sdb.eridb.OpenBatchWithCachedValue(quit, s.GetSmtCache())
 		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
+			batchContext.sdb.eridb.RollbackBatch()
 			return err
 		}
+		smtCache, err := batchContext.sdb.eridb.RetrieveCacheAndCommitBatch()
+		if err != nil {
+			return err
+		}
+		s.SetSmtCache(smtCache)
 
 		// For X Layer
 		// Count successful transactions

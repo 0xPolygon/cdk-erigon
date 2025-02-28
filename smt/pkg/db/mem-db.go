@@ -40,6 +40,9 @@ func NewMemDb() *MemDb {
 func (m *MemDb) OpenBatch(quitCh <-chan struct{}) {
 }
 
+func (m *MemDb) OpenBatchWithCachedValue(quitCh <-chan struct{}, cachedMapValue map[string]map[string][]byte) {
+}
+
 func (m *MemDb) CommitBatch() error {
 	return nil
 }

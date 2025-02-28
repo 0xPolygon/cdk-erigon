@@ -385,6 +385,7 @@ services:
     image: cdk-erigon
     environment:
       - CDK_ERIGON_SEQUENCER=1
+      - WRITE_MAP=true
     ports:
       - 6060:6060
       - 8123:8545

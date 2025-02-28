@@ -283,6 +283,38 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	return nil
 }
 
+func (m *Mapmutation) SetCachedValue(cachedMapValue map[string]map[string][]byte) {
+	for key, innerMap := range cachedMapValue {
+		if m.puts[key] == nil {
+			m.puts[key] = make(map[string][]byte, len(innerMap))
+		}
+		for innerKey, val := range innerMap {
+			newVal := make([]byte, len(val))
+			copy(newVal, val)
+			m.puts[key][innerKey] = newVal
+		}
+	}
+}
+
+func (m *Mapmutation) RetrieveAndRemoveTableCache(targetTable []string) map[string]map[string][]byte {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if len(targetTable) == 0 {
+		return nil
+	}
+
+	targetCachedTable := make(map[string]map[string][]byte)
+	for _, target := range targetTable {
+		if _, exists := m.puts[target]; exists {
+			targetCachedTable[target] = m.puts[target]
+			delete(m.puts, target)
+		}
+	}
+
+	return targetCachedTable
+}
+
 func (m *Mapmutation) Flush(ctx context.Context, tx kv.RwTx) error {
 	if tx == nil {
 		return errors.New("rwTx needed")
