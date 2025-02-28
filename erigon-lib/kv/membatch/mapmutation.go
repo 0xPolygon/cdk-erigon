@@ -307,7 +307,16 @@ func (m *Mapmutation) RetrieveAndRemoveTableCache(targetTable []string) map[stri
 	targetCachedTable := make(map[string]map[string][]byte)
 	for _, target := range targetTable {
 		if _, exists := m.puts[target]; exists {
-			targetCachedTable[target] = m.puts[target]
+			if targetCachedTable[target] == nil {
+				targetCachedTable[target] = make(map[string][]byte, len(m.puts[target]))
+			}
+
+			for innerKey, val := range m.puts[target] {
+				newVal := make([]byte, len(val))
+				copy(newVal, val)
+				targetCachedTable[target][innerKey] = newVal
+			}
+
 			delete(m.puts, target)
 		}
 	}

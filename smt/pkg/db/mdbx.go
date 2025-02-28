@@ -194,7 +194,7 @@ func (m *EriRoDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 		return utils.NodeValue12{}, err
 	}
 
-	if data == nil {
+	if data == nil || len(data) == 0 {
 		return utils.NodeValue12{}, nil
 	}
 

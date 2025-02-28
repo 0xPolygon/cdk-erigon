@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	"github.com/ledgerwatch/erigon-lib/kv/membatch"
 	"runtime"
 	"time"
 
@@ -43,6 +45,47 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/silkworm"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 )
+
+func AsyncFlushSmtData(ctx context.Context,
+	_db kv.RwDB,
+	sync *stagedsync.Sync,
+	logger log.Logger,
+) {
+	db, ok := _db.(*mdbx.MdbxKV)
+	if !ok {
+		logger.Error("invalid database type")
+		return
+	}
+
+	for {
+		select {
+		case smtCache, ok := <-sync.SmtCacheCh:
+			if !ok {
+				logger.Info("SmtCacheCh closed, stopping AsyncFlushSmtData")
+				return
+			}
+
+			err := db.Batch(func(tx kv.RwTx) error {
+				batch := membatch.NewHashBatch(tx, ctx.Done(), "", logger)
+				defer batch.Close()
+
+				batch.SetCachedValue(smtCache)
+				return batch.Flush(ctx, tx)
+			})
+
+			if err != nil {
+				logger.Error("Failed to batch write data to DB", "err", err)
+			}
+
+		case <-ctx.Done():
+			logger.Info("AsyncFlushSmtData received stop signal")
+			return
+
+		default:
+			time.Sleep(10 * time.Millisecond) // 避免空转占用 CPU
+		}
+	}
+}
 
 // StageLoop runs the continuous loop of staged sync
 func StageLoop(ctx context.Context,
