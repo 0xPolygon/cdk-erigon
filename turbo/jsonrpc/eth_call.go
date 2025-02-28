@@ -250,11 +250,13 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	}
 	header := block.HeaderNoCopy()
 
-	caller, err := transactions.NewReusableCaller(engine, stateReader, nil, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, false)
+	useCounters := !api.DisableVirtualCounters
+	caller, err := transactions.NewReusableCaller(engine, stateReader, nil, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters)
 	if err != nil {
 		return 0, err
 	}
 
+	countersChecked := false
 	// Create a helper to check if a gas allowance results in an executable transaction
 	executable := func(gas uint64) (bool, *core.ExecutionResult, error) {
 		result, err := caller.DoCallWithNewGas(ctx, gas)
@@ -267,6 +269,14 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 			// Bail out
 			return true, nil, err
 		}
+
+		if useCounters && !countersChecked {
+			if overflow, err := caller.CheckCountersOverflow(result); overflow {
+				return true, nil, err
+			}
+			countersChecked = true
+		}
+
 		return result.Failed(), result, nil
 	}
 
@@ -366,7 +376,7 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 			return nil, err
 		}
 
-		interHashStageCfg := stagedsync.StageTrieCfg(nil, false, false, false, api.dirs.Tmp, api._blockReader, nil, api.historyV3(batch), api._agg)
+		interHashStageCfg := stagedsync.StageTrieCfg(nil, !api.DisableStateRootCheck, false, false, api.dirs.Tmp, api._blockReader, nil, api.historyV3(batch), api._agg)
 		loader, err = stagedsync.UnwindIntermediateHashesForTrieLoader("eth_getProof", rl, unwindState, stageState, batch, interHashStageCfg, nil, nil, ctx.Done(), api.logger)
 		if err != nil {
 			return nil, err

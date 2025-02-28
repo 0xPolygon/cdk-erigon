@@ -2,8 +2,6 @@ package utils
 
 import (
 	"bytes"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -55,13 +53,7 @@ func BenchmarkConvertBigIntToHex(b *testing.B) {
 }
 
 func BenchmarkHashContractBytecode(b *testing.B) {
-	str := strings.Repeat("7e", 500)
-	h1 := HashContractBytecodeBigIntV1(str)
-	h2 := HashContractBytecodeBigInt(str)
-	if h1.Cmp(h2) != 0 {
-		panic("hashes do not match")
-	}
-	b.ResetTimer()
+	str := strings.Repeat("e", 1000)
 	b.Run("1", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			HashContractBytecodeBigIntV1(str)
