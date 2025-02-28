@@ -1,8 +1,7 @@
-package replayer
+package relay
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -22,7 +21,7 @@ type Replayer struct {
 	encodedTxChan chan [][]byte
 }
 
-func New(remoteUrl, rpcUrl string) *Replayer {
+func NewReplayer(remoteUrl, rpcUrl string) *Replayer {
 	return &Replayer{
 		RemoteDsUrl:   remoteUrl,
 		RpcUrl:        rpcUrl,
@@ -33,8 +32,7 @@ func New(remoteUrl, rpcUrl string) *Replayer {
 func (r *Replayer) Run(ctx context.Context) error {
 	log.Info("Connecting to remote datastream server", "url", r.RemoteDsUrl)
 
-	dsClient := client.NewClient(ctx, r.RemoteDsUrl, false, 0, 0, 10000000)
-	dsClient.RenewMaxEntryChannel()
+	dsClient := client.NewClient(ctx, r.RemoteDsUrl, false, 0, 0, client.DefaultEntryChannelSize)
 
 	go func() {
 		var prog uint64
@@ -61,14 +59,8 @@ loop:
 			log.Info("Context done, exiting")
 			return nil
 		case entry := <-*entryChan:
-			breakLoop, data := r.processEntry(entry, dsClient)
-
-			if breakLoop {
+			if breakLoop := r.processEntry(entry, dsClient); breakLoop {
 				break loop
-			}
-
-			if data != nil {
-				allData = append(allData, data...)
 			}
 
 			if dsClient.GetLastWrittenEntryAtomic().Load() == dsClient.GetEntryNumberLimit() {
@@ -96,12 +88,7 @@ func (r *Replayer) startReading(dsClient *client.StreamClient, progress uint64) 
 	if err := dsClient.HandleStart(); err != nil {
 		log.Error("Failed to start datastream client", "error", err)
 	}
-
-	defer func(dsClient *client.StreamClient) {
-		if err := dsClient.Stop(); err != nil {
-			log.Error("Failed to stop datastream client", "error", err)
-		}
-	}(dsClient)
+	defer dsClient.Stop()
 
 	if progress == 0 {
 		log.Info("Progress is 0, starting from the beginning", "progress", progress)
@@ -125,40 +112,30 @@ func (r *Replayer) IsFinished() bool {
 	return r.isFinished.Load()
 }
 
-func (r *Replayer) processEntry(e interface{}, dsClient *client.StreamClient) (breakLoop bool, data []byte) {
+func (r *Replayer) processEntry(e interface{}, dsClient *client.StreamClient) bool {
 	switch entry := e.(type) {
 	case *types.L2Transaction:
-		return false, r.encodeTxEntry(entry)
+		return false
 	case *types.FullL2Block:
 		blockNum := entry.L2BlockNumber
 		prog := dsClient.GetProgressAtomic().Load()
 		if blockNum > prog {
 			dsClient.GetProgressAtomic().Store(blockNum)
 		}
-		return false, nil
+		return false
 	case *types.BatchStart:
-		return false, nil
+		return false
 	case *types.BatchEnd:
-		return false, nil
+		return false
 	case *types.GerUpdate:
-		return false, nil
+		return false
 	case nil:
 		r.isFinished.Store(true)
-		return true, nil
+		return true
 	default:
 	}
 
-	return false, nil
-}
-
-func (r *Replayer) encodeTxEntry(entry *types.L2Transaction) []byte {
-	be := make([]byte, 1)
-	be = binary.BigEndian.AppendUint32(be, uint32(entry.EffectiveGasPricePercentage))
-	be = binary.BigEndian.AppendUint32(be, uint32(entry.IsValid))
-	be = append(be, entry.StateRoot.Bytes()...)
-	be = binary.BigEndian.AppendUint32(be, entry.EncodedLength)
-	be = append(be, entry.Encoded...)
-	return be
+	return false
 }
 
 func (r *Replayer) sendTxs() error {

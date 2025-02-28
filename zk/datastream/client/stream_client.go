@@ -384,14 +384,8 @@ func (c *StreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function fu
 		return fmt.Errorf("initiateDownloadBookmark: %w", err)
 	}
 	count := uint64(0)
-	logTicker := time.NewTicker(10 * time.Second)
 
 	for {
-		select {
-		case <-logTicker.C:
-			fmt.Println("Entries read count: ", count)
-		default:
-		}
 		if header.TotalEntries == count {
 			break
 		}
@@ -403,6 +397,7 @@ func (c *StreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function fu
 			return fmt.Errorf("execute function: %w", err)
 
 		}
+		c.lastWrittenEntryNum.Store(file.EntryNum)
 		count++
 	}
 

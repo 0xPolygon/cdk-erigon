@@ -1,4 +1,4 @@
-package replayer
+package relay
 
 import (
 	"context"
