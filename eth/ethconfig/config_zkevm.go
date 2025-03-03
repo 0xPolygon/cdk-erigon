@@ -86,6 +86,7 @@ type Zk struct {
 	DebugStep                  uint64
 	DebugStepAfter             uint64
 	DebugDisableStateRootCheck bool
+	DebugStepExcludeBatches    bool
 
 	PoolManagerUrl              string
 	DisableVirtualCounters      bool

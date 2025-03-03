@@ -212,6 +212,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		DebugStep:                              ctx.Uint64(utils.DebugStep.Name),
 		DebugStepAfter:                         ctx.Uint64(utils.DebugStepAfter.Name),
 		DebugDisableStateRootCheck:             ctx.Bool(utils.DebugDisableStateRootCheck.Name),
+		DebugStepExcludeBatches:                ctx.Bool(utils.DebugStepExcludeBatches.Name),
 		PoolManagerUrl:                         ctx.String(utils.PoolManagerUrl.Name),
 		TxPoolRejectSmartContractDeployments:   ctx.Bool(utils.TxPoolRejectSmartContractDeployments.Name),
 		DisableVirtualCounters:                 ctx.Bool(utils.DisableVirtualCounters.Name),

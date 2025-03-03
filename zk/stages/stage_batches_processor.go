@@ -69,7 +69,8 @@ type BatchesProcessor struct {
 	syncBlockLimit,
 	debugBlockLimit,
 	debugStepAfter,
-	debugStep,
+	debugStep uint64
+	debugStepExcludeBatches bool
 	stageProgressBlockNo,
 	highestHashableL2BlockNo,
 	lastForkId uint64
@@ -307,11 +308,13 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 		endLoop = true
 	}
 
-	// if we're above StepAfter, and we're at a step, move the stages on
-	if p.debugStep > 0 && p.debugStepAfter > 0 && blockEntry.L2BlockNumber > p.debugStepAfter {
-		if blockEntry.L2BlockNumber%p.debugStep == 0 {
-			log.Info(fmt.Sprintf("[%s] Debug step reached, stopping stage\n", p.logPrefix))
-			endLoop = true
+	if p.debugStepExcludeBatches {
+		// if we're above StepAfter, and we're at a step, move the stages on
+		if p.debugStep > 0 && p.debugStepAfter > 0 && blockEntry.L2BlockNumber > p.debugStepAfter {
+			if blockEntry.L2BlockNumber%p.debugStep == 0 {
+				log.Info(fmt.Sprintf("[%s] Debug step reached, stopping stage\n", p.logPrefix))
+				endLoop = true
+			}
 		}
 	}
 	/////// END DEBUG BISECTION ///////

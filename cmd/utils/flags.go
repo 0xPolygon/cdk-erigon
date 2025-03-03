@@ -867,6 +867,11 @@ var (
 		Name:  "debug.step-after",
 		Usage: "Start incrementing by debug.step after this block",
 	}
+	DebugStepExcludeBatches = cli.BoolFlag{
+		Name:  "debug.step-exclude-batches",
+		Usage: "While executing step by step in debug mode, load all batches first at once if set to true",
+		Value: true,
+	}
 	DebugDisableStateRootCheck = cli.BoolFlag{
 		Name:  "debug.disable-state-root-check",
 		Usage: "Check the state root after each block",

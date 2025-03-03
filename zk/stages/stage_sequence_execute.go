@@ -241,6 +241,12 @@ func sequencingBatchStep(
 			log.Debug(fmt.Sprintf("[%s] Closing batch due to timeout", logPrefix))
 			break
 		}
+
+		if blockNumber > cfg.zk.DebugStepAfter && cfg.zk.DebugStep > 0 && (blockNumber-executionAt) > cfg.zk.DebugStep {
+			log.Info(fmt.Sprintf("[%s] Debug step reached, stopping blocks loop", logPrefix), "blockNumber", blockNumber)
+			break
+		}
+
 		startTime := time.Now()
 		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, batchState.forkId))
 		logTicker.Reset(10 * time.Second)
