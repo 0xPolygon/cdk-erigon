@@ -4,35 +4,59 @@ import (
 	"time"
 )
 
-type logTag string
+type LogTag string
 
 const (
-	BlockCounter                  logTag = "BlockCounter"
-	TxCounter                     logTag = "TxCounter"
-	GetTxTiming                   logTag = "GetTxTiming"
-	GetTxPauseCounter             logTag = "GetTxPauseCounter"
-	GetTxPauseTiming              logTag = "GetTxPauseTiming"
-	BatchCloseReason              logTag = "BatchCloseReason"
-	ReprocessingTxCounter         logTag = "ReProcessingTxCounter"
-	ZKOverflowBlockCounter        logTag = "ZKOverflowBlockCounter"
-	FailTxGasOverCounter          logTag = "FailTxGasOverCounter"
-	BatchGas                      logTag = "BatchGas"
-	SequencingBatchTiming         logTag = "SequencingBatchTiming"
-	ProcessingTxTiming            logTag = "ProcessingTxTiming"
-	ProcessingInvalidTxCounter    logTag = "ProcessingInvalidTxCounter"
-	FinalizeBatchNumber           logTag = "FinalizeBatchNumber"
-	BatchCommitDBTiming           logTag = "BatchCommitDBTiming"
-	PbStateTiming                 logTag = "PbStateTiming"
-	ZkIncIntermediateHashesTiming logTag = "ZkIncIntermediateHashesTiming"
-	FinaliseBlockWriteTiming      logTag = "FinaliseBlockWriteTiming"
+	BlockCounter                  LogTag = "BlockCounter"
+	TxCounter                     LogTag = "TxCounter"
+	GetTxTiming                   LogTag = "GetTxTiming"
+	GetTxPauseCounter             LogTag = "GetTxPauseCounter"
+	GetTxPauseTiming              LogTag = "GetTxPauseTiming"
+	BatchCloseReason              LogTag = "BatchCloseReason"
+	ReprocessingTxCounter         LogTag = "ReProcessingTxCounter"
+	ZKOverflowBlockCounter        LogTag = "ZKOverflowBlockCounter"
+	FailTxGasOverCounter          LogTag = "FailTxGasOverCounter"
+	BatchGas                      LogTag = "BatchGas"
+	SequencingBatchTiming         LogTag = "SequencingBatchTiming"
+	ProcessingTxTiming            LogTag = "ProcessingTxTiming"
+	ProcessingInvalidTxCounter    LogTag = "ProcessingInvalidTxCounter"
+	FinalizeBatchNumber           LogTag = "FinalizeBatchNumber"
+	BatchCommitDBTiming           LogTag = "BatchCommitDBTiming"
+	PbStateTiming                 LogTag = "PbStateTiming"
+	ZkIncIntermediateHashesTiming LogTag = "ZkIncIntermediateHashesTiming"
+	FinaliseBlockWriteTiming      LogTag = "FinaliseBlockWriteTiming"
+
+	ZKHashAccountCount LogTag = "ZKHashAccountCount"
+	ZKHashStoreCount   LogTag = "ZKHashStoreCount"
+	ZKHashCodeCount    LogTag = "ZKHashCodeCount"
+
+	ZKHashSMTDeleteByNodeKey LogTag = "ZKHashSMTDeleteByNodeKey"
+	ZKHashSMTDeleteHashKey   LogTag = "ZKHashSMTDeleteHashKey"
+	ZKHashSMTInsertKey       LogTag = "ZKHashSMTInsertKey"
+	ZKHashSMTGetKey          LogTag = "ZKHashSMTGetKey"
+
+	ZKHashSMTDeleteByNodeKeyTiming LogTag = "ZKHashSMTDeleteByNodeKeyTiming"
+	ZKHashSMTDeleteHashKeyTiming   LogTag = "ZKHashSMTDeleteHashKeyTiming"
+	ZKHashSMTInsertKeyTiming       LogTag = "ZKHashSMTInsertKeyTiming"
+	ZKHashSMTGetKeyTiming          LogTag = "ZKHashSMTGetKeyTiming"
+
+	HermezSmtMetadata LogTag = "HermezSmtMetadata"
+	HermezSmtStats    LogTag = "HermezSmtStats"
+	HermezSmt         LogTag = "HermezSmt"
+	HermezSmtHashKey  LogTag = "HermezSmtHashKey"
+
+	Delete LogTag = "Delete"
+	Append LogTag = "Insert"
+	Put    LogTag = "Put"
 )
 
 type Statistics interface {
-	CumulativeCounting(tag logTag)
-	CumulativeValue(tag logTag, value int64)
-	CumulativeTiming(tag logTag, duration time.Duration)
-	SetTag(tag logTag, value string)
-	GetTag(tag logTag) string
-	GetStatistics(tag logTag) int64
+	CumulativeCounting(tag LogTag)
+	CumulativeValue(tag LogTag, value int64)
+	CumulativeTiming(tag LogTag, duration time.Duration)
+	CumulativeMicroTiming(tag LogTag, duration time.Duration)
+	SetTag(tag LogTag, value string)
+	GetTag(tag LogTag) string
+	GetStatistics(tag LogTag) int64
 	Summary() string
 }
