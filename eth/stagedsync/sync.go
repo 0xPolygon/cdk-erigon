@@ -50,7 +50,10 @@ func (s *Sync) GetSmtCache() map[string]map[string][]byte { return s.SmtCache }
 
 func (s *Sync) SetSmtCache(cache map[string]map[string][]byte) {
 	s.SmtCache = cache
-	s.SmtCacheCh <- cache
+}
+
+func (s *Sync) FlushSmtCache() {
+	s.SmtCacheCh <- s.SmtCache
 }
 
 func (s *Sync) Len() int {

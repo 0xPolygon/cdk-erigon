@@ -96,13 +96,14 @@ func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
 }
 
 func (m *EriDb) OpenBatchWithCachedValue(quitCh <-chan struct{}, cachedMapValue map[string]map[string][]byte) {
-	batch := membatch.NewHashBatch(m.kvTx, quitCh, "./tempdb", log.New())
-	defer func() {
-		batch.Close()
-	}()
-	if cachedMapValue != nil {
-		batch.SetCachedValue(cachedMapValue)
+	if cachedMapValue == nil {
+		cachedMapValue = make(map[string]map[string][]byte)
 	}
+	batch := membatch.NewHashBatchWithCache(m.kvTx, quitCh, "./tempdb", log.New(), cachedMapValue)
+	// WARN: cannnot close batch here, or it will clean all the cache value
+	//defer func() {
+	//	batch.Close()
+	//}()
 	m.tx = batch
 	m.kvTxRo = batch
 }

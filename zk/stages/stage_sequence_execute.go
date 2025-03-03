@@ -59,7 +59,11 @@ func SpawnSequencingStage(
 		return nil
 	}
 
-	return sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil)
+	if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil); err == nil {
+		s.FlushSmtCache()
+	}
+
+	return err
 }
 
 func sequencingBatchStep(

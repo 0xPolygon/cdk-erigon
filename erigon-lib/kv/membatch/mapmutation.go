@@ -54,6 +54,33 @@ func NewHashBatch(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger log.Logg
 	}
 }
 
+func NewHashBatchWithCache(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger log.Logger, cache map[string]map[string][]byte) *Mapmutation {
+	clean := func() {}
+	if quit == nil {
+		ch := make(chan struct{})
+		clean = func() { close(ch) }
+		quit = ch
+	}
+
+	size := 0
+	count := 0
+	for k, v := range cache {
+		size += len(k) + len(v)
+		count++
+	}
+
+	return &Mapmutation{
+		db:     tx,
+		puts:   cache,
+		size:   size,
+		count:  uint64(count),
+		quit:   quit,
+		clean:  clean,
+		tmpdir: tmpdir,
+		logger: logger,
+	}
+}
+
 func (m *Mapmutation) getMem(table string, key []byte) ([]byte, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

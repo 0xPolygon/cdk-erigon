@@ -53,6 +53,10 @@ func (s *StageState) SetSmtCache(cache map[string]map[string][]byte) {
 	s.state.SetSmtCache(cache)
 }
 
+func (s *StageState) FlushSmtCache() {
+	s.state.FlushSmtCache()
+}
+
 func (s *StageState) LogPrefix() string { return s.state.LogPrefix() }
 
 // Update updates the stage state (current block number) in the database. Can be called multiple times during stage execution.
