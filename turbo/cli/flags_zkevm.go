@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/ledgerwatch/erigon/zk/zk_config"
 	"math"
 	"net"
 	"strconv"
@@ -178,7 +179,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	}
 
 	// set type 1 enabled as a global var for easier access
-	ethconfig.Type1Enabled = ctx.Bool(utils.EnableType1Rollups.Name)
+	zk_config.Type1Enabled = ctx.Bool(utils.EnableType1Rollups.Name)
 
 	cfg.Zk = &ethconfig.Zk{
 		L2ChainId:                              ctx.Uint64(utils.L2ChainIdFlag.Name),

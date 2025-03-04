@@ -2,7 +2,7 @@ package erigon_db
 
 import (
 	"fmt"
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/zk/zk_config"
 	"math/big"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
@@ -68,7 +68,7 @@ func (db ErigonDb) WriteHeader(
 		h.WithdrawalsHash = &ethTypes.EmptyRootHash
 	}
 
-	if !chainConfig.IsNormalcy(blockNo.Uint64()) || !ethconfig.IsType1Rollup() {
+	if !chainConfig.IsNormalcy(blockNo.Uint64()) || !zk_config.IsType1Rollup() {
 		h.GasLimit = gasLimit
 	}
 

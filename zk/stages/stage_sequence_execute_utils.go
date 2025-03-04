@@ -3,6 +3,7 @@ package stages
 import (
 	"context"
 	"fmt"
+	"github.com/ledgerwatch/erigon/zk/zk_config"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -284,13 +285,13 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimest
 
 	var targetGas uint64
 
-	if chainConfig.IsNormalcy(previousBlockNumber+1) || ethconfig.IsType1Rollup() {
+	if chainConfig.IsNormalcy(previousBlockNumber+1) || zk_config.IsType1Rollup() {
 		targetGas = miningConfig.GasLimit
 	}
 
 	header := core.MakeEmptyHeader(parentBlock.Header(), chainConfig, newBlockTimestamp, &targetGas)
 
-	if !chainConfig.IsNormalcy(previousBlockNumber+1) || !ethconfig.IsType1Rollup() {
+	if !chainConfig.IsNormalcy(previousBlockNumber+1) || !zk_config.IsType1Rollup() {
 		header.GasLimit = utils.GetBlockGasLimitForFork(forkId)
 	}
 

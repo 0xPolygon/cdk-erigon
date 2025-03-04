@@ -3,7 +3,7 @@ package stages
 import (
 	"context"
 	"errors"
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/zk/zk_config"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -168,7 +168,7 @@ func attemptAddTransaction(
 
 	// if not normalcy we want to create a gas pool per transaction (zkevm block gas limit is infinite), if normalcy create a pool per block.
 	var gasPool *core.GasPool
-	if !cfg.chainConfig.IsNormalcy(blockContext.BlockNumber) || !ethconfig.IsType1Rollup() {
+	if !cfg.chainConfig.IsNormalcy(blockContext.BlockNumber) || !zk_config.IsType1Rollup() {
 		gasPool = new(core.GasPool).AddGas(transactionGasLimit)
 	} else {
 		gasPool = ethBlockGasPool

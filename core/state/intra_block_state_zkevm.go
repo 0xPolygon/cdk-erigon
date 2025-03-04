@@ -2,7 +2,7 @@ package state
 
 import (
 	"errors"
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/zk/zk_config"
 
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
@@ -59,7 +59,7 @@ func (sdb *IntraBlockState) GetTxCount() (uint64, error) {
 }
 
 func (sdb *IntraBlockState) PostExecuteStateSet(chainConfig *chain.Config, blockNum uint64, blockInfoRoot *libcommon.Hash) {
-	if chainConfig.IsNormalcy(blockNum) || ethconfig.IsType1Rollup() {
+	if chainConfig.IsNormalcy(blockNum) || zk_config.IsType1Rollup() {
 		return
 	}
 
@@ -75,7 +75,7 @@ func (sdb *IntraBlockState) PreExecuteStateSet(chainConfig *chain.Config, blockN
 		sdb.CreateAccount(ADDRESS_SCALABLE_L2, true)
 	}
 
-	if !chainConfig.IsNormalcy(blockNumber) || !ethconfig.IsType1Rollup() {
+	if !chainConfig.IsNormalcy(blockNumber) || !zk_config.IsType1Rollup() {
 		//save block number
 		sdb.scalableSetBlockNum(blockNumber)
 
@@ -106,14 +106,14 @@ func (sdb *IntraBlockState) SyncerPreExecuteStateSet(
 	}
 
 	//save block number
-	if !chainConfig.IsNormalcy(blockNumber) || !ethconfig.IsType1Rollup() {
+	if !chainConfig.IsNormalcy(blockNumber) || !zk_config.IsType1Rollup() {
 		sdb.scalableSetBlockNum(blockNumber)
 	}
 	emptyHash := libcommon.Hash{}
 
 	//ETROG
 	if chainConfig.IsForkID7Etrog(blockNumber) {
-		if !chainConfig.IsNormalcy(blockNumber) || !ethconfig.IsType1Rollup() {
+		if !chainConfig.IsNormalcy(blockNumber) || !zk_config.IsType1Rollup() {
 			currentTimestamp := sdb.ScalableGetTimestamp()
 			if blockTimestamp > currentTimestamp {
 				sdb.ScalableSetTimestamp(blockTimestamp)

@@ -147,9 +147,3 @@ func (c *Zk) ShouldImportInitialBatch() bool {
 func (c *Zk) IsL1Recovery() bool {
 	return c.L1SyncStartBlock > 0
 }
-
-var Type1Enabled bool
-
-func IsType1Rollup() bool {
-	return Type1Enabled
-}
