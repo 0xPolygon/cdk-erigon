@@ -68,7 +68,6 @@ type DatastreamClient interface {
 	GetProgressAtomic() *atomic.Uint64
 	Start() error
 	Stop() error
-	PrepUnwind()
 	HandleStart() error
 }
 
@@ -814,7 +813,11 @@ func newStreamClient(ctx context.Context, cfg BatchesCfg, latestForkId uint64) (
 		}
 	} else {
 		dsClient = cfg.dsClient
-		stopFn = func() {}
+		stopFn = func() {
+			if err := dsClient.Stop(); err != nil {
+				log.Warn("Failed to stop datastream client", "err", err)
+			}
+		}
 	}
 
 	return dsClient, stopFn, nil
