@@ -316,39 +316,33 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 }
 
 func (m *Mapmutation) SetCachedValue(cachedMapValue map[string]map[string][]byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	for key, innerMap := range cachedMapValue {
-		if m.puts[key] == nil {
+		// 直接初始化，避免多次 nil 检查
+		if _, exists := m.puts[key]; !exists {
 			m.puts[key] = make(map[string][]byte, len(innerMap))
 		}
+
 		for innerKey, val := range innerMap {
-			newVal := make([]byte, len(val))
-			copy(newVal, val)
-			m.puts[key][innerKey] = newVal
+			m.puts[key][innerKey] = val // 直接引用，不拷贝
 		}
 	}
 }
 
 func (m *Mapmutation) RetrieveAndRemoveTableCache(targetTable []string) map[string]map[string][]byte {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if len(targetTable) == 0 {
 		return nil
 	}
 
-	targetCachedTable := make(map[string]map[string][]byte)
+	targetCachedTable := make(map[string]map[string][]byte, len(targetTable))
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for _, target := range targetTable {
-		if _, exists := m.puts[target]; exists {
-			if targetCachedTable[target] == nil {
-				targetCachedTable[target] = make(map[string][]byte, len(m.puts[target]))
-			}
-
-			for innerKey, val := range m.puts[target] {
-				newVal := make([]byte, len(val))
-				copy(newVal, val)
-				targetCachedTable[target][innerKey] = newVal
-			}
-
+		if cached, exists := m.puts[target]; exists {
+			targetCachedTable[target] = cached // 直接引用，不拷贝
 			delete(m.puts, target)
 		}
 	}
