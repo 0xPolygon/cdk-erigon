@@ -66,9 +66,11 @@ func NewHashBatchWithCache(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger
 
 	size := 0
 	count := 0
-	for k, v := range cache {
-		size += len(k) + len(v)
-		count++
+	for _, bucket := range cache {
+		for k, v := range bucket {
+			size += len(k) + len(v)
+			count++
+		}
 	}
 
 	return &Mapmutation{
@@ -315,22 +317,6 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	return nil
 }
 
-func (m *Mapmutation) SetCachedValue(cachedMapValue map[string]map[string][]byte) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for key, innerMap := range cachedMapValue {
-		// 直接初始化，避免多次 nil 检查
-		if _, exists := m.puts[key]; !exists {
-			m.puts[key] = make(map[string][]byte, len(innerMap))
-		}
-
-		for innerKey, val := range innerMap {
-			m.puts[key][innerKey] = val // 直接引用，不拷贝
-		}
-	}
-}
-
 func (m *Mapmutation) RetrieveAndRemoveTableCache(targetTable []string) map[string]map[string][]byte {
 	if len(targetTable) == 0 {
 		return nil
@@ -343,6 +329,10 @@ func (m *Mapmutation) RetrieveAndRemoveTableCache(targetTable []string) map[stri
 	for _, target := range targetTable {
 		if cached, exists := m.puts[target]; exists {
 			targetCachedTable[target] = cached // 直接引用，不拷贝
+			for k, v := range cached {
+				m.size -= (len(k) + len(v))
+				m.count--
+			}
 			delete(m.puts, target)
 		}
 	}
@@ -356,6 +346,9 @@ func (m *Mapmutation) Flush(ctx context.Context, tx kv.RwTx) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if len(m.puts) == 0 {
+		return nil
+	}
 	if err := m.doCommit(tx); err != nil {
 		return err
 	}

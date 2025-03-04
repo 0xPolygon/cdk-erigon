@@ -66,10 +66,9 @@ func AsyncFlushSmtData(ctx context.Context,
 			}
 
 			err := db.Batch(func(tx kv.RwTx) error {
-				batch := membatch.NewHashBatch(tx, ctx.Done(), "", logger)
+				batch := membatch.NewHashBatchWithCache(tx, ctx.Done(), "", logger, smtCache)
 				defer batch.Close()
 
-				batch.SetCachedValue(smtCache)
 				return batch.Flush(ctx, tx)
 			})
 
