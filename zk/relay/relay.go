@@ -110,8 +110,11 @@ func (r *Relay) Run() error {
 		}
 	}()
 
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	tickerRemote := time.NewTicker(10 * time.Second)
+	defer tickerRemote.Stop()
+
+	tickerLocal := time.NewTicker(10 * time.Second)
+	defer tickerLocal.Stop()
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
@@ -123,11 +126,13 @@ func (r *Relay) Run() error {
 		case <-signals:
 			log.Info("Shutting down datastream server")
 			return nil
-		case <-ticker.C:
+		case <-tickerRemote.C:
 			if r.client.GetEntryNumberLimit() == 0 {
 				continue
 			}
 			log.Info(fmt.Sprintf("Datastream entries processed: %d/%d (%d%%)", r.client.GetLastWrittenEntryAtomic().Load(), r.client.GetEntryNumberLimit(), (r.client.GetLastWrittenEntryAtomic().Load()*100)/r.client.GetEntryNumberLimit()))
+		case <-tickerLocal.C:
+			log.Info(fmt.Sprintf("Local datastream entries: %d", r.server.GetHeader().TotalEntries))
 		}
 	}
 }
