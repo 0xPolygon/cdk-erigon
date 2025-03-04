@@ -59,7 +59,6 @@ type Zk struct {
 	ExecutorMaxConcurrentRequests          int
 	Limbo                                  bool
 	AllowFreeTransactions                  bool
-	RejectLowGasPriceTransactions          bool
 	AllowPreEIP155Transactions             bool
 	EffectiveGasPriceForEthTransfer        uint8
 	EffectiveGasPriceForErc20Transfer      uint8
@@ -68,6 +67,8 @@ type Zk struct {
 	DefaultGasPrice                        uint64
 	MaxGasPrice                            uint64
 	GasPriceFactor                         float64
+	GasPriceCheckFrequency                 time.Duration
+	GasPriceHistoryCount                   uint64
 	DAUrl                                  string
 	DataStreamHost                         string
 	DataStreamPort                         uint
@@ -105,9 +106,13 @@ type Zk struct {
 	SealBatchImmediatelyOnOverflow bool
 	MockWitnessGeneration          bool
 	WitnessCacheEnabled            bool
-	WitnessCacheLimit              uint64
+	WitnessCachePurge              bool
+	WitnessCacheBatchAheadOffset   uint64
+	WitnessCacheBatchBehindOffset  uint64
 	WitnessContractInclusion       []common.Address
 	BadTxAllowance                 uint64
+	RejectLowGasPriceTransactions  bool
+	RejectLowGasPriceTolerance     float64
 }
 
 var DefaultZkConfig = Zk{
