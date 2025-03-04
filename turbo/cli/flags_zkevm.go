@@ -135,10 +135,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	// witness cache flags
 	// if dicabled, set limit to 0 and only check for it to be 0 or not
 	witnessCacheEnabled := ctx.Bool(utils.WitnessCacheEnable.Name)
-	witnessCacheLimit := ctx.Uint64(utils.WitnessCacheLimit.Name)
-	if !witnessCacheEnabled {
-		witnessCacheLimit = 0
-	}
+	witnessCachePurge := ctx.Bool(utils.WitnessCachePurge.Name)
 	var witnessInclusion []libcommon.Address
 	for _, s := range strings.Split(ctx.String(utils.WitnessContractInclusion.Name), ",") {
 		if s == "" {
@@ -200,7 +197,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		ExecutorMaxConcurrentRequests:          ctx.Int(utils.ExecutorMaxConcurrentRequests.Name),
 		Limbo:                                  ctx.Bool(utils.Limbo.Name),
 		AllowFreeTransactions:                  ctx.Bool(utils.AllowFreeTransactions.Name),
-		RejectLowGasPriceTransactions:          ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
 		AllowPreEIP155Transactions:             ctx.Bool(utils.AllowPreEIP155Transactions.Name),
 		EffectiveGasPriceForEthTransfer:        uint8(math.Round(effectiveGasPriceForEthTransferVal * 255.0)),
 		EffectiveGasPriceForErc20Transfer:      uint8(math.Round(effectiveGasPriceForErc20TransferVal * 255.0)),
@@ -232,9 +228,16 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		InfoTreeUpdateInterval:                 ctx.Duration(utils.InfoTreeUpdateInterval.Name),
 		SealBatchImmediatelyOnOverflow:         ctx.Bool(utils.SealBatchImmediatelyOnOverflow.Name),
 		MockWitnessGeneration:                  ctx.Bool(utils.MockWitnessGeneration.Name),
-		WitnessCacheLimit:                      witnessCacheLimit,
+		WitnessCacheEnabled:                    witnessCacheEnabled,
+		WitnessCachePurge:                      witnessCachePurge,
+		WitnessCacheBatchAheadOffset:           ctx.Uint64(utils.WitnessCacheBatchAheadOffset.Name),
+		WitnessCacheBatchBehindOffset:          ctx.Uint64(utils.WitnessCacheBatchBehindOffset.Name),
 		WitnessContractInclusion:               witnessInclusion,
 		BadTxAllowance:                         ctx.Uint64(utils.BadTxAllowance.Name),
+		GasPriceCheckFrequency:                 ctx.Duration(utils.GasPriceCheckFrequency.Name),
+		GasPriceHistoryCount:                   ctx.Uint64(utils.GasPriceHistoryCount.Name),
+		RejectLowGasPriceTransactions:          ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
+		RejectLowGasPriceTolerance:             ctx.Float64(utils.RejectLowGasPriceTolerance.Name),
 	}
 
 	// For X Layer

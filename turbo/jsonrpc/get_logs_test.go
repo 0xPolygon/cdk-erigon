@@ -3,6 +3,9 @@ package jsonrpc
 import (
 	"context"
 	"fmt"
+	"math/big"
+	"testing"
+
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
 	"github.com/ledgerwatch/erigon-lib/kv/kvcache"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind/backends"
@@ -10,8 +13,6 @@ import (
 	"github.com/ledgerwatch/erigon/eth/filters"
 	"github.com/ledgerwatch/erigon/rpc/rpccfg"
 	"github.com/ledgerwatch/log/v3"
-	"math/big"
-	"testing"
 )
 
 func TestGetLogsWithRange(t *testing.T) {
@@ -26,7 +27,7 @@ func TestGetLogsWithRange(t *testing.T) {
 	db := contractBackend.DB()
 	agg := contractBackend.Agg()
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), logsMaxRange)
+	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), nil, logsMaxRange)
 
 	scenarios := []struct {
 		name          string
