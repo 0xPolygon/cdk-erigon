@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"math/big"
 	"sync/atomic"
 
@@ -384,7 +385,7 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 	txHash := ethTypes.DeriveSha(txCollection)
 
 	var gasLimit uint64
-	if !p.chainConfig.IsNormalcy(l2Block.L2BlockNumber) {
+	if !p.chainConfig.IsNormalcy(l2Block.L2BlockNumber) || !ethconfig.IsType1Rollup() {
 		gasLimit = utils.GetBlockGasLimitForFork(l2Block.ForkId)
 	} else {
 		gasLimit = p.miningConfig.GasLimit

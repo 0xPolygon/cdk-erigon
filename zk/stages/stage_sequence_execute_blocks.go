@@ -2,7 +2,6 @@ package stages
 
 import (
 	"fmt"
-
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 

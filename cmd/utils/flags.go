@@ -903,6 +903,11 @@ var (
 		Usage: "When enabled a RPC node can use the L2 to build the InfoTree.",
 		Value: false,
 	}
+	EnableType1Rollups = cli.BoolFlag{
+		Name:  "zkevm.type-1",
+		Usage: "Enable type 1 rollups",
+		Value: false,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",

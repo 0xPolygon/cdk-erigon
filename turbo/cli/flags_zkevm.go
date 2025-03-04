@@ -177,6 +177,9 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		}
 	}
 
+	// set type 1 enabled as a global var for easier access
+	ethconfig.Type1Enabled = ctx.Bool(utils.EnableType1Rollups.Name)
+
 	cfg.Zk = &ethconfig.Zk{
 		L2ChainId:                              ctx.Uint64(utils.L2ChainIdFlag.Name),
 		L2RpcUrl:                               ctx.String(utils.L2RpcUrlFlag.Name),

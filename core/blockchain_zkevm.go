@@ -20,6 +20,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -129,7 +130,7 @@ func ExecuteBlockEphemerallyZk(
 			return nil, fmt.Errorf("ProcessReceiptForBlockExecution: %w", err)
 		}
 
-		if !chainConfig.IsForkID7Etrog(block.NumberU64()) && !chainConfig.IsNormalcy(block.NumberU64()) {
+		if !chainConfig.IsForkID7Etrog(block.NumberU64()) && !chainConfig.IsNormalcy(block.NumberU64()) || !ethconfig.IsType1Rollup() {
 			if err := ibs.ScalableSetSmtRootHash(roHermezDb); err != nil {
 				return nil, fmt.Errorf("ScalableSetSmtRootHash: %w", err)
 			}
@@ -168,7 +169,9 @@ func ExecuteBlockEphemerallyZk(
 		}
 	}
 
-	ibs.PostExecuteStateSet(chainConfig, block.NumberU64(), l2InfoRoot)
+	if !ethconfig.IsType1Rollup() {
+		ibs.PostExecuteStateSet(chainConfig, block.NumberU64(), l2InfoRoot)
+	}
 
 	receiptSha := types.DeriveSha(receipts)
 	// [zkevm] todo
@@ -334,7 +337,7 @@ func ProcessReceiptForBlockExecution(receipt *types.Receipt, roHermezDb state.Re
 		receipt.CumulativeGasUsed = receipt.GasUsed
 	}
 
-	if !chainConfig.IsNormalcy(blockNum) {
+	if !chainConfig.IsNormalcy(blockNum) || !ethconfig.IsType1Rollup() {
 		for _, l := range receipt.Logs {
 			l.ApplyPaddingToLogsData(chainConfig.IsForkID8Elderberry(blockNum), chainConfig.IsForkID12Banana(blockNum))
 		}

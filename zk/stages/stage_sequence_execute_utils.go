@@ -284,13 +284,13 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimest
 
 	var targetGas uint64
 
-	if chainConfig.IsNormalcy(previousBlockNumber + 1) {
+	if chainConfig.IsNormalcy(previousBlockNumber+1) || ethconfig.IsType1Rollup() {
 		targetGas = miningConfig.GasLimit
 	}
 
 	header := core.MakeEmptyHeader(parentBlock.Header(), chainConfig, newBlockTimestamp, &targetGas)
 
-	if !chainConfig.IsNormalcy(previousBlockNumber + 1) {
+	if !chainConfig.IsNormalcy(previousBlockNumber+1) || !ethconfig.IsType1Rollup() {
 		header.GasLimit = utils.GetBlockGasLimitForFork(forkId)
 	}
 
