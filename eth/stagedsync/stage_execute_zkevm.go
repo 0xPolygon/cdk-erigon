@@ -118,6 +118,11 @@ Loop:
 			break
 		}
 
+		if blockNum > cfg.zk.DebugStepAfter && cfg.zk.DebugStep > 0 && (blockNum-highestBlockExecuted) > cfg.zk.DebugStep {
+			log.Info(fmt.Sprintf("[%s] Debug step reached, stopping blocks loop", s.LogPrefix()), "blockNumber", blockNum)
+			break
+		}
+
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
 			break
 		}
