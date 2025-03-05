@@ -2267,6 +2267,7 @@ type PendingPool struct {
 }
 
 func NewPendingSubPool(t SubPoolType, limit int) *PendingPool {
+	log.Info("new pending sub pool", "limit", limit)
 	return &PendingPool{limit: limit, t: t, best: &bestSlice{ms: []*metaTx{}}, worst: &WorstQueue{ms: []*metaTx{}}}
 }
 
