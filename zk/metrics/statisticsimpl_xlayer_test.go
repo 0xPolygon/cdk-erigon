@@ -7,9 +7,10 @@ import (
 
 func TestStatisticsInstanceSummary(t *testing.T) {
 	type fields struct {
-		timestamp  time.Time
-		statistics map[LogTag]int64
-		tags       map[LogTag]string
+		timestamp     time.Time
+		statistics    map[LogTag]int64
+		statisticsOld map[LogTag]int64
+		tags          map[LogTag]string
 	}
 	tests := []struct {
 		name   string
@@ -24,7 +25,6 @@ func TestStatisticsInstanceSummary(t *testing.T) {
 				GetTxTiming:                   time.Second.Milliseconds(),
 				GetTxPauseCounter:             2,
 				GetTxPauseTiming:              time.Second.Milliseconds() * 30,
-				ReprocessingTxCounter:         3,
 				FailTxGasOverCounter:          1,
 				ZKOverflowBlockCounter:        1,
 				ProcessingInvalidTxCounter:    2,
@@ -48,25 +48,32 @@ func TestStatisticsInstanceSummary(t *testing.T) {
 				ZKHashSMTInsertKeyTiming:       6100,
 				ZKHashSMTGetKeyTiming:          7100,
 
-				HermezSmtStats:    1100,
-				HermezSmtMetadata: 2100,
-				HermezSmt:         3200,
-				HermezSmtHashKey:  4200,
+				HermezSmtStats:          1,
+				HermezSmtMetadata:       1,
+				HermezSmt:               60,
+				HermezSmtHashKey:        20,
+				HermezSmtStatsTiming:    1100,
+				HermezSmtMetadataTiming: 2100,
+				HermezSmtTiming:         3200,
+				HermezSmtHashKeyTiming:  4200,
 
 				Delete: 5000,
 				Append: 6000,
 				Put:    7000,
 			},
-			tags: map[LogTag]string{BatchCloseReason: "deadline", FinalizeBatchNumber: "123", HermezSmtStats: "1", HermezSmtMetadata: "2", HermezSmt: "3", HermezSmtHashKey: "4"},
+			statisticsOld: map[LogTag]int64{},
+			tags:          map[LogTag]string{BatchCloseReason: "deadline", FinalizeBatchNumber: "123", FinalizeBlockNumber: "5"},
 		}, "test"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l := &statisticsInstance{
-				newRoundTime: tt.fields.timestamp,
-				statistics:   tt.fields.statistics,
-				tags:         tt.fields.tags,
+				newRoundTime:  tt.fields.timestamp,
+				statistics:    tt.fields.statistics,
+				statisticsOld: tt.fields.statisticsOld,
+				tags:          tt.fields.tags,
 			}
+			t.Log(l.SummaryCheckpoint())
 			t.Log(l.Summary())
 		})
 	}
