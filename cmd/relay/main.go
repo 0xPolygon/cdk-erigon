@@ -34,6 +34,11 @@ var (
 		Name:  "tx-bin",
 		Usage: "Location of the tx binary file",
 	}
+	logVerbosityFlag = &cli.IntFlag{
+		Name:  "log-verbosity",
+		Usage: "Log level verbosity. 1: Trace, 2: Debug, 3: Info, 4: Warn, 5: Error, 6: Crit",
+		Value: int(log.LvlInfo),
+	}
 
 	Relay = cli.Command{
 		Action: runRelay,
@@ -43,6 +48,7 @@ var (
 			remoteDsUrlFlag,
 			relayPortFlag,
 			streamDirFlag,
+			logVerbosityFlag,
 		},
 	}
 	Replayer = cli.Command{
@@ -83,10 +89,6 @@ func main() {
 }
 
 func preStartRelay(cliCtx *cli.Context) error {
-	logLvl := log.LvlInfo
-	logger := log.Root()
-	consoleHandler := log.LvlFilterHandler(logLvl, log.StreamHandler(os.Stdout, log.TerminalFormat()))
-	logger.SetHandler(consoleHandler)
 	return nil
 }
 
@@ -96,6 +98,11 @@ func finishRelay(cliCtx *cli.Context) error {
 }
 
 func runRelay(cliCtx *cli.Context) error {
+	logLvl := log.Lvl(cliCtx.Int(logVerbosityFlag.Name))
+	logger := log.Root()
+	consoleHandler := log.LvlFilterHandler(logLvl, log.StreamHandler(os.Stdout, log.TerminalFormat()))
+	logger.SetHandler(consoleHandler)
+
 	log.Info("Starting Datastream Relay...")
 
 	dsUrl := cliCtx.String(remoteDsUrlFlag.Name)

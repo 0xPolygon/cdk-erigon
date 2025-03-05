@@ -383,8 +383,8 @@ func (c *StreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function fu
 	if _, err := c.initiateDownloadBookmark(protoBookmark); err != nil {
 		return fmt.Errorf("initiateDownloadBookmark: %w", err)
 	}
-	count := uint64(0)
 
+	var count uint64
 	for {
 		if header.TotalEntries == count {
 			break
@@ -398,7 +398,7 @@ func (c *StreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function fu
 
 		}
 		c.lastWrittenEntryNum.Store(file.EntryNum)
-		count++
+		count = file.EntryNum
 	}
 
 	return nil

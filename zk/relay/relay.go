@@ -100,9 +100,19 @@ func (r *Relay) Run() error {
 		return err
 	}
 
+	// correctness check
+	if err = r.performCorrectnessCheck(r.processFileEntry); err != nil {
+		log.Error("Failed to perform correctness check", "error", err)
+		return err
+	}
+
 	go func() {
 		for {
-			if err := r.client.ExecutePerFile(r.progressBookmark(), r.commitFileEntry); err != nil {
+			bm := r.progressBookmark()
+
+			log.Info("Datastream execution started", "value", bm.GetValue())
+
+			if err := r.client.ExecutePerFile(bm, r.commitFileEntry); err != nil {
 				log.Error("Failed to execute per file", "error", err)
 			}
 
@@ -132,61 +142,74 @@ func (r *Relay) Run() error {
 			}
 			log.Info(fmt.Sprintf("Datastream entries processed: %d/%d (%d%%)", r.client.GetLastWrittenEntryAtomic().Load(), r.client.GetEntryNumberLimit(), (r.client.GetLastWrittenEntryAtomic().Load()*100)/r.client.GetEntryNumberLimit()))
 		case <-tickerLocal.C:
-			log.Info(fmt.Sprintf("Local datastream entries: %d", r.server.GetHeader().TotalEntries))
+			log.Debug(fmt.Sprintf("Local datastream entries: %d", r.server.GetHeader().TotalEntries))
 		}
 	}
 }
 
 func (r *Relay) commitFileEntry(file *types.FileEntry) error {
 	var et datastreamer.EntryType
-	var bookmark []byte
+	var bookmark *types.BookmarkProto
+	var bmProto []byte
 	var err error
 
 	switch file.EntryType {
 	case types.EntryTypeL2BlockEnd:
 		et = 6
-
-		var blockNum *types.FullL2Block
-		blockNum, err = types.UnmarshalL2Block(file.Data)
-		if err != nil {
-			return err
-		}
-
-		bookmarkProto := types.NewBookmarkProto(blockNum.L2BlockNumber, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
-		bookmark, err = bookmarkProto.Marshal()
-
-		if err = r.serverRelay.CommitBookmarkToStream(bookmark); err != nil {
-			return err
-		}
-
-		// track progress
-		progBlock := r.client.GetProgressAtomic().Load()
-		if blockNum.L2BlockNumber > progBlock {
-			r.client.GetProgressAtomic().Store(blockNum.L2BlockNumber)
-		}
 	case types.BookmarkEntryType:
 		et = 176
 
-		if err = r.serverRelay.CommitEntryToStream(et, file.Data); err != nil {
-			return err
-		}
-	case types.EntryTypeBatchStart:
-		et = 6
-	case types.EntryTypeBatchEnd:
-		et = 4
-
-		var batchNum *types.BatchEnd
-		batchNum, err = types.UnmarshalBatchEnd(file.Data)
+		bookmark, err = types.UnmarshalBookmark(file.Data)
 		if err != nil {
 			return err
 		}
 
-		bookmarkProto := types.NewBookmarkProto(batchNum.Number, datastream.BookmarkType_BOOKMARK_TYPE_BATCH)
-		bookmark, err = bookmarkProto.Marshal()
+		if bookmark.BookmarkType() == datastream.BookmarkType_BOOKMARK_TYPE_BATCH {
+			bmProto, err = bookmark.Marshal()
+			if err != nil {
+				return err
+			}
 
-		if err = r.serverRelay.CommitBookmarkToStream(bookmark); err != nil {
-			return err
+			return r.serverRelay.CommitBookmarkToStream(bmProto)
 		}
+
+		if bookmark.BookmarkType() == datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK {
+			var blockNum *types.FullL2Block
+			blockNum, err = types.UnmarshalL2Block(file.Data)
+			if err != nil {
+				return err
+			}
+
+			progBlock := r.client.GetProgressAtomic().Load()
+			if blockNum.L2BlockNumber > progBlock {
+				r.client.GetProgressAtomic().Store(blockNum.L2BlockNumber)
+			}
+
+			bmProto, err = bookmark.Marshal()
+			if err != nil {
+				return err
+			}
+
+			return r.serverRelay.CommitBookmarkToStream(bmProto)
+		}
+
+		if bookmark.BookmarkType() == datastream.BookmarkType_BOOKMARK_TYPE_UNSPECIFIED {
+			log.Warn("Unspecified bookmark type", "bookmarkType", bookmark.BookmarkType())
+
+			bmProto, err = bookmark.Marshal()
+			if err != nil {
+				return err
+			}
+
+			return r.serverRelay.CommitBookmarkToStream(bmProto)
+		}
+
+		log.Error("Unexpected bookmark type", "bookmarkType", bookmark.BookmarkType())
+		return nil
+	case types.EntryTypeBatchStart:
+		et = 1
+	case types.EntryTypeBatchEnd:
+		et = 4
 	case types.EntryTypeL2Tx:
 		et = 3
 	case types.EntryTypeL2Block:
@@ -206,4 +229,55 @@ func (r *Relay) commitFileEntry(file *types.FileEntry) error {
 
 func (r *Relay) progressBookmark() *types.BookmarkProto {
 	return types.NewBookmarkProto(r.client.GetProgressAtomic().Load(), datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
+}
+
+func (r *Relay) performCorrectnessCheck(function func(file datastreamer.FileEntry) error) error {
+	totalLocalEntries := r.server.GetHeader().TotalEntries
+	if totalLocalEntries == 0 {
+		log.Debug("Local datastream is empty")
+		return nil
+	}
+
+	var startEntryNum uint64 = 1
+	for {
+		if startEntryNum == totalLocalEntries {
+			log.Debug("Entry check completed", "startEntryNum", startEntryNum, "totalLocalEntries", totalLocalEntries)
+			return nil
+		}
+
+		serverEntry, err := r.server.GetEntry(startEntryNum)
+		if err != nil {
+			return err
+		}
+
+		if err = function(serverEntry); err != nil {
+			return err
+		}
+
+		startEntryNum = serverEntry.Number + 1
+	}
+}
+
+func (r *Relay) processFileEntry(file datastreamer.FileEntry) error {
+	switch file.Type {
+	case 0:
+		// EntryTypeUnspecified
+	case 1:
+		// EntryTypeBatchStart
+	case 2:
+		// EntryTypeL2Block
+	case 3:
+		// EntryTypeL2Tx
+	case 4:
+		// EntryTypeBatchEnd
+	case 5:
+		// EntryTypeGerUpdate
+	case 176:
+		// BookmarkEntryType
+	case math.MaxUint32:
+		// EntryTypeNotFound
+	default:
+		log.Error("Unexpected entry type", "entryType", file.Type)
+	}
+	return nil
 }
