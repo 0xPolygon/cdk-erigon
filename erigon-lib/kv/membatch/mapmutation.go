@@ -65,21 +65,10 @@ func NewHashBatchWithCache(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger
 		quit = ch
 	}
 
-	size := 0
-	count := 0
-	for _, bucket := range cache {
-		for k, v := range bucket {
-			size += len(k) + len(v)
-			count++
-		}
-	}
-
 	return &Mapmutation{
 		db:            tx,
 		puts:          cache,
 		modifiedCache: make(map[string]map[string][]byte),
-		size:          size,
-		count:         uint64(count),
 		quit:          quit,
 		clean:         clean,
 		tmpdir:        tmpdir,
