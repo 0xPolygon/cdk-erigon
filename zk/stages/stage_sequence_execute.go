@@ -60,7 +60,10 @@ func SpawnSequencingStage(
 	}
 
 	if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil); err == nil {
-		s.FlushSmtCache()
+		//if s.BlockNumber%50 == 0 {
+		//	err = s.FlushSmtCache()
+		//}
+		err = s.FlushSmtCache()
 	}
 
 	return err
@@ -702,11 +705,11 @@ func sequencingBatchStep(
 			batchContext.sdb.eridb.RollbackBatch()
 			return err
 		}
-		smtCache, err := batchContext.sdb.eridb.RetrieveCacheAndCommitBatch()
+		smtCache, deltaCache, err := batchContext.sdb.eridb.RetrieveCacheAndCommitBatch()
 		if err != nil {
 			return err
 		}
-		s.SetSmtCache(smtCache)
+		s.SetSmtCache(smtCache, deltaCache)
 
 		// For X Layer
 		// Count successful transactions

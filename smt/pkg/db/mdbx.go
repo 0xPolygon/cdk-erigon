@@ -108,20 +108,20 @@ func (m *EriDb) OpenBatchWithCachedValue(quitCh <-chan struct{}, cachedMapValue 
 	m.kvTxRo = batch
 }
 
-func (m *EriDb) RetrieveCacheAndCommitBatch() (map[string]map[string][]byte, error) {
+func (m *EriDb) RetrieveCacheAndCommitBatch() (map[string]map[string][]byte, map[string]map[string][]byte, error) {
 	batch, ok := m.tx.(kv.PendingMutations)
 	if !ok {
-		return nil, nil // don't roll back a kvRw tx
+		return nil, nil, nil // don't roll back a kvRw tx
 	}
 
 	mapCache, ok := batch.(*membatch.Mapmutation)
 	if !ok {
-		return nil, nil // don't roll back a kvRw tx
+		return nil, nil, nil // don't roll back a kvRw tx
 	}
 
-	smtCache := mapCache.RetrieveAndRemoveTableCache(HermezSmtTables)
+	smtCache, deltaSmtCache := mapCache.RetrieveAndRemoveTableCache(HermezSmtTables)
 
-	return smtCache, m.CommitBatch()
+	return smtCache, deltaSmtCache, m.CommitBatch()
 }
 
 func (m *EriDb) CommitBatch() error {

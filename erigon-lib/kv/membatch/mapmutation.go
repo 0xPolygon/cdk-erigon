@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,12 +13,13 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/etl"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/zk/metrics"
 	"github.com/ledgerwatch/log/v3"
 )
 
 type Mapmutation struct {
-	puts   map[string]map[string][]byte // table -> key -> value ie. blocks -> hash -> blockBod
+	puts       map[string]map[string][]byte // table -> key -> value ie. blocks -> hash -> blockBod
+	modifyFlag map[string]map[string]bool
+
 	db     kv.Tx
 	quit   <-chan struct{}
 	clean  func()
@@ -47,12 +47,13 @@ func NewHashBatch(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger log.Logg
 	}
 
 	return &Mapmutation{
-		db:     tx,
-		puts:   make(map[string]map[string][]byte),
-		quit:   quit,
-		clean:  clean,
-		tmpdir: tmpdir,
-		logger: logger,
+		db:         tx,
+		puts:       make(map[string]map[string][]byte),
+		modifyFlag: make(map[string]map[string]bool),
+		quit:       quit,
+		clean:      clean,
+		tmpdir:     tmpdir,
+		logger:     logger,
 	}
 }
 
@@ -74,14 +75,15 @@ func NewHashBatchWithCache(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger
 	}
 
 	return &Mapmutation{
-		db:     tx,
-		puts:   cache,
-		size:   size,
-		count:  uint64(count),
-		quit:   quit,
-		clean:  clean,
-		tmpdir: tmpdir,
-		logger: logger,
+		db:         tx,
+		puts:       cache,
+		modifyFlag: make(map[string]map[string]bool),
+		size:       size,
+		count:      uint64(count),
+		quit:       quit,
+		clean:      clean,
+		tmpdir:     tmpdir,
+		logger:     logger,
 	}
 }
 
@@ -178,8 +180,13 @@ func (m *Mapmutation) Put(table string, k, v []byte) error {
 	if _, ok := m.puts[table]; !ok {
 		m.puts[table] = make(map[string][]byte)
 	}
+	if _, ok := m.modifyFlag[table]; !ok {
+		m.modifyFlag[table] = make(map[string]bool)
+	}
 
 	stringKey := string(k)
+
+	m.modifyFlag[table][stringKey] = true
 
 	var ok bool
 	if _, ok = m.puts[table][stringKey]; ok {
@@ -288,8 +295,6 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	count := 0
 	total := float64(m.count)
 	for table, bucket := range m.puts {
-		startTime := time.Now()
-		metrics.GetLogStatistics().SetTag(metrics.LogTag(table), strconv.Itoa(len(bucket)))
 		collector := etl.NewCollector("", m.tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize/2), m.logger)
 		defer collector.Close()
 		collector.SortAndFlushInBackground(true)
@@ -310,34 +315,119 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 			return err
 		}
 		collector.Close()
-		metrics.GetLogStatistics().CumulativeTiming(metrics.LogTag(table), time.Since(startTime))
 	}
 
 	tx.CollectMetrics()
 	return nil
 }
 
-func (m *Mapmutation) RetrieveAndRemoveTableCache(targetTable []string) map[string]map[string][]byte {
+func (m *Mapmutation) RetrieveAndRemoveTableCache(targetTable []string) (map[string]map[string][]byte, map[string]map[string][]byte) {
 	if len(targetTable) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	targetCachedTable := make(map[string]map[string][]byte, len(targetTable))
+	deltaTargetCached := make(map[string]map[string][]byte, len(targetTable))
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, target := range targetTable {
-		if cached, exists := m.puts[target]; exists {
-			targetCachedTable[target] = cached // 直接引用，不拷贝
-			for k, v := range cached {
-				m.size -= (len(k) + len(v))
-				m.count--
-			}
-			delete(m.puts, target)
-		}
+	type result struct {
+		table          string
+		bucket         map[string][]byte
+		delta          map[string][]byte
+		sizeReduction  int
+		countReduction uint64
 	}
 
-	return targetCachedTable
+	results := make(chan result, len(targetTable))
+	var wg sync.WaitGroup
+
+	m.mu.Lock()
+	// 先收集所有需要的数据，复制到 goroutine
+	type tableData struct {
+		bucket           map[string][]byte
+		modTable         map[string]bool
+		hasModifications bool
+	}
+	tablesToProcess := make(map[string]tableData, len(targetTable))
+
+	for _, table := range targetTable {
+		bucket, exists := m.puts[table]
+		if !exists {
+			continue
+		}
+		modTable, hasModifications := m.modifyFlag[table]
+		tablesToProcess[table] = tableData{
+			bucket:           bucket,
+			modTable:         modTable,
+			hasModifications: hasModifications,
+		}
+	}
+	m.mu.Unlock()
+
+	// 启动 goroutines 处理数据
+	for table, data := range tablesToProcess {
+		wg.Add(1)
+		go func(table string, bucket map[string][]byte, modTable map[string]bool, hasModifications bool) {
+			defer wg.Done()
+
+			var delta map[string][]byte
+			sizeReduction := 0
+			countReduction := uint64(0)
+
+			if hasModifications {
+				delta = make(map[string][]byte, len(modTable))
+			}
+
+			for k, v := range bucket {
+				if hasModifications {
+					if _, modified := modTable[k]; modified {
+						delta[k] = append([]byte(nil), v...)
+
+						//if v == nil || len(v) == 0 {
+						//	delete(bucket, k)
+						//}
+					}
+				}
+				sizeReduction += (len(k) + len(v))
+				countReduction++
+			}
+
+			results <- result{
+				table:          table,
+				bucket:         bucket,
+				delta:          delta,
+				sizeReduction:  sizeReduction,
+				countReduction: countReduction,
+			}
+		}(table, data.bucket, data.modTable, data.hasModifications)
+	}
+
+	// 关闭通道
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// 收集结果
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	totalSizeReduction := 0
+	totalCountReduction := uint64(0)
+	for res := range results {
+		targetCachedTable[res.table] = res.bucket
+		if res.delta != nil {
+			deltaTargetCached[res.table] = res.delta
+			delete(m.modifyFlag, res.table)
+		}
+		delete(m.puts, res.table)
+		totalSizeReduction += res.sizeReduction
+		totalCountReduction += res.countReduction
+	}
+
+	m.size -= totalSizeReduction
+	m.count -= totalCountReduction
+
+	return targetCachedTable, deltaTargetCached
 }
 
 func (m *Mapmutation) Flush(ctx context.Context, tx kv.RwTx) error {
@@ -354,6 +444,7 @@ func (m *Mapmutation) Flush(ctx context.Context, tx kv.RwTx) error {
 	}
 
 	m.puts = map[string]map[string][]byte{}
+	m.modifyFlag = map[string]map[string]bool{}
 	m.size = 0
 	m.count = 0
 	return nil
@@ -367,6 +458,7 @@ func (m *Mapmutation) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.puts = map[string]map[string][]byte{}
+	m.modifyFlag = map[string]map[string]bool{}
 	m.size = 0
 	m.count = 0
 	m.size = 0

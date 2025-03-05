@@ -49,12 +49,12 @@ type StageState struct {
 
 func (s *StageState) GetSmtCache() map[string]map[string][]byte { return s.state.GetSmtCache() }
 
-func (s *StageState) SetSmtCache(cache map[string]map[string][]byte) {
-	s.state.SetSmtCache(cache)
+func (s *StageState) SetSmtCache(cache, deltaCache map[string]map[string][]byte) {
+	s.state.SetSmtCache(cache, deltaCache)
 }
 
-func (s *StageState) FlushSmtCache() {
-	s.state.FlushSmtCache()
+func (s *StageState) FlushSmtCache() error {
+	return s.state.FlushSmtCache()
 }
 
 func (s *StageState) LogPrefix() string { return s.state.LogPrefix() }
