@@ -42,11 +42,48 @@ func TestBinaryStringToInt64(t *testing.T) {
 	}
 }
 
+func ConvertBigIntToHexOld(n *big.Int) string {
+	return "0x" + n.Text(16)
+}
+
+func ConvertHexToBigIntOld(hex string) *big.Int {
+	hex = strings.TrimPrefix(hex, "0x")
+	n, _ := new(big.Int).SetString(hex, 16)
+	return n
+}
+
 func BenchmarkConvertBigIntToHex(b *testing.B) {
-	b.ReportAllocs()
-	for n := 0; n < b.N; n++ {
-		ConvertBigIntToHex(big.NewInt(int64(n)))
-	}
+	var s string
+	b.Run("Old", func(b *testing.B) {
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			s = ConvertBigIntToHexOld(big.NewInt(int64(n)))
+		}
+	})
+
+	b.Run("New", func(b *testing.B) {
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			s = ConvertBigIntToHex(big.NewInt(int64(n)))
+		}
+	})
+	_ = s
+}
+
+func BenchmarkConvertHexToBigInt(b *testing.B) {
+	b.Run("Old", func(b *testing.B) {
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			ConvertHexToBigIntOld("0x9257c9a31308a7cb046aba1a95679dd7e3ad695b6900e84a6470b401b1ea416e")
+
+		}
+	})
+	b.Run("New", func(b *testing.B) {
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			ConvertHexToBigInt("0x9257c9a31308a7cb046aba1a95679dd7e3ad695b6900e84a6470b401b1ea416e")
+		}
+	})
 }
 
 func BenchmarkHashContractBytecode(b *testing.B) {
@@ -118,6 +155,16 @@ func TestConvertHexToBigInt(t *testing.T) {
 			name:     "zero case",
 			hexInput: "0x0",
 			expected: big.NewInt(0),
+		},
+		{
+			name:     "single case",
+			hexInput: "0xF",
+			expected: big.NewInt(0xF),
+		},
+		{
+			name:     "odd case",
+			hexInput: "0x1aF",
+			expected: big.NewInt(0x1aF),
 		},
 		{
 			name:     "large number",

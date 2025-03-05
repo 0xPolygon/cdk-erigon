@@ -1,12 +1,14 @@
 package utils
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
 	"strconv"
 	"strings"
+	"unsafe"
 
 	"sort"
 
@@ -271,13 +273,54 @@ func (nv *NodeValue12) IsFinalNode() bool {
 
 // 7 times more efficient than sprintf
 func ConvertBigIntToHex(n *big.Int) string {
-	return "0x" + n.Text(16)
+	i := int(float64(n.BitLen())/4) + 1
+	if n.Sign() < 0 {
+		i++
+	}
+
+	buf := make([]byte, 2, i+2)
+	buf[0] = '0'
+	buf[1] = 'x'
+
+	buf = n.Append(buf, 16)
+	return unsafe.String(&buf[0], len(buf))
 }
 
-func ConvertHexToBigInt(hex string) *big.Int {
-	hex = strings.TrimPrefix(hex, "0x")
-	n, _ := new(big.Int).SetString(hex, 16)
-	return n
+func ConvertHexToBigInt(hexStr string) *big.Int {
+	hexStr = strings.TrimPrefix(hexStr, "0x")
+	isOdd := len(hexStr)%2 != 0
+	dstLen := len(hexStr) / 2
+	if isOdd {
+		dstLen += 1
+	}
+
+	dst := make([]byte, dstLen)
+
+	if isOdd {
+		singleChar := hexStr[0]
+		if singleChar >= 'a' && singleChar <= 'f' {
+			dst[0] = singleChar - 'a' + 10
+		} else if singleChar >= 'A' && singleChar <= 'F' {
+			dst[0] = singleChar - 'A' + 10
+		} else {
+			dst[0] = singleChar - '0'
+		}
+		hexStr = hexStr[1:]
+	}
+	if len(hexStr) != 0 {
+		var newDst = dst[:]
+		if isOdd {
+			newDst = dst[1:]
+		}
+		n, _ := hex.Decode(newDst, unsafe.Slice(unsafe.StringData(hexStr), len(hexStr)))
+		if isOdd {
+			dst = dst[:n+1]
+		} else {
+			dst = dst[:n]
+		}
+	}
+
+	return new(big.Int).SetBytes(dst)
 }
 
 func ConvertHexToAddress(hex string) common.Address {
