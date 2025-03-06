@@ -1095,10 +1095,26 @@ func PruneBlocks(tx kv.RwTx, blockTo uint64, blocksDeleteLimit int) error {
 		return err
 	}
 	if firstK == nil { //nothing to delete
+		log.Debug("Nothing to delete (first block is nil)")
 		return err
 	}
 	blockFrom := binary.BigEndian.Uint64(firstK)
+
 	stopAtBlock := cmp.Min(blockTo, blockFrom+uint64(blocksDeleteLimit))
+	if blockTo == 0 {
+		lastK, _, err := c.Last()
+		if err != nil {
+			return err
+		}
+		if lastK == nil { //nothing to delete
+			log.Debug("Nothing to delete (last block is nil)")
+			return err
+		}
+		stopAtBlock = binary.BigEndian.Uint64(lastK)
+		stopAtBlock-- // don't delete the last block
+	}
+
+	log.Info("Pruning blocks", "from", blockFrom, "to", stopAtBlock)
 
 	var b *types.BodyForStorage
 

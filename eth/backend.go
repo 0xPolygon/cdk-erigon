@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"math/big"
 	"net"
 	"os"
@@ -252,6 +253,60 @@ func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {
 	return
 }
 
+func doPrune(ctx context.Context, db kv.RwDB, pruneTo uint64, logger log.Logger) error {
+	tx, err := db.BeginRw(ctx)
+	if err != nil {
+		logger.Error("Failed to start transaction", "err", err)
+		return err
+	}
+
+	logEvery := time.NewTicker(20 * time.Second)
+
+	err = rawdb.PruneTableDupSort(tx, kv.AccountChangeSet, "", pruneTo, logEvery, ctx)
+	if err != nil {
+		logger.Error("Failed to start transaction", "err", err)
+		return err
+	}
+
+	err = rawdb.PruneTableDupSort(tx, kv.StorageChangeSet, "", pruneTo, logEvery, ctx)
+	if err != nil {
+		logger.Error("Failed to start transaction", "err", err)
+		return err
+	}
+
+	err = rawdb.PruneTable(tx, kv.Receipts, pruneTo, ctx, math.MaxInt32)
+	if err != nil {
+		logger.Error("Failed to start transaction", "err", err)
+		return err
+	}
+
+	err = rawdb.PruneTable(tx, kv.Log, pruneTo, ctx, math.MaxInt32)
+	if err != nil {
+		logger.Error("Failed to start transaction", "err", err)
+		return err
+	}
+
+	err = rawdb.PruneTableDupSort(tx, kv.CallTraceSet, "", pruneTo, logEvery, ctx)
+	if err != nil {
+		logger.Error("Failed to start transaction", "err", err)
+		return err
+	}
+
+	err = rawdb.PruneBlocks(tx, pruneTo, int(pruneTo))
+	if err != nil {
+		logger.Error("Failed to start transaction", "err", err)
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		logger.Error("Failed to start transaction", "err", err)
+		return err
+	}
+
+	return nil
+}
+
 const blockBufferSize = 128
 
 // New creates a new Ethereum object (including the
@@ -295,6 +350,14 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 	if config.HistoryV3 {
 		return nil, errors.New("seems you using erigon2 git branch on erigon3 DB")
 	}
+
+	// pruning
+	logger.Info("Do pruning on start ...")
+	err = doPrune(ctx, chainKv, 0, logger)
+	if err != nil {
+		logger.Error("Failed to prune", "err", err)
+	}
+
 	ctx, ctxCancel := context.WithCancel(context.Background())
 
 	// kv_remote architecture does blocks on stream.Send - means current architecture require unlimited amount of txs to provide good throughput
