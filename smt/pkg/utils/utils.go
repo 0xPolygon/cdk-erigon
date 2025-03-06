@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"math/bits"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -404,15 +405,35 @@ func ScalarToNodeKey(s *big.Int) NodeKey {
 
 func ScalarToRoot(s *big.Int) NodeKey {
 	var result [4]uint64
-	divisor := new(big.Int).Exp(big.NewInt(2), big.NewInt(64), nil)
 
-	sCopy := new(big.Int).Set(s)
+	if bits.UintSize == 64 {
+		sbits := s.Bits()
+		for i := 0; i < 4; i++ {
+			if i < len(sbits) {
+				result[i] = uint64(sbits[i])
+			}
+		}
+	} else {
+		// 2**64
+		//var divisor *big.Int
+		//if bits.UintSize == 64 {
+		//	divisor = new(big.Int).SetBits([]big.Word{0, 1})
+		//} else {
+		//	divisor = new(big.Int).SetBits([]big.Word{0, 0, 1})
+		//}
+		// divisor := new(big.Int).Exp(big.NewInt(2), big.NewInt(64), nil)
 
-	for i := 0; i < 4; i++ {
-		mod := new(big.Int).Mod(sCopy, divisor)
-		result[i] = mod.Uint64()
-		sCopy.Div(sCopy, divisor)
+		sCopy := new(big.Int).Set(s)
+
+		for i := 0; i < 4; i++ {
+			// sCopy mod divisor == sCopy & (divisor - 1) == sCopy & 0xFFFFFFFFFFFFFFFF
+			//mod := new(big.Int).Mod(sCopy, divisor)
+			result[i] = sCopy.Uint64()
+			// sCopy.Div(sCopy, divisor)
+			sCopy.Rsh(sCopy, 64)
+		}
 	}
+
 	return result
 }
 
