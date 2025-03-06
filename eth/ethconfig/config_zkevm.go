@@ -123,6 +123,7 @@ type Zk struct {
 	BadTxPurge                     bool
 	L2InfoTreeUpdatesBatchSize     uint64
 	L2InfoTreeUpdatesEnabled       bool
+	Type1RollupEnabled             bool
 }
 
 var DefaultZkConfig = &Zk{}
@@ -146,4 +147,8 @@ func (c *Zk) ShouldImportInitialBatch() bool {
 
 func (c *Zk) IsL1Recovery() bool {
 	return c.L1SyncStartBlock > 0
+}
+
+func (c *Zk) IsType1Rollup() bool {
+	return c.Type1RollupEnabled
 }

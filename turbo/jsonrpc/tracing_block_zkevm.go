@@ -2,6 +2,7 @@ package jsonrpc
 
 import (
 	"context"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
@@ -31,10 +32,11 @@ type blockTracer struct {
 	_blockReader   services.FullBlockReader
 	historyV3      bool
 	evmCallTimeout time.Duration
+	ethConfigZk    *ethconfig.Zk
 }
 
 func (bt *blockTracer) TraceBlock(block *types.Block) error {
-	txEnv, err := transactions.ComputeTxEnv_ZkEvm(bt.ctx, bt.engine, block, bt.chainConfig, bt._blockReader, bt.tx, 0, bt.historyV3)
+	txEnv, err := transactions.ComputeTxEnv_ZkEvm(bt.ethConfigZk, bt.ctx, bt.engine, block, bt.chainConfig, bt._blockReader, bt.tx, 0, bt.historyV3)
 	if err != nil {
 		bt.stream.WriteNil()
 		return err

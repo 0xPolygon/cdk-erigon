@@ -103,7 +103,7 @@ func (api *PrivateDebugAPIImpl) traceBlock_deprecated(ctx context.Context, block
 	}
 	engine := api.engine()
 
-	txEnv, err := transactions.ComputeTxEnv_ZkEvm(ctx, engine, block, chainConfig, api._blockReader, tx, 0, api.historyV3(tx))
+	txEnv, err := transactions.ComputeTxEnv_ZkEvm(api.ethConfigZk(), ctx, engine, block, chainConfig, api._blockReader, tx, 0, api.historyV3(tx))
 	if err != nil {
 		stream.WriteNil()
 		return err
@@ -285,7 +285,7 @@ func (api *PrivateDebugAPIImpl) TraceTransaction(ctx context.Context, hash commo
 
 	engine := api.engine()
 
-	txEnv, err := transactions.ComputeTxEnv_ZkEvm(ctx, engine, block, chainConfig, api._blockReader, tx, int(txnIndex), api.historyV3(tx))
+	txEnv, err := transactions.ComputeTxEnv_ZkEvm(api.ethConfigZk(), ctx, engine, block, chainConfig, api._blockReader, tx, int(txnIndex), api.historyV3(tx))
 	if err != nil {
 		stream.WriteNil()
 		return err

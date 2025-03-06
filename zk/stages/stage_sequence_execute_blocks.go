@@ -33,7 +33,7 @@ func handleStateForNewBlockStarting(
 	chainConfig := batchContext.cfg.chainConfig
 	hermezDb := batchContext.sdb.hermezDb
 
-	ibs.PreExecuteStateSet(chainConfig, blockNumber, timestamp, stateRoot)
+	ibs.PreExecuteStateSet(chainConfig, blockNumber, timestamp, stateRoot, batchContext.cfg.zk.IsType1Rollup())
 
 	// handle writing to the ger manager contract but only if the index is above 0
 	// block 1 is a special case as it's the injected batch, so we always need to check the GER/L1 block hash
@@ -292,7 +292,7 @@ func postBlockStateHandling(
 		return err
 	}
 
-	ibs.PostExecuteStateSet(cfg.chainConfig, header.Number.Uint64(), blockInfoRootHash)
+	ibs.PostExecuteStateSet(cfg.chainConfig, header.Number.Uint64(), blockInfoRootHash, cfg.zk.IsType1Rollup())
 
 	// store a reference to this block info root against the block number
 	return hermezDb.WriteBlockInfoRoot(header.Number.Uint64(), *blockInfoRootHash)

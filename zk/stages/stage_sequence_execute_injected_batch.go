@@ -64,7 +64,7 @@ func processInjectedInitialBatch(
 	}
 
 	header, parentBlock, err := prepareHeader(batchContext.sdb.tx, 0, math.MaxUint64, math.MaxUint64,
-		batchState.forkId, batchContext.cfg.zk.AddressSequencer, batchContext.cfg.chainConfig, batchContext.cfg.miningConfig)
+		batchState.forkId, batchContext.cfg.zk.AddressSequencer, batchContext.cfg.chainConfig, batchContext.cfg.miningConfig, batchContext.cfg.zk)
 	if err != nil {
 		return err
 	}

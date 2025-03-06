@@ -345,7 +345,7 @@ func updateGER(v vector, ibs *state.IntraBlockState, chainCfg *chain.Config) err
 	if err != nil {
 		return fmt.Errorf("could not parse delta timestamp: %v", err)
 	}
-	ibs.PreExecuteStateSet(chainCfg, 1, deltaTimestamp, &parentRoot)
+	ibs.PreExecuteStateSet(chainCfg, 1, deltaTimestamp, &parentRoot, false)
 
 	if v.Txs[0].L1Info == nil {
 		return nil

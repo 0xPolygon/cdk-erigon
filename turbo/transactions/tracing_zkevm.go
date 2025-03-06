@@ -3,6 +3,7 @@ package transactions
 import (
 	"context"
 	"fmt"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -32,7 +33,7 @@ type TxEnv struct {
 }
 
 // ComputeTxEnv returns the execution environment of a certain transaction.
-func ComputeTxEnv_ZkEvm(ctx context.Context, engine consensus.EngineReader, block *types.Block, cfg *chain.Config, headerReader services.HeaderReader, dbtx kv.Tx, txIndex int, historyV3 bool) (TxEnv, error) {
+func ComputeTxEnv_ZkEvm(ethConfigZk *ethconfig.Zk, ctx context.Context, engine consensus.EngineReader, block *types.Block, cfg *chain.Config, headerReader services.HeaderReader, dbtx kv.Tx, txIndex int, historyV3 bool) (TxEnv, error) {
 	reader, err := rpchelper.CreateHistoryStateReader(dbtx, block.NumberU64(), txIndex, historyV3, cfg.ChainName)
 	if err != nil {
 		return TxEnv{}, err
@@ -59,7 +60,7 @@ func ComputeTxEnv_ZkEvm(ctx context.Context, engine consensus.EngineReader, bloc
 
 	vmConfig := vm.NewTraceVmConfig()
 	vmConfig.Debug = false
-	blockContext, _, ger, l1BlockHash, err := core.PrepareBlockTxExecution(cfg, &vmConfig, core.GetHashFn(header, getHeader), nil, engine.(consensus.Engine), stagedsync.NewChainReaderImpl(cfg, dbtx, nil, log.New()), block, statedb, hermezReader, block.GasLimit())
+	blockContext, _, ger, l1BlockHash, err := core.PrepareBlockTxExecution(ethConfigZk, cfg, &vmConfig, core.GetHashFn(header, getHeader), nil, engine.(consensus.Engine), stagedsync.NewChainReaderImpl(cfg, dbtx, nil, log.New()), block, statedb, hermezReader, block.GasLimit())
 	if err != nil {
 		return TxEnv{}, err
 	}

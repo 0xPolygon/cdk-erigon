@@ -36,7 +36,7 @@ func APIList(db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, r
 		rpcUrl = ethCfg.Zk.L2RpcUrl
 	}
 
-	base := NewBaseApi(filters, stateCache, blockReader, agg, cfg.WithDatadir, cfg.EvmCallTimeout, engine, cfg.Dirs)
+	base := NewBaseApi(filters, stateCache, blockReader, agg, cfg.WithDatadir, cfg.EvmCallTimeout, engine, cfg.Dirs, ethCfg)
 	base.SetL2RpcUrl(ethCfg.Zk.L2RpcUrl)
 	base.SetGasless(ethCfg.AllowFreeTransactions)
 	ethImpl := NewEthAPI(base, db, eth, txPool, mining, cfg.Gascap, cfg.Feecap, cfg.ReturnDataLimit, ethCfg, cfg.AllowUnprotectedTxs, cfg.MaxGetProofRewindBlockCount, cfg.WebsocketSubscribeLogsChannelSize, logger, gasTracker, cfg.LogsMaxRange, ethCfg.DebugDisableStateRootCheck)

@@ -93,6 +93,7 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 		_blockReader:   api._blockReader,
 		historyV3:      api.historyV3(tx),
 		evmCallTimeout: api.evmCallTimeout,
+		ethConfigZk:    api.ethConfigZk(),
 	}
 
 	return blockTracer.TraceBlock(block)
@@ -366,7 +367,7 @@ func (api *PrivateDebugAPIImpl) TraceTransactionCounters(ctx context.Context, ha
 	}
 	engine := api.engine()
 
-	txEnv, err := transactions.ComputeTxEnv_ZkEvm(ctx, engine, block, chainConfig, api._blockReader, tx, int(txnIndex), api.historyV3(tx))
+	txEnv, err := transactions.ComputeTxEnv_ZkEvm(api.ethConfigZk(), ctx, engine, block, chainConfig, api._blockReader, tx, int(txnIndex), api.historyV3(tx))
 	if err != nil {
 		stream.WriteNil()
 		return err
@@ -463,6 +464,7 @@ func (api *PrivateDebugAPIImpl) TraceBatchByNumber(ctx context.Context, batchNum
 		_blockReader:   api._blockReader,
 		historyV3:      api.historyV3(tx),
 		evmCallTimeout: api.evmCallTimeout,
+		ethConfigZk:    api.ethConfigZk(),
 	}
 
 	for _, blockNum := range blockNumbers {

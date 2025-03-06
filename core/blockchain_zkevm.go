@@ -20,7 +20,7 @@ package core
 import (
 	"errors"
 	"fmt"
-	"github.com/ledgerwatch/erigon/zk/zk_config"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -49,6 +49,7 @@ type EphemeralExecResultZk struct {
 // ExecuteBlockEphemerally runs a block from provided stateReader and
 // writes the result to the provided stateWriter
 func ExecuteBlockEphemerallyZk(
+	ethConfigZk *ethconfig.Zk,
 	chainConfig *chain.Config,
 	vmConfig *vm.Config,
 	blockHashFunc func(n uint64) libcommon.Hash,
@@ -81,7 +82,7 @@ func ExecuteBlockEphemerallyZk(
 		receipts    types.Receipts
 	)
 
-	blockContext, _, ger, l1Blockhash, err := PrepareBlockTxExecution(chainConfig, vmConfig, blockHashFunc, nil, engine, chainReader, block, ibs, roHermezDb, blockGasLimit)
+	blockContext, _, ger, l1Blockhash, err := PrepareBlockTxExecution(ethConfigZk, chainConfig, vmConfig, blockHashFunc, nil, engine, chainReader, block, ibs, roHermezDb, blockGasLimit)
 	if err != nil {
 		return nil, fmt.Errorf("PrepareBlockTxExecution: %w", err)
 	}
@@ -126,11 +127,11 @@ func ExecuteBlockEphemerallyZk(
 		}
 
 		localReceipt := CreateReceiptForBlockInfoTree(receipt, chainConfig, blockNum, execResult)
-		if err = ProcessReceiptForBlockExecution(receipt, roHermezDb, chainConfig, blockNum, header, tx); err != nil {
+		if err = ProcessReceiptForBlockExecution(receipt, roHermezDb, chainConfig, blockNum, header, tx, ethConfigZk); err != nil {
 			return nil, fmt.Errorf("ProcessReceiptForBlockExecution: %w", err)
 		}
 
-		if !chainConfig.IsForkID7Etrog(block.NumberU64()) && !chainConfig.IsNormalcy(block.NumberU64()) || !zk_config.IsType1Rollup() {
+		if !chainConfig.IsForkID7Etrog(block.NumberU64()) && !chainConfig.IsNormalcy(block.NumberU64()) || !ethConfigZk.IsType1Rollup() {
 			if err := ibs.ScalableSetSmtRootHash(roHermezDb); err != nil {
 				return nil, fmt.Errorf("ScalableSetSmtRootHash: %w", err)
 			}
@@ -169,8 +170,8 @@ func ExecuteBlockEphemerallyZk(
 		}
 	}
 
-	if !zk_config.IsType1Rollup() {
-		ibs.PostExecuteStateSet(chainConfig, block.NumberU64(), l2InfoRoot)
+	if !ethConfigZk.IsType1Rollup() {
+		ibs.PostExecuteStateSet(chainConfig, block.NumberU64(), l2InfoRoot, ethConfigZk.IsType1Rollup())
 	}
 
 	receiptSha := types.DeriveSha(receipts)
@@ -217,6 +218,7 @@ func ExecuteBlockEphemerallyZk(
 }
 
 func PrepareBlockTxExecution(
+	ethConfigZk *ethconfig.Zk,
 	chainConfig *chain.Config,
 	vmConfig *vm.Config,
 	blockHashFunc func(n uint64) common.Hash,
@@ -286,7 +288,7 @@ func PrepareBlockTxExecution(
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("GetReusedL1InfoTreeIndex: %w", err)
 	}
-	ibs.SyncerPreExecuteStateSet(chainConfig, blockNum, blockTime, &prevBlockRoot, &blockGer, &blockL1BlockHash, gersInBetween, l1InfoTreeIndexReused)
+	ibs.SyncerPreExecuteStateSet(chainConfig, blockNum, blockTime, &prevBlockRoot, &blockGer, &blockL1BlockHash, gersInBetween, l1InfoTreeIndexReused, ethConfigZk.IsType1Rollup())
 	///////////////////////////////////////////
 	// [zkevm] finish set preexecution state //
 	///////////////////////////////////////////
@@ -306,7 +308,7 @@ func CreateReceiptForBlockInfoTree(receipt *types.Receipt, chainConfig *chain.Co
 	return localReceipt
 }
 
-func ProcessReceiptForBlockExecution(receipt *types.Receipt, roHermezDb state.ReadOnlyHermezDb, chainConfig *chain.Config, blockNum uint64, header *types.Header, tx types.Transaction) error {
+func ProcessReceiptForBlockExecution(receipt *types.Receipt, roHermezDb state.ReadOnlyHermezDb, chainConfig *chain.Config, blockNum uint64, header *types.Header, tx types.Transaction, ethConfigZk *ethconfig.Zk) error {
 	// forkid8 the poststate is empty
 	// forkid8 also fixed the bugs with logs and cumulative gas used
 	if !chainConfig.IsForkID8Elderberry(blockNum) {
@@ -337,7 +339,7 @@ func ProcessReceiptForBlockExecution(receipt *types.Receipt, roHermezDb state.Re
 		receipt.CumulativeGasUsed = receipt.GasUsed
 	}
 
-	if !chainConfig.IsNormalcy(blockNum) || !zk_config.IsType1Rollup() {
+	if !chainConfig.IsNormalcy(blockNum) || !ethConfigZk.IsType1Rollup() {
 		for _, l := range receipt.Logs {
 			l.ApplyPaddingToLogsData(chainConfig.IsForkID8Elderberry(blockNum), chainConfig.IsForkID12Banana(blockNum))
 		}

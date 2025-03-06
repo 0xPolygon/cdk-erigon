@@ -3,7 +3,6 @@ package stages
 import (
 	"context"
 	"fmt"
-	"github.com/ledgerwatch/erigon/zk/zk_config"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -262,7 +261,7 @@ func prepareForkId(lastBatch, executionAt uint64, hermezDb ForkDb) (latest uint6
 	return latest, nil
 }
 
-func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimestamp, forkId uint64, coinbase common.Address, chainConfig *chain.Config, miningConfig *params.MiningConfig) (*types.Header, *types.Block, error) {
+func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimestamp, forkId uint64, coinbase common.Address, chainConfig *chain.Config, miningConfig *params.MiningConfig, ethConfigZk *ethconfig.Zk) (*types.Header, *types.Block, error) {
 	parentBlock, err := rawdb.ReadBlockByNumber(tx, previousBlockNumber)
 	if err != nil {
 		return nil, nil, err
@@ -285,13 +284,13 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimest
 
 	var targetGas uint64
 
-	if chainConfig.IsNormalcy(previousBlockNumber+1) || zk_config.IsType1Rollup() {
+	if chainConfig.IsNormalcy(previousBlockNumber+1) || ethConfigZk.IsType1Rollup() {
 		targetGas = miningConfig.GasLimit
 	}
 
 	header := core.MakeEmptyHeader(parentBlock.Header(), chainConfig, newBlockTimestamp, &targetGas)
 
-	if !chainConfig.IsNormalcy(previousBlockNumber+1) || !zk_config.IsType1Rollup() {
+	if !chainConfig.IsNormalcy(previousBlockNumber+1) || !ethConfigZk.IsType1Rollup() {
 		header.GasLimit = utils.GetBlockGasLimitForFork(forkId)
 	}
 

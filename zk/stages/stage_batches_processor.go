@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ledgerwatch/erigon/zk/zk_config"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"math/big"
 	"sync/atomic"
 
@@ -27,7 +27,7 @@ var (
 )
 
 type ProcessorErigonDb interface {
-	WriteHeader(batchNo *big.Int, blockHash common.Hash, stateRoot, txHash, parentHash common.Hash, coinbase common.Address, ts, gasLimit uint64, chainConfig *chain.Config) (*ethTypes.Header, error)
+	WriteHeader(batchNo *big.Int, blockHash common.Hash, stateRoot, txHash, parentHash common.Hash, coinbase common.Address, ts, gasLimit uint64, chainConfig *chain.Config, isType1 bool) (*ethTypes.Header, error)
 	WriteBody(batchNo *big.Int, headerHash common.Hash, txs []ethTypes.Transaction) error
 	ReadCanonicalHash(L2BlockNumber uint64) (common.Hash, error)
 }
@@ -67,10 +67,6 @@ type BatchesProcessor struct {
 	tx        kv.RwTx
 	hermezDb  ProcessorHermezDb
 	eriDb     ProcessorErigonDb
-	syncBlockLimit,
-	debugBlockLimit,
-	debugStepAfter,
-	debugStep,
 	stageProgressBlockNo,
 	highestHashableL2BlockNo,
 	lastForkId uint64
@@ -87,6 +83,7 @@ type BatchesProcessor struct {
 	lastBlockHash common.Hash
 	chainConfig  *chain.Config
 	miningConfig *params.MiningConfig
+	ethConfigZk  *ethconfig.Zk
 }
 
 func NewBatchesProcessor(
@@ -95,12 +92,13 @@ func NewBatchesProcessor(
 	tx kv.RwTx,
 	hermezDb ProcessorHermezDb,
 	eriDb ProcessorErigonDb,
-	syncBlockLimit, debugBlockLimit, debugStepAfter, debugStep, stageProgressBlockNo, stageProgressBatchNo uint64,
+	stageProgressBlockNo, stageProgressBatchNo uint64,
 	lastProcessedBlockHash common.Hash,
 	dsQueryClient DsQueryClient,
 	progressChan chan uint64,
 	chainConfig *chain.Config,
 	miningConfig *params.MiningConfig,
+	ethConfigZk *ethconfig.Zk,
 	unwindFn func(uint64) (uint64, error),
 ) (*BatchesProcessor, error) {
 	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
@@ -119,10 +117,6 @@ func NewBatchesProcessor(
 		tx:                   tx,
 		hermezDb:             hermezDb,
 		eriDb:                eriDb,
-		syncBlockLimit:       syncBlockLimit,
-		debugBlockLimit:      debugBlockLimit,
-		debugStep:            debugStep,
-		debugStepAfter:       debugStepAfter,
 		stageProgressBlockNo: stageProgressBlockNo,
 		lastBlockHeight:      stageProgressBlockNo,
 		highestSeenBatchNo:   stageProgressBatchNo,
@@ -135,6 +129,7 @@ func NewBatchesProcessor(
 		unwindFn:             unwindFn,
 		chainConfig:          chainConfig,
 		miningConfig:         miningConfig,
+		ethConfigZk:          ethConfigZk,
 	}, nil
 }
 
@@ -208,9 +203,9 @@ func (p *BatchesProcessor) unwind(blockNum uint64) (uint64, error) {
 
 func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endLoop bool, err error) {
 	log.Debug(fmt.Sprintf("[%s] Retrieved %d (%s) block from stream", p.logPrefix, blockEntry.L2BlockNumber, blockEntry.L2Blockhash.String()))
-	if p.syncBlockLimit > 0 && blockEntry.L2BlockNumber >= p.syncBlockLimit {
+	if p.ethConfigZk.SyncLimit > 0 && blockEntry.L2BlockNumber >= p.ethConfigZk.DebugLimit {
 		// stop the node going into a crazy loop
-		log.Info(fmt.Sprintf("[%s] Sync block limit reached, stopping stage", p.logPrefix), "blockLimit", p.syncBlockLimit, "block", blockEntry.L2BlockNumber)
+		log.Info(fmt.Sprintf("[%s] Sync block limit reached, stopping stage", p.logPrefix), "blockLimit", p.ethConfigZk.DebugLimit, "block", blockEntry.L2BlockNumber)
 		return true, nil
 	}
 
@@ -303,14 +298,14 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 
 	/////// DEBUG BISECTION ///////
 	// exit stage when debug bisection flags set and we're at the limit block
-	if p.debugBlockLimit > 0 && blockEntry.L2BlockNumber > p.debugBlockLimit {
+	if p.ethConfigZk.DebugLimit > 0 && blockEntry.L2BlockNumber > p.ethConfigZk.DebugLimit {
 		log.Info(fmt.Sprintf("[%s] Debug limit reached, stopping stage\n", p.logPrefix))
 		endLoop = true
 	}
 
 	// if we're above StepAfter, and we're at a step, move the stages on
-	if p.debugStep > 0 && p.debugStepAfter > 0 && blockEntry.L2BlockNumber > p.debugStepAfter {
-		if blockEntry.L2BlockNumber%p.debugStep == 0 {
+	if p.ethConfigZk.DebugStep > 0 && p.ethConfigZk.DebugStepAfter > 0 && blockEntry.L2BlockNumber > p.ethConfigZk.DebugStepAfter {
+		if blockEntry.L2BlockNumber%p.ethConfigZk.DebugStep == 0 {
 			log.Info(fmt.Sprintf("[%s] Debug step reached, stopping stage\n", p.logPrefix))
 			endLoop = true
 		}
@@ -351,7 +346,7 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 	p.blocksWritten++
 	p.progressChan <- p.blocksWritten
 
-	if p.debugBlockLimit == 0 {
+	if p.ethConfigZk.DebugLimit == 0 {
 		endLoop = false
 	}
 	return endLoop, nil
@@ -385,13 +380,13 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 	txHash := ethTypes.DeriveSha(txCollection)
 
 	var gasLimit uint64
-	if !p.chainConfig.IsNormalcy(l2Block.L2BlockNumber) || !zk_config.IsType1Rollup() {
+	if !p.chainConfig.IsNormalcy(l2Block.L2BlockNumber) || !p.ethConfigZk.IsType1Rollup() {
 		gasLimit = utils.GetBlockGasLimitForFork(l2Block.ForkId)
 	} else {
 		gasLimit = p.miningConfig.GasLimit
 	}
 
-	if _, err := p.eriDb.WriteHeader(bn, l2Block.L2Blockhash, l2Block.StateRoot, txHash, l2Block.ParentHash, l2Block.Coinbase, uint64(l2Block.Timestamp), gasLimit, p.chainConfig); err != nil {
+	if _, err := p.eriDb.WriteHeader(bn, l2Block.L2Blockhash, l2Block.StateRoot, txHash, l2Block.ParentHash, l2Block.Coinbase, uint64(l2Block.Timestamp), gasLimit, p.chainConfig, p.ethConfigZk.IsType1Rollup()); err != nil {
 		return fmt.Errorf("write header error: %w", err)
 	}
 

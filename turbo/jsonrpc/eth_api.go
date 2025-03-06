@@ -132,9 +132,11 @@ type BaseAPI struct {
 	l2RpcUrl       string
 	gasless        bool
 	logLevel       log.Lvl
+
+	ethConfig *ethconfig.Config
 }
 
-func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader services.FullBlockReader, agg *libstate.Aggregator, singleNodeMode bool, evmCallTimeout time.Duration, engine consensus.EngineReader, dirs datadir.Dirs) *BaseAPI {
+func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader services.FullBlockReader, agg *libstate.Aggregator, singleNodeMode bool, evmCallTimeout time.Duration, engine consensus.EngineReader, dirs datadir.Dirs, ethConfig *ethconfig.Config) *BaseAPI {
 	var (
 		blocksLRUSize      = 128 // ~32Mb
 		receiptsCacheLimit = 32
@@ -164,7 +166,12 @@ func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader serv
 		evmCallTimeout: evmCallTimeout,
 		_engine:        engine,
 		dirs:           dirs,
+		ethConfig:      ethConfig,
 	}
+}
+
+func (api *BaseAPI) ethConfigZk() *ethconfig.Zk {
+	return api.ethConfig.Zk
 }
 
 func (api *BaseAPI) chainConfig(ctx context.Context, tx kv.Tx) (*chain.Config, error) {

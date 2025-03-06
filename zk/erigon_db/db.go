@@ -2,7 +2,6 @@ package erigon_db
 
 import (
 	"fmt"
-	"github.com/ledgerwatch/erigon/zk/zk_config"
 	"math/big"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
@@ -41,7 +40,7 @@ func (db ErigonDb) WriteHeader(
 	blockHash common.Hash,
 	stateRoot, txHash, parentHash common.Hash,
 	coinbase common.Address,
-	ts, gasLimit uint64, chainConfig *chain.Config,
+	ts, gasLimit uint64, chainConfig *chain.Config, isType1 bool,
 ) (*ethTypes.Header, error) {
 	parentHeader, err := db.GetHeader(blockNo.Uint64() - 1)
 	if err != nil {
@@ -68,7 +67,7 @@ func (db ErigonDb) WriteHeader(
 		h.WithdrawalsHash = &ethTypes.EmptyRootHash
 	}
 
-	if !chainConfig.IsNormalcy(blockNo.Uint64()) || !zk_config.IsType1Rollup() {
+	if !chainConfig.IsNormalcy(blockNo.Uint64()) || !isType1 {
 		h.GasLimit = gasLimit
 	}
 

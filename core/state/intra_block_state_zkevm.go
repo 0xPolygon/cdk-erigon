@@ -2,8 +2,6 @@ package state
 
 import (
 	"errors"
-	"github.com/ledgerwatch/erigon/zk/zk_config"
-
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/ledgerwatch/erigon-lib/chain"
@@ -58,8 +56,8 @@ func (sdb *IntraBlockState) GetTxCount() (uint64, error) {
 	return counter.GetTxCount()
 }
 
-func (sdb *IntraBlockState) PostExecuteStateSet(chainConfig *chain.Config, blockNum uint64, blockInfoRoot *libcommon.Hash) {
-	if chainConfig.IsNormalcy(blockNum) || zk_config.IsType1Rollup() {
+func (sdb *IntraBlockState) PostExecuteStateSet(chainConfig *chain.Config, blockNum uint64, blockInfoRoot *libcommon.Hash, isType1 bool) {
+	if chainConfig.IsNormalcy(blockNum) || isType1 {
 		return
 	}
 
@@ -69,13 +67,13 @@ func (sdb *IntraBlockState) PostExecuteStateSet(chainConfig *chain.Config, block
 	}
 }
 
-func (sdb *IntraBlockState) PreExecuteStateSet(chainConfig *chain.Config, blockNumber uint64, blockTimestamp uint64, stateRoot *libcommon.Hash) {
+func (sdb *IntraBlockState) PreExecuteStateSet(chainConfig *chain.Config, blockNumber uint64, blockTimestamp uint64, stateRoot *libcommon.Hash, isType1 bool) {
 	if !sdb.Exist(ADDRESS_SCALABLE_L2) {
 		// create account if not exists
 		sdb.CreateAccount(ADDRESS_SCALABLE_L2, true)
 	}
 
-	if !chainConfig.IsNormalcy(blockNumber) || !zk_config.IsType1Rollup() {
+	if !chainConfig.IsNormalcy(blockNumber) || !isType1 {
 		//save block number
 		sdb.scalableSetBlockNum(blockNumber)
 
@@ -99,6 +97,7 @@ func (sdb *IntraBlockState) SyncerPreExecuteStateSet(
 	prevBlockHash, blockGer, l1BlockHash *libcommon.Hash,
 	gerUpdates *[]dstypes.GerUpdate,
 	reUsedL1InfoTreeIndex bool,
+	isType1 bool,
 ) {
 	if !sdb.Exist(ADDRESS_SCALABLE_L2) {
 		// create account if not exists
@@ -106,14 +105,14 @@ func (sdb *IntraBlockState) SyncerPreExecuteStateSet(
 	}
 
 	//save block number
-	if !chainConfig.IsNormalcy(blockNumber) || !zk_config.IsType1Rollup() {
+	if !chainConfig.IsNormalcy(blockNumber) || !isType1 {
 		sdb.scalableSetBlockNum(blockNumber)
 	}
 	emptyHash := libcommon.Hash{}
 
 	//ETROG
 	if chainConfig.IsForkID7Etrog(blockNumber) {
-		if !chainConfig.IsNormalcy(blockNumber) || !zk_config.IsType1Rollup() {
+		if !chainConfig.IsNormalcy(blockNumber) || !isType1 {
 			currentTimestamp := sdb.ScalableGetTimestamp()
 			if blockTimestamp > currentTimestamp {
 				sdb.ScalableSetTimestamp(blockTimestamp)
