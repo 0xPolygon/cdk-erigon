@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
+	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/metrics"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
@@ -24,6 +26,9 @@ import (
 )
 
 var shouldCheckForExecutionAndDataStreamAlignment = true
+
+// For X Layer, for local replay feature
+var externalDataStreamServerCreated = false
 
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
@@ -47,6 +52,31 @@ func SpawnSequencingStage(
 	highestBatchInDs, err := cfg.dataStreamServer.GetHighestBatchNumber()
 	if err != nil {
 		return err
+	}
+
+	// For X Layer, local replay feature
+	if cfg.zk.XLayer.SequencerReplay {
+		if cfg.zk.XLayer.SequencerReplayL1SyncOnly {
+			log.Info(fmt.Sprintf("[%s] Stop here because the zkevm.sequencer-replay-l1-sync-only flag is set to true.", s.LogPrefix()))
+			os.Exit(0)
+		}
+		var externalDataStreamServer server.DataStreamServer
+		if cfg.zk.XLayer.SequencerReplayExternalDatastream && !externalDataStreamServerCreated {
+			externalDataStreamServer, err = createExternalDataStreamServer(cfg)
+			if err != nil {
+				return err
+			}
+			externalDataStreamServerCreated = true
+			highestBatchInDs, err = externalDataStreamServer.GetHighestBatchNumber()
+		} else {
+			highestBatchInDs, err = cfg.dataStreamServer.GetHighestBatchNumber()
+		}
+		if err != nil {
+			return err
+		}
+		if lastBatch < highestBatchInDs {
+			return replay(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs, externalDataStreamServer)
+		}
 	}
 
 	if lastBatch < highestBatchInDs {
@@ -341,6 +371,10 @@ func sequencingBatchStep(
 
 		innerBreak := false
 		emptyBlockOverflow := false
+
+		// For X Layer, local replay's feature of stateroot mismatch detection
+		stateRootBeforeReplay := common.Hash{}
+
 		sendersToTriggerStatechanges := make(map[common.Address]struct{})
 		processingTxTime := time.Now()
 	OuterLoopTransactions:
@@ -398,6 +432,11 @@ func sequencingBatchStep(
 				batchState.blockState.transactionsForInclusion, err = batchState.resequenceBatchJob.YieldNextBlockTransactions(zktx.DecodeTx)
 				if err != nil {
 					return err
+				}
+
+				// For X Layer, local replay's feature of stateroot mismatch detection
+				if cfg.zk.XLayer.SequencerReplay {
+					stateRootBeforeReplay = batchState.resequenceBatchJob.CurrentBlock().StateRoot
 				}
 			} else if !batchState.isL1Recovery() {
 
@@ -757,6 +796,20 @@ func sequencingBatchStep(
 			return err
 		}
 		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
+
+		// For X Layer, local replay's feature of stateroot mismatch detection
+		if cfg.zk.XLayer.SequencerReplay {
+			if stateRootBeforeReplay != block.Root() {
+				err := fmt.Errorf("[%s] State root mismatch of block %d after resequencing, expected %s, got %s",
+					logPrefix,
+					blockNumber,
+					stateRootBeforeReplay.Hex(),
+					block.Root().Hex(),
+				)
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		}
 
 		// check for new responses from the verifier
 		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)

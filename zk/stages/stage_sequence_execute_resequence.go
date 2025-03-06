@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ledgerwatch/log/v3"
-
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/ledgerwatch/log/v3"
 )
 
 func resequence(

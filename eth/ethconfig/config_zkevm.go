@@ -95,7 +95,7 @@ type Zk struct {
 
 	// For X Layer
 	XLayer XLayerConfig
-	
+
 	InitialBatchCfgFile            string
 	ACLPrintHistory                int
 	InfoTreeUpdateInterval         time.Duration

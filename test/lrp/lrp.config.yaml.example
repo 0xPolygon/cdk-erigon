@@ -1,0 +1,10 @@
+user: kyrin
+gitCommit: d85086a741
+portDiff: 3
+fromBatchNumber: 170701
+toBatchNumber: 170770
+processCount: 1
+useExternalDatastream: true
+srcMainnetDataPath: $HOME/Downloads/mainnet-compact-170700-9510470/seq
+externalDatastreamPath:
+gitRootPath:
