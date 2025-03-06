@@ -239,6 +239,30 @@ func TestArrayToScalar(t *testing.T) {
 	}
 }
 
+func ArrayToScalarOld(array []uint64) *big.Int {
+	scalar := new(big.Int)
+	for i := len(array) - 1; i >= 0; i-- {
+		scalar.Lsh(scalar, 64)
+		scalar.Add(scalar, new(big.Int).SetUint64(array[i]))
+	}
+	return scalar
+}
+
+func BenchmarkArrayToScalar(b *testing.B) {
+	b.Run("Old", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			ArrayToScalarOld([]uint64{2, 3})
+		}
+	})
+	b.Run("New", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			ArrayToScalar([]uint64{2, 3})
+		}
+	})
+}
+
 func TestArrayToScalarBig(t *testing.T) {
 	array := []*big.Int{
 		new(big.Int),

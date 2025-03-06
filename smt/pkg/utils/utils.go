@@ -329,12 +329,20 @@ func ConvertHexToAddress(hex string) common.Address {
 }
 
 func ArrayToScalar(array []uint64) *big.Int {
-	scalar := new(big.Int)
-	for i := len(array) - 1; i >= 0; i-- {
-		scalar.Lsh(scalar, 64)
-		scalar.Add(scalar, new(big.Int).SetUint64(array[i]))
+	if strconv.IntSize == 64 {
+		abs := make([]big.Word, len(array))
+		for i, v := range array {
+			abs[i] = big.Word(v)
+		}
+		return new(big.Int).SetBits(abs)
+	} else {
+		abs := make([]big.Word, len(array)*2)
+		for i, v := range array {
+			abs[i*2] = big.Word(v)
+			abs[i*2+1] = big.Word(v >> 32)
+		}
+		return new(big.Int).SetBits(abs)
 	}
-	return scalar
 }
 
 func ScalarToArray(scalar *big.Int) []uint64 {
