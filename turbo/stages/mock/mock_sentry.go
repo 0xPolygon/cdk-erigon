@@ -69,7 +69,7 @@ import (
 	"github.com/erigontech/erigon/turbo/stages/bodydownload"
 	"github.com/erigontech/erigon/turbo/stages/headerdownload"
 	"github.com/erigontech/erigon/turbo/trie"
-	"github.com/ledgerwatch/erigon/zk/txpool"
+	"github.com/erigontech/erigon/zk/txpool"
 )
 
 const MockInsertAsInitialCycle = false

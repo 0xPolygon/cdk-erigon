@@ -13,9 +13,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	remote "github.com/ledgerwatch/erigon-lib/gointerfaces/remote"
-	kv "github.com/ledgerwatch/erigon-lib/kv"
-	types "github.com/ledgerwatch/erigon-lib/types"
+	remote "github.com/erigontech/erigon-lib/gointerfaces/remote"
+	kv "github.com/erigontech/erigon-lib/kv"
+	types "github.com/erigontech/erigon-lib/types"
 	gomock "go.uber.org/mock/gomock"
 )
 

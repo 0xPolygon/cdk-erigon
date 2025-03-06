@@ -26,7 +26,7 @@ import (
 	"github.com/erigontech/erigon/eth/tracers/logger"
 	"github.com/erigontech/erigon/turbo/rpchelper"
 	"github.com/erigontech/erigon/turbo/services"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/erigontech/erigon/zk/hermez_db"
 )
 
 type BlockGetter interface {

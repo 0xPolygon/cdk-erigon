@@ -3,13 +3,13 @@ package jsonrpc
 import (
 	"math/big"
 
-	"github.com/ledgerwatch/erigon-lib/chain"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/hexutil"
-	types2 "github.com/ledgerwatch/erigon-lib/types"
-	"github.com/ledgerwatch/erigon/consensus/misc"
-	"github.com/ledgerwatch/erigon/core/types"
-	zktx "github.com/ledgerwatch/erigon/zk/tx"
+	"github.com/erigontech/erigon-lib/chain"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/common/hexutil"
+	types2 "github.com/erigontech/erigon-lib/types"
+	"github.com/erigontech/erigon/consensus/misc"
+	"github.com/erigontech/erigon/core/types"
+	zktx "github.com/erigontech/erigon/zk/tx"
 )
 
 func (api *BaseAPI) SetL2RpcUrl(url string) {

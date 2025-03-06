@@ -2,7 +2,7 @@ package txpool
 
 import (
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/metrics"
+	"github.com/erigontech/erigon-lib/metrics"
 	"time"
 )
 

@@ -3,8 +3,8 @@ package cfg_allocs
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/zk/zk_config"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/zk/zk_config"
 	"io"
 	"os"
 	"path"

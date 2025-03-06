@@ -3,8 +3,8 @@ package cfg_chain
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/chain"
-	"github.com/ledgerwatch/erigon/zk/zk_config"
+	"github.com/erigontech/erigon-lib/chain"
+	"github.com/erigontech/erigon/zk/zk_config"
 	"io"
 	"os"
 	"path"

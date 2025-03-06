@@ -2,7 +2,7 @@ package utils
 
 import (
 	"strings"
-	"github.com/ledgerwatch/erigon/params"
+	"github.com/erigontech/erigon/params"
 	"fmt"
 )
 

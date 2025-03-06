@@ -9,14 +9,14 @@ import (
 	"time"
 
 	"github.com/iden3/go-iden3-crypto/keccak256"
-	ethereum "github.com/ledgerwatch/erigon"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/log/v3"
+	ethereum "github.com/erigon/erigon"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/log/v3"
 
 	"encoding/binary"
 
-	ethTypes "github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/rpc"
+	ethTypes "github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/rpc"
 )
 
 var (

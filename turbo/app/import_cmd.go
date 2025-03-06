@@ -24,7 +24,7 @@ import (
 	"github.com/erigontech/erigon/consensus/merge"
 	"github.com/erigontech/erigon/turbo/execution/eth1/eth1_chain_reader.go"
 	"github.com/erigontech/erigon/turbo/services"
-	"github.com/ledgerwatch/erigon/turbo/stages"
+	"github.com/erigontech/erigon/turbo/stages"
 
 	"github.com/erigontech/erigon/cmd/utils"
 	"github.com/erigontech/erigon/core"

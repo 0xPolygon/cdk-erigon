@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/ledgerwatch/erigon/turbo/jsonrpc"
+	"github.com/erigontech/erigon/turbo/jsonrpc"
 	"io"
 	"math/big"
 	"net/http"

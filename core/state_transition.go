@@ -39,8 +39,8 @@ import (
 	"github.com/erigontech/erigon/core/vm"
 	"github.com/erigontech/erigon/core/vm/evmtypes"
 	"github.com/erigontech/erigon/params"
-	"github.com/ledgerwatch/erigon/params"
-	zktypes "github.com/ledgerwatch/erigon/zk/types"
+	"github.com/erigontech/erigon/params"
+	zktypes "github.com/erigontech/erigon/zk/types"
 )
 
 var emptyCodeHash = crypto.Keccak256Hash(nil)

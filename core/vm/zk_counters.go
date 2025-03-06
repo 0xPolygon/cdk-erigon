@@ -6,9 +6,9 @@ import (
 	"math/big"
 
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon-lib/chain"
-	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/erigontech/erigon-lib/chain"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/zk/hermez_db"
 )
 
 const (

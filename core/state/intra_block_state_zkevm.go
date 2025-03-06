@@ -5,12 +5,12 @@ import (
 
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
-	"github.com/ledgerwatch/erigon-lib/chain"
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/common"
-	"github.com/ledgerwatch/erigon/core/types"
-	dstypes "github.com/ledgerwatch/erigon/zk/datastream/types"
-	zktypes "github.com/ledgerwatch/erigon/zk/types"
+	"github.com/erigontech/erigon-lib/chain"
+	libcommon "github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon/common"
+	"github.com/erigontech/erigon/core/types"
+	dstypes "github.com/erigontech/erigon/zk/datastream/types"
+	zktypes "github.com/erigontech/erigon/zk/types"
 )
 
 var (

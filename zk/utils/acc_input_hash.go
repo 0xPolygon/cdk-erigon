@@ -4,8 +4,8 @@ import (
 	"math/big"
 
 	"github.com/iden3/go-iden3-crypto/keccak256"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/crypto"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon/crypto"
 )
 
 func CalculateBananaAccInputHash(

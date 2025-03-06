@@ -16,10 +16,10 @@ import (
 	"github.com/erigontech/erigon/rpc"
 	"github.com/erigontech/erigon/turbo/rpchelper"
 	"github.com/erigontech/erigon/turbo/services"
-	"github.com/ledgerwatch/erigon/zk/datastream/server"
-	"github.com/ledgerwatch/erigon/zk/sequencer"
-	"github.com/ledgerwatch/erigon/zk/syncer"
-	txpool2 "github.com/ledgerwatch/erigon/zk/txpool"
+	"github.com/erigontech/erigon/zk/datastream/server"
+	"github.com/erigontech/erigon/zk/sequencer"
+	"github.com/erigontech/erigon/zk/syncer"
+	txpool2 "github.com/erigontech/erigon/zk/txpool"
 )
 
 // APIList describes the list of available RPC apis

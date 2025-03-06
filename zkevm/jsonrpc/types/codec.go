@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v4"
-	"github.com/ledgerwatch/erigon/zkevm/encoding"
-	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/erigontech/erigon/zkevm/encoding"
+	"github.com/erigontech/erigon/zkevm/hex"
 )
 
 const (
