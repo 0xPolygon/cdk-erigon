@@ -35,7 +35,14 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 		}
 		defer db.Close()
 
-		if err := unwindZk(ctx, db); err != nil {
+		dbsmt, err := openDB(dbCfg(kv.SmtDB, chaindata), true, logger)
+		if err != nil {
+			logger.Error("Opening SMT DB", "error", err)
+			return
+		}
+		defer dbsmt.Close()
+
+		if err := unwindZk(ctx, db, dbsmt); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Error(err.Error())
 			}
@@ -77,8 +84,8 @@ func init() {
 }
 
 // unwindZk unwinds to the batch number set in the unwindBatchNo flag (package global)
-func unwindZk(ctx context.Context, db kv.RwDB) error {
-	_, _, stateStages := newSyncZk(ctx, db)
+func unwindZk(ctx context.Context, db, dbsmt kv.RwDB) error {
+	_, _, stateStages := newSyncZk(ctx, db, dbsmt)
 
 	tx, err := db.BeginRw(ctx)
 	if err != nil {
@@ -86,11 +93,17 @@ func unwindZk(ctx context.Context, db kv.RwDB) error {
 	}
 	defer tx.Rollback()
 
+	txsmt, err := dbsmt.BeginRw(ctx)
+	if err != nil {
+		return err
+	}
+	defer txsmt.Rollback()
+
 	if err := hermez_db.CreateHermezBuckets(tx); err != nil {
 		return err
 	}
 
-	if err := smtdb.CreateEriDbBuckets(tx); err != nil {
+	if err := smtdb.CreateEriDbBuckets(txsmt); err != nil {
 		return err
 	}
 
@@ -107,10 +120,11 @@ func unwindZk(ctx context.Context, db kv.RwDB) error {
 	}
 
 	if err := tx.Commit(); err != nil {
+		txsmt.Rollback()
 		return err
 	}
 
-	return nil
+	return txsmt.Commit()
 }
 
 func compareDbs(db1, db2 kv.RwDB) ([]string, error) {

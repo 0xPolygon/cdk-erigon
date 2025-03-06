@@ -406,6 +406,49 @@ func OpenDatabase(ctx context.Context, config *nodecfg.Config, label kv.Label, n
 	return db, nil
 }
 
+func OpenDatabaseSMT(ctx context.Context, config *nodecfg.Config, logger log.Logger) (kv.RwDB, error) {
+	label := kv.SmtDB
+	name := kv.SmtDB.String()
+
+	var db kv.RwDB
+	if config.Dirs.DataDir == "" {
+		db = memdb.New("")
+		return db, nil
+	}
+
+	dbPath := filepath.Join(config.Dirs.DataDir, name)
+
+	logger.Info("Opening Database", "label", name, "path", dbPath)
+	openFunc := func(exclusive bool) (kv.RwDB, error) {
+		roTxLimit := int64(32)
+		if config.Http.DBReadConcurrency > 0 {
+			roTxLimit = int64(config.Http.DBReadConcurrency)
+		}
+		roTxsLimiter := semaphore.NewWeighted(roTxLimit) // 1 less than max to allow unlocking to happen
+		opts := mdbx.NewMDBX(logger).
+			Path(dbPath).Label(label).
+			GrowthStep(16 * datasize.MB).
+			DBVerbosity(config.DatabaseVerbosity).RoTxsLimiter(roTxsLimiter)
+
+		if exclusive {
+			opts = opts.Exclusive()
+		}
+		if config.MdbxPageSize.Bytes() > 0 {
+			opts = opts.PageSize(config.MdbxPageSize.Bytes())
+		}
+		if config.MdbxDBSizeLimit > 0 {
+			opts = opts.MapSize(config.MdbxDBSizeLimit)
+		}
+		if config.MdbxGrowthStep > 0 {
+			opts = opts.GrowthStep(config.MdbxGrowthStep)
+		}
+		opts = opts.DirtySpace(uint64(512 * datasize.MB))
+		return opts.Open(ctx)
+	}
+
+	return openFunc(false)
+}
+
 // ResolvePath returns the absolute path of a resource in the instance directory.
 func (n *Node) ResolvePath(x string) string {
 	return n.config.ResolvePath(x)

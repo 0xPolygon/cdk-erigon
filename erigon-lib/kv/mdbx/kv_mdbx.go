@@ -417,6 +417,14 @@ func (opts MdbxOpts) Open(ctx context.Context) (kv.RwDB, error) {
 		MaxBatchDelay: DefaultMaxBatchDelay,
 	}
 
+	// for smt db we don't need to open any buckets
+	if opts.label == kv.SmtDB {
+		db.path = opts.path
+		addToPathDbMap(opts.path, db)
+		opts.debug()
+		return db, nil
+	}
+
 	customBuckets := opts.bucketsCfg(kv.ChaindataTablesCfg)
 	for name, cfg := range customBuckets { // copy map to avoid changing global variable
 		db.buckets[name] = cfg

@@ -156,6 +156,7 @@ const (
 	DownloaderDB  Label = 4
 	InMem         Label = 5
 	DiagnosticsDB Label = 6
+	SmtDB         Label = 7
 )
 
 func (l Label) String() string {
@@ -174,6 +175,8 @@ func (l Label) String() string {
 		return "inMem"
 	case DiagnosticsDB:
 		return "diagnostics"
+	case SmtDB:
+		return "smt"
 	default:
 		return "unknown"
 	}
