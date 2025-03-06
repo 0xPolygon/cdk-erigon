@@ -100,6 +100,7 @@ services:
     image: cdk-erigon
     environment:
       - CDK_ERIGON_SEQUENCER=1
+      - WRITE_MAP=true
     ports:
       - 6060:6060
       - 8123:8545
@@ -119,6 +120,7 @@ services:
     image: cdk-erigon
     environment:
       - CDK_ERIGON_SEQUENCER=0
+      - WRITE_MAP=true
     ports:
       - 6061:6060
       - 8124:8545
@@ -385,7 +387,7 @@ services:
     image: cdk-erigon
     environment:
       - CDK_ERIGON_SEQUENCER=1
-#      - WRITE_MAP=true
+      - WRITE_MAP=true
     ports:
       - 6060:6060
       - 8123:8545
