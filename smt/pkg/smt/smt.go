@@ -31,7 +31,6 @@ type DB interface {
 	SetDepth(uint8) error
 	CommitBatch() error
 	OpenBatch(quitCh <-chan struct{})
-	//OpenBatchWithCachedValue(quitCh <-chan struct{}, cachedMapValue map[string]map[string][]byte)
 	RollbackBatch()
 	RoDB
 }
