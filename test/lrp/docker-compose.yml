@@ -8,14 +8,14 @@ services:
     environment:
       - CDK_ERIGON_SEQUENCER=0
     volumes:
-      - ./mainnet/seq/:/home/erigon/data/
+      - ./mainnet/seq:/home/erigon/data/
       - ./xlayerconfig-mainnet.yaml:/usr/src/app/config.yaml
     command: |
       integration state_stages_zkevm \
         --config=/usr/src/app/config.yaml \
         --chain xlayer-mainnet \
         --datadir /home/erigon/data/ \
-        --unwind-batch-no=134484
+        --unwind-batch-no=170700
 
   xlayer-mainnet-replay:
     container_name: ${USER_PREFIX:-default}-xlayer-mainnet-replay
@@ -33,7 +33,7 @@ services:
     profiles:
       - internal-ds
     command: >
-      cdk-erigon --zkevm.sequencer-resequence=true --zkevm.sequencer-replay=true --zkevm.sequencer-replay-halt-on-batch-number=134500 --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
+      cdk-erigon --zkevm.sequencer-resequence=true --zkevm.sequencer-replay=true --zkevm.sequencer-replay-halt-on-batch-number=170770 --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
 
   xlayer-mainnet-replay-with-external-datastream:
     container_name: ${USER_PREFIX:-default}-xlayer-mainnet-replay
@@ -42,12 +42,50 @@ services:
     ports:
       - ${EXTERNAL_DS_PORT}:16900
     volumes:
-      - ./external_ds/data-stream.bin:/home/data-stream.bin
-      - ./external_ds/data-stream.db:/home/data-stream.db/
+      - ../mainnet/rpc/data-stream.bin:/home/data-stream.bin
+      - ../mainnet/rpc/data-stream.db:/home/data-stream.db/
     profiles:
       - external-ds
     command: >
-      cdk-erigon --zkevm.sequencer-resequence=true --zkevm.sequencer-replay=true --zkevm.sequencer-replay-halt-on-batch-number=134500 --zkevm.sequencer-replay-external-datastream=true --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
+      cdk-erigon --zkevm.sequencer-resequence=true --zkevm.sequencer-replay=true --zkevm.sequencer-replay-halt-on-batch-number=170770 --zkevm.sequencer-replay-external-datastream=true --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
+
+  xlayer-mainnet-l1-sync:
+    container_name: ${USER_PREFIX:-default}-xlayer-mainnet-l1-sync
+    image: cdk-erigon:${IMAGE_TAG}
+    extends: xlayer-mainnet-replay
+    command: >
+      cdk-erigon --zkevm.sequencer-resequence=true --zkevm.sequencer-replay=true --zkevm.sequencer-replay-l1-sync-only=true --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
+
+  xlayer-mainnet-replay-with-vmtouch:
+    container_name: ${USER_PREFIX:-default}-xlayer-mainnet-replay
+    image: cdk-erigon:${IMAGE_TAG}
+    extends: xlayer-mainnet-replay
+    profiles:
+      - internal-ds-vmtouch
+    command: >
+      sh -c "vmtouch -t /home/erigon/data/chaindata/mdbx.dat && cdk-erigon --zkevm.sequencer-resequence=true --zkevm.sequencer-replay=true --zkevm.sequencer-replay-halt-on-batch-number=170770 --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml"
+
+  xlayer-mainnet-replay-with-external-datastream-and-vmtouch:
+    container_name: ${USER_PREFIX:-default}-xlayer-mainnet-replay
+    image: cdk-erigon:${IMAGE_TAG}
+    extends: xlayer-mainnet-replay-with-external-datastream
+    profiles:
+      - external-ds-vmtouch
+    command: >
+      sh -c "vmtouch -t /home/erigon/data/chaindata/mdbx.dat && cdk-erigon --zkevm.sequencer-resequence=true --zkevm.sequencer-replay=true --zkevm.sequencer-replay-halt-on-batch-number=170770 --zkevm.sequencer-replay-external-datastream=true --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml"
+
+  xlayer-mainnet-unwind-seq:
+    container_name: ${USER_PREFIX:-default}-xlayer-mainnet-unwind-seq
+    image: cdk-erigon:${IMAGE_TAG}
+    extends: xlayer-mainnet-unwind
+    environment:
+      - CDK_ERIGON_SEQUENCER=1
+    command: |
+      integration state_stages_zkevm \
+        --config=/usr/src/app/config.yaml \
+        --chain xlayer-mainnet \
+        --datadir /home/erigon/data/ \
+        --unwind-batch-no=170700
 
   xlayer-executor:
     container_name: ${USER_PREFIX:-default}:-xlayer-executor

@@ -1,8 +1,10 @@
 user: kyrin
-gitCommit: 85eb47a5be
-portDiff: 5
-fromBatchNumber: 134480
-toBatchNumber: 134500
+gitCommit: d85086a741
+portDiff: 3
+fromBatchNumber: 170701
+toBatchNumber: 170770
+processCount: 1
 useExternalDatastream: true
-externalDatastreamPath: ./external_ds/data-stream
-srcMainnetDataPath: $HOME/Downloads/mainnet_unwound_134484_compact_l1synced/seq
+srcMainnetDataPath: $HOME/Downloads/mainnet-compact-170700-9510470/seq
+externalDatastreamPath:
+gitRootPath:

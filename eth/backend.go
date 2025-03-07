@@ -1983,8 +1983,9 @@ func (s *Ethereum) Start() error {
 // Stop implements node.Service, terminating all internal goroutines used by the
 // Ethereum protocol.
 func (s *Ethereum) Stop() error {
+	// For X Layer, local replay's feature of resuming from breakpoint
 	// Wait for the batch resequence done
-	if s.config.Zk.SequencerResequence && s.config.Zk.SequencerReplay && s.config.Zk.SequencerReplayExternalDatastream {
+	if s.config.Zk.XLayer.SequencerReplay && s.config.Zk.XLayer.SequencerReplayExternalDatastream {
 		if done, running := zkStages.WaitResequenceBatchDone(); running {
 			s.logger.Info("Waiting for resequencing latest batch...")
 			<-done

@@ -6,8 +6,10 @@ zkevm.l2-chain-id: 196
 zkevm.l2-sequencer-rpc-url: https://rpc.xlayer.tech
 zkevm.l2-datastreamer-url: stream.xlayer.tech:8800
 zkevm.l1-chain-id: 1
-#zkevm.l1-rpc-url: https://rpc.ankr.com/eth/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-zkevm.l1-rpc-url: https://rpc.ankr.com/eth
+# `zkevm.l1-rpc-url` must be changed before running.
+# using a wrong default value so it can report and error and remind you to change this value.
+zkevm.l1-rpc-url: https://rpc.ankr.com/eth/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+#zkevm.l1-rpc-url: https://rpc.ankr.com/eth
 #zkevm.increment-tree-always: true
 
 #debug.limit: 8554110
@@ -15,7 +17,7 @@ zkevm.l1-rpc-url: https://rpc.ankr.com/eth
 zkevm.executor-strict: false
 zkevm.witness-full: false
 
-zkevm.sequencer-block-seal-time: "3s"
+zkevm.sequencer-block-seal-time: "1s"
 zkevm.sequencer-batch-seal-time: "10s"
 zkevm.sequencer-batch-sleep-duration: "0s"
 
@@ -27,6 +29,9 @@ zkevm.gas-price-factor: 0.000001
 zkevm.allow-free-transactions: true
 
 txpool.packbatchspeciallist : ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534", "0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E"]
+txpool.globalslots: 100000
+txpool.globalbasefeeslots: 100000
+txpool.globalqueue: 100000
 
 zkevm.address-sequencer: "0xAF9d27ffe4d51eD54AC8eEc78f2785D7E11E5ab1"
 zkevm.address-zkevm: "0x2B0ee28D4D51bC9aDde5E58E295873F61F4a0507"

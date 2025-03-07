@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
@@ -14,49 +15,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func resequence(
-	s *stagedsync.StageState,
-	u stagedsync.Unwinder,
-	ctx context.Context,
-	cfg SequenceBlockCfg,
-	historyCfg stagedsync.HistoryCfg,
-	lastBatch, highestBatchInDs uint64,
-) (err error) {
-	if !cfg.zk.SequencerResequence {
-		panic(fmt.Sprintf("[%s] The node need re-sequencing but this option is disabled.", s.LogPrefix()))
-	}
-
-	log.Info(fmt.Sprintf("[%s] Last batch %d is lower than highest batch in datastream %d, resequencing...", s.LogPrefix(), lastBatch, highestBatchInDs))
-
-	batches, err := cfg.dataStreamServer.ReadBatches(lastBatch+1, highestBatchInDs)
-	if err != nil {
-		return err
-	}
-
-	if err = cfg.dataStreamServer.UnwindToBatchStart(lastBatch + 1); err != nil {
-		return err
-	}
-
-	log.Info(fmt.Sprintf("[%s] Resequence from batch %d to %d in data stream", s.LogPrefix(), lastBatch+1, highestBatchInDs))
-	for _, batch := range batches {
-		batchJob := NewResequenceBatchJob(batch)
-		subBatchCount := 0
-		for batchJob.HasMoreBlockToProcess() {
-			if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, batchJob); err != nil {
-				return err
-			}
-
-			subBatchCount += 1
-		}
-
-		log.Info(fmt.Sprintf("[%s] Resequenced original batch %d with %d batches", s.LogPrefix(), batchJob.batchToProcess[0].BatchNumber, subBatchCount))
-		if cfg.zk.SequencerResequenceStrict && subBatchCount != 1 {
-			return fmt.Errorf("strict mode enabled, but resequenced batch %d has %d sub-batches", batchJob.batchToProcess[0].BatchNumber, subBatchCount)
-		}
-	}
-
-	return nil
-}
+var (
+	doneChan        = make(chan struct{})
+	mu              = sync.Mutex{}
+	sequencingBatch bool
+)
 
 func replay(
 	s *stagedsync.StageState,
@@ -69,8 +32,8 @@ func replay(
 ) (err error) {
 
 	haltBatch := uint64(0)
-	if cfg.zk.SequencerReplayHaltOnBatchNumber > 0 {
-		haltBatch = cfg.zk.SequencerReplayHaltOnBatchNumber
+	if cfg.zk.XLayer.SequencerReplayHaltOnBatchNumber > 0 {
+		haltBatch = cfg.zk.XLayer.SequencerReplayHaltOnBatchNumber
 		if haltBatch <= lastBatch {
 			panic(fmt.Sprintf("[%s] The zkevm.sequencer-replay-halt-on-batch-number is set lower than the last batch number.", s.LogPrefix()))
 		} else if haltBatch > highestBatchInDs {
@@ -83,7 +46,7 @@ func replay(
 	log.Info(fmt.Sprintf("[%s] Last batch %d is lower than highest batch in datastream %d, resequencing from batch %d to %d ...", s.LogPrefix(), lastBatch, highestBatchInDs, lastBatch+1, haltBatch))
 
 	var batches [][]*types.FullL2Block
-	if cfg.zk.SequencerReplayExternalDatastream {
+	if cfg.zk.XLayer.SequencerReplayExternalDatastream {
 		batches, err = externalDataStreamServer.ReadBatchesWithConcurrency(lastBatch+1, haltBatch)
 	} else {
 		batches, err = cfg.dataStreamServer.ReadBatchesWithConcurrency(lastBatch+1, haltBatch)
@@ -169,7 +132,8 @@ func replay(
 		default:
 		}
 	}
-
+	log.Info(fmt.Sprintf("[%s] Replay completed.", s.LogPrefix()))
+	os.Exit(0)
 	return nil
 }
 

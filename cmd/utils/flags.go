@@ -606,6 +606,11 @@ var (
 		Usage: "When enabled, the sequencer will create a new data stream server connected to an external datastream file and read batches from it",
 		Value: false,
 	}
+	SequencerReplayL1SyncOnly = cli.BoolFlag{
+		Name:  "zkevm.sequencer-replay-l1-sync-only",
+		Usage: "When enabled, the sequencer will only sync the L1 info and exit",
+		Value: false,
+	}
 	ExecutorUrls = cli.StringFlag{
 		Name:  "zkevm.executor-urls",
 		Usage: "A comma separated list of grpc addresses that host executors",

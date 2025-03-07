@@ -54,21 +54,21 @@ def main(log_file):
 
         total_tx_count = 0
         for line in lines[i:]:
-            if "Batch" in line and "TotalDuration" in line and "Tx" in line:
+            if "Batch" in line and "TotalDuration-batch" in line and "Txs" in line:
                 batch_match = re.search(r'Batch<(\d+)>', line)
-                duration_match = re.search(r'TotalDuration<(\d+)ms>', line)
-                tx_match = re.search(r'Tx<(\d+)>', line)
-                
+                duration_match = re.search(r'TotalDuration-batch<(\d+)ms>', line)
+                tx_match = re.search(r'Txs<(\d+)>', line)
+
                 if batch_match and duration_match and tx_match:
                     batch_no = int(batch_match.group(1))
                     duration_ms = int(duration_match.group(1))
                     tx_count = int(tx_match.group(1))
                     total_tx_count += tx_count
-                    
+
                     instant_tps = (tx_count * 1000) / duration_ms if duration_ms > 0 else 0
                     logging.info(f"Batch {batch_no}: {tx_count} txs in {duration_ms/1000:.3f} seconds, Instant TPS: {instant_tps:.2f}")
-            
-            if "Resequencing completed." in line:
+
+            if "Replay completed." in line:
                 end_time = parse_time(line)
                 break
 

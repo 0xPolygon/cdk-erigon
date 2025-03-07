@@ -44,6 +44,7 @@ type DataStreamServer interface {
 	UnwindToBlock(blockNumber uint64) error
 	UnwindToBatchStart(batchNumber uint64) error
 	ReadBatches(start uint64, end uint64) ([][]*types.FullL2Block, error)
+	// For X Layer, optimize for reading batches from datastream
 	ReadBatchesWithConcurrency(start uint64, end uint64) ([][]*types.FullL2Block, error)
 	WriteWholeBatchToStream(logPrefix string, tx kv.Tx, reader DbReader, prevBatchNum, batchNum uint64) error
 	WriteBlocksToStreamConsecutively(ctx context.Context, logPrefix string, tx kv.Tx, reader DbReader, from, to uint64) error

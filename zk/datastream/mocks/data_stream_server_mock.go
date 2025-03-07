@@ -325,6 +325,7 @@ func (m *MockDataStreamServer) ReadBatches(arg0, arg1 uint64) ([][]*types0.FullL
 	return ret0, ret1
 }
 
+// For X Layer, just a wrapper of ReadBatches
 func (m *MockDataStreamServer) ReadBatchesWithConcurrency(arg0, arg1 uint64) ([][]*types0.FullL2Block, error) {
 	return m.ReadBatches(arg0, arg1)
 }

@@ -334,6 +334,10 @@ var DefaultFlags = []cli.Flag{
 	&utils.TxPoolFreeGasList,
 	&utils.HTTPApiKeysFlag,
 	&utils.MethodRateLimitFlag,
+	&utils.SequencerReplay,
+	&utils.SequencerReplayHaltOnBatchNumber,
+	&utils.SequencerReplayExternalDatastream,
+	&utils.SequencerReplayL1SyncOnly,
 
 	&utils.ACLPrintHistory,
 	&utils.InfoTreeUpdateInterval,
