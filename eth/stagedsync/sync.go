@@ -262,7 +262,7 @@ func New(cfg ethconfig.Sync, stagesList []*Stage, unwindOrder UnwindOrder, prune
 		logPrefixes:   logPrefixes,
 		logger:        logger,
 		stagesIdsList: stagesIdsList,
-		SmtCacheCh:    make(chan map[string]map[string][]byte, 1000),
+		SmtCacheCh:    make(chan map[string]map[string][]byte, 1),
 		SmtCache:      make(map[string]map[string][]byte),
 		DeltaSmtCache: make(map[string]map[string][]byte),
 	}
