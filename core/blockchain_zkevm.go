@@ -191,7 +191,7 @@ func ExecuteBlockEphemerallyZk(
 	}
 	if !vmConfig.ReadOnly {
 		txs := blockTransactions
-		if _, _, _, err := FinalizeBlockExecution(engine, stateReader, block.Header(), txs, block.Uncles(), stateWriter, chainConfig, ibs, receipts, block.Withdrawals(), chainReader, false, log.New()); err != nil {
+		if _, _, _, _, err := FinalizeBlockExecution(engine, stateReader, block.Header(), txs, block.Uncles(), stateWriter, chainConfig, ibs, receipts, block.Withdrawals(), chainReader, false, log.New()); err != nil {
 			return nil, fmt.Errorf("FinalizeBlockExecution: %w", err)
 		}
 	}
@@ -288,12 +288,12 @@ func PrepareBlockTxExecution(
 	// [zkevm] finish set preexecution state //
 	///////////////////////////////////////////
 
-	blockContextImpl := NewEVMBlockContext(block.Header(), blockHashFunc, engine, author)
+	blockContextImpl := NewEVMBlockContext(block.Header(), blockHashFunc, engine, author, chainConfig)
 
 	return &blockContextImpl, excessDataGas, &blockGer, &blockL1BlockHash, nil
 }
 
-func CreateReceiptForBlockInfoTree(receipt *types.Receipt, chainConfig *chain.Config, blockNum uint64, execResult *ExecutionResult) *types.Receipt {
+func CreateReceiptForBlockInfoTree(receipt *types.Receipt, chainConfig *chain.Config, blockNum uint64, execResult *evmtypes.ExecutionResult) *types.Receipt {
 	// [hack]TODO: remove this after bug is fixed
 	localReceipt := receipt.Clone()
 	if !chainConfig.IsForkID8Elderberry(blockNum) && errors.Is(execResult.Err, vm.ErrUnsupportedPrecompile) {
