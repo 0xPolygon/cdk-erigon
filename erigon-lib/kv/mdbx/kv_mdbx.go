@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -95,6 +96,62 @@ func NewMDBX(log log.Logger) MdbxOpts {
 	return opts
 }
 
+// Custom marshaling for MdbxOpts
+func MdbxOptsFromJSON(data []byte) (*MdbxOpts, error) {
+	var aux struct {
+		Path            string            `json:"path"`
+		SyncPeriod      time.Duration     `json:"syncPeriod"`
+		MapSize         datasize.ByteSize `json:"mapSize"`
+		GrowthStep      datasize.ByteSize `json:"growthStep"`
+		ShrinkThreshold int               `json:"shrinkThreshold"`
+		Flags           uint              `json:"flags"`
+		PageSize        uint64            `json:"pageSize"`
+		DirtySpace      uint64            `json:"dirtySpace"`
+		MergeThreshold  uint64            `json:"mergeThreshold"`
+		Verbosity       kv.DBVerbosityLvl `json:"verbosity"`
+		Label           kv.Label          `json:"label"`
+		InMem           bool              `json:"inMem"`
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return nil, err
+	}
+
+	opts := &MdbxOpts{
+		path:            aux.Path,
+		syncPeriod:      aux.SyncPeriod,
+		mapSize:         aux.MapSize,
+		growthStep:      aux.GrowthStep,
+		shrinkThreshold: aux.ShrinkThreshold,
+		flags:           aux.Flags,
+		pageSize:        aux.PageSize,
+		dirtySpace:      aux.DirtySpace,
+		mergeThreshold:  aux.MergeThreshold,
+		verbosity:       aux.Verbosity,
+		label:           aux.Label,
+		inMem:           aux.InMem,
+	}
+
+	return opts, nil
+}
+
+func (opts MdbxOpts) toMap() map[string]interface{} {
+	return map[string]interface{}{
+		"path":            opts.path,
+		"syncPeriod":      opts.syncPeriod,
+		"mapSize":         opts.mapSize,
+		"growthStep":      opts.growthStep,
+		"shrinkThreshold": opts.shrinkThreshold,
+		"flags":           opts.flags,
+		"pageSize":        opts.pageSize,
+		"dirtySpace":      opts.dirtySpace,
+		"mergeThreshold":  opts.mergeThreshold,
+		"verbosity":       opts.verbosity,
+		"label":           opts.label,
+		"inMem":           opts.inMem,
+	}
+}
+
 func (opts MdbxOpts) GetLabel() kv.Label  { return opts.label }
 func (opts MdbxOpts) GetInMem() bool      { return opts.inMem }
 func (opts MdbxOpts) GetPageSize() uint64 { return opts.pageSize }
@@ -126,6 +183,11 @@ func (opts MdbxOpts) GrowthStep(v datasize.ByteSize) MdbxOpts {
 
 func (opts MdbxOpts) Path(path string) MdbxOpts {
 	opts.path = path
+	return opts
+}
+
+func (opts MdbxOpts) Logger(log log.Logger) MdbxOpts {
+	opts.log = log
 	return opts
 }
 
@@ -417,15 +479,19 @@ func (opts MdbxOpts) Open(ctx context.Context) (kv.RwDB, error) {
 		MaxBatchDelay: DefaultMaxBatchDelay,
 	}
 
-	// for smt db we don't need to open any buckets
-	if opts.label == kv.SmtDB {
-		db.path = opts.path
-		addToPathDbMap(opts.path, db)
-		opts.debug()
-		return db, nil
-	}
+	var customBuckets kv.TableCfg
 
-	customBuckets := opts.bucketsCfg(kv.ChaindataTablesCfg)
+	// SMT db has all chaindata tables deprecated
+	if opts.label == kv.SmtDB {
+		customBuckets = kv.TableCfg{}
+		for name, cfg := range kv.ChaindataTablesCfg {
+			tmp := cfg
+			tmp.IsDeprecated = true
+			customBuckets[name] = tmp
+		}
+	} else {
+		customBuckets = opts.bucketsCfg(kv.ChaindataTablesCfg)
+	}
 	for name, cfg := range customBuckets { // copy map to avoid changing global variable
 		db.buckets[name] = cfg
 	}
@@ -472,6 +538,20 @@ func (opts MdbxOpts) Open(ctx context.Context) (kv.RwDB, error) {
 	db.path = opts.path
 	addToPathDbMap(opts.path, db)
 	opts.debug()
+
+	// for split db only
+	/*
+		optsJson, err := json.Marshal(opts.toMap())
+		if err != nil {
+			log.Error("Failed to MarshalIndent opts", "err", err)
+		} else {
+			err = os.WriteFile(db.path+"/opts_chaindb.json", optsJson, 0644)
+			if err != nil {
+				log.Error("Error writing json to file", "err", err)
+			}
+		}
+	*/
+
 	return db, nil
 }
 
