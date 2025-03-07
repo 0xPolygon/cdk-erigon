@@ -44,6 +44,7 @@ type Config struct {
 	TotalBlobPoolLimit  uint64 // Total number of blobs (not txs) allowed within the txpool
 	PriceBump           uint64 // Price bump percentage to replace an already existing transaction
 	BlobPriceBump       uint64 //Price bump percentage to replace an existing 4844 blob tx (type-3)
+	OverrideShanghaiTime  *big.Int
 	OverridePragueTime  *big.Int
 
 	// regular batch tasks processing
