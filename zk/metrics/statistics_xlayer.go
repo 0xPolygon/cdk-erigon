@@ -13,7 +13,6 @@ const (
 	GetTxPauseCounter             LogTag = "GetTxPauseCounter"
 	GetTxPauseTiming              LogTag = "GetTxPauseTiming"
 	BatchCloseReason              LogTag = "BatchCloseReason"
-	ReprocessingTxCounter         LogTag = "ReProcessingTxCounter"
 	ZKOverflowBlockCounter        LogTag = "ZKOverflowBlockCounter"
 	FailTxGasOverCounter          LogTag = "FailTxGasOverCounter"
 	BatchGas                      LogTag = "BatchGas"
@@ -40,14 +39,20 @@ const (
 	ZKHashSMTInsertKeyTiming       LogTag = "ZKHashSMTInsertKeyTiming"
 	ZKHashSMTGetKeyTiming          LogTag = "ZKHashSMTGetKeyTiming"
 
-	HermezSmtMetadata LogTag = "HermezSmtMetadata"
-	HermezSmtStats    LogTag = "HermezSmtStats"
-	HermezSmt         LogTag = "HermezSmt"
-	HermezSmtHashKey  LogTag = "HermezSmtHashKey"
+	HermezSmtMetadata       LogTag = "HermezSmtMetadata"
+	HermezSmtStats          LogTag = "HermezSmtStats"
+	HermezSmt               LogTag = "HermezSmt"
+	HermezSmtHashKey        LogTag = "HermezSmtHashKey"
+	HermezSmtMetadataTiming LogTag = "HermezSmtMetadataTiming"
+	HermezSmtStatsTiming    LogTag = "HermezSmtStatsTiming"
+	HermezSmtTiming         LogTag = "HermezSmtTiming"
+	HermezSmtHashKeyTiming  LogTag = "HermezSmtHashKeyTiming"
 
 	Delete LogTag = "Delete"
 	Append LogTag = "Insert"
 	Put    LogTag = "Put"
+
+	FinalizeBlockNumber LogTag = "FinalizeBlockNumber"
 )
 
 type Statistics interface {
@@ -59,4 +64,5 @@ type Statistics interface {
 	GetTag(tag LogTag) string
 	GetStatistics(tag LogTag) int64
 	Summary() string
+	SummaryCheckpoint() string
 }

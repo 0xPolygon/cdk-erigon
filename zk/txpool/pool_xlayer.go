@@ -161,3 +161,15 @@ func (p *TxPool) isFreeGasXLayer(senderID uint64, tx *types.TxSlot) bool {
 	freeType, _ := p.checkFreeGasAddrXLayer(senderID, tx)
 	return freeType > notFree
 }
+
+func (p *TxPool) setFreeGasList(freeGasList []ethconfig.FreeGasInfo) {
+	p.xlayerCfg.FreeGasFromNameMap = make(map[string]string)
+	p.xlayerCfg.FreeGasList = make(map[string]*ethconfig.FreeGasInfo, len(freeGasList))
+	for _, info := range freeGasList {
+		for _, from := range info.FromList {
+			p.xlayerCfg.FreeGasFromNameMap[strings.ToLower(from)] = info.Name
+		}
+		infoCopy := info
+		p.xlayerCfg.FreeGasList[info.Name] = &infoCopy
+	}
+}

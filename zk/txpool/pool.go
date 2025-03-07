@@ -28,7 +28,6 @@ import (
 	"math/big"
 	"runtime"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -422,18 +421,6 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 	tp.setFreeGasList(ethCfg.DeprecatedTxPool.FreeGasList)
 
 	return tp, nil
-}
-
-func (p *TxPool) setFreeGasList(freeGasList []ethconfig.FreeGasInfo) {
-	p.xlayerCfg.FreeGasFromNameMap = make(map[string]string)
-	p.xlayerCfg.FreeGasList = make(map[string]*ethconfig.FreeGasInfo, len(freeGasList))
-	for _, info := range freeGasList {
-		for _, from := range info.FromList {
-			p.xlayerCfg.FreeGasFromNameMap[strings.ToLower(from)] = info.Name
-		}
-		infoCopy := info
-		p.xlayerCfg.FreeGasList[info.Name] = &infoCopy
-	}
 }
 
 func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChangeBatch, unwindTxs, minedTxs types.TxSlots, tx kv.Tx) error {
@@ -2280,6 +2267,7 @@ type PendingPool struct {
 }
 
 func NewPendingSubPool(t SubPoolType, limit int) *PendingPool {
+	log.Info("new sub pool", "SubPoolType", PendingSubPool, "limit", limit)
 	return &PendingPool{limit: limit, t: t, best: &bestSlice{ms: []*metaTx{}}, worst: &WorstQueue{ms: []*metaTx{}}}
 }
 
@@ -2382,6 +2370,7 @@ type SubPool struct {
 }
 
 func NewSubPool(t SubPoolType, limit int) *SubPool {
+	log.Info("new sub pool", "SubPoolType", t, "limit", limit)
 	return &SubPool{limit: limit, t: t, best: &BestQueue{}, worst: &WorstQueue{}}
 }
 

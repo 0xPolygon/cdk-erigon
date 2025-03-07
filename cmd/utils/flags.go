@@ -591,6 +591,26 @@ var (
 		Usage: "Reuse the L1 info index for resequencing",
 		Value: true,
 	}
+	SequencerReplay = cli.BoolFlag{
+		Name:  "zkevm.sequencer-replay",
+		Usage: "Local replay feature, only works when zkevm.sequencer-resequence enabled",
+		Value: false,
+	}
+	SequencerReplayHaltOnBatchNumber = cli.Uint64Flag{
+		Name:  "zkevm.sequencer-replay-halt-on-batch-number",
+		Usage: "Halt the sequencer on this batch number when replaying",
+		Value: 0,
+	}
+	SequencerReplayExternalDatastream = cli.BoolFlag{
+		Name:  "zkevm.sequencer-replay-external-datastream",
+		Usage: "When enabled, the sequencer will create a new data stream server connected to an external datastream file and read batches from it",
+		Value: false,
+	}
+	SequencerReplayL1SyncOnly = cli.BoolFlag{
+		Name:  "zkevm.sequencer-replay-l1-sync-only",
+		Usage: "When enabled, the sequencer will only sync the L1 info and exit",
+		Value: false,
+	}
 	ExecutorUrls = cli.StringFlag{
 		Name:  "zkevm.executor-urls",
 		Usage: "A comma separated list of grpc addresses that host executors",
@@ -688,6 +708,11 @@ var (
 		Usage: "Reject the sequencer to proceed transactions with low gas price",
 		Value: false,
 	}
+	RejectLowGasPriceTolerance = cli.Float64Flag{
+		Name:  "zkevm.reject-low-gas-price-tolerance",
+		Usage: "Value between 0 and 1 that defines the tolerance for low gas price transactions, this percentage will be removed from the lowest price to determine rejection",
+		Value: 0,
+	}
 	AllowPreEIP155Transactions = cli.BoolFlag{
 		Name:  "zkevm.allow-pre-eip155-transactions",
 		Usage: "Allow the sequencer to proceed pre-EIP155 transactions",
@@ -727,6 +752,16 @@ var (
 	GasPriceFactor = cli.Float64Flag{
 		Name:  "zkevm.gas-price-factor",
 		Usage: "Apply factor to L1 gas price to calculate l2 gasPrice",
+		Value: 1,
+	}
+	GasPriceCheckFrequency = cli.DurationFlag{
+		Name:  "zkevm.gas-price-check-frequency",
+		Usage: "The frequency at which to check the L1 for the latest gas price",
+		Value: 0,
+	}
+	GasPriceHistoryCount = cli.Uint64Flag{
+		Name:  "zkevm.gas-price-history-count",
+		Usage: "The number of historical gas prices to keep",
 		Value: 1,
 	}
 	WitnessFullFlag = cli.BoolFlag{
@@ -799,10 +834,20 @@ var (
 		Usage: "Enable witness cache",
 		Value: false,
 	}
-	WitnessCacheLimit = cli.UintFlag{
-		Name:  "zkevm.witness-cache-limit",
-		Usage: "Amount of blocks behind the last executed one to keep witnesses for. Needs a lot of HDD space. Default value 10 000.",
-		Value: 10000,
+	WitnessCachePurge = cli.BoolFlag{
+		Name:  "zkevm.witness-cache-purge",
+		Usage: "Purge the witness cache on startup. Default false.",
+		Value: false,
+	}
+	WitnessCacheBatchAheadOffset = cli.UintFlag{
+		Name:  "zkevm.witness-cache-batch-ahead-offset",
+		Usage: "How many batches ahead of the highest verified batch to cache. Default 0.",
+		Value: 0,
+	}
+	WitnessCacheBatchBehindOffset = cli.UintFlag{
+		Name:  "zkevm.witness-cache-batch-behind-offset",
+		Usage: "How many batches behind the highest verified batch to cache. Default 5.",
+		Value: 5,
 	}
 	WitnessContractInclusion = cli.StringFlag{
 		Name:  "zkevm.witness-contract-inclusion",

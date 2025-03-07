@@ -11,6 +11,12 @@ type XLayerConfig struct {
 	EnableInnerTx bool
 	// Sequencer
 	SequencerBatchSleepDuration time.Duration
+
+	// Local Replay
+	SequencerReplay                   bool
+	SequencerReplayHaltOnBatchNumber  uint64
+	SequencerReplayExternalDatastream bool
+	SequencerReplayL1SyncOnly         bool
 }
 
 var DefaultXLayerConfig = XLayerConfig{}
