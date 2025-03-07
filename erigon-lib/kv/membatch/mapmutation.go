@@ -310,31 +310,30 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	return nil
 }
 
-func (m *Mapmutation) RetrieveAndRemoveTableCache(targetTable []string) (map[string]map[string][]byte, map[string]map[string][]byte) {
-	if len(targetTable) == 0 {
-		return nil, nil
-	}
+func (m *Mapmutation) RetrieveAndCleanCache() (map[string]map[string][]byte, map[string]map[string][]byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	targetCachedTable := make(map[string]map[string][]byte, len(targetTable))
-	deltaTargetCached := make(map[string]map[string][]byte, len(targetTable))
-
-	for _, table := range targetTable {
-		bucket, exists := m.puts[table]
-		if exists {
-			targetCachedTable[table] = bucket
-			delete(m.puts, table)
-		}
-
-		changedBucket, exists := m.modifiedCache[table]
-		if exists {
-			deltaTargetCached[table] = changedBucket
-			delete(m.modifiedCache, table)
+	targetCachedTable := make(map[string]map[string][]byte, len(m.puts))
+	for table, bucket := range m.puts {
+		targetCachedTable[table] = bucket
+		for k, v := range bucket {
+			if v == nil || len(v) == 0 {
+				delete(bucket, k)
+			}
 		}
 	}
-	// 只需要提交当前block更改过的key-val对即可
-	m.puts = m.modifiedCache
+
+	deltaTargetCached := make(map[string]map[string][]byte, len(m.modifiedCache))
+	for k, v := range m.modifiedCache {
+		deltaTargetCached[k] = v
+	}
+
+	// 重置原始 map
+	m.puts = map[string]map[string][]byte{}
+	m.modifiedCache = map[string]map[string][]byte{}
+	m.size = 0
+	m.count = 0
 
 	return targetCachedTable, deltaTargetCached
 }

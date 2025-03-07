@@ -86,9 +86,9 @@ func sequencingBatchStep(
 	}()
 
 	// For X Layer metrics
-	log.Info("[PoolTxCount] Starting Getting Pending Tx Count")
-	pending, basefee, queued := cfg.txPool.CountContent()
-	metrics.AddPoolTxCount(pending, basefee, queued)
+	//log.Info("[PoolTxCount] Starting Getting Pending Tx Count")
+	//pending, basefee, queued := cfg.txPool.CountContent()
+	//metrics.AddPoolTxCount(pending, basefee, queued)
 
 	// at this point of time the datastream could not be ahead of the executor
 	if err = validateIfDatastreamIsAheadOfExecution(s, ctx, cfg); err != nil {
@@ -705,10 +705,7 @@ func sequencingBatchStep(
 			batchContext.sdb.eridb.RollbackBatch()
 			return err
 		}
-		smtCache, deltaCache, err := batchContext.sdb.eridb.RetrieveCacheAndCommitBatch()
-		if err != nil {
-			return err
-		}
+		smtCache, deltaCache := batchContext.sdb.eridb.RetrieveAndCleanBatchCache()
 		s.SetSmtCache(smtCache, deltaCache)
 
 		// For X Layer
