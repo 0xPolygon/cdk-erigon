@@ -29,7 +29,7 @@ import (
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/core/vm"
 	"github.com/erigontech/erigon/core/vm/evmtypes"
-	"github.com/erigontech/erigon/crypto"
+	"github.com/erigontech/erigon-lib/crypto"
 )
 
 func GetTxContext(config *chain.Config, engine consensus.EngineReader, ibs *state.IntraBlockState, header *types.Header, tx types.Transaction, evm *vm.EVM, effectiveGasPricePercentage uint8) (types.Message, evmtypes.TxContext, error) {

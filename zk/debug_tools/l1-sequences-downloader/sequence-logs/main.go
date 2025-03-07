@@ -11,7 +11,7 @@ import (
 	ethTypes "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/ethclient"
 
-	ethereum "github.com/erigon/erigon"
+	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/zk/contracts"
 	"github.com/erigontech/erigon/zk/debug_tools"

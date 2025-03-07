@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"strings"
 
-	ethereum "github.com/erigon/erigon"
+	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/accounts/abi"
 	"github.com/erigontech/erigon/accounts/abi/bind"

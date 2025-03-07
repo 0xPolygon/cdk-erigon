@@ -11,7 +11,7 @@ import (
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/length"
 	"github.com/erigontech/erigon/accounts/abi"
-	"github.com/erigontech/erigon/crypto"
+	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon/zk/contracts"
 	"github.com/erigontech/erigon/zk/da"
 	zktx "github.com/erigontech/erigon/zk/tx"

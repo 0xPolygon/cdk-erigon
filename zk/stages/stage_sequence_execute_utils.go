@@ -13,7 +13,7 @@ import (
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/erigontech/erigon-lib/chain"
-	"github.com/erigontech/erigon/common/math"
+	"github.com/erigontech/erigon-lib/common/math"
 	"github.com/erigontech/erigon/consensus"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"

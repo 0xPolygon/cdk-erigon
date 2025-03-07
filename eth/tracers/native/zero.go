@@ -13,7 +13,7 @@ import (
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/core/vm"
-	"github.com/erigontech/erigon/crypto"
+	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon/eth/tracers"
 	"github.com/erigontech/erigon-lib/log/v3"
 )

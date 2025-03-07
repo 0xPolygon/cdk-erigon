@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/iden3/go-iden3-crypto/keccak256"
-	ethereum "github.com/erigon/erigon"
+	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv/memdb"
 	"github.com/erigontech/erigon/core/types"

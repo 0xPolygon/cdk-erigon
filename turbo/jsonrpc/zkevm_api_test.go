@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/holiman/uint256"
-	ethereum "github.com/erigon/erigon"
+	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/datadir"
 	"github.com/erigontech/erigon-lib/common/hexutil"
@@ -19,7 +19,7 @@ import (
 	"github.com/erigontech/erigon/accounts/abi/bind/backends"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/types"
-	"github.com/erigontech/erigon/crypto"
+	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/params"

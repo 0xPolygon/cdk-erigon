@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/erigontech/erigon-lib/common"
-	"github.com/erigontech/erigon/crypto"
+	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon/smt/pkg/smt"
 	"github.com/erigontech/erigon/turbo/trie"
 	"github.com/status-im/keycard-go/hexutils"

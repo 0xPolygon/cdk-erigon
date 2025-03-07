@@ -29,7 +29,7 @@ import (
 
 	"github.com/erigontech/erigon-lib/chain"
 
-	"github.com/erigontech/erigon/common/math"
+	"github.com/erigontech/erigon-lib/common/math"
 	"github.com/erigontech/erigon/consensus"
 	"github.com/erigontech/erigon/consensus/misc"
 	"github.com/erigontech/erigon/core/state"

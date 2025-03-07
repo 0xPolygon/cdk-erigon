@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	ethereum "github.com/erigon/erigon"
+	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 
 	"github.com/iden3/go-iden3-crypto/keccak256"

@@ -27,7 +27,7 @@ import (
 	"strconv"
 
 	"github.com/holiman/uint256"
-	ethereum "github.com/erigon/erigon"
+	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/hexutil"
 	"github.com/erigontech/erigon/core/types"

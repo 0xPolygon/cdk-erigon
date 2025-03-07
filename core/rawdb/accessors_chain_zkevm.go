@@ -14,7 +14,7 @@ import (
 	"github.com/erigontech/erigon-lib/kv/dbutils"
 	"github.com/erigontech/erigon-lib/kv/kvcfg"
 	"github.com/erigontech/erigon/core/types"
-	"github.com/erigontech/erigon/rlp"
+	"github.com/erigontech/erigon-lib/rlp"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon-lib/log/v3"
 )

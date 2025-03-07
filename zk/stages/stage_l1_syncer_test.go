@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	ethereum "github.com/erigon/erigon"
+	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv/memdb"
 	"github.com/erigontech/erigon/core/rawdb"

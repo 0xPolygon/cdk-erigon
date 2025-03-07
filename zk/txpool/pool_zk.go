@@ -13,7 +13,7 @@ import (
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/types"
 	types2 "github.com/erigontech/erigon-lib/types"
-	"github.com/erigontech/erigon/common/math"
+	"github.com/erigontech/erigon-lib/common/math"
 	"github.com/erigontech/erigon/zk/utils"
 	"github.com/erigontech/erigon-lib/log/v3"
 )

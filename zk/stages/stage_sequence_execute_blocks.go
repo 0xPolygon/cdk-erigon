@@ -18,7 +18,7 @@ import (
 	"github.com/erigontech/erigon/zk/erigon_db"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	zktypes "github.com/erigontech/erigon/zk/types"
-	"github.com/erigon/secp256k1"
+	"github.com/erigontech/secp256k1"
 )
 
 func handleStateForNewBlockStarting(
