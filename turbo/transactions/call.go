@@ -20,6 +20,7 @@ import (
 	"github.com/erigontech/erigon/core/vm/evmtypes"
 	"github.com/erigontech/erigon/rpc"
 	"github.com/erigontech/erigon/smt/pkg/smt"
+	db2 "github.com/erigontech/erigon/smt/pkg/db"
 	ethapi2 "github.com/erigontech/erigon/turbo/adapter/ethapi"
 	"github.com/erigontech/erigon/turbo/services"
 	"github.com/erigontech/erigon/zk/hermez_db"

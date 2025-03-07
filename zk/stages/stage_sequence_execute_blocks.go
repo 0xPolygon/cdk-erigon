@@ -165,7 +165,7 @@ func finaliseBlock(
 		withdrawals = []*types.Withdrawal{}
 	}
 
-	finalBlock, finalTransactions, finalReceipts, err := core.FinalizeBlockExecution(
+	finalBlock, finalTransactions, finalReceipts, _, err := core.FinalizeBlockExecution(
 		batchContext.cfg.engine,
 		batchContext.sdb.stateReader,
 		newHeader,

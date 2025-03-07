@@ -101,7 +101,7 @@ func processInjectedInitialBatch(
 	batchState.blockState.builtBlockElements = BuiltBlockElements{
 		transactions:     types.Transactions{*txn},
 		receipts:         types.Receipts{receipt},
-		executionResults: []*core.ExecutionResult{execResult},
+		executionResults: []*evmtypes.ExecutionResult{execResult},
 		effectiveGases:   []uint8{effectiveGas},
 	}
 	batchCounters := vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(batchState.forkId), batchContext.cfg.zk.VirtualCountersSmtReduction,
@@ -122,7 +122,7 @@ func handleInjectedBatch(
 	header *types.Header,
 	parentBlock *types.Block,
 	forkId uint64,
-) (*types.Transaction, *types.Receipt, *core.ExecutionResult, uint8, error) {
+) (*types.Transaction, *types.Receipt, *evmtypes.ExecutionResult, uint8, error) {
 	decodedBlocks, err := zktx.DecodeBatchL2Blocks(injected.Transaction, forkId)
 	if err != nil {
 		return nil, nil, nil, 0, err

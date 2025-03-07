@@ -138,7 +138,7 @@ func attemptAddTransaction(
 	forkId, l1InfoIndex uint64,
 	blockDataSizeChecker *BlockDataChecker,
 	ethBlockGasPool *core.GasPool,
-) (*types.Receipt, *core.ExecutionResult, *vm.TransactionCounter, overflowType, error) {
+) (*types.Receipt, *evmtypes.ExecutionResult, *vm.TransactionCounter, overflowType, error) {
 	var batchDataOverflow, overflow bool
 	var err error
 

@@ -327,7 +327,7 @@ func sequencingBatchStep(
 		ibs := state.New(sdb.stateReader)
 		getHashFn := core.GetHashFn(header, func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(sdb.tx, hash, number) })
 		coinbase := batchState.getCoinbase(&cfg)
-		blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &coinbase)
+		blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, nil /* author */, &coinbase)
 		batchState.blockState.builtBlockElements.resetBlockBuildingArrays()
 
 		parentRoot := parentBlock.Root()
