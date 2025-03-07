@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/c2h5oh/datasize"
+	"github.com/erigontech/erigon-lib/chain"
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/consensus/ethash/ethashcfg"
 	"github.com/erigontech/erigon/core/types"
@@ -32,7 +33,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		Miner                          params.MiningConfig
 		Ethash                         ethashcfg.Config
 		Clique                         params.ConsensusSnapshotConfig
-		Aura                           erigonchain.AuRaConfig
+		Aura                           chain.AuRaConfig
 		TxPool                         DeprecatedTxPoolConfig
 		GPO                            gaspricecfg.Config
 		RPCGasCap                      uint64  `toml:",omitempty"`
@@ -81,7 +82,7 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		Miner                          *params.MiningConfig
 		Ethash                         *ethashcfg.Config
 		Clique                         *params.ConsensusSnapshotConfig
-		Aura                           *erigonchain.AuRaConfig
+		Aura                           *chain.AuRaConfig
 		TxPool                         *DeprecatedTxPoolConfig
 		GPO                            *gaspricecfg.Config
 		RPCGasCap                      *uint64  `toml:",omitempty"`

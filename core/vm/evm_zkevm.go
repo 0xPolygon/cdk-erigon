@@ -75,7 +75,7 @@ func NewZkEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, state ev
 
 func (evm *EVM) Deploy(caller ContractRef, code []byte, gas uint64, endowment *uint256.Int, intrinsicGas uint64) (ret []byte, contractAddr libcommon.Address, leftOverGas uint64, err error) {
 	if evm.ChainRules().IsNormalcy {
-		return evm.Create(caller, code, gas, endowment, intrinsicGas)
+		return evm.Create(caller, code, gas, endowment, false /* bailout */, intrinsicGas)
 	}
 
 	contractAddr = crypto.CreateAddress(caller.Address(), evm.intraBlockState.GetNonce(caller.Address()))
