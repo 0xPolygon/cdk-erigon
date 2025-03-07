@@ -17,13 +17,13 @@
 package vm
 
 import (
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon-lib/chain"
 	libcommon "github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon/common/u256"
 	"github.com/erigontech/erigon/core/vm/evmtypes"
-	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon/params"
+	"github.com/holiman/uint256"
 )
 
 // [zkevm] contains the list of zkevm precompiles

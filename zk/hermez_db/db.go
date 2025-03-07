@@ -13,9 +13,9 @@ import (
 
 	"time"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	dstypes "github.com/erigontech/erigon/zk/datastream/types"
 	"github.com/erigontech/erigon/zk/types"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 const L1VERIFICATIONS = "hermez_l1Verifications"                        // l1blockno, batchno -> l1txhash

@@ -5,8 +5,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/jackc/pgx/v4"
 	"github.com/erigontech/erigon-lib/common"
+	"github.com/jackc/pgx/v4"
 
 	"github.com/erigontech/erigon/core/types"
 )

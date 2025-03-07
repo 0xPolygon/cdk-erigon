@@ -7,14 +7,14 @@ import (
 	"testing"
 
 	"github.com/c2h5oh/datasize"
-	"github.com/holiman/uint256"
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/kv/mdbx"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/types/accounts"
 	"github.com/erigontech/erigon/migrations"
 	"github.com/erigontech/erigon/smt/pkg/db"
-	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/holiman/uint256"
 	"golang.org/x/sync/semaphore"
 )
 

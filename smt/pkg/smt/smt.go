@@ -12,9 +12,9 @@ import (
 
 	"github.com/erigontech/erigon-lib/common"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/smt/pkg/db"
 	"github.com/erigontech/erigon/smt/pkg/utils"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 type DB interface {

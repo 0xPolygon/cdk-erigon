@@ -3,14 +3,15 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os"
+
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/kv/mdbx"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/params"
 	cli2 "github.com/erigontech/erigon/turbo/cli"
 	"github.com/erigontech/erigon/turbo/logging"
-	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/urfave/cli/v2"
-	"os"
 )
 
 var (

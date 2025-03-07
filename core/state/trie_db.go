@@ -11,7 +11,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon-lib/common"
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/length"
@@ -22,6 +21,7 @@ import (
 	"github.com/erigontech/erigon/ethdb"
 	"github.com/erigontech/erigon/smt/pkg/utils"
 	"github.com/erigontech/erigon/turbo/trie"
+	"github.com/holiman/uint256"
 )
 
 // Buffer is a structure holding updates, deletes, and reads registered within one change period

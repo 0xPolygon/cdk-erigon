@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx/v4"
 	"github.com/erigontech/erigon/zkevm/encoding"
 	"github.com/erigontech/erigon/zkevm/hex"
+	"github.com/jackc/pgx/v4"
 )
 
 const (

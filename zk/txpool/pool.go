@@ -36,13 +36,13 @@ import (
 
 	"github.com/VictoriaMetrics/metrics"
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon-lib/txpool/txpoolcfg"
+	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/go-stack/stack"
 	"github.com/google/btree"
 	"github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/holiman/uint256"
-	"github.com/erigontech/erigon-lib/txpool/txpoolcfg"
-	"github.com/erigontech/erigon/eth/ethconfig"
-	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/status-im/keycard-go/hexutils"
 
 	"github.com/erigontech/erigon-lib/chain"

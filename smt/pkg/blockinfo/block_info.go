@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"math/big"
 
-	ethTypes "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon-lib/log/v3"
+	ethTypes "github.com/erigontech/erigon/core/types"
 
 	"github.com/erigontech/erigon/smt/pkg/smt"
 	"github.com/erigontech/erigon/smt/pkg/utils"

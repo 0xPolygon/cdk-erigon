@@ -11,10 +11,10 @@ import (
 	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 
-	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/erigontech/erigon/ethclient"
 	"github.com/erigontech/erigon/zk/debug_tools"
 	"github.com/erigontech/erigon/zk/types"
+	"github.com/iden3/go-iden3-crypto/keccak256"
 )
 
 func main() {

@@ -8,11 +8,11 @@ import (
 
 	"github.com/erigontech/erigon-lib/common/datadir"
 	"github.com/erigontech/erigon-lib/kv/kvcache"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/accounts/abi/bind/backends"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/eth/filters"
 	"github.com/erigontech/erigon/rpc/rpccfg"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 func TestGetLogsWithRange(t *testing.T) {

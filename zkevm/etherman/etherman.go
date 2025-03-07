@@ -10,14 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/holiman/uint256"
 	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon/accounts/abi"
 	"github.com/erigontech/erigon/accounts/abi/bind"
 	"github.com/erigontech/erigon/core/types"
-	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon/ethclient"
 	"github.com/erigontech/erigon/params"
 	"github.com/erigontech/erigon/zkevm/etherman/smartcontracts/matic"
@@ -25,6 +24,7 @@ import (
 	"github.com/erigontech/erigon/zkevm/etherman/smartcontracts/polygonzkevmglobalexitroot"
 	ethmanTypes "github.com/erigontech/erigon/zkevm/etherman/types"
 	"github.com/erigontech/erigon/zkevm/log"
+	"github.com/holiman/uint256"
 	"golang.org/x/crypto/sha3"
 )
 

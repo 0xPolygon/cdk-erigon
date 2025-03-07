@@ -5,13 +5,13 @@ import (
 	"fmt"
 
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/eth/stagedsync"
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/zk/datastream/server"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/sequencer"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 type DataStreamCatchupCfg struct {

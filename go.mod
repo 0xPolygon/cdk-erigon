@@ -30,26 +30,27 @@ require (
 	github.com/c2h5oh/datasize v0.0.0-20231215233829-aa82cc1e6500
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/consensys/gnark-crypto v0.12.1
-	github.com/crate-crypto/go-ipa v0.0.0-20221111143132-9aa5d42120bc
-	github.com/crate-crypto/go-kzg-4844 v0.7.0
+	github.com/crate-crypto/go-ipa v0.0.0-20240223125850-b1e8a79f509c
+	github.com/crate-crypto/go-kzg-4844 v1.0.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/deckarep/golang-set v1.8.0
-	github.com/deckarep/golang-set/v2 v2.3.1
+	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/dgravesa/go-parallel v0.6.0
 	github.com/docker/docker v26.1.0+incompatible
-	github.com/dop251/goja v0.0.0-20230122112309-96b1610dd4f7
+	github.com/dop251/goja v0.0.0-20230605162241-28ee0ee714f3
 	github.com/dustin/go-humanize v1.0.1
 	github.com/edsrzf/mmap-go v1.1.0
 	github.com/emicklei/dot v1.6.1
 	github.com/erigontech/erigon-lib v1.0.0
 	github.com/erigontech/erigonwatch v0.1.16
-	github.com/fjl/gencodec v0.0.0-20220412091415-8bb9e558978c
+	github.com/ethereum/go-ethereum v1.14.8
+	github.com/fjl/gencodec v0.0.0-20230517082657-f9840df7b83e
 	github.com/gballet/go-verkle v0.0.0-20221121182333-31427a1f2d35
 	github.com/gfx-labs/sse v0.0.0-20231226060816-f747e26a9baa
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/go-chi/cors v1.2.1
 	github.com/go-test/deep v1.1.1
-	github.com/goccy/go-json v0.9.11
+	github.com/goccy/go-json v0.10.2
 	github.com/gofrs/flock v0.8.1
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb
@@ -125,7 +126,8 @@ require (
 
 require (
 	github.com/erigontech/erigon-snapshot v1.3.1-0.20240619030755-1e16b374e6cb // indirect
-	github.com/go-ole/go-ole v1.2.6 // indirect
+	github.com/ethereum/c-kzg-4844 v1.0.0 // indirect
+	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect

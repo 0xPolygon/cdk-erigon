@@ -9,9 +9,9 @@ import (
 	"math/big"
 	"net/http"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/ethclient"
 	"github.com/erigontech/erigon/zk/debug_tools"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 func main() {

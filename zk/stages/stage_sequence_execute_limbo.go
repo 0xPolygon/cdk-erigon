@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/zk/legacy_executor_verifier"
 	"github.com/erigontech/erigon/zk/txpool"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBundle *legacy_executor_verifier.VerifierBundle) error {

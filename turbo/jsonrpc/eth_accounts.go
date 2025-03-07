@@ -13,8 +13,8 @@ import (
 	"github.com/erigontech/erigon-lib/gointerfaces"
 	"google.golang.org/grpc"
 
-	"github.com/erigontech/erigon/turbo/rpchelper"
 	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/turbo/rpchelper"
 
 	txpool_proto "github.com/erigontech/erigon-lib/gointerfaces/txpool"
 

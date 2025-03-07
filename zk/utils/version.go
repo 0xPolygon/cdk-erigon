@@ -1,9 +1,10 @@
 package utils
 
 import (
-	"strings"
-	"github.com/erigontech/erigon/params"
 	"fmt"
+	"strings"
+
+	"github.com/erigontech/erigon/params"
 )
 
 func GetVersion() string {

@@ -13,12 +13,12 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/erigontech/erigon-lib/common"
-	"github.com/erigontech/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
 	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
-	"github.com/google/uuid"
 )
 
 var (

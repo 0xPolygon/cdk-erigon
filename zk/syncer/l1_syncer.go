@@ -8,10 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/iden3/go-iden3-crypto/keccak256"
 	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/iden3/go-iden3-crypto/keccak256"
 
 	"encoding/binary"
 

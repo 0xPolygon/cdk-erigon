@@ -7,13 +7,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	loglvl "github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/cmd/acl/list"
 	"github.com/erigontech/erigon/cmd/acl/mode"
 	"github.com/erigontech/erigon/cmd/acl/update"
 	"github.com/erigontech/erigon/params"
 	"github.com/erigontech/erigon/turbo/logging"
 	"github.com/erigontech/erigon/zkevm/log"
-	loglvl "github.com/erigontech/erigon-lib/log/v3"
 	"github.com/urfave/cli/v2"
 )
 

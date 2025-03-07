@@ -8,10 +8,10 @@ import (
 
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/vm"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/zk/legacy_executor_verifier"
-	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/status-im/keycard-go/hexutils"
 )
 

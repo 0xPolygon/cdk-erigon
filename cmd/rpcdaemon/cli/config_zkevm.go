@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"github.com/erigontech/erigon/zk/datastream/server"
 	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/zk/datastream/server"
 )
 
 func StartDataStream(server server.StreamServer) error {

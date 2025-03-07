@@ -7,11 +7,11 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/iden3/go-iden3-crypto/keccak256"
 	"github.com/erigontech/erigon-lib/chain"
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/datadir"
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 	libstate "github.com/erigontech/erigon-lib/state"
 	"github.com/erigontech/erigon/common"
 	"github.com/erigontech/erigon/consensus"
@@ -29,7 +29,7 @@ import (
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1_data"
 	zkUtils "github.com/erigontech/erigon/zk/utils"
-	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/iden3/go-iden3-crypto/keccak256"
 
 	"github.com/erigontech/erigon-lib/kv/membatchwithdb"
 )

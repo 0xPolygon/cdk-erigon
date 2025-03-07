@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/hexutil"
@@ -15,6 +14,7 @@ import (
 	"github.com/erigontech/erigon/rpc"
 	db2 "github.com/erigontech/erigon/smt/pkg/db"
 	"github.com/erigontech/erigon/smt/pkg/smt"
+	"github.com/holiman/uint256"
 
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"

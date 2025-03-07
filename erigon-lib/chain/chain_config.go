@@ -389,8 +389,6 @@ func (c *Config) GetMaxBlobsPerBlock(time uint64) uint64 {
 	return b.MaxBlobsPerBlock(c.IsPrague(time))
 }
 
-
-
 func (c *Config) GetTargetBlobGasPerBlock(t uint64) uint64 {
 	var b *BlobSchedule
 	if c != nil {

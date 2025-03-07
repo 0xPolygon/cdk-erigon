@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/erigontech/erigon-lib/chain"
+	"github.com/erigontech/erigon-lib/kv"
 	"github.com/holiman/uint256"
 
 	"github.com/erigontech/erigon-lib/log/v3"

@@ -3,10 +3,12 @@ package stages
 import (
 	"context"
 	"fmt"
+
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/datadir"
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 	eristate "github.com/erigontech/erigon-lib/state"
 	"github.com/erigontech/erigon/consensus"
 	"github.com/erigontech/erigon/eth/ethconfig"
@@ -16,7 +18,6 @@ import (
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/sequencer"
 	"github.com/erigontech/erigon/zk/witness"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 type WitnessDb interface {

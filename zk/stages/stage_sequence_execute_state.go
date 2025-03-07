@@ -8,6 +8,7 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 
 	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/eth/stagedsync"
@@ -15,7 +16,6 @@ import (
 	"github.com/erigontech/erigon/zk/l1_data"
 	zktx "github.com/erigontech/erigon/zk/tx"
 	"github.com/erigontech/erigon/zk/txpool"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 const maximumOverflowTransactionAttempts = 5

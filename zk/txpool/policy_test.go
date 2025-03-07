@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/c2h5oh/datasize"
-	mdbx2 "github.com/erigontech/mdbx-go/mdbx"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/kv/mdbx"
 	"github.com/erigontech/erigon-lib/log/v3"
+	mdbx2 "github.com/erigontech/mdbx-go/mdbx"
 	"github.com/stretchr/testify/require"
 )
 

@@ -25,14 +25,14 @@ import (
 	"github.com/consensys/gnark-crypto/ecc"
 	bls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	"github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
-	"github.com/holiman/uint256"
 	libcommon "github.com/erigontech/erigon-lib/common"
+	"github.com/holiman/uint256"
 
-	"github.com/erigontech/erigon-lib/crypto/blake2b"
-	"github.com/erigontech/erigon/common"
 	"github.com/erigontech/erigon-lib/common/math"
 	"github.com/erigontech/erigon-lib/crypto"
+	"github.com/erigontech/erigon-lib/crypto/blake2b"
 	"github.com/erigontech/erigon-lib/crypto/secp256r1"
+	"github.com/erigontech/erigon/common"
 	"github.com/erigontech/erigon/params"
 	"golang.org/x/crypto/ripemd160"
 	//lint:ignore SA1019 Needed for precompile

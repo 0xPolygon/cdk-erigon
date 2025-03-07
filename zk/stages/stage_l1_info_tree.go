@@ -3,13 +3,14 @@ package stages
 import (
 	"context"
 	"fmt"
+
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/eth/stagedsync"
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	"github.com/erigontech/erigon/zk/sequencer"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 type L1InfoTreeCfg struct {

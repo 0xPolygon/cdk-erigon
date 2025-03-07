@@ -21,11 +21,11 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/holiman/uint256"
 	libcommon "github.com/erigontech/erigon-lib/common"
+	"github.com/holiman/uint256"
 
-	"github.com/erigontech/erigon/common/u256"
 	"github.com/erigontech/erigon-lib/crypto"
+	"github.com/erigontech/erigon/common/u256"
 	"github.com/erigontech/erigon/params"
 )
 

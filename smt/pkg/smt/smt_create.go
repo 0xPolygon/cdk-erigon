@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/smt/pkg/utils"
 	"github.com/erigontech/erigon/zk"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 //////////////////////////////////////////////////////////////////////////////

@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"fmt"
+
 	"github.com/erigontech/erigon-lib/common/hexutil"
 	"github.com/erigontech/erigon/rpc"
 	"github.com/erigontech/erigon/turbo/jsonrpc"

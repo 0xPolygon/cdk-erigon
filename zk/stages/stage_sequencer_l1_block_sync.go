@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/eth/stagedsync"
@@ -16,7 +17,6 @@ import (
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1_data"
 	"github.com/erigontech/erigon/zk/syncer"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 type SequencerL1BlockSyncCfg struct {

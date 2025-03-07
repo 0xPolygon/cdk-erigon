@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/params"
 	"github.com/erigontech/erigon/zkevm/hex"
+	"github.com/holiman/uint256"
 
 	"github.com/erigontech/erigon-lib/common"
 )

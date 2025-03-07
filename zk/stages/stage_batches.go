@@ -14,6 +14,7 @@ import (
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/state"
 	ethTypes "github.com/erigontech/erigon/core/types"
@@ -27,7 +28,6 @@ import (
 	"github.com/erigontech/erigon/zk/erigon_db"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/sequencer"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 const (

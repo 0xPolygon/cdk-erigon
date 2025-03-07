@@ -10,6 +10,7 @@ import (
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/rawdb"
 	ethTypes "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
@@ -17,7 +18,6 @@ import (
 	"github.com/erigontech/erigon/zk/datastream/types"
 	txtype "github.com/erigontech/erigon/zk/tx"
 	"github.com/erigontech/erigon/zk/utils"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 var (

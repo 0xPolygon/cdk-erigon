@@ -5,8 +5,8 @@ import (
 
 	"github.com/erigontech/erigon-lib/common/datadir"
 	"github.com/erigontech/erigon-lib/kv"
-	smtdb "github.com/erigontech/erigon/smt/pkg/db"
 	"github.com/erigontech/erigon-lib/log/v3"
+	smtdb "github.com/erigontech/erigon/smt/pkg/db"
 )
 
 var refactorTableLastRoot = Migration{

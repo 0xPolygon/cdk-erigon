@@ -15,10 +15,10 @@ import (
 
 	chain "github.com/erigontech/erigon-lib/chain"
 	common "github.com/erigontech/erigon-lib/common"
+	log "github.com/erigontech/erigon-lib/log/v3"
 	state "github.com/erigontech/erigon/core/state"
 	types "github.com/erigontech/erigon/core/types"
 	rpc "github.com/erigontech/erigon/rpc"
-	log "github.com/erigontech/erigon-lib/log/v3"
 	gomock "go.uber.org/mock/gomock"
 )
 

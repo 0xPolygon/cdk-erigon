@@ -3,11 +3,11 @@ package vm
 import (
 	"math/big"
 
-	"github.com/holiman/uint256"
 	libcommon "github.com/erigontech/erigon-lib/common"
-	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon-lib/crypto"
+	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/params"
+	"github.com/holiman/uint256"
 )
 
 func opCallDataLoad_zkevmIncompatible(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {

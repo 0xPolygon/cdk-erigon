@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/common"
 	zkutils "github.com/erigontech/erigon/zk/utils"
-	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/pelletier/go-toml"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"

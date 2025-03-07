@@ -10,10 +10,10 @@ import (
 
 	"encoding/binary"
 
-	"github.com/holiman/uint256"
 	constants "github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/core/types"
+	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

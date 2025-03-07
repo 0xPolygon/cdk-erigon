@@ -3,11 +3,12 @@ package cfg_chain
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/erigontech/erigon-lib/chain"
-	"github.com/erigontech/erigon/zk/zk_config"
 	"io"
 	"os"
 	"path"
+
+	"github.com/erigontech/erigon-lib/chain"
+	"github.com/erigontech/erigon/zk/zk_config"
 )
 
 func NewDynamicChainConfig(chain string) *chain.Config {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/ethereum/go-ethereum"
 	jsoniter "github.com/json-iterator/go"
 
 	"github.com/erigontech/erigon-lib/chain"

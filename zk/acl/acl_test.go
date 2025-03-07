@@ -2,9 +2,10 @@ package acl
 
 import (
 	"context"
+	"testing"
+
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestUnmarshalAcl(t *testing.T) {

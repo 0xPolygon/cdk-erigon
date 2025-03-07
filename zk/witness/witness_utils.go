@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/holiman/uint256"
 	coreState "github.com/erigontech/erigon/core/state"
 	db2 "github.com/erigontech/erigon/smt/pkg/db"
 	"github.com/erigontech/erigon/smt/pkg/smt"
 	"github.com/erigontech/erigon/turbo/trie"
+	"github.com/holiman/uint256"
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/datadir"
@@ -19,13 +19,13 @@ import (
 	"github.com/erigontech/erigon-lib/state"
 	corestate "github.com/erigontech/erigon/core/state"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/rawdb"
 	eritypes "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/eth/stagedsync"
 	dstypes "github.com/erigontech/erigon/zk/datastream/types"
 	zkSmt "github.com/erigontech/erigon/zk/smt"
 	zkUtils "github.com/erigontech/erigon/zk/utils"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 var (

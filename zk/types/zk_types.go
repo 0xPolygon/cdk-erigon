@@ -12,9 +12,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon/cl/utils"
 	ethTypes "github.com/erigontech/erigon/core/types"
+	"github.com/holiman/uint256"
 )
 
 const EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED = 0

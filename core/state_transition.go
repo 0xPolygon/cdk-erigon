@@ -39,7 +39,6 @@ import (
 	"github.com/erigontech/erigon/core/vm"
 	"github.com/erigontech/erigon/core/vm/evmtypes"
 	"github.com/erigontech/erigon/params"
-	"github.com/erigontech/erigon/params"
 	zktypes "github.com/erigontech/erigon/zk/types"
 )
 

@@ -9,6 +9,7 @@ import (
 	"errors"
 
 	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/state"
@@ -18,7 +19,6 @@ import (
 	zktx "github.com/erigontech/erigon/zk/tx"
 	zktypes "github.com/erigontech/erigon/zk/types"
 	"github.com/erigontech/erigon/zk/utils"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 const (

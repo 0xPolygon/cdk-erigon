@@ -13,10 +13,10 @@ import (
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/kv/dbutils"
 	"github.com/erigontech/erigon-lib/kv/kvcfg"
-	"github.com/erigontech/erigon/core/types"
-	"github.com/erigontech/erigon-lib/rlp"
-	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon-lib/rlp"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/zk/hermez_db"
 )
 
 func DeleteCumulativeGasUsed(tx kv.RwTx, blockFrom uint64) error {

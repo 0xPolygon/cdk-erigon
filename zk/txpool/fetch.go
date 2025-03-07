@@ -22,16 +22,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon-lib/common/dbg"
 	"github.com/erigontech/erigon-lib/direct"
 	"github.com/erigontech/erigon-lib/gointerfaces/grpcutil"
 	"github.com/erigontech/erigon-lib/gointerfaces/remote"
 	"github.com/erigontech/erigon-lib/gointerfaces/sentry"
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon-lib/rlp"
 	types2 "github.com/erigontech/erigon-lib/types"
-	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/holiman/uint256"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )

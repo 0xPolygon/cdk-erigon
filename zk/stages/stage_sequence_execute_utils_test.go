@@ -4,12 +4,12 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/core/types"
 	dsTypes "github.com/erigontech/erigon/zk/datastream/types"
 	zktx "github.com/erigontech/erigon/zk/tx"
 	zktypes "github.com/erigontech/erigon/zk/types"
+	"github.com/holiman/uint256"
 	gomock "go.uber.org/mock/gomock"
 )
 

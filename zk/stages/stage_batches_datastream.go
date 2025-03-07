@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/erigontech/erigon/zk/datastream/client"
 	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/zk/datastream/client"
 )
 
 type DatastreamClientRunner struct {

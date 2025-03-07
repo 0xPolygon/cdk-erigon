@@ -3,8 +3,8 @@ package vm
 import (
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common/math"
-	"github.com/erigontech/erigon/core/vm/stack"
 	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/core/vm/stack"
 )
 
 type ZkConfig struct {

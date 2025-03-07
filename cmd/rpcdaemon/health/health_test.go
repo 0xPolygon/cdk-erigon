@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/erigontech/erigon/turbo/jsonrpc"
 	"io"
 	"math/big"
 	"net/http"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/erigontech/erigon/turbo/jsonrpc"
 
 	"github.com/erigontech/erigon-lib/common/hexutil"
 

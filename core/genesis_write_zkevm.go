@@ -1,6 +1,8 @@
 package core
 
 import (
+	"math/big"
+
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/params"
@@ -9,7 +11,6 @@ import (
 	"github.com/erigontech/erigon/zk/zk_config/cfg_chain"
 	"github.com/erigontech/erigon/zk/zk_config/cfg_dynamic_genesis"
 	"github.com/erigontech/erigon/zkevm/hex"
-	"math/big"
 )
 
 func HermezMainnetGenesisBlock() *types.Genesis {

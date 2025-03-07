@@ -26,13 +26,13 @@ import (
 	"math/big"
 	"strconv"
 
-	"github.com/holiman/uint256"
 	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/hexutil"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/rpc"
-	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/holiman/uint256"
 )
 
 var EmptyTxsHash = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")

@@ -13,15 +13,15 @@ import (
 
 	"encoding/binary"
 
-	"github.com/holiman/uint256"
 	constants "github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common"
-	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon-lib/rlp"
+	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/smt/pkg/utils"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zkevm/hex"
-	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/holiman/uint256"
 )
 
 const (

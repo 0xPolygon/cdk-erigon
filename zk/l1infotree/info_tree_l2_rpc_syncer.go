@@ -3,12 +3,13 @@ package l1infotree
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
+	"time"
+
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	zkTypes "github.com/erigontech/erigon/zk/types"
 	jsonClient "github.com/erigontech/erigon/zkevm/jsonrpc/client"
-	"github.com/erigontech/erigon-lib/log/v3"
-	"sync/atomic"
-	"time"
 )
 
 const (

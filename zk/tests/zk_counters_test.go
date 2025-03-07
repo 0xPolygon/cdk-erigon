@@ -17,6 +17,7 @@ import (
 	"github.com/erigontech/erigon-lib/common/hexutil"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/kv/memdb"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/consensus"
 	"github.com/erigontech/erigon/consensus/ethash/ethashcfg"
 	"github.com/erigontech/erigon/core"
@@ -35,7 +36,6 @@ import (
 	"github.com/erigontech/erigon/zk/tx"
 	zktypes "github.com/erigontech/erigon/zk/types"
 	"github.com/erigontech/erigon/zkevm/hex"
-	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/status-im/keycard-go/hexutils"
 )
 

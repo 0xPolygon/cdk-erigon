@@ -5,7 +5,6 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common"
 	libcommon "github.com/erigontech/erigon-lib/common"
@@ -14,6 +13,7 @@ import (
 	"github.com/erigontech/erigon/core/vm/evmtypes"
 	"github.com/erigontech/erigon/core/vm/stack"
 	"github.com/erigontech/erigon/params"
+	"github.com/holiman/uint256"
 )
 
 func TestBlockhashV2(t *testing.T) {

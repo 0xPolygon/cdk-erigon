@@ -8,6 +8,7 @@ import (
 	dslog "github.com/0xPolygonHermez/zkevm-data-streamer/log"
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/rawdb"
 	eritypes "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/zk/datastream/client"
@@ -15,7 +16,6 @@ import (
 	"github.com/erigontech/erigon/zk/datastream/types"
 	zktypes "github.com/erigontech/erigon/zk/types"
 	"github.com/erigontech/erigon/zk/utils"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 type DbReader interface {

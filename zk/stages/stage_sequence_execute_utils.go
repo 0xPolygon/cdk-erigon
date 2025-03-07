@@ -11,9 +11,9 @@ import (
 	"github.com/erigontech/erigon-lib/kv"
 	libstate "github.com/erigontech/erigon-lib/state"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common/math"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/consensus"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
@@ -36,7 +36,7 @@ import (
 	"github.com/erigontech/erigon/zk/txpool"
 	zktypes "github.com/erigontech/erigon/zk/types"
 	"github.com/erigontech/erigon/zk/utils"
-	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 const (

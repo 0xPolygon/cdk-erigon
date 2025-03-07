@@ -16,11 +16,11 @@ import (
 	"bytes"
 	"sync/atomic"
 
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/log/v3"
+	ericommon "github.com/erigontech/erigon/common"
 	"github.com/holiman/uint256"
 	"github.com/iden3/go-iden3-crypto/keccak256"
-	"github.com/erigontech/erigon-lib/common"
-	ericommon "github.com/erigontech/erigon/common"
-	"github.com/erigontech/erigon-lib/log/v3"
 	"golang.org/x/time/rate"
 )
 

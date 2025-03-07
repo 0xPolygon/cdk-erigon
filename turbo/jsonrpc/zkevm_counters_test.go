@@ -1,8 +1,9 @@
 package jsonrpc
 
 import (
-	"testing"
 	"errors"
+	"testing"
+
 	"github.com/erigontech/erigon/eth/tracers"
 )
 

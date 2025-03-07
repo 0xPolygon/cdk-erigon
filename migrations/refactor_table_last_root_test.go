@@ -6,8 +6,8 @@ import (
 
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/kv/memdb"
-	smtdb "github.com/erigontech/erigon/smt/pkg/db"
 	"github.com/erigontech/erigon-lib/log/v3"
+	smtdb "github.com/erigontech/erigon/smt/pkg/db"
 	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
 )

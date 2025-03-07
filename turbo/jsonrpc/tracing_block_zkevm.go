@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon/consensus"
@@ -19,6 +18,7 @@ import (
 	"github.com/erigontech/erigon/turbo/services"
 	"github.com/erigontech/erigon/turbo/transactions"
 	"github.com/erigontech/erigon/zk/hermez_db"
+	jsoniter "github.com/json-iterator/go"
 )
 
 type blockTracer struct {

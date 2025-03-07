@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon/accounts/abi/bind"
 	"github.com/erigontech/erigon/accounts/abi/bind/backends"
 	"github.com/erigontech/erigon/core/types"
-	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon/zkevm/etherman/smartcontracts/matic"
 	"github.com/erigontech/erigon/zkevm/etherman/smartcontracts/mockverifier"
 	"github.com/erigontech/erigon/zkevm/etherman/smartcontracts/polygonzkevm"

@@ -27,8 +27,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon-lib/common/hexutil"
+	"github.com/holiman/uint256"
 
 	math2 "github.com/erigontech/erigon-lib/common/math"
 	"github.com/erigontech/erigon-lib/log/v3"

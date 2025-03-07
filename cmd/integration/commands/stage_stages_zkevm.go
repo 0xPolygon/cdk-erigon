@@ -8,12 +8,12 @@ import (
 
 	common2 "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon-lib/wrap"
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	smtdb "github.com/erigontech/erigon/smt/pkg/db"
 	"github.com/erigontech/erigon/turbo/debug"
 	"github.com/erigontech/erigon/zk/hermez_db"
-	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/spf13/cobra"
 )
 

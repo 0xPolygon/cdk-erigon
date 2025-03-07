@@ -3,8 +3,9 @@ package txpool
 import (
 	"context"
 	"fmt"
-	"github.com/google/btree"
-	"github.com/holiman/uint256"
+	"testing"
+	"time"
+
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/datadir"
 	"github.com/erigontech/erigon-lib/common/u256"
@@ -16,10 +17,10 @@ import (
 	"github.com/erigontech/erigon-lib/txpool/txpoolcfg"
 	"github.com/erigontech/erigon-lib/types"
 	"github.com/erigontech/erigon/eth/ethconfig"
+	"github.com/google/btree"
+	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestCalculateMetrics(t *testing.T) {

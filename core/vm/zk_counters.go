@@ -5,10 +5,10 @@ import (
 	"math"
 	"math/big"
 
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/zk/hermez_db"
+	"github.com/holiman/uint256"
 )
 
 const (

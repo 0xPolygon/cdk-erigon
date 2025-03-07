@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/holiman/uint256"
 	"github.com/erigontech/erigon-lib/chain"
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv/memdb"
@@ -16,6 +15,7 @@ import (
 	"github.com/erigontech/erigon/smt/pkg/smt"
 	"github.com/erigontech/erigon/smt/pkg/utils"
 	"github.com/erigontech/erigon/turbo/trie"
+	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
 )
