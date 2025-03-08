@@ -301,6 +301,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.WitnessCacheBatchBehindOffset,
 	&utils.WitnessContractInclusion,
 	&utils.BadTxAllowance,
+	&utils.SkipSmt,
 	&utils.GasPriceCheckFrequency,
 	&utils.GasPriceHistoryCount,
 	&utils.RejectLowGasPriceTransactions,

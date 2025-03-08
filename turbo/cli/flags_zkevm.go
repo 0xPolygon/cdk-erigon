@@ -233,6 +233,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		WitnessCacheBatchBehindOffset:          ctx.Uint64(utils.WitnessCacheBatchBehindOffset.Name),
 		WitnessContractInclusion:               witnessInclusion,
 		BadTxAllowance:                         ctx.Uint64(utils.BadTxAllowance.Name),
+		SkipSmt:                                ctx.Bool(utils.SkipSmt.Name),
 		GasPriceCheckFrequency:                 ctx.Duration(utils.GasPriceCheckFrequency.Name),
 		GasPriceHistoryCount:                   ctx.Uint64(utils.GasPriceHistoryCount.Name),
 		RejectLowGasPriceTransactions:          ctx.Bool(utils.RejectLowGasPriceTransactions.Name),

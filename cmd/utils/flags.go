@@ -839,6 +839,11 @@ var (
 		Usage: "The maximum number of times a transaction that consumes too many counters to fit into a batch will be attempted before it is rejected outright by eth_sendRawTransaction",
 		Value: 2,
 	}
+	SkipSmt = cli.BoolFlag{
+		Name:  "zkevm.skip-smt",
+		Usage: "Skip the SMT verification",
+		Value: false,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",

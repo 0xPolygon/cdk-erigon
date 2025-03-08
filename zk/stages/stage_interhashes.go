@@ -98,6 +98,20 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		return trie.EmptyRoot, err
 	}
 
+	// special case where we might want to skip the SMT being processed
+	if cfg.zk.SkipSmt {
+		log.Info(fmt.Sprintf("[%s] Skipping SMT processing", logPrefix))
+		if err := s.Update(tx, to); err != nil {
+			return trie.EmptyRoot, err
+		}
+		if !useExternalTx {
+			if err := tx.Commit(); err != nil {
+				return trie.EmptyRoot, err
+			}
+		}
+		return trie.EmptyRoot, nil
+	}
+
 	///// DEBUG BISECT /////
 	defer func() {
 		if cfg.zk.DebugLimit > 0 {
