@@ -569,7 +569,7 @@ func formatL2TxHashParam(param interface{}, paramLength int) (string, error) {
 		paramStr = "0" + paramStr
 	}
 
-	if !re.MatchString(paramStr) {
+	if !hex.IsValid(paramStr) {
 		return "", fmt.Errorf("invalid hex string")
 	}
 
