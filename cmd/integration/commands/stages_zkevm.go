@@ -147,6 +147,7 @@ func newSyncZk(ctx context.Context, db, dbsmt kv.RwDB) (consensus.Engine, *vm.Co
 		stages = stages2.NewDefaultZkStages(
 			context.Background(),
 			db,
+			dbsmt,
 			&cfg,
 			sentryControlServer,
 			&shards.Notifications{},
