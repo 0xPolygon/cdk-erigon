@@ -13,9 +13,9 @@ import (
 
 	"sort"
 
-	poseidon "github.com/okx/poseidongold/go"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/length"
+	poseidon "github.com/okx/poseidongold/go"
 )
 
 const (
@@ -439,9 +439,22 @@ func ScalarToRoot(s *big.Int) NodeKey {
 
 func ScalarToNodeValue(scalarIn *big.Int) NodeValue12 {
 	out := [12]*big.Int{}
+
+	// fast path for 64-bit systems
+	if bits.UintSize == 64 {
+		words := scalarIn.Bits()
+		for i := 0; i < 12; i++ {
+			if i < len(words) {
+				out[i] = new(big.Int).SetUint64(uint64(words[i]))
+			} else {
+				out[i] = big.NewInt(0)
+			}
+		}
+		return out
+	}
+
 	mask := new(big.Int).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
 	scalar := new(big.Int).Set(scalarIn)
-
 	for i := 0; i < 12; i++ {
 		value := new(big.Int).And(scalar, mask)
 		out[i] = value
