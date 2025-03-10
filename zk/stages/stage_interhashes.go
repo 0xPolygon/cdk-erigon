@@ -40,6 +40,7 @@ import (
 
 type ZkInterHashesCfg struct {
 	db                kv.RwDB
+	smtDB             kv.RwDB
 	checkRoot         bool
 	badBlockHalt      bool
 	tmpDir            string
@@ -54,6 +55,7 @@ type ZkInterHashesCfg struct {
 
 func StageZkInterHashesCfg(
 	db kv.RwDB,
+	smtDB kv.RwDB,
 	checkRoot, saveNewHashesToDB, badBlockHalt bool,
 	tmpDir string,
 	blockReader services.FullBlockReader,
@@ -64,6 +66,7 @@ func StageZkInterHashesCfg(
 ) ZkInterHashesCfg {
 	return ZkInterHashesCfg{
 		db:                db,
+		smtDB:             smtDB,
 		checkRoot:         checkRoot,
 		tmpDir:            tmpDir,
 		saveNewHashesToDB: saveNewHashesToDB,
@@ -125,7 +128,13 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	shouldIncrementBecauseOfExecutionConditions := s.BlockNumber > 0 && !shouldRegenerate
 	shouldIncrement := shouldIncrementBecauseOfAFlag || shouldIncrementBecauseOfExecutionConditions
 
-	eridb := db2.NewEriDb(tx)
+	smtTx, err := cfg.smtDB.BeginRw(ctx)
+	if err != nil {
+		return trie.EmptyRoot, err
+	}
+	defer smtTx.Rollback()
+
+	eridb := db2.NewEriDb(smtTx)
 	smt := smt.NewSMT(eridb, false)
 
 	if shouldIncrement {
@@ -183,6 +192,10 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		}
 	}
 
+	if err := smtTx.Commit(); err != nil {
+		return trie.EmptyRoot, err
+	}
+
 	return root, err
 }
 
@@ -210,7 +223,13 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 		expectedRootHash = syncHeadHeader.Root
 	}
 
-	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, cfg.checkRoot, &expectedRootHash, silent); err != nil {
+	smtTx, err := cfg.db.BeginRw(ctx)
+	if err != nil {
+		return err
+	}
+	defer smtTx.Rollback()
+
+	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, smtTx, tx, cfg.checkRoot, &expectedRootHash, silent); err != nil {
 		return err
 	}
 	hermezDb := hermez_db.NewHermezDb(tx)
@@ -225,6 +244,10 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+	}
+
+	if err := smtTx.Commit(); err != nil {
+		return err
 	}
 	return nil
 }

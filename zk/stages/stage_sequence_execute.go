@@ -109,10 +109,10 @@ func sequencingBatchStep(
 		metrics.GetLogStatistics().Summary()
 	}()
 
-	// For X Layer metrics
-	log.Info("[PoolTxCount] Starting Getting Pending Tx Count")
-	pending, basefee, queued := cfg.txPool.CountContent()
-	metrics.AddPoolTxCount(pending, basefee, queued)
+	//// For X Layer metrics
+	//log.Info("[PoolTxCount] Starting Getting Pending Tx Count")
+	//pending, basefee, queued := cfg.txPool.CountContent()
+	//metrics.AddPoolTxCount(pending, basefee, queued)
 
 	// at this point of time the datastream could not be ahead of the executor
 	if err = validateIfDatastreamIsAheadOfExecution(s, ctx, cfg); err != nil {
@@ -761,6 +761,7 @@ func sequencingBatchStep(
 				return errCommitAndStart
 			}
 			defer sdb.tx.Rollback()
+			defer sdb.txsmt.Rollback()
 			metrics.GetLogStatistics().CumulativeTiming(metrics.BatchCommitDBTiming, time.Since(commitTime))
 		}
 
@@ -824,6 +825,7 @@ func sequencingBatchStep(
 				return errCommitAndStart
 			}
 			defer sdb.tx.Rollback()
+			defer sdb.txsmt.Rollback()
 			metrics.GetLogStatistics().CumulativeTiming(metrics.BatchCommitDBTiming, time.Since(commitTime))
 		}
 

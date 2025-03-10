@@ -24,6 +24,7 @@ type WitnessDb interface {
 
 type WitnessCfg struct {
 	db              kv.RwDB
+	smtDB           kv.RwDB
 	zkCfg           *ethconfig.Zk
 	chainConfig     *chain.Config
 	engine          consensus.Engine
@@ -35,9 +36,10 @@ type WitnessCfg struct {
 	unwindLimit     uint64
 }
 
-func StageWitnessCfg(db kv.RwDB, zkCfg *ethconfig.Zk, chainConfig *chain.Config, engine consensus.Engine, blockReader services.FullBlockReader, agg *eristate.Aggregator, historyV3 bool, dirs datadir.Dirs, forcedContracts []common.Address, unwindLimit uint64) WitnessCfg {
+func StageWitnessCfg(db, smtDB kv.RwDB, zkCfg *ethconfig.Zk, chainConfig *chain.Config, engine consensus.Engine, blockReader services.FullBlockReader, agg *eristate.Aggregator, historyV3 bool, dirs datadir.Dirs, forcedContracts []common.Address, unwindLimit uint64) WitnessCfg {
 	cfg := WitnessCfg{
 		db:              db,
+		smtDB:           smtDB,
 		zkCfg:           zkCfg,
 		chainConfig:     chainConfig,
 		engine:          engine,

@@ -17,13 +17,13 @@ import (
 	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
-func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.RwTx, checkRoot bool, expectedRootHash *common.Hash, quiet bool) (common.Hash, error) {
+func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, smtTx, tx kv.RwTx, checkRoot bool, expectedRootHash *common.Hash, quiet bool) (common.Hash, error) {
 	if !quiet {
 		log.Info(fmt.Sprintf("[%s] Unwind trie hashes started", logPrefix))
 		defer log.Info(fmt.Sprintf("[%s] Unwind ended", logPrefix))
 	}
 
-	eridb := db2.NewEriDb(tx)
+	eridb := db2.NewEriDb(smtTx)
 	eridb.RollbackBatch()
 
 	dbSmt := smt.NewSMT(eridb, false)
@@ -33,7 +33,7 @@ func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.R
 	}
 
 	// only open the batch if tx is not already one
-	if _, ok := tx.(*membatchwithdb.MemoryMutation); !ok {
+	if _, ok := smtTx.(*membatchwithdb.MemoryMutation); !ok {
 		quit := make(chan struct{})
 		eridb.OpenBatch(quit)
 	}

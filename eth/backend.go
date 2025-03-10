@@ -1253,6 +1253,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			backend.syncStages = stages2.NewDefaultZkStages(
 				backend.sentryCtx,
 				backend.chainDB,
+				smtdb,
 				config,
 				backend.sentriesClient,
 				backend.notifications,
