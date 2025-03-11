@@ -603,7 +603,7 @@ type MdbxKV struct {
 // Default values if not set in a DB instance.
 const (
 	DefaultMaxBatchSize  int = 1000
-	DefaultMaxBatchDelay     = 10 * time.Millisecond
+	DefaultMaxBatchDelay     = 100 * time.Millisecond
 )
 
 type batch struct {

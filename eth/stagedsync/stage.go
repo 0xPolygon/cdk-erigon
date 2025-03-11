@@ -47,6 +47,16 @@ type StageState struct {
 	BlockNumber uint64 // BlockNumber is the current block number of the stage at the beginning of the state execution.
 }
 
+func (s *StageState) GetSmtCache() map[string]map[string][]byte { return s.state.GetSmtCache() }
+
+func (s *StageState) SetSmtCache(cache, deltaCache map[string]map[string][]byte) {
+	s.state.SetSmtCache(cache, deltaCache)
+}
+
+func (s *StageState) FlushSmtCache() error {
+	return s.state.FlushSmtCache()
+}
+
 func (s *StageState) LogPrefix() string { return s.state.LogPrefix() }
 
 // Update updates the stage state (current block number) in the database. Can be called multiple times during stage execution.

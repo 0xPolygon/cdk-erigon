@@ -34,6 +34,10 @@ type Sync struct {
 	logPrefixes   []string
 	logger        log.Logger
 	stagesIdsList []string
+
+	SmtCacheCh    chan map[string]map[string][]byte
+	DeltaSmtCache map[string]map[string][]byte
+	SmtCache      map[string]map[string][]byte
 }
 
 type Timing struct {
@@ -41,6 +45,50 @@ type Timing struct {
 	isPrune  bool
 	stage    stages.SyncStage
 	took     time.Duration
+}
+
+func (s *Sync) GetSmtCache() map[string]map[string][]byte { return s.SmtCache }
+
+func (s *Sync) SetSmtCache(cache, deltaCache map[string]map[string][]byte) {
+	// 检查并初始化
+	if s.SmtCache == nil {
+		s.SmtCache = make(map[string]map[string][]byte)
+	}
+	if s.DeltaSmtCache == nil {
+		s.DeltaSmtCache = make(map[string]map[string][]byte)
+	}
+
+	// 直接赋值 cache
+	for table, bucket := range cache {
+		s.SmtCache[table] = bucket
+	}
+
+	// 合并 deltaCache
+	for table, bucket := range deltaCache {
+		if existingBucket, exists := s.DeltaSmtCache[table]; exists {
+			if existingBucket == nil {
+				existingBucket = make(map[string][]byte)
+				s.DeltaSmtCache[table] = existingBucket
+			}
+			for k, v := range bucket {
+				existingBucket[k] = v // 直接赋值，不深拷贝
+			}
+		} else {
+			s.DeltaSmtCache[table] = bucket // 直接使用传入的 bucket
+		}
+	}
+}
+
+func (s *Sync) FlushSmtCache() error {
+	// 非阻塞发送
+	select {
+	case s.SmtCacheCh <- s.DeltaSmtCache:
+		// 发送成功后重新初始化 DeltaSmtCache
+		s.DeltaSmtCache = make(map[string]map[string][]byte)
+		return nil
+	default:
+		return fmt.Errorf("failed to flush: channel is full or no receiver")
+	}
 }
 
 func (s *Sync) Len() int {
@@ -214,6 +262,9 @@ func New(cfg ethconfig.Sync, stagesList []*Stage, unwindOrder UnwindOrder, prune
 		logPrefixes:   logPrefixes,
 		logger:        logger,
 		stagesIdsList: stagesIdsList,
+		SmtCacheCh:    make(chan map[string]map[string][]byte, 1),
+		SmtCache:      make(map[string]map[string][]byte),
+		DeltaSmtCache: make(map[string]map[string][]byte),
 	}
 }
 

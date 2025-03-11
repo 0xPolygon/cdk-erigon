@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	"github.com/ledgerwatch/erigon-lib/kv/membatch"
 	"runtime"
+	"sync"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/arc/v2"
@@ -43,6 +46,53 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/silkworm"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 )
+
+func AsyncFlushSmtData(ctx context.Context,
+	_db kv.RwDB,
+	s *stagedsync.Sync,
+	logger log.Logger,
+) {
+	db, ok := _db.(*mdbx.MdbxKV)
+	if !ok {
+		logger.Error("invalid database type, expected *mdbx.MdbxKV")
+		return
+	}
+
+	var wg sync.WaitGroup
+	defer wg.Wait() // 等待所有 FlushDataToDB goroutine 完成
+
+	for {
+		select {
+		case smtCache, ok := <-s.SmtCacheCh:
+			if !ok {
+				logger.Info("SmtCacheCh closed, stopping AsyncFlushSmtData")
+				return
+			}
+
+			wg.Add(1)
+			go FlushDataToDB(&wg, ctx, db, logger, smtCache)
+
+		case <-ctx.Done():
+			logger.Info("AsyncFlushSmtData received stop signal", "reason", ctx.Err())
+			return
+		}
+	}
+}
+
+func FlushDataToDB(wg *sync.WaitGroup, ctx context.Context, db *mdbx.MdbxKV, logger log.Logger, smtCache map[string]map[string][]byte) {
+	defer wg.Done()
+
+	err := db.Batch(func(tx kv.RwTx) error {
+		batch := membatch.NewHashBatchWithCache(tx, ctx.Done(), "", logger, smtCache)
+		defer batch.Close()
+
+		return batch.Flush(ctx, tx)
+	})
+
+	if err != nil {
+		logger.Error("failed to flush data to DB", "error", err)
+	}
+}
 
 // StageLoop runs the continuous loop of staged sync
 func StageLoop(ctx context.Context,

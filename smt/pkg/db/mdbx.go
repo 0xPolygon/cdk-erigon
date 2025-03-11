@@ -98,6 +98,35 @@ func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
 	m.kvTxRo = batch
 }
 
+func (m *EriDb) OpenBatchWithCachedValue(quitCh <-chan struct{}, cachedMapValue map[string]map[string][]byte) {
+	if cachedMapValue == nil {
+		cachedMapValue = make(map[string]map[string][]byte)
+	}
+	batch := membatch.NewHashBatchWithCache(m.kvTx, quitCh, "./tempdb", log.New(), cachedMapValue)
+	// WARN: cannnot close batch here, or it will clean all the cache value
+	//defer func() {
+	//	batch.Close()
+	//}()
+	m.tx = batch
+	m.kvTxRo = batch
+}
+
+func (m *EriDb) RetrieveAndCleanBatchCache() (map[string]map[string][]byte, map[string]map[string][]byte) {
+	batch, ok := m.tx.(kv.PendingMutations)
+	if !ok {
+		return nil, nil // don't roll back a kvRw tx
+	}
+
+	mapCache, ok := batch.(*membatch.Mapmutation)
+	if !ok {
+		return nil, nil // don't roll back a kvRw tx
+	}
+
+	smtCache, deltaSmtCache := mapCache.RetrieveAndCleanCache()
+
+	return smtCache, deltaSmtCache
+}
+
 func (m *EriDb) CommitBatch() error {
 	batch, ok := m.tx.(kv.PendingMutations)
 	if !ok {
@@ -169,7 +198,7 @@ func (m *EriRoDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 		return utils.NodeValue12{}, err
 	}
 
-	if data == nil {
+	if data == nil || len(data) == 0 {
 		return utils.NodeValue12{}, nil
 	}
 

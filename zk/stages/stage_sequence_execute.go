@@ -89,7 +89,14 @@ func SpawnSequencingStage(
 		return nil
 	}
 
-	return sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil)
+	if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil); err == nil {
+		//if s.BlockNumber%50 == 0 {
+		//	err = s.FlushSmtCache()
+		//}
+		err = s.FlushSmtCache()
+	}
+
+	return err
 }
 
 func sequencingBatchStep(
@@ -109,7 +116,7 @@ func sequencingBatchStep(
 		metrics.GetLogStatistics().Summary()
 	}()
 
-	//// For X Layer metrics
+	// For X Layer metrics
 	//log.Info("[PoolTxCount] Starting Getting Pending Tx Count")
 	//pending, basefee, queued := cfg.txPool.CountContent()
 	//metrics.AddPoolTxCount(pending, basefee, queued)
@@ -734,9 +741,14 @@ func sequencingBatchStep(
 			break
 		}
 
+		quit := batchContext.ctx.Done()
+		batchContext.sdb.eridb.OpenBatchWithCachedValue(quit, s.GetSmtCache())
 		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
+			batchContext.sdb.eridb.RollbackBatch()
 			return err
 		}
+		smtCache, deltaCache := batchContext.sdb.eridb.RetrieveAndCleanBatchCache()
+		s.SetSmtCache(smtCache, deltaCache)
 
 		// For X Layer
 		// Count successful transactions
