@@ -366,6 +366,22 @@ func ScalarToArray(scalar *big.Int) []uint64 {
 }
 
 func ArrayToScalarBig(array []*big.Int) *big.Int {
+	// fast path for 64-bit systems
+	if len(array) != 0 && bits.UintSize == 64 {
+		lastInt := array[len(array)-1]
+		scalarBitsSize := len(lastInt.Bits()) + (len(array) - 1)
+		intBits := make([]big.Word, scalarBitsSize)
+		copy(intBits[len(array)-1:], lastInt.Bits())
+		for i := 0; i < len(array)-1; i++ {
+			if array[i] == nil || len(array[i].Bits()) == 0 {
+				intBits[i] = 0
+			} else {
+				intBits[i] = array[i].Bits()[0]
+			}
+		}
+		return new(big.Int).SetBits(intBits)
+	}
+
 	scalar := new(big.Int)
 	for i := len(array) - 1; i >= 0; i-- {
 		scalar.Lsh(scalar, 64)
