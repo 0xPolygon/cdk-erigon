@@ -50,7 +50,7 @@ func (sdb *stageDb) SetTx(tx, txsmt kv.RwTx) {
 	sdb.tx = tx
 	sdb.txsmt = txsmt
 	sdb.hermezDb = hermez_db.NewHermezDb(tx)
-	sdb.eridb = db2.NewEriDb(txsmt)
+	sdb.eridb = db2.NewEriDb(txsmt, tx)
 	sdb.stateReader = state.NewPlainStateReader(tx)
 	sdb.smt = smtNs.NewSMT(sdb.eridb, false)
 }

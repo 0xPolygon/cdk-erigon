@@ -37,7 +37,7 @@ import (
 
 func TestSpawnSequencingStage(t *testing.T) {
 	// Arrange
-	ctx, db1, txPoolDb := context.Background(), memdb.NewTestDB(t), memdb.NewTestDB(t)
+	ctx, db1, dbsmt, txPoolDb := context.Background(), memdb.NewTestDB(t), memdb.NewTestDB(t), memdb.NewTestDB(t)
 	tx := memdb.BeginRw(t, db1)
 	err := hermez_db.CreateHermezBuckets(tx)
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 		InfoTreeUpdateInterval: 2 * time.Millisecond,
 	}
 
-	legacyVerifier := verifier.NewLegacyExecutorVerifier(*zkCfg, nil, db1, nil, nil)
+	legacyVerifier := verifier.NewLegacyExecutorVerifier(*zkCfg, nil, db1, dbsmt, nil, nil)
 
 	cfg := SequenceBlockCfg{
 		dataStreamServer: dataStreamServerMock,

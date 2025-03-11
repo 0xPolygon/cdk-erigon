@@ -40,7 +40,7 @@ import (
 
 type ZkInterHashesCfg struct {
 	db                kv.RwDB
-	smtDB             kv.RwDB
+	dbsmt             kv.RwDB
 	checkRoot         bool
 	badBlockHalt      bool
 	tmpDir            string
@@ -55,7 +55,7 @@ type ZkInterHashesCfg struct {
 
 func StageZkInterHashesCfg(
 	db kv.RwDB,
-	smtDB kv.RwDB,
+	dbsmt kv.RwDB,
 	checkRoot, saveNewHashesToDB, badBlockHalt bool,
 	tmpDir string,
 	blockReader services.FullBlockReader,
@@ -66,7 +66,7 @@ func StageZkInterHashesCfg(
 ) ZkInterHashesCfg {
 	return ZkInterHashesCfg{
 		db:                db,
-		smtDB:             smtDB,
+		dbsmt:             dbsmt,
 		checkRoot:         checkRoot,
 		tmpDir:            tmpDir,
 		saveNewHashesToDB: saveNewHashesToDB,
@@ -80,7 +80,7 @@ func StageZkInterHashesCfg(
 	}
 }
 
-func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context) (root common.Hash, err error) {
+func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, txsmt kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context) (root common.Hash, err error) {
 	logPrefix := s.LogPrefix()
 
 	quit := ctx.Done()
@@ -94,6 +94,15 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 			return trie.EmptyRoot, err
 		}
 		defer tx.Rollback()
+	}
+	useExternalSmtTx := txsmt != nil
+	if !useExternalSmtTx {
+		var err error
+		txsmt, err = cfg.dbsmt.BeginRw(ctx)
+		if err != nil {
+			return trie.EmptyRoot, err
+		}
+		defer txsmt.Rollback()
 	}
 
 	to, err := s.ExecutionAt(tx)
@@ -128,13 +137,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	shouldIncrementBecauseOfExecutionConditions := s.BlockNumber > 0 && !shouldRegenerate
 	shouldIncrement := shouldIncrementBecauseOfAFlag || shouldIncrementBecauseOfExecutionConditions
 
-	smtTx, err := cfg.smtDB.BeginRw(ctx)
-	if err != nil {
-		return trie.EmptyRoot, err
-	}
-	defer smtTx.Rollback()
-
-	eridb := db2.NewEriDb(smtTx)
+	eridb := db2.NewEriDb(txsmt, tx)
 	smt := smt.NewSMT(eridb, false)
 
 	if shouldIncrement {
@@ -191,15 +194,16 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 			return trie.EmptyRoot, err
 		}
 	}
-
-	if err := smtTx.Commit(); err != nil {
-		return trie.EmptyRoot, err
+	if !useExternalSmtTx {
+		if err := txsmt.Commit(); err != nil {
+			return trie.EmptyRoot, err
+		}
 	}
 
 	return root, err
 }
 
-func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context, silent bool) (err error) {
+func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx, txsmt kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context, silent bool) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -207,6 +211,14 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 			return err
 		}
 		defer tx.Rollback()
+	}
+	useExternalSmtTx := txsmt != nil
+	if !useExternalSmtTx {
+		txsmt, err = cfg.dbsmt.BeginRw(ctx)
+		if err != nil {
+			return err
+		}
+		defer txsmt.Rollback()
 	}
 	if !silent {
 		log.Debug(fmt.Sprintf("[%s] Unwinding intermediate hashes", s.LogPrefix()), "from", s.BlockNumber, "to", u.UnwindPoint)
@@ -223,13 +235,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 		expectedRootHash = syncHeadHeader.Root
 	}
 
-	smtTx, err := cfg.db.BeginRw(ctx)
-	if err != nil {
-		return err
-	}
-	defer smtTx.Rollback()
-
-	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, smtTx, tx, cfg.checkRoot, &expectedRootHash, silent); err != nil {
+	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, txsmt, cfg.checkRoot, &expectedRootHash, silent); err != nil {
 		return err
 	}
 	hermezDb := hermez_db.NewHermezDb(tx)
@@ -245,9 +251,10 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 			return err
 		}
 	}
-
-	if err := smtTx.Commit(); err != nil {
-		return err
+	if !useExternalSmtTx {
+		if err := txsmt.Commit(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -89,6 +89,7 @@ type ZkEvmAPIImpl struct {
 	ethApi *APIImpl
 
 	db               kv.RoDB
+	dbsmt            kv.RoDB
 	ReturnDataLimit  int
 	config           *ethconfig.Config
 	l1Syncer         *syncer.L1Syncer
@@ -111,6 +112,7 @@ func (api *ZkEvmAPIImpl) initializeSemaphores(functionLimits map[string]int) {
 func NewZkEvmAPI(
 	base *APIImpl,
 	db kv.RoDB,
+	dbsmt kv.RoDB,
 	returnDataLimit int,
 	zkConfig *ethconfig.Config,
 	l1Syncer *syncer.L1Syncer,
@@ -121,6 +123,7 @@ func NewZkEvmAPI(
 	a := &ZkEvmAPIImpl{
 		ethApi:           base,
 		db:               db,
+		dbsmt:            dbsmt,
 		ReturnDataLimit:  returnDataLimit,
 		config:           zkConfig,
 		l1Syncer:         l1Syncer,
@@ -953,7 +956,7 @@ func (api *ZkEvmAPIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.Block
 	if debug != nil {
 		dbg = *debug
 	}
-	return api.getBlockRangeWitness(ctx, api.db, blockNrOrHash, blockNrOrHash, dbg, checkedMode)
+	return api.getBlockRangeWitness(ctx, api.db, api.dbsmt, blockNrOrHash, blockNrOrHash, dbg, checkedMode)
 }
 
 func (api *ZkEvmAPIImpl) GetBlockRangeWitness(ctx context.Context, startBlockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, mode *WitnessMode, debug *bool) (hexutility.Bytes, error) {
@@ -968,10 +971,10 @@ func (api *ZkEvmAPIImpl) GetBlockRangeWitness(ctx context.Context, startBlockNrO
 	if debug != nil {
 		dbg = *debug
 	}
-	return api.getBlockRangeWitness(ctx, api.db, startBlockNrOrHash, endBlockNrOrHash, dbg, checkedMode)
+	return api.getBlockRangeWitness(ctx, api.db, api.dbsmt, startBlockNrOrHash, endBlockNrOrHash, dbg, checkedMode)
 }
 
-func (api *ZkEvmAPIImpl) getBatchWitness(ctx context.Context, tx kv.Tx, batchNum uint64, debug bool, mode WitnessMode) (hexutility.Bytes, error) {
+func (api *ZkEvmAPIImpl) getBatchWitness(ctx context.Context, tx kv.Tx, txsmt kv.Tx, batchNum uint64, debug bool, mode WitnessMode) (hexutility.Bytes, error) {
 	// limit in-flight requests by name
 	semaphore := api.semaphores[getBatchWitness]
 	if semaphore != nil {
@@ -1015,14 +1018,14 @@ func (api *ZkEvmAPIImpl) getBatchWitness(ctx context.Context, tx kv.Tx, batchNum
 
 		startBlockRpc := rpc.BlockNumberOrHash{BlockNumber: &startBlockInt}
 		endBlockNrOrHash := rpc.BlockNumberOrHash{BlockNumber: &endBlockInt}
-		return api.getBlockRangeWitness(ctx, api.db, startBlockRpc, endBlockNrOrHash, debug, mode)
+		return api.getBlockRangeWitness(ctx, api.db, api.dbsmt, startBlockRpc, endBlockNrOrHash, debug, mode)
 	} else {
 		generator, fullWitness, err := api.buildGenerator(ctx, tx, mode)
 		if err != nil {
 			return nil, err
 		}
 
-		return generator.GetWitnessByBadBatch(tx, ctx, batchNum, debug, fullWitness)
+		return generator.GetWitnessByBadBatch(tx, txsmt, ctx, batchNum, debug, fullWitness)
 	}
 }
 
@@ -1055,7 +1058,7 @@ func (api *ZkEvmAPIImpl) buildGenerator(ctx context.Context, tx kv.Tx, witnessMo
 }
 
 // Get witness for a range of blocks [startBlockNrOrHash, endBlockNrOrHash] (inclusive)
-func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, startBlockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, debug bool, witnessMode WitnessMode) (hexutility.Bytes, error) {
+func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, dbsmt kv.RoDB, startBlockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, debug bool, witnessMode WitnessMode) (hexutility.Bytes, error) {
 	tx, err := db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -1064,6 +1067,11 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 	if api.ethApi.historyV3(tx) {
 		return nil, fmt.Errorf("not supported by Erigon3")
 	}
+	txsmt, err := dbsmt.BeginRo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer txsmt.Rollback()
 
 	blockNr, _, _, err := rpchelper.GetCanonicalBlockNumber_zkevm(startBlockNrOrHash, tx, api.ethApi.filters) // DoCall cannot be executed on non-canonical blocks
 	if err != nil {
@@ -1084,7 +1092,7 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 		return nil, err
 	}
 
-	return generator.GetWitnessByBlockRange(tx, ctx, blockNr, endBlockNr, debug, fullWitness)
+	return generator.GetWitnessByBlockRange(tx, txsmt, ctx, blockNr, endBlockNr, debug, fullWitness)
 }
 
 type WitnessMode string
@@ -1103,6 +1111,12 @@ func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64
 		return nil, err
 	}
 	defer tx.Rollback()
+
+	txsmt, err := api.dbsmt.BeginRo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer txsmt.Rollback()
 
 	hermezDb := hermez_db.NewHermezDbReader(tx)
 	badBatch, err := hermezDb.GetInvalidBatch(batchNumber)
@@ -1140,7 +1154,8 @@ func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64
 		}
 	}
 
-	return api.getBatchWitness(ctx, tx, batchNumber, false, checkedMode)
+	log.Info("call api.getBatchWitness", "is smt db ok?", txsmt != nil)
+	return api.getBatchWitness(ctx, tx, txsmt, batchNumber, false, checkedMode)
 }
 
 func (api *ZkEvmAPIImpl) GetProverInput(ctx context.Context, batchNumber uint64, mode *WitnessMode, debug *bool) (*legacy_executor_verifier.RpcPayload, error) {
@@ -1181,7 +1196,7 @@ func (api *ZkEvmAPIImpl) GetProverInput(ctx context.Context, batchNumber uint64,
 	start := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(blockNumbers[0]))
 	end := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(blockNumbers[len(blockNumbers)-1]))
 
-	rangeWitness, err := api.getBlockRangeWitness(ctx, api.db, start, end, useDebug, checkedMode)
+	rangeWitness, err := api.getBlockRangeWitness(ctx, api.db, api.dbsmt, start, end, useDebug, checkedMode)
 	if err != nil {
 		return nil, err
 	}
@@ -1594,6 +1609,11 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 	if api.historyV3(tx) {
 		return nil, fmt.Errorf("not supported by Erigon3")
 	}
+	txsmt, err := zkapi.dbsmt.BeginRo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer txsmt.Rollback()
 
 	blockNr, _, _, err := rpchelper.GetBlockNumber_zkevm(blockNrOrHash, tx, api.filters)
 	if err != nil {
@@ -1615,6 +1635,11 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 	if err = utils.PopulateMemoryMutationTables(batch); err != nil {
 		return nil, err
 	}
+	batchSmt := membatchwithdb.NewMemoryBatch(txsmt, api.dirs.Tmp, api.logger)
+	defer batchSmt.Rollback()
+	if err = utils.PopulateMemoryMutationTablesSmt(batchSmt); err != nil {
+		return nil, err
+	}
 
 	if blockNr < latestBlock {
 		if latestBlock-blockNr > uint64(api.MaxGetProofRewindBlockCount) {
@@ -1625,7 +1650,7 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 
 		interHashStageCfg := zkStages.StageZkInterHashesCfg(nil, nil, true, true, false, api.dirs.Tmp, api._blockReader, nil, api.historyV3(tx), api._agg, nil)
 
-		if err = zkStages.UnwindZkIntermediateHashesStage(unwindState, stageState, batch, interHashStageCfg, ctx, true); err != nil {
+		if err = zkStages.UnwindZkIntermediateHashesStage(unwindState, stageState, batch, batchSmt, interHashStageCfg, ctx, true); err != nil {
 			return nil, fmt.Errorf("unwind intermediate hashes: %w", err)
 		}
 
@@ -1687,7 +1712,7 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		return nil, err
 	}
 
-	smtTrie := smt.NewRoSMT(smtDb.NewRoEriDb(tx))
+	smtTrie := smt.NewRoSMT(smtDb.NewRoEriDb(txsmt, tx))
 
 	proofs, err := smt.BuildProofs(smtTrie, rl, ctx)
 	if err != nil {

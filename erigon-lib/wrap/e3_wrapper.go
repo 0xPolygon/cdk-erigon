@@ -5,6 +5,7 @@ import (
 )
 
 type TxContainer struct {
-	Tx  kv.RwTx
-	Ttx kv.TemporalTx
+	Tx    kv.RwTx
+	TxSmt kv.RwTx
+	Ttx   kv.TemporalTx
 }

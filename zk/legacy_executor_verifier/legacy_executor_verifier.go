@@ -111,11 +111,12 @@ func (vb *VerifierBundle) isInternalError() bool {
 }
 
 type WitnessGenerator interface {
-	GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error)
+	GetWitnessByBlockRange(tx kv.Tx, txsmt kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error)
 }
 
 type LegacyExecutorVerifier struct {
 	db                     kv.RwDB
+	dbsmt                  kv.RwDB
 	cfg                    ethconfig.Zk
 	executors              []*Executor
 	executorNumber         int
@@ -132,11 +133,13 @@ func NewLegacyExecutorVerifier(
 	cfg ethconfig.Zk,
 	executors []*Executor,
 	db kv.RwDB,
+	dbsmt kv.RwDB,
 	witnessGenerator WitnessGenerator,
 	streamServer server.DataStreamServer,
 ) *LegacyExecutorVerifier {
 	return &LegacyExecutorVerifier{
 		db:                     db,
+		dbsmt:                  dbsmt,
 		cfg:                    cfg,
 		executors:              executors,
 		executorNumber:         0,
@@ -235,7 +238,6 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest) *Promise[
 			return verifierBundle, err
 		}
 		defer tx.Rollback()
-
 		hermezDb := hermez_db.NewHermezDbReader(tx)
 
 		l1InfoTreeMinTimestamps := make(map[uint64]uint64)
@@ -244,7 +246,13 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest) *Promise[
 			return verifierBundle, err
 		}
 
-		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
+		txsmt, err := v.dbsmt.BeginRo(innerCtx)
+		if err != nil {
+			return verifierBundle, err
+		}
+		defer txsmt.Rollback()
+
+		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, txsmt, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
 		if err != nil {
 			return verifierBundle, err
 		}

@@ -24,7 +24,7 @@ func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBun
 		return err
 	}
 
-	witness, err := legacyVerifier.WitnessGenerator.GetWitnessByBlockRange(batchContext.sdb.tx, batchContext.ctx, blockNumber, blockNumber, false, batchContext.cfg.zk.WitnessFull)
+	witness, err := legacyVerifier.WitnessGenerator.GetWitnessByBlockRange(batchContext.sdb.tx, batchContext.sdb.txsmt, batchContext.ctx, blockNumber, blockNumber, false, batchContext.cfg.zk.WitnessFull)
 	if err != nil {
 		return err
 	}
