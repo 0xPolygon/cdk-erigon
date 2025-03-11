@@ -1,8 +1,8 @@
 #!/bin/bash
 
-ID=`docker ps | grep "xlayer-seq$" | tr -s ' ' | cut -d ' ' -f 1`
+ID=`docker ps | grep "xlayer-rpc$" | tr -s ' ' | cut -d ' ' -f 1`
 if [ -z "$ID" ]; then
-	echo "No seq docker container found!"
+	echo "No rpc docker container found!"
 	exit 1
 fi
 docker logs $ID > logs.txt 2>&1
