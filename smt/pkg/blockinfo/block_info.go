@@ -3,6 +3,7 @@ package blockinfo
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"runtime"
 	"sync"
@@ -41,17 +42,6 @@ func BuildBlockInfoTree(
 		return nil, err
 	}
 
-	log.Trace("info-tree-header",
-		"blockNumber", blockNumber,
-		"previousStateRoot", previousStateRoot.String(),
-		"coinbase", coinbase.String(),
-		"blockGasLimit", blockGasLimit,
-		"blockGasUsed", blockGasUsed,
-		"blockTime", blockTime,
-		"ger", ger.String(),
-		"l1BlockHash", l1BlockHash.String(),
-	)
-
 	type result struct {
 		keys   []*utils.NodeKey
 		vals   []*utils.NodeValue8
@@ -62,98 +52,101 @@ func BuildBlockInfoTree(
 
 	numWorkers := runtime.NumCPU()
 	resultChan := make(chan result, len(*transactionInfos))
+	errChan := make(chan error, 1)
 	var wg sync.WaitGroup
 
-	taskChan := make(chan struct {
-		txInfo ExecutedTxInfo
-		index  int
-		logIdx int64
-	}, len(*transactionInfos))
+	// create task channel
+	taskChan := make(chan int, len(*transactionInfos))
 
+	// start workers
 	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for task := range taskChan {
-				txInfo := task.txInfo
-				t := txInfo.Tx
+			for idx := range taskChan {
+				txInfo := (*transactionInfos)[idx]
 
-				l2TxHash, err := zktx.ComputeL2TxHash(
-					t.GetChainID().ToBig(),
-					t.GetValue(),
-					t.GetPrice(),
-					t.GetNonce(),
-					t.GetGas(),
-					t.GetTo(),
-					txInfo.Signer,
-					t.GetData(),
-				)
-				if err != nil {
-					resultChan <- result{err: err, index: task.index}
-					continue
+				// calculate log index
+				var logIndex int64
+				for i := 0; i < idx; i++ {
+					logIndex += int64(len((*transactionInfos)[i].Receipt.Logs))
 				}
 
-				log.Trace("info-tree-tx",
-					"block", blockNumber,
-					"idx", task.index,
-					"hash", l2TxHash.String(),
+				// calculate L2 tx hash
+				l2TxHash, err := zktx.ComputeL2TxHash(
+					txInfo.Tx.GetChainID().ToBig(),
+					txInfo.Tx.GetValue(),
+					txInfo.Tx.GetPrice(),
+					txInfo.Tx.GetNonce(),
+					txInfo.Tx.GetGas(),
+					txInfo.Tx.GetTo(),
+					txInfo.Signer,
+					txInfo.Tx.GetData(),
 				)
+				if err != nil {
+					errChan <- fmt.Errorf("compute L2 tx hash error at index %d: %w", idx, err)
+					return
+				}
 
 				genKeys, genVals, err := infoTree.GenerateBlockTxKeysVals(
 					&l2TxHash,
-					task.index,
+					idx,
 					txInfo.Receipt,
-					task.logIdx,
+					logIndex,
 					txInfo.Receipt.CumulativeGasUsed,
 					txInfo.EffectiveGasPrice,
 				)
 				if err != nil {
-					resultChan <- result{err: err, index: task.index}
-					continue
+					errChan <- fmt.Errorf("generate block tx keys vals error at index %d: %w", idx, err)
+					return
 				}
 
 				resultChan <- result{
 					keys:   genKeys,
 					vals:   genVals,
 					logCnt: int64(len(txInfo.Receipt.Logs)),
-					index:  task.index,
+					index:  idx,
 				}
 			}
 		}()
 	}
 
-	var currentLogIndex int64
-	for i, txInfo := range *transactionInfos {
-		taskChan <- struct {
-			txInfo ExecutedTxInfo
-			index  int
-			logIdx int64
-		}{
-			txInfo: txInfo,
-			index:  i,
-			logIdx: currentLogIndex,
-		}
-		currentLogIndex += int64(len(txInfo.Receipt.Logs))
+	// send tasks
+	for i := range *transactionInfos {
+		taskChan <- i
 	}
 	close(taskChan)
 
-	results := make([]result, len(*transactionInfos))
+	// wait for all workers to finish
 	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
 
+	// collect results
+	results := make([]result, len(*transactionInfos))
 	for r := range resultChan {
-		if r.err != nil {
-			return nil, r.err
+		select {
+		case err := <-errChan:
+			return nil, err
+		default:
+			results[r.index] = r
 		}
-		results[r.index] = r
 	}
 
-	for _, r := range results {
-		keys = append(keys, r.keys...)
-		vals = append(vals, r.vals...)
+	// merge results in order
+	for i := 0; i < len(results); i++ {
+		keys = append(keys, results[i].keys...)
+		vals = append(vals, results[i].vals...)
 	}
+
+	// Add block gas usage
+	key, val, err := generateBlockGasUsed(blockGasUsed)
+	if err != nil {
+		return nil, err
+	}
+	keys = append(keys, key)
+	vals = append(vals, val)
 
 	insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "block_info_tree", false)
 	root, err := infoTree.smt.InsertBatch(insertBatchCfg, keys, vals, nil, nil)
