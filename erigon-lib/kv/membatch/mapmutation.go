@@ -310,32 +310,51 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	return nil
 }
 
-func (m *Mapmutation) RetrieveAndCleanCache() (map[string]map[string][]byte, map[string]map[string][]byte) {
+func (m *Mapmutation) RetrieveAndCleanSmtCache(smtTables []string) (map[string]map[string][]byte, map[string]map[string][]byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	targetCachedTable := make(map[string]map[string][]byte, len(m.puts))
-	for table, bucket := range m.puts {
-		targetCachedTable[table] = bucket
-		for k, v := range bucket {
-			if v == nil || len(v) == 0 {
-				delete(bucket, k)
+	targetCachedTable := make(map[string]map[string][]byte, len(smtTables))
+	deltaTargetCached := make(map[string]map[string][]byte, len(smtTables))
+
+	for _, table := range smtTables {
+		if bucket, ok := m.puts[table]; ok {
+			targetCachedTable[table] = bucket
+			for k, v := range bucket {
+				if v == nil || len(v) == 0 {
+					delete(bucket, k)
+				}
 			}
+
+			delete(m.puts, table)
+		}
+
+		if bucket, ok := m.modifiedCache[table]; ok {
+			deltaTargetCached[table] = bucket
+
+			delete(m.modifiedCache, table)
 		}
 	}
 
-	deltaTargetCached := make(map[string]map[string][]byte, len(m.modifiedCache))
-	for k, v := range m.modifiedCache {
-		deltaTargetCached[k] = v
-	}
+	return targetCachedTable, deltaTargetCached
+}
+
+func (m *Mapmutation) ResetCacheContent() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// 重置原始 map
-	m.puts = map[string]map[string][]byte{}
+	m.puts = m.modifiedCache
 	m.modifiedCache = map[string]map[string][]byte{}
 	m.size = 0
 	m.count = 0
 
-	return targetCachedTable, deltaTargetCached
+	for _, bucket := range m.puts {
+		m.count += uint64(len(bucket))
+		for k, v := range bucket {
+			m.size += len(k) + len(v)
+		}
+	}
 }
 
 func (m *Mapmutation) Flush(ctx context.Context, tx kv.RwTx) error {

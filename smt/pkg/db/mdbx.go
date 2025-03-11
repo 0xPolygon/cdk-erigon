@@ -83,11 +83,11 @@ func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
 	m.kvTxRo = batch
 }
 
-func (m *EriDb) OpenBatchWithCachedValue(quitCh <-chan struct{}, cachedMapValue map[string]map[string][]byte) {
-	if cachedMapValue == nil {
-		cachedMapValue = make(map[string]map[string][]byte)
+func (m *EriDb) OpenBatchWithSmtCache(quitCh <-chan struct{}, smtCachedMapValue map[string]map[string][]byte) {
+	if smtCachedMapValue == nil {
+		smtCachedMapValue = make(map[string]map[string][]byte)
 	}
-	batch := membatch.NewHashBatchWithCache(m.kvTx, quitCh, "./tempdb", log.New(), cachedMapValue)
+	batch := membatch.NewHashBatchWithCache(m.kvTx, quitCh, "./tempdb", log.New(), smtCachedMapValue)
 	// WARN: cannnot close batch here, or it will clean all the cache value
 	//defer func() {
 	//	batch.Close()
@@ -96,7 +96,7 @@ func (m *EriDb) OpenBatchWithCachedValue(quitCh <-chan struct{}, cachedMapValue 
 	m.kvTxRo = batch
 }
 
-func (m *EriDb) RetrieveAndCleanBatchCache() (map[string]map[string][]byte, map[string]map[string][]byte) {
+func (m *EriDb) RetrieveAndCleanSmtBatchCache() (map[string]map[string][]byte, map[string]map[string][]byte) {
 	batch, ok := m.tx.(kv.PendingMutations)
 	if !ok {
 		return nil, nil // don't roll back a kvRw tx
@@ -107,7 +107,8 @@ func (m *EriDb) RetrieveAndCleanBatchCache() (map[string]map[string][]byte, map[
 		return nil, nil // don't roll back a kvRw tx
 	}
 
-	smtCache, deltaSmtCache := mapCache.RetrieveAndCleanCache()
+	smtCache, deltaSmtCache := mapCache.RetrieveAndCleanSmtCache(HermezSmtTables)
+	mapCache.ResetCacheContent()
 
 	return smtCache, deltaSmtCache
 }

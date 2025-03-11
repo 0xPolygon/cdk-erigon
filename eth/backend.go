@@ -1958,7 +1958,7 @@ func (s *Ethereum) Start() error {
 		if s.config.DebugNoSync {
 			return nil
 		}
-		go stages2.AsyncFlushSmtData(s.sentryCtx, s.chainDB, s.stagedSync, s.logger)
+		go stages2.AsyncFlushSmtData(s.sentryCtx, s.smtDB, s.stagedSync, s.logger)
 		go stages2.StageLoop(s.sentryCtx, s.chainDB, s.stagedSync, s.sentriesClient.Hd, s.waitForStageLoopStop, s.config.Sync.LoopThrottle, s.logger, s.blockReader, hook, s.config.ForcePartialCommit)
 	}
 

@@ -123,6 +123,7 @@ test/lrp/mainnet
 test/lrp/external_ds
 test/*.zip
 test/*.tar.gz
+test/*.out
 
 datadir
 zk/tests/unwinds/datastream/hermez-dynamic-integration8-datastream
