@@ -73,7 +73,7 @@ func processInjectedInitialBatch(
 		return rawdb.ReadHeader(batchContext.sdb.tx, hash, number)
 	}
 	getHashFn := core.GetHashFn(header, getHeader)
-	blockContext := core.NewEVMBlockContext(header, getHashFn, batchContext.cfg.engine, &batchContext.cfg.zk.AddressSequencer)
+	blockContext := core.NewEVMBlockContext(header, getHashFn, batchContext.cfg.engine, &batchContext.cfg.zk.AddressSequencer, batchContext.cfg.chainConfig)
 
 	fakeL1TreeUpdate := &zktypes.L1InfoTreeUpdate{
 		GER:        injectedBatch.LastGlobalExitRoot,

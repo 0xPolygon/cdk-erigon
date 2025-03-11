@@ -82,9 +82,9 @@ func NewDefaultZkStages(ctx context.Context,
 		zkStages.StageZkInterHashesCfg(db, !cfg.DebugDisableStateRootCheck, true, false, dirs.Tmp, blockReader, controlServer.Hd, cfg.HistoryV3, agg, cfg.Zk),
 		zkStages.StageWitnessCfg(db, cfg.Zk, controlServer.ChainConfig, engine, blockReader, agg, cfg.HistoryV3, dirs, cfg.WitnessContractInclusion, cfg.WitnessUnwindLimit),
 		stagedsync.StageHistoryCfg(db, cfg.Prune, dirs.Tmp),
-		stagedsync.StageLogIndexCfg(db, cfg.Prune, dirs.Tmp, cfg.Genesis.Config.NoPruneContracts),
+		stagedsync.StageLogIndexCfg(db, cfg.Prune, dirs.Tmp, &cfg.Genesis.Config.DepositContract),
 		stagedsync.StageCallTracesCfg(db, cfg.Prune, 0, dirs.Tmp),
-		stagedsync.StageTxLookupCfg(db, cfg.Prune, dirs.Tmp, controlServer.ChainConfig.Bor, blockReader),
+		stagedsync.StageTxLookupCfg(db, cfg.Prune, cfg.Sync, dirs.Tmp, controlServer.ChainConfig.Bor, blockReader),
 		stagedsync.StageFinishCfg(db, dirs.Tmp, forkValidator),
 		runInTestMode)
 }
@@ -153,9 +153,9 @@ func NewSequencerZkStages(ctx context.Context,
 		stagedsync.StageHashStateCfg(db, dirs, cfg.HistoryV3, agg),
 		zkStages.StageZkInterHashesCfg(db, !cfg.DebugDisableStateRootCheck, true, false, dirs.Tmp, blockReader, controlServer.Hd, cfg.HistoryV3, agg, cfg.Zk),
 		stagedsync.StageHistoryCfg(db, cfg.Prune, dirs.Tmp),
-		stagedsync.StageLogIndexCfg(db, cfg.Prune, dirs.Tmp, cfg.Genesis.Config.NoPruneContracts),
+		stagedsync.StageLogIndexCfg(db, cfg.Prune, dirs.Tmp, &cfg.Genesis.Config.DepositContract),
 		stagedsync.StageCallTracesCfg(db, cfg.Prune, 0, dirs.Tmp),
-		stagedsync.StageTxLookupCfg(db, cfg.Prune, dirs.Tmp, controlServer.ChainConfig.Bor, blockReader),
+		stagedsync.StageTxLookupCfg(db, cfg.Prune, cfg.Sync, dirs.Tmp, controlServer.ChainConfig.Bor, blockReader),
 		stagedsync.StageFinishCfg(db, dirs.Tmp, forkValidator),
 		runInTestMode)
 }

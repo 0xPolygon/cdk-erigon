@@ -19,6 +19,7 @@ package txpooluitl
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -135,11 +136,20 @@ func AllComponents(ctx context.Context, cfg txpoolcfg.Config, ethCfg *ethconfig.
 	chainID, _ := uint256.FromBig(chainConfig.ChainID)
 
 	shanghaiTime := chainConfig.ShanghaiTime
+	var agraBlock *big.Int
+	if chainConfig.Bor != nil {
+		agraBlock = chainConfig.Bor.GetAgraBlock()
+	}
+	cancunTime := chainConfig.CancunTime
+	pragueTime := chainConfig.PragueTime
+	if cfg.OverridePragueTime != nil {
+		pragueTime = cfg.OverridePragueTime
+	}
 	if cfg.OverrideShanghaiTime != nil {
 		shanghaiTime = cfg.OverrideShanghaiTime
 	}
 
-	txPool, err := txpool.New(newTxs, chainDB, cfg, ethCfg, cache, *chainID, shanghaiTime, chainConfig.LondonBlock, aclDB)
+	txPool, err := txpool.New(newTxs, chainDB, cfg, cache, *chainID, shanghaiTime, agraBlock, cancunTime, pragueTime, chainConfig.BlobSchedule, chainConfig.LondonBlock, ethCfg, aclDB)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
