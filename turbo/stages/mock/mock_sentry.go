@@ -80,6 +80,7 @@ type MockSentry struct {
 	tb                   testing.TB
 	cancel               context.CancelFunc
 	DB                   kv.RwDB
+	DBSMT                kv.RwDB
 	Dirs                 datadir.Dirs
 	Engine               consensus.Engine
 	gspec                *types.Genesis
@@ -132,6 +133,9 @@ func (ms *MockSentry) Close() {
 	}
 	if ms.DB != nil {
 		ms.DB.Close()
+	}
+	if ms.DBSMT != nil {
+		ms.DBSMT.Close()
 	}
 }
 
@@ -262,6 +266,12 @@ func MockWithEverything(tb testing.TB, gspec *types.Genesis, key *ecdsa.PrivateK
 	} else {
 		db = memdb.New(tmpdir)
 	}
+	var dbsmt kv.RwDB
+	if tb != nil {
+		dbsmt = memdb.NewTestDB(tb)
+	} else {
+		dbsmt = memdb.New(tmpdir)
+	}
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	_ = db.Update(ctx, func(tx kv.RwTx) error {
 		_ = withHermezDb(tx)
@@ -274,7 +284,7 @@ func MockWithEverything(tb testing.TB, gspec *types.Genesis, key *ecdsa.PrivateK
 	allSnapshots := freezeblocks.NewRoSnapshots(ethconfig.Defaults.Snapshot, dirs.Snap, 0, logger)
 	allBorSnapshots := freezeblocks.NewBorRoSnapshots(ethconfig.Defaults.Snapshot, dirs.Snap, 0, logger)
 	mock := &MockSentry{
-		Ctx: ctx, cancel: ctxCancel, DB: db, agg: agg,
+		Ctx: ctx, cancel: ctxCancel, DB: db, DBSMT: dbsmt, agg: agg,
 		tb:          tb,
 		Log:         logger,
 		Dirs:        dirs,

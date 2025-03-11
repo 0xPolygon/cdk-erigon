@@ -126,6 +126,11 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 		return 0, err
 	}
 	defer dbtx.Rollback()
+	dbtxsmt, err := api.dbsmt.BeginRo(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer dbtxsmt.Rollback()
 
 	// Binary search the gas requirement, as it may be higher than the amount used
 	var (
@@ -251,7 +256,7 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	header := block.HeaderNoCopy()
 
 	useCounters := !api.DisableVirtualCounters
-	caller, err := transactions.NewReusableCaller(engine, stateReader, nil, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters)
+	caller, err := transactions.NewReusableCaller(engine, stateReader, nil, header, args, api.GasCap, latestNumOrHash, dbtx, dbtxsmt, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters)
 	if err != nil {
 		return 0, err
 	}

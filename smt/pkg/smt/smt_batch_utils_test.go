@@ -49,7 +49,7 @@ func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
 	}
 
 	db.CreateEriDbBuckets(dbTransaction)
-	return database, dbTransaction, db.NewEriDb(dbTransaction)
+	return database, dbTransaction, db.NewEriDb(dbTransaction, nil)
 }
 
 func prepareData() ([]*BatchInsertDataHolder, int) {

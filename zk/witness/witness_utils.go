@@ -32,7 +32,7 @@ var (
 	ErrNoWitnesses = errors.New("witness count is 0")
 )
 
-func UnwindForWitness(ctx context.Context, smtTx, tx kv.RwTx, startBlock, latestBlock uint64, dirs datadir.Dirs, historyV3 bool, agg *state.Aggregator) (err error) {
+func UnwindForWitness(ctx context.Context, tx kv.RwTx, txsmt kv.RwTx, startBlock, latestBlock uint64, dirs datadir.Dirs, historyV3 bool, agg *state.Aggregator) (err error) {
 	unwindState := &stagedsync.UnwindState{UnwindPoint: startBlock - 1}
 	stageState := &stagedsync.StageState{BlockNumber: latestBlock}
 
@@ -53,7 +53,7 @@ func UnwindForWitness(ctx context.Context, smtTx, tx kv.RwTx, startBlock, latest
 		expectedRootHash = syncHeadHeader.Root
 	}
 
-	if _, err := zkSmt.UnwindZkSMT(ctx, "api.generateWitness", stageState.BlockNumber, unwindState.UnwindPoint, smtTx, tx, true, &expectedRootHash, true); err != nil {
+	if _, err := zkSmt.UnwindZkSMT(ctx, "api.generateWitness", stageState.BlockNumber, unwindState.UnwindPoint, tx, txsmt, true, &expectedRootHash, true); err != nil {
 		return fmt.Errorf("UnwindZkSMT: %w", err)
 	}
 
@@ -119,7 +119,7 @@ type trieDbState interface {
 	ResolveSMTRetainList(inclusion map[common.Address][]common.Hash) (*trie.RetainList, error)
 }
 
-func BuildWitnessFromTrieDbState(ctx context.Context, tx kv.Tx, tds trieDbState, reader *corestate.PlainState, forcedContracts []common.Address, forcedInfoTreeUpdates []common.Hash, witnessFull bool) (witness *trie.Witness, err error) {
+func BuildWitnessFromTrieDbState(ctx context.Context, tx kv.Tx, txsmt kv.Tx, tds trieDbState, reader *corestate.PlainState, forcedContracts []common.Address, forcedInfoTreeUpdates []common.Hash, witnessFull bool) (witness *trie.Witness, err error) {
 	var rl trie.RetainDecider
 	// if full is true, we will send all the nodes to the witness
 	rl = &trie.AlwaysTrueRetainDecider{}
@@ -163,7 +163,7 @@ func BuildWitnessFromTrieDbState(ctx context.Context, tx kv.Tx, tds trieDbState,
 		}
 	}
 
-	eridb := db2.NewRoEriDb(tx)
+	eridb := db2.NewRoEriDb(txsmt, tx)
 	smtTrie := smt.NewRoSMT(eridb)
 
 	if witness, err = smtTrie.BuildWitness(rl, ctx); err != nil {

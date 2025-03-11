@@ -161,6 +161,7 @@ type Ethereum struct {
 
 	// DB interfaces
 	chainDB    kv.RwDB
+	smtDB      kv.RwDB
 	privateAPI *grpc.Server
 
 	engine consensus.Engine
@@ -325,6 +326,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		sentryCancel:         ctxCancel,
 		config:               config,
 		chainDB:              chainKv,
+		smtDB:                smtdb,
 		networkID:            config.NetworkID,
 		etherbase:            config.Miner.Etherbase,
 		waitForStageLoopStop: make(chan struct{}),
@@ -1184,6 +1186,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				*cfg.Zk,
 				legacyExecutors,
 				backend.chainDB,
+				backend.smtDB,
 				witnessGenerator,
 				dataStreamServer,
 			)
@@ -1383,7 +1386,7 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 	}
 
 	var gpCache *jsonrpc.GasPriceCache
-	s.apiList, gpCache = jsonrpc.APIList(chainKv, ethRpcClient, txPoolRpcClient, s.txPool2, miningRpcClient, ff, stateCache, blockReader, s.agg, &httpRpcCfg, s.engine, config, s.l1Syncer, s.logger, dataStreamServer, s.gasTracker)
+	s.apiList, gpCache = jsonrpc.APIList(chainKv, s.smtDB, ethRpcClient, txPoolRpcClient, s.txPool2, miningRpcClient, ff, stateCache, blockReader, s.agg, &httpRpcCfg, s.engine, config, s.l1Syncer, s.logger, dataStreamServer, s.gasTracker)
 
 	// For X Layer
 	if s.txPool2 != nil && gpCache != nil {
@@ -1422,7 +1425,7 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 	}
 
 	if chainConfig.Bor == nil {
-		go s.engineBackendRPC.Start(ctx, &httpRpcCfg, s.chainDB, s.blockReader, ff, stateCache, s.agg, s.engine, ethRpcClient, txPoolRpcClient, miningRpcClient, s.gasTracker)
+		go s.engineBackendRPC.Start(ctx, &httpRpcCfg, s.chainDB, s.smtDB, s.blockReader, ff, stateCache, s.agg, s.engine, ethRpcClient, txPoolRpcClient, miningRpcClient, s.gasTracker)
 	}
 
 	go func() {

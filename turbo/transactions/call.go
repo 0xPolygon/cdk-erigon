@@ -191,6 +191,7 @@ func NewReusableCaller(
 	gasCap uint64,
 	blockNrOrHash rpc.BlockNumberOrHash,
 	tx kv.Tx,
+	txsmt kv.Tx,
 	headerReader services.HeaderReader,
 	chainConfig *chain.Config,
 	callTimeout time.Duration,
@@ -222,7 +223,7 @@ func NewReusableCaller(
 	blockCtx := NewEVMBlockContext(engine, header, blockNrOrHash.RequireCanonical, tx, headerReader)
 	txCtx := core.NewEVMTxContext(msg)
 
-	eriDb := db2.NewRoEriDb(tx)
+	eriDb := db2.NewRoEriDb(txsmt, tx)
 	smt := smt.NewRoSMT(eriDb)
 	hermezDb := hermez_db.NewHermezDbReader(tx)
 

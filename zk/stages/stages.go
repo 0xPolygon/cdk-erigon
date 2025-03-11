@@ -116,7 +116,7 @@ func SequencerZkStages(
 				return SpawnSequencerInterhashesStage(s, u, txc.Tx, ctx, zkInterHashesCfg, true)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
-				return UnwindSequencerInterhashsStage(u, s, txc.Tx, ctx, zkInterHashesCfg)
+				return UnwindSequencerInterhashsStage(u, s, txc.Tx, txc.TxSmt, ctx, zkInterHashesCfg)
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
 				return PruneSequencerInterhashesStage(p, tx, zkInterHashesCfg, ctx)
@@ -345,11 +345,11 @@ func DefaultZkStages(
 			Description: "Generate intermediate hashes and computing state root",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
-				_, err := SpawnZkIntermediateHashesStage(s, u, txc.Tx, zkInterHashesCfg, ctx)
+				_, err := SpawnZkIntermediateHashesStage(s, u, txc.Tx, txc.TxSmt, zkInterHashesCfg, ctx)
 				return err
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
-				return UnwindZkIntermediateHashesStage(u, s, txc.Tx, zkInterHashesCfg, ctx, false)
+				return UnwindZkIntermediateHashesStage(u, s, txc.Tx, txc.TxSmt, zkInterHashesCfg, ctx, false)
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
 				// TODO: implement this in zk interhashes
@@ -445,7 +445,7 @@ func DefaultZkStages(
 			Description: "Generate witness caches for each block",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
-				return SpawnStageWitness(s, u, ctx, txc.Tx, stageWitnessCfg)
+				return SpawnStageWitness(s, u, ctx, txc.Tx, txc.TxSmt, stageWitnessCfg)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
 				return UnwindWitnessStage(u, txc.Tx, stageWitnessCfg, ctx)

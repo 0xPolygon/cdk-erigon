@@ -360,6 +360,7 @@ type APIImpl struct {
 	mining                        txpool.MiningClient
 	gasCache                      *GasPriceCache
 	db                            kv.RoDB
+	dbsmt                         kv.RoDB
 	GasCap                        uint64
 	FeeCap                        float64
 	ReturnDataLimit               int
@@ -391,7 +392,7 @@ type APIImpl struct {
 }
 
 // NewEthAPI returns APIImpl instance
-func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, feecap float64, returnDataLimit int, ethCfg *ethconfig.Config, allowUnprotectedTxs bool, maxGetProofRewindBlockCount int, subscribeLogsChannelSize int, logger log.Logger, gasTracker RpcL1GasPriceTracker, LogsMaxRange uint64) *APIImpl {
+func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, feecap float64, returnDataLimit int, ethCfg *ethconfig.Config, allowUnprotectedTxs bool, maxGetProofRewindBlockCount int, subscribeLogsChannelSize int, logger log.Logger, gasTracker RpcL1GasPriceTracker, LogsMaxRange uint64) *APIImpl {
 	if gascap == 0 {
 		gascap = uint64(math.MaxUint64 / 2)
 	}
@@ -399,6 +400,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 	apii := &APIImpl{
 		BaseAPI:                       base,
 		db:                            db,
+		dbsmt:                         dbsmt,
 		ethBackend:                    eth,
 		txPool:                        txPool,
 		mining:                        mining,
