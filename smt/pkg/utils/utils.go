@@ -45,6 +45,11 @@ type NodeKey [4]uint64
 
 type NodeType int
 
+type NodeInfo struct {
+	Key    *NodeKey
+	IsLeaf bool
+}
+
 const (
 	LeafNode   NodeType = iota // 0 for leaf node
 	BranchNode                 // 1 for branch node
