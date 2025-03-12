@@ -47,7 +47,7 @@ func TestNonceFromAddress(t *testing.T) {
 	cfg := txpoolcfg.DefaultConfig
 	ethCfg := &ethconfig.Defaults
 	sendersCache := kvcache.New(kvcache.DefaultCoherentConfig)
-	pool, err := New(ch, coreDB, cfg, ethCfg, sendersCache, *u256.N1, nil, nil, aclsDB)
+	pool, err := New(ch, coreDB, cfg, sendersCache, *u256.N1, nil, nil, nil, nil, nil, nil, ethCfg, aclsDB)
 	assert.NoError(err)
 	require.True(pool != nil)
 	ctx := context.Background()

@@ -398,7 +398,7 @@ func applyTransactionsToDecodedBlocks(
 		for _, transaction := range block.Transactions {
 			vmCfg.Config.SkipAnalysis = core.SkipAnalysis(chainCfg, header.Number.Uint64())
 
-			blockContext := core.NewEVMBlockContext(header, blockHashFunc, engine, &sequencerAddress)
+			blockContext := core.NewEVMBlockContext(header, blockHashFunc, engine, &sequencerAddress, chainCfg)
 
 			if !blockStarted {
 				overflow, err := batchCollector.StartNewBlock(false)

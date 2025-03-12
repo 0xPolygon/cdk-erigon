@@ -128,7 +128,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 	cacheMock := cMocks.NewMockCache(mockCtrl)
 	cacheMock.EXPECT().View(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
-	txPool, err := txpool.New(nil, txPoolDb, txpoolcfg.Config{}, &ethconfig.Config{}, cacheMock, chainID, nil, nil, nil)
+	txPool, err := txpool.New(nil, txPoolDb, txpoolcfg.Config{}, cacheMock, chainID, nil, nil, nil, nil, nil, nil, &ethconfig.Config{}, nil)
 	require.NoError(t, err)
 
 	engineMock.EXPECT().
@@ -137,9 +137,9 @@ func TestSpawnSequencingStage(t *testing.T) {
 		AnyTimes()
 	engineMock.EXPECT().
 		FinalizeAndAssemble(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(config *chain.Config, header *types.Header, state *state.IntraBlockState, txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal, chain consensus.ChainReader, syscall consensus.SystemCall, call consensus.Call, logger log.Logger) (*types.Block, types.Transactions, types.Receipts, error) {
+		DoAndReturn(func(config *chain.Config, header *types.Header, state *state.IntraBlockState, txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal, chain consensus.ChainReader, syscall consensus.SystemCall, call consensus.Call, logger log.Logger) (*types.Block, types.Transactions, types.Receipts, types.FlatRequests, error) {
 			finalBlock := types.NewBlockWithHeader(header)
-			return finalBlock, txs, receipts, nil
+			return finalBlock, txs, receipts, types.FlatRequests{}, nil
 		}).
 		AnyTimes()
 

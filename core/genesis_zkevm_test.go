@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	"github.com/erigontech/erigon-lib/chain/networkname"
+	"github.com/erigontech/erigon-lib/common/datadir"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/kv/memdb"
+	"github.com/erigontech/erigon-lib/kv/temporal/temporaltest"
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/params"
@@ -14,16 +16,18 @@ import (
 )
 
 func TestGenesisBlockHashesZkevm(t *testing.T) {
+	logger := log.New()
+	_, db, _ := temporaltest.NewTestDB(t, datadir.New(t.TempDir()))
+	// defer db.Close()
 	check := func(network string) {
-		db := memdb.NewTestDB(t)
-		defer db.Close()
+		// db := memdb.NewTestDB(t)
+		// defer db.Close()
 		genesis := core.GenesisBlockByChainName(network)
 		tx, err := db.BeginRw(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer tx.Rollback()
-		logger := log.New()
 		_, block, err := core.WriteGenesisBlock(tx, genesis, nil, "/tmp/"+network, logger)
 		require.NoError(t, err)
 		expect := params.GenesisHashByChainName(network)

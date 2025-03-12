@@ -392,8 +392,11 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		policyValidator = NewPolicyValidator(aclDB)
 	}
 
+	lock := &sync.Mutex{}
+
 	res := &TxPool{
-		lock:                    &sync.Mutex{},
+		lock:                    lock,
+		lastSeenCond:            sync.NewCond(lock),
 		byHash:                  map[string]*metaTx{},
 		isLocalLRU:              localsHistory,
 		discardReasonsLRU:       discardHistory,
@@ -418,35 +421,6 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		policyValidator:         policyValidator,
 		metrics:                 &Metrics{},
 		londonBlock:             londonBlock,
-	}
-
-	if shanghaiTime != nil {
-		if !shanghaiTime.IsUint64() {
-			return nil, errors.New("shanghaiTime overflow")
-		}
-		shanghaiTimeU64 := shanghaiTime.Uint64()
-		res.shanghaiTime = &shanghaiTimeU64
-	}
-	if agraBlock != nil {
-		if !agraBlock.IsUint64() {
-			return nil, errors.New("agraBlock overflow")
-		}
-		agraBlockU64 := agraBlock.Uint64()
-		res.agraBlock = &agraBlockU64
-	}
-	if cancunTime != nil {
-		if !cancunTime.IsUint64() {
-			return nil, errors.New("cancunTime overflow")
-		}
-		cancunTimeU64 := cancunTime.Uint64()
-		res.cancunTime = &cancunTimeU64
-	}
-	if pragueTime != nil {
-		if !pragueTime.IsUint64() {
-			return nil, errors.New("pragueTime overflow")
-		}
-		pragueTimeU64 := pragueTime.Uint64()
-		res.pragueTime = &pragueTimeU64
 	}
 
 	return res, nil
@@ -1042,6 +1016,9 @@ func (p *TxPool) isLondon() bool {
 	set := p.isPostLondon.Load()
 	if set {
 		return true
+	}
+	if p.londonBlock == nil {
+		return false
 	}
 	lbsBig := big.NewInt(0).SetUint64(p.lastSeenBlock.Load())
 	if p.londonBlock.Cmp(lbsBig) <= 0 {
