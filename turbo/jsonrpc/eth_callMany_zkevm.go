@@ -115,17 +115,7 @@ func (api *APIImpl) CallMany(ctx context.Context, bundles []Bundle, simulateCont
 		baseFee.SetFromBig(parent.BaseFee)
 	}
 
-	blockCtx = evmtypes.BlockContext{
-		CanTransfer: core.CanTransfer,
-		Transfer:    core.Transfer,
-		GetHash:     getHash,
-		Coinbase:    parent.Coinbase,
-		BlockNumber: parent.Number.Uint64(),
-		Time:        parent.Time,
-		Difficulty:  new(big.Int).Set(parent.Difficulty),
-		GasLimit:    parent.GasLimit,
-		BaseFee:     &baseFee,
-	}
+	blockCtx = core.NewEVMBlockContext(parent, getHash, api.engine(), &parent.Coinbase, chainConfig)
 
 	// Get a new instance of the EVM
 	evm = vm.NewEVM(blockCtx, txCtx, st, chainConfig, vm.Config{Debug: false})

@@ -75,10 +75,10 @@ func (api *APIImpl) GetTransactionByHash_deprecated(ctx context.Context, txnHash
 				return nil, nil
 			}
 			borTx := bortypes.NewBorTransaction()
-			return ethapi.NewRPCBorTransaction(borTx, txnHash, blockHash, blockNum, uint64(len(block.Transactions())), chainConfig.ChainID), nil
+			return newRPCBorTransaction(borTx, txnHash, blockHash, blockNum, uint64(len(block.Transactions())), baseFee, chainConfig.ChainID), nil
 		}
 
-		return ethapi.NewRPCTransaction(txn, blockHash, blockNum, txnIndex, baseFee), nil
+		return NewRPCTransaction(txn, blockHash, blockNum, txnIndex, baseFee), nil
 	}
 
 	curHeader := rawdb.ReadCurrentHeader(tx)
