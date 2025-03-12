@@ -3,16 +3,15 @@ package jsonrpc
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/holiman/uint256"
 	jsoniter "github.com/json-iterator/go"
 
-	"github.com/erigontech/erigon-lib/common/math"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/hexutil"
+	"github.com/erigontech/erigon-lib/common/math"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/state"
@@ -132,14 +131,12 @@ func (api *PrivateDebugAPIImpl) traceBlock_deprecated(ctx context.Context, block
 		}
 	}
 
-	_, blockCtx, _, ibs, _, err := transactions.ComputeTxEnv(ctx, engine, block, chainConfig, api._blockReader, tx, 0, api.historyV3(tx), borStateSyncTxn != nil)
+	_, blockCtx, _, ibs, _, err = transactions.ComputeTxEnv(ctx, engine, block, chainConfig, api._blockReader, tx, 0, api.historyV3(tx), borStateSyncTxn != nil)
 	if err != nil {
 		stream.WriteNil()
 		return err
 	}
 
-	signer := types.MakeSigner(chainConfig, block.NumberU64(), block.Time())
-	rules := chainConfig.Rules(block.NumberU64(), block.Time())
 	stream.WriteArrayStart()
 
 	for idx, txn := range txns {
@@ -474,17 +471,7 @@ func (api *PrivateDebugAPIImpl) TraceCallMany_deprecated(ctx context.Context, bu
 		baseFee.SetFromBig(parent.BaseFee)
 	}
 
-	blockCtx = evmtypes.BlockContext{
-		CanTransfer: core.CanTransfer,
-		Transfer:    core.Transfer,
-		GetHash:     getHash,
-		Coinbase:    parent.Coinbase,
-		BlockNumber: parent.Number.Uint64(),
-		Time:        parent.Time,
-		Difficulty:  new(big.Int).Set(parent.Difficulty),
-		GasLimit:    parent.GasLimit,
-		BaseFee:     &baseFee,
-	}
+	blockCtx = core.NewEVMBlockContext(parent, getHash, api.engine(), &parent.Coinbase, chainConfig)
 
 	// Get a new instance of the EVM
 	evm = vm.NewEVM(blockCtx, txCtx, st, chainConfig, vm.Config{Debug: false})
