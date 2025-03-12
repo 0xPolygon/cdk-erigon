@@ -43,7 +43,6 @@ require (
 	github.com/emicklei/dot v1.6.1
 	github.com/erigontech/erigon-lib v1.0.0
 	github.com/erigontech/erigonwatch v0.1.16
-	github.com/ethereum/go-ethereum v1.14.8
 	github.com/fjl/gencodec v0.0.0-20220412091415-8bb9e558978c
 	github.com/gballet/go-verkle v0.0.0-20221121182333-31427a1f2d35
 	github.com/gfx-labs/sse v0.0.0-20231226060816-f747e26a9baa
@@ -319,5 +318,3 @@ replace github.com/anacrolix/torrent => github.com/erigontech/torrent v1.54.2-al
 replace github.com/erigontech/erigon-snapshot => github.com/ledgerwatch/erigon-snapshot v1.3.1-0.20240805114253-42da880260bb
 
 replace github.com/erigontech/interfaces => github.com/ledgerwatch/interfaces v0.0.0-20241024161200-024ffe1cabff
-
-replace github.com/ethereum/go-ethereum => github.com/ethereum/go-ethereum v1.10.26

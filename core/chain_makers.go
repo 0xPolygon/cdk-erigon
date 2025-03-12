@@ -30,7 +30,6 @@ import (
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon-lib/rlp"
 
-	zktypes "github.com/erigontech/erigon/zk/types"
 	"github.com/erigontech/erigon/consensus"
 	"github.com/erigontech/erigon/consensus/merge"
 	"github.com/erigontech/erigon/consensus/misc"
@@ -39,6 +38,7 @@ import (
 	"github.com/erigontech/erigon/core/vm"
 	"github.com/erigontech/erigon/params"
 	"github.com/erigontech/erigon/turbo/trie"
+	zktypes "github.com/erigontech/erigon/zk/types"
 )
 
 // BlockGen creates blocks for testing.
