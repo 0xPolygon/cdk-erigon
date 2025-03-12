@@ -205,7 +205,7 @@ func (ibs TestIntraBlockState) SetTransientState(addr common.Address, key common
 }
 
 func (ibs TestIntraBlockState) Prepare(rules *chain.Rules, sender, coinbase common.Address, dest *common.Address,
-	precompiles []common.Address, txAccesses types2.AccessList) {
+	precompiles []common.Address, txAccesses types2.AccessList, authorities []common.Address) {
 }
 
 func (ibs TestIntraBlockState) Selfdestruct6780(common.Address) {}
@@ -213,3 +213,15 @@ func (ibs TestIntraBlockState) Selfdestruct6780(common.Address) {}
 func (ibs TestIntraBlockState) SetDisableBalanceInc(disable bool) {}
 
 func (ibs TestIntraBlockState) IsDirtyJournal(addr common.Address) bool { return false }
+
+func (ibs TestIntraBlockState) GetDelegatedDesignation(addr common.Address) (common.Address, bool) {
+	return common.Address{}, false
+}
+
+func (ibs TestIntraBlockState) ResolveCode(addr common.Address) []byte {
+	return nil
+}
+
+func (ibs TestIntraBlockState) ResolveCodeHash(addr common.Address) common.Hash {
+	return common.Hash{}
+}
