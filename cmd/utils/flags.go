@@ -591,26 +591,6 @@ var (
 		Usage: "Reuse the L1 info index for resequencing",
 		Value: true,
 	}
-	SequencerReplay = cli.BoolFlag{
-		Name:  "zkevm.sequencer-replay",
-		Usage: "Local replay feature, only works when zkevm.sequencer-resequence enabled",
-		Value: false,
-	}
-	SequencerReplayHaltOnBatchNumber = cli.Uint64Flag{
-		Name:  "zkevm.sequencer-replay-halt-on-batch-number",
-		Usage: "Halt the sequencer on this batch number when replaying",
-		Value: 0,
-	}
-	SequencerReplayExternalDatastream = cli.BoolFlag{
-		Name:  "zkevm.sequencer-replay-external-datastream",
-		Usage: "When enabled, the sequencer will create a new data stream server connected to an external datastream file and read batches from it",
-		Value: false,
-	}
-	SequencerReplayL1SyncOnly = cli.BoolFlag{
-		Name:  "zkevm.sequencer-replay-l1-sync-only",
-		Usage: "When enabled, the sequencer will only sync the L1 info and exit",
-		Value: false,
-	}
 	ExecutorUrls = cli.StringFlag{
 		Name:  "zkevm.executor-urls",
 		Usage: "A comma separated list of grpc addresses that host executors",

@@ -204,6 +204,33 @@ var (
 		Usage: "Method rate limit in requests per second, format: {\"method\":[\"method1\",\"method2\"],\"count\":1,\"bucket\":1}, eg. {\"methods\":[\"eth_call\",\"eth_blockNumber\"],\"count\":10,\"bucket\":1}",
 		Value: "",
 	}
+	// Local Replay
+	SequencerReplay = cli.BoolFlag{
+		Name:  "zkevm.sequencer-replay",
+		Usage: "Local replay feature, only works when zkevm.sequencer-resequence enabled",
+		Value: false,
+	}
+	SequencerReplayHaltOnBatchNumber = cli.Uint64Flag{
+		Name:  "zkevm.sequencer-replay-halt-on-batch-number",
+		Usage: "Halt the sequencer on this batch number when replaying",
+		Value: 0,
+	}
+	SequencerReplayExternalDatastream = cli.BoolFlag{
+		Name:  "zkevm.sequencer-replay-external-datastream",
+		Usage: "When enabled, the sequencer will create a new data stream server connected to an external datastream file and read batches from it",
+		Value: false,
+	}
+	SequencerReplayL1SyncOnly = cli.BoolFlag{
+		Name:  "zkevm.sequencer-replay-l1-sync-only",
+		Usage: "When enabled, the sequencer will only sync the L1 info and exit",
+		Value: false,
+	}
+	// Executor
+	ExecutorMock = cli.BoolFlag{
+		Name:  "zkevm.executor-mock",
+		Usage: "Only for testing use. Generate the witness and return the verifierBundle without actually sending payload to executor.",
+		Value: false,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {

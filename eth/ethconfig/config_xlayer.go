@@ -17,6 +17,8 @@ type XLayerConfig struct {
 	SequencerReplayHaltOnBatchNumber  uint64
 	SequencerReplayExternalDatastream bool
 	SequencerReplayL1SyncOnly         bool
+	// Executor
+	ExecutorMock bool
 }
 
 var DefaultXLayerConfig = XLayerConfig{}

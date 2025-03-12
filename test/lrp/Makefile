@@ -333,15 +333,27 @@ lrp-config-apply-parallel:
 		fi; \
 		UNWIND_BATCH=$$((START_BATCH - 1)); \
 		cp -f docker-compose.yml docker-compose-$$i.yml; \
-		sed -i '' "s/xlayer-mainnet-unwind/xlayer-mainnet-unwind-$$i/g" docker-compose-$$i.yml; \
-		sed -i '' "s/xlayer-mainnet-replay/xlayer-mainnet-replay-$$i/g" docker-compose-$$i.yml; \
-		sed -i '' "s/--unwind-batch-no=[0-9]*/--unwind-batch-no=$$UNWIND_BATCH/" docker-compose-$$i.yml; \
-		sed -i '' "s|./mainnet/seq:|./mainnet/seq$$i:|" docker-compose-$$i.yml; \
-		sed -i '' "s/--zkevm.sequencer-replay-halt-on-batch-number=[0-9]*/--zkevm.sequencer-replay-halt-on-batch-number=$$END_BATCH/" docker-compose-$$i.yml; \
-		sed -i '' "s/\$${PPROF_PORT}/$$(($(PPROF_PORT) + $$i))/" docker-compose-$$i.yml; \
-		sed -i '' "s/\$${RPC_PORT}/$$(($(RPC_PORT) + $$i))/" docker-compose-$$i.yml; \
-		sed -i '' "s/\$${DS_PORT}/$$(($(DS_PORT) + $$i))/" docker-compose-$$i.yml; \
-		sed -i '' "s/\$${METRICS_PORT}/$$(($(METRICS_PORT) + $$i))/" docker-compose-$$i.yml; \
+		if [ "$(shell uname)" = "Darwin" ]; then \
+			sed -i '' "s/xlayer-mainnet-unwind/xlayer-mainnet-unwind-$$i/g" docker-compose-$$i.yml; \
+			sed -i '' "s/xlayer-mainnet-replay/xlayer-mainnet-replay-$$i/g" docker-compose-$$i.yml; \
+			sed -i '' "s/--unwind-batch-no=[0-9]*/--unwind-batch-no=$$UNWIND_BATCH/" docker-compose-$$i.yml; \
+			sed -i '' "s|./mainnet/seq:|./mainnet/seq$$i:|" docker-compose-$$i.yml; \
+			sed -i '' "s/--zkevm.sequencer-replay-halt-on-batch-number=[0-9]*/--zkevm.sequencer-replay-halt-on-batch-number=$$END_BATCH/" docker-compose-$$i.yml; \
+			sed -i '' "s/\$${PPROF_PORT}/$$(($(PPROF_PORT) + $$i))/" docker-compose-$$i.yml; \
+			sed -i '' "s/\$${RPC_PORT}/$$(($(RPC_PORT) + $$i))/" docker-compose-$$i.yml; \
+			sed -i '' "s/\$${DS_PORT}/$$(($(DS_PORT) + $$i))/" docker-compose-$$i.yml; \
+			sed -i '' "s/\$${METRICS_PORT}/$$(($(METRICS_PORT) + $$i))/" docker-compose-$$i.yml; \
+		else \
+			sed -i "s/xlayer-mainnet-unwind/xlayer-mainnet-unwind-$$i/g" docker-compose-$$i.yml; \
+			sed -i "s/xlayer-mainnet-replay/xlayer-mainnet-replay-$$i/g" docker-compose-$$i.yml; \
+			sed -i "s/--unwind-batch-no=[0-9]*/--unwind-batch-no=$$UNWIND_BATCH/" docker-compose-$$i.yml; \
+			sed -i "s|./mainnet/seq:|./mainnet/seq$$i:|" docker-compose-$$i.yml; \
+			sed -i "s/--zkevm.sequencer-replay-halt-on-batch-number=[0-9]*/--zkevm.sequencer-replay-halt-on-batch-number=$$END_BATCH/" docker-compose-$$i.yml; \
+			sed -i "s/\$${PPROF_PORT}/$$(($(PPROF_PORT) + $$i))/" docker-compose-$$i.yml; \
+			sed -i "s/\$${RPC_PORT}/$$(($(RPC_PORT) + $$i))/" docker-compose-$$i.yml; \
+			sed -i "s/\$${DS_PORT}/$$(($(DS_PORT) + $$i))/" docker-compose-$$i.yml; \
+			sed -i "s/\$${METRICS_PORT}/$$(($(METRICS_PORT) + $$i))/" docker-compose-$$i.yml; \
+		fi; \
 		CURRENT_BATCH=$$((START_BATCH - 1)); \
 	done
 
