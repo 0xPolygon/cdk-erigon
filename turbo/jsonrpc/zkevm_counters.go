@@ -155,7 +155,7 @@ func (zkapi *ZkEvmAPIImpl) EstimateCounters(ctx context.Context, rpcTx *zkevmRPC
 
 	ibs := state.New(stateReader)
 
-	blockCtx := core.NewEVMBlockContext(header, core.GetHashFn(header, nil), engine, nil)
+	blockCtx := core.NewEVMBlockContext(header, core.GetHashFn(header, nil), engine, nil, chainConfig)
 
 	rules := chainConfig.Rules(block.NumberU64(), header.Time)
 
@@ -257,7 +257,7 @@ type revertInfo struct {
 	Data    []byte `json:"data"`
 }
 
-func populateCounters(collected *vm.Counters, execResult *core.ExecutionResult, gasLimit uint64, oocError error) (json.RawMessage, error) {
+func populateCounters(collected *vm.Counters, execResult *evmtypes.ExecutionResult, gasLimit uint64, oocError error) (json.RawMessage, error) {
 	var revInfo revertInfo
 	var usedGas uint64
 	if execResult != nil {
@@ -445,7 +445,7 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 
 		header := block.Header()
 		ibs := state.New(stateReader)
-		blockCtx := core.NewEVMBlockContext(header, core.GetHashFn(header, nil), engine, nil)
+		blockCtx := core.NewEVMBlockContext(header, core.GetHashFn(header, nil), engine, nil, chainConfig)
 		rules := chainConfig.Rules(blockNum, header.Time)
 		signer := types.MakeSigner(chainConfig, blockNum, 0)
 		if receipts, err = rawdb.ReadReceiptsByHash(dbtx, header.Hash()); err != nil {
@@ -485,7 +485,7 @@ func (api *ZkEvmAPIImpl) execTransaction(
 ) (gasUsed uint64, err error) {
 	var (
 		msg        core.Message
-		execResult *core.ExecutionResult
+		execResult *evmtypes.ExecutionResult
 	)
 	txCounters := vm.NewTransactionCounter(tx, smtDepth, forkId, api.config.Zk.VirtualCountersSmtReduction, false)
 

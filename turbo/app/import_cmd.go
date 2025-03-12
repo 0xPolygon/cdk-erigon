@@ -31,9 +31,9 @@ import (
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/eth"
+	stages2 "github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/turbo/debug"
 	turboNode "github.com/erigontech/erigon/turbo/node"
-	"github.com/erigontech/erigon/turbo/stages"
 )
 
 const (

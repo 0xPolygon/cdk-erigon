@@ -6,7 +6,7 @@ import (
 
 	"github.com/erigontech/erigon-lib/common/hexutil"
 	"github.com/erigontech/erigon/rpc"
-	"github.com/erigontech/erigon/turbo/jsonrpc"
+	"github.com/erigontech/erigon/turbo/adapter/ethapi"
 )
 
 func checkTxPool(ctx context.Context, txApi TxPoolAPI, ethApi EthAPI) error {
@@ -25,7 +25,7 @@ func checkTxPool(ctx context.Context, txApi TxPoolAPI, ethApi EthAPI) error {
 		return err
 	}
 
-	contentMap, ok := data.(map[string]map[string]map[string]*jsonrpc.RPCTransaction)
+	contentMap, ok := data.(map[string]map[string]map[string]*ethapi.RPCTransaction)
 	if !ok {
 		return fmt.Errorf("unexpected response type for tx_pool: %T", data)
 	}
