@@ -49,8 +49,8 @@ type EthAPI interface {
 	GetBlockTransactionCountByHash(ctx context.Context, blockHash common.Hash) (*hexutil.Uint, error)
 
 	// Transaction related (see ./eth_txs.go)
-	GetTransactionByHash(ctx context.Context, hash common.Hash) (*ethapi.RPCTransaction, error)
-	GetTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, txIndex hexutil.Uint64) (*ethapi.RPCTransaction, error)
+	GetTransactionByHash(ctx context.Context, hash common.Hash, includeExtraInfo *bool) (*ethapi.RPCTransaction, error)
+	GetTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, txIndex hexutil.Uint64, includeExtraInfo *bool) (*ethapi.RPCTransaction, error)
 	GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, txIndex hexutil.Uint) (*ethapi.RPCTransaction, error)
 	GetRawTransactionByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) (hexutility.Bytes, error)
 	GetRawTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index hexutil.Uint) (hexutility.Bytes, error)
@@ -532,34 +532,6 @@ func computeGasPrice(tx types.Transaction, blockHash common.Hash, baseFee *big.I
 		return (*hexutil.Big)(price.ToBig())
 	}
 	return nil
-}
-
-// newRPCBorTransaction returns a Bor transaction that will serialize to the RPC
-// representation, with the given location metadata set (if available).
-func newRPCBorTransaction(opaqueTx types.Transaction, txHash common.Hash, blockHash common.Hash, blockNumber uint64, index uint64, baseFee *big.Int, chainId *big.Int) *RPCTransaction {
-	tx := opaqueTx.(*types.LegacyTx)
-	result := &RPCTransaction{
-		Type:     hexutil.Uint64(tx.Type()),
-		ChainID:  (*hexutil.Big)(new(big.Int)),
-		GasPrice: (*hexutil.Big)(tx.GasPrice.ToBig()),
-		Gas:      hexutil.Uint64(tx.GetGas()),
-		Hash:     txHash,
-		Input:    hexutil.Bytes(tx.GetData()),
-		Nonce:    hexutil.Uint64(tx.GetNonce()),
-		From:     common.Address{},
-		To:       tx.GetTo(),
-		Value:    (*hexutil.Big)(tx.GetValue().ToBig()),
-		V:        (*hexutil.Big)(big.NewInt(0)),
-		R:        (*hexutil.Big)(big.NewInt(0)),
-		S:        (*hexutil.Big)(big.NewInt(0)),
-	}
-	if blockHash != (common.Hash{}) {
-		result.ChainID = (*hexutil.Big)(new(big.Int).SetUint64(chainId.Uint64()))
-		result.BlockHash = &blockHash
-		result.BlockNumber = (*hexutil.Big)(new(big.Int).SetUint64(blockNumber))
-		result.TransactionIndex = (*hexutil.Uint64)(&index)
-	}
-	return result
 }
 
 // newRPCPendingTransaction returns a pending transaction that will serialize to the RPC representation

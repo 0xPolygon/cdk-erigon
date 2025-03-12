@@ -15,6 +15,7 @@ import (
 	types2 "github.com/erigontech/erigon/core/types"
 	bortypes "github.com/erigontech/erigon/polygon/bor/types"
 	"github.com/erigontech/erigon/rpc"
+	"github.com/erigontech/erigon/turbo/adapter/ethapi"
 	"github.com/erigontech/erigon/turbo/rpchelper"
 	"github.com/erigontech/erigon/zk/sequencer"
 	"github.com/erigontech/erigon/zkevm/jsonrpc/client"
@@ -142,7 +143,7 @@ func (api *APIImpl) GetTransactionByHash(ctx context.Context, txnHash common.Has
 }
 
 // GetTransactionByBlockHashAndIndex implements eth_getTransactionByBlockHashAndIndex. Returns information about a transaction given the block's hash and a transaction index.
-func (api *APIImpl) GetTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, txIndex hexutil.Uint64, includeExtraInfo *bool) (*RPCTransaction, error) {
+func (api *APIImpl) GetTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, txIndex hexutil.Uint64, includeExtraInfo *bool) (*ethapi.RPCTransaction, error) {
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -185,7 +186,7 @@ func (api *APIImpl) GetTransactionByBlockHashAndIndex(ctx context.Context, block
 }
 
 // GetTransactionByBlockNumberAndIndex implements eth_getTransactionByBlockNumberAndIndex. Returns information about a transaction given a block number and transaction index.
-func (api *APIImpl) GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, txIndex hexutil.Uint, includeExtraInfo *bool) (*RPCTransaction, error) {
+func (api *APIImpl) GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, txIndex hexutil.Uint, includeExtraInfo *bool) (*ethapi.RPCTransaction, error) {
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
