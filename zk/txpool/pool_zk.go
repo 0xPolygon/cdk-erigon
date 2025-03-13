@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/big"
 	"sync"
 	"time"
 
@@ -89,16 +88,17 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 			// get dynamic gp
 			// here for the case when restart gpCache has not init
 			// use the max uint64 as default because the remain claimTx should handle first
-			newGpBig := new(big.Int).SetUint64(math.MaxUint64)
+			var newGpBig uint64 = math.MaxUint64
 			if p.gpCache != nil {
 				_, dGp := p.gpCache.GetLatest()
 				if dGp != nil {
-					newGpBig = newGpBig.Mul(dGp, big.NewInt(int64(gpMul)))
+					newGpBig = dGp.Uint64() * gpMul
+					// newGpBig = newGpBig.Mul(dGp, big.NewInt(int64(gpMul)))
 				}
 				//log.Debug(fmt.Sprintf("Free tx: nonce:%d, type %d. dGp:%v, factor:%d, newGp:%d", mt.Tx.Nonce, freeType, dGp, gpMul, newGpBig))
 			}
 
-			mt.minTip = newGpBig.Uint64()
+			mt.minTip = newGpBig
 			mt.minFeeCap = *uint256.NewInt(mt.minTip)
 		}
 

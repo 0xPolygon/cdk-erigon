@@ -604,7 +604,7 @@ func newRPCRawTransactionFromBlockIndex(b *types.Block, index uint64) (hexutilit
 type GasPriceCache struct {
 	latestPrice *big.Int
 	latestHash  common.Hash
-	mtx         sync.Mutex
+	mtx         sync.RWMutex
 	rawGPCache  *RawGPCache
 }
 
@@ -617,11 +617,11 @@ func NewGasPriceCache() *GasPriceCache {
 }
 
 func (c *GasPriceCache) GetLatest() (common.Hash, *big.Int) {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-	hash := c.latestHash
-	price := new(big.Int).Set(c.latestPrice) // deep copy
-	return hash, price
+	price := new(big.Int)
+	c.mtx.RLock()
+	defer c.mtx.RUnlock()
+	price.Set(c.latestPrice) // deep copy
+	return c.latestHash, price
 }
 
 func (c *GasPriceCache) SetLatest(hash common.Hash, price *big.Int) {

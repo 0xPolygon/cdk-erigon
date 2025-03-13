@@ -1,18 +1,21 @@
 package utils
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"math/bits"
 	"strconv"
 	"strings"
+	"unsafe"
 
 	"sort"
 
-	poseidon "github.com/okx/poseidongold/go"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/length"
+	poseidon "github.com/okx/poseidongold/go"
 )
 
 const (
@@ -271,13 +274,54 @@ func (nv *NodeValue12) IsFinalNode() bool {
 
 // 7 times more efficient than sprintf
 func ConvertBigIntToHex(n *big.Int) string {
-	return "0x" + n.Text(16)
+	i := int(float64(n.BitLen())/4) + 1
+	if n.Sign() < 0 {
+		i++
+	}
+
+	buf := make([]byte, 2, i+2)
+	buf[0] = '0'
+	buf[1] = 'x'
+
+	buf = n.Append(buf, 16)
+	return unsafe.String(&buf[0], len(buf))
 }
 
-func ConvertHexToBigInt(hex string) *big.Int {
-	hex = strings.TrimPrefix(hex, "0x")
-	n, _ := new(big.Int).SetString(hex, 16)
-	return n
+func ConvertHexToBigInt(hexStr string) *big.Int {
+	hexStr = strings.TrimPrefix(hexStr, "0x")
+	isOdd := len(hexStr)%2 != 0
+	dstLen := len(hexStr) / 2
+	if isOdd {
+		dstLen += 1
+	}
+
+	dst := make([]byte, dstLen)
+
+	if isOdd {
+		singleChar := hexStr[0]
+		if singleChar >= 'a' && singleChar <= 'f' {
+			dst[0] = singleChar - 'a' + 10
+		} else if singleChar >= 'A' && singleChar <= 'F' {
+			dst[0] = singleChar - 'A' + 10
+		} else {
+			dst[0] = singleChar - '0'
+		}
+		hexStr = hexStr[1:]
+	}
+	if len(hexStr) != 0 {
+		var newDst = dst[:]
+		if isOdd {
+			newDst = dst[1:]
+		}
+		n, _ := hex.Decode(newDst, unsafe.Slice(unsafe.StringData(hexStr), len(hexStr)))
+		if isOdd {
+			dst = dst[:n+1]
+		} else {
+			dst = dst[:n]
+		}
+	}
+
+	return new(big.Int).SetBytes(dst)
 }
 
 func ConvertHexToAddress(hex string) common.Address {
@@ -286,12 +330,20 @@ func ConvertHexToAddress(hex string) common.Address {
 }
 
 func ArrayToScalar(array []uint64) *big.Int {
-	scalar := new(big.Int)
-	for i := len(array) - 1; i >= 0; i-- {
-		scalar.Lsh(scalar, 64)
-		scalar.Add(scalar, new(big.Int).SetUint64(array[i]))
+	if strconv.IntSize == 64 {
+		abs := make([]big.Word, len(array))
+		for i, v := range array {
+			abs[i] = big.Word(v)
+		}
+		return new(big.Int).SetBits(abs)
+	} else {
+		abs := make([]big.Word, len(array)*2)
+		for i, v := range array {
+			abs[i*2] = big.Word(v)
+			abs[i*2+1] = big.Word(v >> 32)
+		}
+		return new(big.Int).SetBits(abs)
 	}
-	return scalar
 }
 
 func ScalarToArray(scalar *big.Int) []uint64 {
@@ -314,6 +366,22 @@ func ScalarToArray(scalar *big.Int) []uint64 {
 }
 
 func ArrayToScalarBig(array []*big.Int) *big.Int {
+	// fast path for 64-bit systems
+	if len(array) != 0 && bits.UintSize == 64 {
+		lastInt := array[len(array)-1]
+		scalarBitsSize := len(lastInt.Bits()) + (len(array) - 1)
+		intBits := make([]big.Word, scalarBitsSize)
+		copy(intBits[len(array)-1:], lastInt.Bits())
+		for i := 0; i < len(array)-1; i++ {
+			if array[i] == nil || len(array[i].Bits()) == 0 {
+				intBits[i] = 0
+			} else {
+				intBits[i] = array[i].Bits()[0]
+			}
+		}
+		return new(big.Int).SetBits(intBits)
+	}
+
 	scalar := new(big.Int)
 	for i := len(array) - 1; i >= 0; i-- {
 		scalar.Lsh(scalar, 64)
@@ -353,23 +421,56 @@ func ScalarToNodeKey(s *big.Int) NodeKey {
 
 func ScalarToRoot(s *big.Int) NodeKey {
 	var result [4]uint64
-	divisor := new(big.Int).Exp(big.NewInt(2), big.NewInt(64), nil)
 
-	sCopy := new(big.Int).Set(s)
+	if bits.UintSize == 64 {
+		sbits := s.Bits()
+		for i := 0; i < 4; i++ {
+			if i < len(sbits) {
+				result[i] = uint64(sbits[i])
+			}
+		}
+	} else {
+		// 2**64
+		//var divisor *big.Int
+		//if bits.UintSize == 64 {
+		//	divisor = new(big.Int).SetBits([]big.Word{0, 1})
+		//} else {
+		//	divisor = new(big.Int).SetBits([]big.Word{0, 0, 1})
+		//}
+		// divisor := new(big.Int).Exp(big.NewInt(2), big.NewInt(64), nil)
 
-	for i := 0; i < 4; i++ {
-		mod := new(big.Int).Mod(sCopy, divisor)
-		result[i] = mod.Uint64()
-		sCopy.Div(sCopy, divisor)
+		sCopy := new(big.Int).Set(s)
+
+		for i := 0; i < 4; i++ {
+			// sCopy mod divisor == sCopy & (divisor - 1) == sCopy & 0xFFFFFFFFFFFFFFFF
+			//mod := new(big.Int).Mod(sCopy, divisor)
+			result[i] = sCopy.Uint64()
+			// sCopy.Div(sCopy, divisor)
+			sCopy.Rsh(sCopy, 64)
+		}
 	}
+
 	return result
 }
 
 func ScalarToNodeValue(scalarIn *big.Int) NodeValue12 {
 	out := [12]*big.Int{}
+
+	// fast path for 64-bit systems
+	if bits.UintSize == 64 {
+		words := scalarIn.Bits()
+		for i := 0; i < 12; i++ {
+			if i < len(words) {
+				out[i] = new(big.Int).SetUint64(uint64(words[i]))
+			} else {
+				out[i] = big.NewInt(0)
+			}
+		}
+		return out
+	}
+
 	mask := new(big.Int).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
 	scalar := new(big.Int).Set(scalarIn)
-
 	for i := 0; i < 12; i++ {
 		value := new(big.Int).And(scalar, mask)
 		out[i] = value
