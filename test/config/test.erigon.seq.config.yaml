@@ -100,3 +100,4 @@ txpool.freegaslist : '[{"name":"e2e", "from_list":["0x586cbc95ed16031d9efdaebacf
 # close a block/batch immediately after the 1st zkCounter overflow TX
 zkevm.seal-batch-immediately-on-overflow: true
 zkevm.sequencer-timeout-on-empty-tx-pool: 5ms
+zkevm.block-info-concurrent: true

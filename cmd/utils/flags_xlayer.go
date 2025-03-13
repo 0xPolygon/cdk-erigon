@@ -231,6 +231,12 @@ var (
 		Usage: "Only for testing use. Generate the witness and return the verifierBundle without actually sending payload to executor.",
 		Value: false,
 	}
+	// block info concurrent calculation
+	BlockInfoConcurrent = cli.BoolFlag{
+		Name:  "zkevm.block-info-concurrent",
+		Usage: "Enable concurrent block info calculation",
+		Value: false,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {

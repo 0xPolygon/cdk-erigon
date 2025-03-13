@@ -18,7 +18,8 @@ type XLayerConfig struct {
 	SequencerReplayExternalDatastream bool
 	SequencerReplayL1SyncOnly         bool
 	// Executor
-	ExecutorMock bool
+	ExecutorMock        bool
+	BlockInfoConcurrent bool
 }
 
 var DefaultXLayerConfig = XLayerConfig{}
