@@ -151,6 +151,13 @@ func (c *ecrecover_zkevm) Run(input []byte) ([]byte, error) {
 	sig := make([]byte, 65)
 	copy(sig, input[64:128])
 	sig[64] = v
+	if PrecompiledCache != nil {
+		value, ok := PrecompiledCache.Get(string(input))
+		if ok {
+			return value, nil
+		}
+	}
+
 	// v needs to be at the end for libsecp256k1
 	pubKey, err := crypto.Ecrecover(input[:32], sig)
 	// make sure the public key is a valid one
@@ -158,8 +165,12 @@ func (c *ecrecover_zkevm) Run(input []byte) ([]byte, error) {
 		return nil, nil
 	}
 
+	result := common.LeftPadBytes(crypto.Keccak256(pubKey[1:])[12:], 32)
+	if PrecompiledCache != nil {
+		PrecompiledCache.Add(string(input), result)
+	}
 	// the first byte of pubkey is bitcoin heritage
-	return common.LeftPadBytes(crypto.Keccak256(pubKey[1:])[12:], 32), nil
+	return result, nil
 }
 
 // SHA256 implemented as a native contract.
@@ -1249,10 +1260,22 @@ func (c *p256Verify_zkevm) Run(input []byte) ([]byte, error) {
 	if c.cc != nil {
 		c.cc.preP256Verify(r, s, x, y)
 	}
+
+	if PrecompiledCache != nil {
+		value, ok := PrecompiledCache.Get(string(input))
+		if ok {
+			return value, nil
+		}
+	}
+
 	// Verify the secp256r1 signature
 	if secp256r1.Verify(hash, r, s, x, y) {
 		// Signature is valid
-		return common.LeftPadBytes(big1.Bytes(), 32), nil
+		result := common.LeftPadBytes(big1.Bytes(), 32)
+		if PrecompiledCache != nil {
+			PrecompiledCache.Add(string(input), result)
+		}
+		return result, nil
 	} else {
 		// Signature is invalid
 		return nil, nil

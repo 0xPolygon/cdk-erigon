@@ -2,6 +2,8 @@ package ethconfig
 
 import (
 	"time"
+
+	"github.com/ledgerwatch/erigon-lib/common"
 )
 
 // XLayerConfig is the X Layer config used on the eth backend
@@ -17,6 +19,13 @@ type XLayerConfig struct {
 	SequencerReplayHaltOnBatchNumber  uint64
 	SequencerReplayExternalDatastream bool
 	SequencerReplayL1SyncOnly         bool
+
+	// PreRun
+	PreRunList      map[common.Address]struct{}
+	PreRunCacheSize int
+	PreRunCacheTTL  time.Duration
+	PreRunChanNum   int
+	PreRunTaskNum   int
 	// Executor
 	ExecutorMock        bool
 	BlockInfoConcurrent bool

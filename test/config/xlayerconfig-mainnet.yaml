@@ -73,4 +73,6 @@ yieldsize: 35
 zkevm.seal-batch-immediately-on-overflow: true
 zkevm.sequencer-timeout-on-empty-tx-pool: 1ms
 
+
+zkevm.pre-run-address-list: ["0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E"]
 zkevm.block-info-concurrent: true
