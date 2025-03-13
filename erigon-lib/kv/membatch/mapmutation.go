@@ -310,6 +310,13 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	return nil
 }
 
+func (m *Mapmutation) SetCache(cache map[string]map[string][]byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.puts = cache
+}
+
 func (m *Mapmutation) RetrieveAndCleanSmtCache(smtTables []string) (map[string]map[string][]byte, map[string]map[string][]byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

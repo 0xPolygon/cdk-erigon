@@ -14,109 +14,87 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
-type SmtDbTx interface {
-	GetOne(bucket string, key []byte) ([]byte, error)
-	Put(bucket string, key []byte, value []byte) error
-	Has(bucket string, key []byte) (bool, error)
-	Delete(bucket string, key []byte) error
-	ForEach(bucket string, start []byte, fn func(k, v []byte) error) error
-	ForPrefix(bucket string, prefix []byte, fn func(k, v []byte) error) error
-	Commit() error
-	Rollback()
-}
-
-const TableSmt = "HermezSmt"
-const TableStats = "HermezSmtStats"
-const TableAccountValues = "HermezSmtAccountValues"
-const TableMetadata = "HermezSmtMetadata"
-const TableHashKey = "HermezSmtHashKey"
-
-const MetaLastRoot = "lastRoot"
-const MetaDepth = "depth"
-
-var HermezSmtTables = []string{TableSmt, TableStats, TableAccountValues, TableMetadata, TableHashKey}
-
-type EriDb struct {
-	kvTx        kv.RwTx
-	tx          SmtDbTx
+type EriCacheDb struct {
+	kvTx        kv.Tx
+	cacheTx     SmtDbTx
 	kvTxChainDB kv.RwTx
 	*EriRoDb
 }
 
-type EriRoDb struct {
-	kvTxRo        kv.Getter
-	kvTxRoChainDB kv.Getter
-}
-
-func CreateEriDbBuckets(tx kv.RwTx) error {
-	for _, table := range HermezSmtTables {
-		err := tx.CreateBucket(table)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func NewEriDb(txsmt, txcdb kv.RwTx) *EriDb {
-	return &EriDb{
-		tx:          txsmt,
-		kvTx:        txsmt,
-		kvTxChainDB: txcdb,
-		EriRoDb:     NewRoEriDb(txsmt, txcdb),
-	}
-}
-
-func NewRoEriDb(txsmt, txcdb kv.Getter) *EriRoDb {
-	return &EriRoDb{
-		kvTxRo:        txsmt,
-		kvTxRoChainDB: txcdb,
-	}
-}
-
-func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
-	batch := membatch.NewHashBatch(m.kvTx, quitCh, "./tempdb", log.New())
+func NewEriCacheDb(ctx context.Context, txsmt kv.Tx, txcdb kv.RwTx) *EriCacheDb {
+	batch := membatch.NewHashBatch(txsmt, ctx.Done(), "./tempdb", log.New())
 	defer func() {
 		batch.Close()
 	}()
-	m.tx = batch
-	m.kvTxRo = batch
+
+	return &EriCacheDb{
+		cacheTx:     batch,
+		kvTx:        txsmt,
+		kvTxChainDB: txcdb,
+		EriRoDb:     NewRoEriDb(batch, txcdb),
+	}
 }
 
-func (m *EriDb) SetCache(smtCachedMapValue map[string]map[string][]byte) {}
+func (m *EriCacheDb) OpenBatch(quitCh <-chan struct{}) {}
 
-func (m *EriDb) RetriveAndCleanCache() (map[string]map[string][]byte, map[string]map[string][]byte) {
-	return nil, nil
-}
+func (m *EriCacheDb) SetCache(smtCachedMapValue map[string]map[string][]byte) {
+	if smtCachedMapValue == nil {
+		smtCachedMapValue = make(map[string]map[string][]byte)
+	}
 
-func (m *EriDb) CommitBatch() error {
-	batch, ok := m.tx.(kv.PendingMutations)
+	mapCache, ok := m.cacheTx.(*membatch.Mapmutation)
 	if !ok {
+		return // don't roll back a kvRw tx
+	}
 
+	mapCache.SetCache(smtCachedMapValue)
+
+	//batch := membatch.NewHashBatchWithCache(m.kvTx, quitCh, "./tempdb", log.New(), smtCachedMapValue)
+	// WARN: cannnot close batch here, or it will clean all the cache value
+	//defer func() {
+	//	batch.Close()
+	//}()
+
+	//m.cacheTx = batch
+	//m.kvTxRo = batch
+}
+
+func (m *EriCacheDb) RetriveAndCleanCache() (map[string]map[string][]byte, map[string]map[string][]byte) {
+	mapCache, ok := m.cacheTx.(*membatch.Mapmutation)
+	if !ok {
+		return nil, nil // don't roll back a kvRw tx
+	}
+
+	smtCache, deltaSmtCache := mapCache.RetrieveAndCleanSmtCache(HermezSmtTables)
+	mapCache.ResetCacheContent()
+
+	return smtCache, deltaSmtCache
+}
+
+func (m *EriCacheDb) CommitBatch() error {
+	batch, ok := m.cacheTx.(kv.PendingMutations)
+	if !ok {
 		return nil // don't roll back a kvRw tx
 	}
-	// err := m.tx.Commit()
-	err := batch.Flush(context.Background(), m.kvTx)
-	if err != nil {
-		// m.tx.Rollback()
-		batch.Close()
-		return err
-	}
-	m.tx = m.kvTx
-	m.kvTxRo = m.kvTx
+	batch.Close()
+
+	m.cacheTx = batch
+	m.kvTxRo = batch
 	return nil
 }
 
-func (m *EriDb) RollbackBatch() {
-	if _, ok := m.tx.(kv.PendingMutations); !ok {
+func (m *EriCacheDb) RollbackBatch() {
+	batch, ok := m.cacheTx.(kv.PendingMutations)
+	if !ok {
 		return // don't roll back a kvRw tx
 	}
-	m.tx.(kv.PendingMutations).Close()
-	m.tx = m.kvTx
-	m.kvTxRo = m.kvTx
+	batch.Close()
+
+	m.cacheTx = batch
+	m.kvTxRo = batch
 }
 
-func (m *EriRoDb) GetLastRoot() (*big.Int, error) {
+func (m *EriCacheDb) GetLastRoot() (*big.Int, error) {
 	data, err := m.kvTxRo.GetOne(TableStats, []byte(MetaLastRoot))
 	if err != nil {
 		return big.NewInt(0), err
@@ -129,12 +107,12 @@ func (m *EriRoDb) GetLastRoot() (*big.Int, error) {
 	return utils.ConvertHexToBigInt(string(data)), nil
 }
 
-func (m *EriDb) SetLastRoot(r *big.Int) error {
+func (m *EriCacheDb) SetLastRoot(r *big.Int) error {
 	v := utils.ConvertBigIntToHex(r)
-	return m.tx.Put(TableStats, []byte(MetaLastRoot), []byte(v))
+	return m.cacheTx.Put(TableStats, []byte(MetaLastRoot), []byte(v))
 }
 
-func (m *EriRoDb) GetDepth() (uint8, error) {
+func (m *EriCacheDb) GetDepth() (uint8, error) {
 	data, err := m.kvTxRo.GetOne(TableStats, []byte(MetaDepth))
 	if err != nil {
 		return 0, err
@@ -147,11 +125,11 @@ func (m *EriRoDb) GetDepth() (uint8, error) {
 	return data[0], nil
 }
 
-func (m *EriDb) SetDepth(depth uint8) error {
-	return m.tx.Put(TableStats, []byte(MetaDepth), []byte{depth})
+func (m *EriCacheDb) SetDepth(depth uint8) error {
+	return m.cacheTx.Put(TableStats, []byte(MetaDepth), []byte{depth})
 }
 
-func (m *EriRoDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
+func (m *EriCacheDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
 
@@ -170,7 +148,7 @@ func (m *EriRoDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 	return val, nil
 }
 
-func (m *EriDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
+func (m *EriCacheDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
 
@@ -180,20 +158,20 @@ func (m *EriDb) Insert(key utils.NodeKey, value utils.NodeValue12) error {
 	vConc := utils.ArrayToScalarBig(vals)
 	v := utils.ConvertBigIntToHex(vConc)
 
-	return m.tx.Put(TableSmt, []byte(k), []byte(v))
+	return m.cacheTx.Put(TableSmt, []byte(k), []byte(v))
 }
 
-func (m *EriDb) Delete(key string) error {
-	return m.tx.Delete(TableSmt, []byte(key))
+func (m *EriCacheDb) Delete(key string) error {
+	return m.cacheTx.Delete(TableSmt, []byte(key))
 }
 
-func (m *EriDb) DeleteByNodeKey(key utils.NodeKey) error {
+func (m *EriCacheDb) DeleteByNodeKey(key utils.NodeKey) error {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
-	return m.tx.Delete(TableSmt, []byte(k))
+	return m.cacheTx.Delete(TableSmt, []byte(k))
 }
 
-func (m *EriRoDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
+func (m *EriCacheDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
 
@@ -212,7 +190,7 @@ func (m *EriRoDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
 	return val, nil
 }
 
-func (m *EriDb) InsertAccountValue(key utils.NodeKey, value utils.NodeValue8) error {
+func (m *EriCacheDb) InsertAccountValue(key utils.NodeKey, value utils.NodeValue8) error {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
 
@@ -222,22 +200,22 @@ func (m *EriDb) InsertAccountValue(key utils.NodeKey, value utils.NodeValue8) er
 	vConc := utils.ArrayToScalarBig(vals)
 	v := utils.ConvertBigIntToHex(vConc)
 
-	return m.tx.Put(TableAccountValues, []byte(k), []byte(v))
+	return m.cacheTx.Put(TableAccountValues, []byte(k), []byte(v))
 }
 
-func (m *EriDb) InsertKeySource(key utils.NodeKey, value []byte) error {
+func (m *EriCacheDb) InsertKeySource(key utils.NodeKey, value []byte) error {
 	keyConc := utils.ArrayToScalar(key[:])
 
-	return m.tx.Put(TableMetadata, keyConc.Bytes(), value)
+	return m.cacheTx.Put(TableMetadata, keyConc.Bytes(), value)
 }
 
-func (m *EriDb) DeleteKeySource(key utils.NodeKey) error {
+func (m *EriCacheDb) DeleteKeySource(key utils.NodeKey) error {
 	keyConc := utils.ArrayToScalar(key[:])
 
-	return m.tx.Delete(TableMetadata, keyConc.Bytes())
+	return m.cacheTx.Delete(TableMetadata, keyConc.Bytes())
 }
 
-func (m *EriRoDb) GetKeySource(key utils.NodeKey) ([]byte, error) {
+func (m *EriCacheDb) GetKeySource(key utils.NodeKey) ([]byte, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 
 	data, err := m.kvTxRo.GetOne(TableMetadata, keyConc.Bytes())
@@ -252,20 +230,20 @@ func (m *EriRoDb) GetKeySource(key utils.NodeKey) ([]byte, error) {
 	return data, nil
 }
 
-func (m *EriDb) InsertHashKey(key utils.NodeKey, value utils.NodeKey) error {
+func (m *EriCacheDb) InsertHashKey(key utils.NodeKey, value utils.NodeKey) error {
 	keyConc := utils.ArrayToScalar(key[:])
 
 	valConc := utils.ArrayToScalar(value[:])
 
-	return m.tx.Put(TableHashKey, keyConc.Bytes(), valConc.Bytes())
+	return m.cacheTx.Put(TableHashKey, keyConc.Bytes(), valConc.Bytes())
 }
 
-func (m *EriDb) DeleteHashKey(key utils.NodeKey) error {
+func (m *EriCacheDb) DeleteHashKey(key utils.NodeKey) error {
 	keyConc := utils.ArrayToScalar(key[:])
-	return m.tx.Delete(TableHashKey, keyConc.Bytes())
+	return m.cacheTx.Delete(TableHashKey, keyConc.Bytes())
 }
 
-func (m *EriRoDb) GetHashKey(key utils.NodeKey) (utils.NodeKey, error) {
+func (m *EriCacheDb) GetHashKey(key utils.NodeKey) (utils.NodeKey, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 
 	data, err := m.kvTxRo.GetOne(TableHashKey, keyConc.Bytes())
@@ -284,7 +262,7 @@ func (m *EriRoDb) GetHashKey(key utils.NodeKey) (utils.NodeKey, error) {
 	return utils.NodeKey{na[0], na[1], na[2], na[3]}, nil
 }
 
-func (m *EriRoDb) GetCode(codeHash []byte) ([]byte, error) {
+func (m *EriCacheDb) GetCode(codeHash []byte) ([]byte, error) {
 	codeHash = utils.ResizeHashTo32BytesByPrefixingWithZeroes(codeHash)
 
 	data, err := m.kvTxRoChainDB.GetOne(kv.Code, codeHash)
@@ -299,7 +277,7 @@ func (m *EriRoDb) GetCode(codeHash []byte) ([]byte, error) {
 	return data, nil
 }
 
-func (m *EriDb) AddCode(code []byte) error {
+func (m *EriCacheDb) AddCode(code []byte) error {
 	codeHash := utils.HashContractBytecode(hex.EncodeToString(code))
 
 	codeHashBytes, err := hex.DecodeString(strings.TrimPrefix(codeHash, "0x"))
@@ -312,7 +290,7 @@ func (m *EriDb) AddCode(code []byte) error {
 	return m.kvTxChainDB.Put(kv.Code, codeHashBytes, code)
 }
 
-func (m *EriRoDb) PrintDb() {
+func (m *EriCacheDb) PrintDb() {
 	err := m.kvTxRo.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
 		println(string(k), string(v))
 		return nil
@@ -322,7 +300,7 @@ func (m *EriRoDb) PrintDb() {
 	}
 }
 
-func (m *EriRoDb) GetDb() map[string][]string {
+func (m *EriCacheDb) GetDb() map[string][]string {
 	transformedDb := make(map[string][]string)
 
 	err := m.kvTxRo.ForEach(TableSmt, []byte{}, func(k, v []byte) error {

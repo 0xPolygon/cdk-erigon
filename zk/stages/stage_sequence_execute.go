@@ -30,6 +30,8 @@ var shouldCheckForExecutionAndDataStreamAlignment = true
 // For X Layer, for local replay feature
 var externalDataStreamServerCreated = false
 
+var supportAC = true
+
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
 	u stagedsync.Unwinder,
@@ -90,10 +92,14 @@ func SpawnSequencingStage(
 	}
 
 	if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil); err == nil {
-		//if s.BlockNumber%50 == 0 {
-		//	err = s.FlushSmtCache()
-		//}
-		err = s.FlushSmtCache()
+		if !supportAC {
+			return err
+		}
+
+		if s.BlockNumber%50 == 0 {
+			err = s.FlushSmtCache()
+		}
+		//err = s.FlushSmtCache()
 	}
 
 	return err
@@ -107,8 +113,6 @@ func sequencingBatchStep(
 	historyCfg stagedsync.HistoryCfg,
 	resequenceBatchJob *ResequenceBatchJob,
 ) (err error) {
-	supportAC := true
-
 	startSequenceTime := time.Now()
 	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting sequencing stage", logPrefix))
@@ -128,12 +132,16 @@ func sequencingBatchStep(
 		return err
 	}
 
-	sdb, err := newStageDb(ctx, cfg.db, cfg.dbsmt)
+	sdb, err := newStageDb(ctx, cfg.db, cfg.dbsmt, supportAC)
 	if err != nil {
 		return err
 	}
 	defer sdb.tx.Rollback()
 	defer sdb.txsmt.Rollback()
+
+	if sdb.supportAC {
+		sdb.eridb.SetCache(s.GetSmtCache())
+	}
 
 	if err = cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
 		return err
@@ -186,7 +194,7 @@ func sequencingBatchStep(
 			return err
 		}
 
-		return sdb.Commit(false)
+		return sdb.Commit(s, true)
 	}
 
 	if shouldCheckForExecutionAndDataStreamAlignment {
@@ -203,7 +211,7 @@ func sequencingBatchStep(
 				return err
 			}
 			if isUnwinding {
-				err := sdb.Commit(false)
+				err := sdb.Commit(s, true)
 				if err != nil {
 					// do not set shouldCheckForExecutionAndDataStreamAlighment=false because of the error
 					return err
@@ -222,7 +230,7 @@ func sequencingBatchStep(
 	if exitStage {
 		log.Info(fmt.Sprintf("[%s] Exiting stage during halted sequencer", logPrefix))
 		// commit the tx so any updates to the stream etc are persisted
-		return sdb.Commit(false)
+		return sdb.Commit(s, true)
 	}
 
 	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {
@@ -743,14 +751,15 @@ func sequencingBatchStep(
 			break
 		}
 
-		if supportAC {
+		if batchContext.sdb.supportAC {
 			quit := batchContext.ctx.Done()
-			batchContext.sdb.eridb.OpenBatchWithSmtCache(quit, s.GetSmtCache())
+			batchContext.sdb.eridb.OpenBatch(quit) // do nothing...
+			batchContext.sdb.eridb.SetCache(s.GetSmtCache())
 			if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
 				batchContext.sdb.eridb.RollbackBatch()
 				return err
 			}
-			smtCache, deltaCache := batchContext.sdb.eridb.RetrieveAndCleanSmtBatchCache()
+			smtCache, deltaCache := batchContext.sdb.eridb.RetriveAndCleanCache()
 			if err := batchContext.sdb.eridb.CommitBatch(); err != nil {
 				return err
 			}
@@ -786,7 +795,7 @@ func sequencingBatchStep(
 		if !batchState.isL1Recovery() {
 			commitTime := time.Now()
 			// commit block data here so it is accessible in other threads
-			if errCommitAndStart := sdb.CommitAndStart(supportAC); errCommitAndStart != nil {
+			if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
 				return errCommitAndStart
 			}
 			defer sdb.tx.Rollback()
@@ -850,7 +859,7 @@ func sequencingBatchStep(
 
 		if !batchState.isL1Recovery() {
 			commitTime := time.Now()
-			if errCommitAndStart := sdb.CommitAndStart(supportAC); errCommitAndStart != nil {
+			if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
 				return errCommitAndStart
 			}
 			defer sdb.tx.Rollback()
@@ -891,7 +900,7 @@ func sequencingBatchStep(
 	metrics.GetLogStatistics().SetTag(metrics.FinalizeBatchNumber, strconv.Itoa(int(batchState.batchNumber)))
 	tryToSleepSequencer(cfg.zk.XLayer.SequencerBatchSleepDuration, logPrefix)
 	startCommitTime := time.Now()
-	err = sdb.Commit(supportAC)
+	err = sdb.Commit(s, false)
 	metrics.GetLogStatistics().CumulativeTiming(metrics.BatchCommitDBTiming, time.Since(startCommitTime))
 
 	batchTime := time.Since(batchStart)
