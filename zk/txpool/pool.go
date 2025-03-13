@@ -194,7 +194,7 @@ func (r DiscardReason) String() string {
 	case Expired:
 		return "expired"
 	default:
-		return DiscardReason(r).String()
+		return txpoolcfg.DiscardReason(r).String()
 	}
 }
 

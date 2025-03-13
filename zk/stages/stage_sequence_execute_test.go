@@ -17,6 +17,7 @@ import (
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/state"
 	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/core/vm/evmtypes"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/eth/stagedsync"
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
@@ -140,6 +141,15 @@ func TestSpawnSequencingStage(t *testing.T) {
 		DoAndReturn(func(config *chain.Config, header *types.Header, state *state.IntraBlockState, txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal, chain consensus.ChainReader, syscall consensus.SystemCall, call consensus.Call, logger log.Logger) (*types.Block, types.Transactions, types.Receipts, types.FlatRequests, error) {
 			finalBlock := types.NewBlockWithHeader(header)
 			return finalBlock, txs, receipts, types.FlatRequests{}, nil
+		}).
+		AnyTimes()
+	engineMock.EXPECT().
+		GetTransferFunc().
+		Return(func(evmtypes.IntraBlockState, common.Address, common.Address, *uint256.Int, bool) {}).
+		AnyTimes()
+	engineMock.EXPECT().
+		GetPostApplyMessageFunc().
+		Return(func(ibs evmtypes.IntraBlockState, sender common.Address, coinbase common.Address, result *evmtypes.ExecutionResult) {
 		}).
 		AnyTimes()
 
