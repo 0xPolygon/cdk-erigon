@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sync"
+	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/holiman/uint256"
@@ -174,21 +176,53 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 	}
 }
 
+var (
+	removeWG sync.WaitGroup
+)
+
 // zk: the implementation of best here is changed only to not take into account block gas limits as we don't care about
 // these in zk.  Instead we do a quick check on the transaction maximum gas in zk
 func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, error) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	removeWG.Wait()
+	ok, count, toRemove, err := p.bestRead(n, txs, tx, onTopOf, availableGas, availableBlobGas, toSkip)
+	if err != nil {
+		return ok, count, err
+	}
+	if !ok {
+		return false, count, nil
+	}
+	txs.Resize(uint(count))
+	if len(toRemove) > 0 {
+		removeWG.Add(1)
+		go func() {
+			p.lock.Lock()
+			defer p.lock.Unlock()
+			removeWG.Done()
+			for _, mt := range toRemove {
+				p.pending.Remove(mt)
+				p.discardLocked(mt, UnsupportedTx)
+				//log.Debug("Removed transaction from pending pool", "txID", mt.Tx.IDHash)
+			}
+		}()
+		time.Sleep(1 * time.Nanosecond)
+	}
+
+	return true, count, nil
+}
+
+func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, []*metaTx, error) {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
 
 	if p.isDeniedYieldingTransactions() {
 		//log.Trace("Denied yielding transactions, cannot proceed")
-		return false, 0, nil
+		return false, 0, nil, nil
 	}
 
 	// First wait for the corresponding block to arrive
 	if p.lastSeenBlock.Load() < onTopOf {
 		//log.Trace("Block not yet arrived, too early to process", "lastSeenBlock", p.lastSeenBlock.Load(), "requiredBlock", onTopOf)
-		return false, 0, nil
+		return false, 0, nil, nil
 	}
 
 	isShanghai := p.isShanghai()
@@ -233,7 +267,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		rlpTx, sender, isLocal, err := p.getRlpLocked(tx, mt.Tx.IDHash[:])
 		if err != nil {
 			//log.Trace("Error getting RLP of transaction", "txID", mt.Tx.IDHash, "error", err)
-			return false, count, err
+			return false, count, toRemove, err
 		}
 		if len(rlpTx) == 0 {
 			toRemove = append(toRemove, mt)
@@ -272,15 +306,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		count++
 	}
 
-	txs.Resize(uint(count))
-	if len(toRemove) > 0 {
-		for _, mt := range toRemove {
-			p.pending.Remove(mt)
-			p.discardLocked(mt, UnsupportedTx)
-			//log.Debug("Removed transaction from pending pool", "txID", mt.Tx.IDHash)
-		}
-	}
-	return true, count, nil
+	return true, count, toRemove, nil
 }
 
 func (p *TxPool) ForceUpdateLatestBlock(blockNumber uint64) {
@@ -308,11 +334,10 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 }
 
 func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGasLimit uint64, ids []common.Hash) error {
-	cache := p.cache()
-
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	cache := p._stateCache
 	toDelete := make([]*metaTx, 0)
 
 	p.all.ascendAll(func(mt *metaTx) bool {
