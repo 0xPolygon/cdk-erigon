@@ -161,9 +161,11 @@ mainnet-rpc: build-docker
 
 vmtouch:
 	docker exec -it xlayer-seq sh -c "vmtouch -t /home/erigon/data/chaindata/mdbx.dat"
+	docker exec -it xlayer-seq sh -c "vmtouch -t /home/erigon/data/smt/mdbx.dat"
 
 vmtouch-evict:
 	docker exec -it xlayer-seq sh -c "vmtouch -e /home/erigon/data/chaindata/mdbx.dat"
 
 vmtouch-check:
 	docker exec -it xlayer-seq sh -c "vmtouch /home/erigon/data/chaindata/mdbx.dat"
+	docker exec -it xlayer-seq sh -c "vmtouch /home/erigon/data/smt/mdbx.dat"
