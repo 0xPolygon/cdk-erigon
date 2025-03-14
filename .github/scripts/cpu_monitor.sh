@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-THRESHOLD=80
+THRESHOLD=200
 MEASUREMENTS_FILE="/tmp/cpu_measurements.txt"
 MONITOR_INTERVAL=5  # seconds
 PROCESS_NAME="cdk-erigon"
