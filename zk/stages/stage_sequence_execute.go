@@ -408,7 +408,6 @@ func sequencingBatchStep(
 					return err
 				}
 			} else if !batchState.isL1Recovery() {
-
 				var newTransactions []types.Transaction
 				var newIds []common.Hash
 
