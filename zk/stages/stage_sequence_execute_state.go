@@ -61,7 +61,7 @@ func newBatchState(forkId, batchNumber, blockNumber uint64, hasExecutorForThisBa
 		hasAnyTransactionsInThisBatch: false,
 		builtBlocks:                   make([]uint64, 0, 128),
 		yieldedTransactions:           mapset.NewSet[[32]byte](),
-		blockState:                    newBlockState(),
+		blockState:                    &BlockState{},
 		batchL1RecoveryData:           nil,
 		limboRecoveryData:             nil,
 		resequenceBatchJob:            resequenceBatchJob,
@@ -164,11 +164,7 @@ func (bs *BatchState) getCoinbase(cfg *SequenceBlockCfg) common.Address {
 	return cfg.zk.AddressSequencer
 }
 
-func (bs *BatchState) onAddedTransaction(transaction types.Transaction, receipt *types.Receipt, execResult *core.ExecutionResult, effectiveGas uint8) {
-	slotId, ok := bs.blockState.transactionHashesToSlots[transaction.Hash()]
-	if !ok {
-		log.Warn("[batchState] transaction hash not found in transaction hashes to slots map", "hash", transaction.Hash())
-	}
+func (bs *BatchState) onAddedTransaction(transaction types.Transaction, slotId common.Hash, receipt *types.Receipt, execResult *core.ExecutionResult, effectiveGas uint8) {
 	bs.blockState.builtBlockElements.onFinishAddingTransaction(transaction, receipt, execResult, effectiveGas, slotId)
 	bs.hasAnyTransactionsInThisBatch = true
 }
@@ -254,16 +250,10 @@ func newLimboRecoveryData(limboHeaderTimestamp uint64, limboTxHash *common.Hash)
 // TYPE BLOCK STATE
 type BlockState struct {
 	transactionsForInclusion []types.Transaction
-	transactionHashesToSlots map[common.Hash]common.Hash
+	transactionSlotIds       []common.Hash
 	builtBlockElements       BuiltBlockElements
 	blockL1RecoveryData      *zktx.DecodedBatchL2Data
 	transactionsToDiscard    []common.Hash
-}
-
-func newBlockState() *BlockState {
-	return &BlockState{
-		transactionHashesToSlots: make(map[common.Hash]common.Hash),
-	}
 }
 
 func (bs *BlockState) hasAnyTransactionForInclusion() bool {
