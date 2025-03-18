@@ -47,7 +47,7 @@ type NodeType int
 
 type NodeInfo struct {
 	Key    *NodeKey
-	IsLeaf bool
+	IsLeaf bool // whether it is leaf node
 }
 
 const (
