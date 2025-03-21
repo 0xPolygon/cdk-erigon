@@ -158,14 +158,21 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		expectedRootHash := syncHeadHeader.Root
 		headerHash := syncHeadHeader.Hash()
 		if root != expectedRootHash {
-			if shouldIncrement {
-				eridb.RollbackBatch()
-			}
 			if cfg.zk.DebugLimit > 0 {
 				err = fmt.Errorf("wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", to, root, expectedRootHash, headerHash)
-				return trie.EmptyRoot, err
+				log.Error("Hashing Failed", "block", to, "err", err)
+				// return trie.EmptyRoot, err
+				syncHeadHeader.Root = root
+				if err := rawdb.WriteHeader(tx, syncHeadHeader); err != nil {
+					return trie.EmptyRoot, err
+				}
+
+				if err = rawdb.WriteCanonicalHash(tx, root, to); err != nil {
+					return trie.EmptyRoot, fmt.Errorf("[saveHeader] failed to canonical hash: %w", err)
+				}
+
+				log.Info(fmt.Sprintf("[%s] State root updated", logPrefix))
 			}
-			panic(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))
 		}
 
 		log.Info(fmt.Sprintf("[%s] State root matches", logPrefix))

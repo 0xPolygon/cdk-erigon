@@ -15,6 +15,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	txtype "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
@@ -359,6 +360,33 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 // writeL2Block writes L2Block to ErigonDb and HermezDb
 // writes header, body, forkId and blockBatch
 func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
+
+	// BEGIN SPECIAL MODE:
+	// we need to do a reverse lookup of the l1infotreeupdate by the index
+	// indexes are contiguous but in this case the index is not attached to the right data on L1 (the correct L1 data was originally missed)
+	// this RPC node now contains the correct l1 data, so going forward we can map the index to the correct data
+	hdbReader := hermez_db.NewHermezDbReader(p.tx)
+	l1InfoTreeUpdate, err := hdbReader.GetL1InfoTreeUpdate(uint64(l2Block.L1InfoTreeIndex))
+	if err != nil {
+		return fmt.Errorf("get l1 info tree update by ger error: %w", err)
+	}
+	if l1InfoTreeUpdate.GER != l2Block.GlobalExitRoot {
+		log.Error(fmt.Sprintf("[%s] Batch Number: %d, Block Number: %d, L1 info tree update ger mismatch: %x, %x", p.logPrefix, l2Block.BatchNumber, l2Block.L2BlockNumber, l1InfoTreeUpdate.GER, l2Block.GlobalExitRoot))
+	}
+
+	if l1InfoTreeUpdate.ParentHash != l2Block.L1BlockHash {
+		log.Error(fmt.Sprintf("[%s] Batch Number: %d, Block Number: %d, L1 info tree update parent hash mismatch: %x, %x", p.logPrefix, l2Block.BatchNumber, l2Block.L2BlockNumber, l1InfoTreeUpdate.ParentHash, l2Block.L1BlockHash))
+	}
+
+	// we overwrite these with the data from the L1
+	l2Block.GlobalExitRoot = l1InfoTreeUpdate.GER
+
+	// TODO: added late night - not synced this way yet - maybe try with this if we get mismatched roots lower down
+	if l1InfoTreeUpdate.ParentHash != emptyHash {
+		l2Block.L1BlockHash = l1InfoTreeUpdate.ParentHash
+	}
+	/// END SPECIAL MODE
+
 	bn := new(big.Int).SetUint64(l2Block.L2BlockNumber)
 	txs := make([]ethTypes.Transaction, 0, len(l2Block.L2Txs))
 	for _, transaction := range l2Block.L2Txs {
