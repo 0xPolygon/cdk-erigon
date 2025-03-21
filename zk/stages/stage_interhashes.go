@@ -125,6 +125,29 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	shouldIncrementBecauseOfExecutionConditions := s.BlockNumber > 0 && !shouldRegenerate
 	shouldIncrement := shouldIncrementBecauseOfAFlag || shouldIncrementBecauseOfExecutionConditions
 
+	// Always write state roots to DB when L1MissedInfoRecovery flag is enabled
+	if cfg.zk.L1MissedInfoRecovery {
+		cfg.saveNewHashesToDB = true
+		// If a starting block is specified, and we're at or beyond it, enable the recovery mode
+		recoveryActive := cfg.zk.L1MissedInfoRecoveryStart == 0 || to >= cfg.zk.L1MissedInfoRecoveryStart
+
+		// In recovery mode we always want to check roots
+		cfg.checkRoot = true
+
+		log.Info(fmt.Sprintf("[%s] L1 missed info recovery mode enabled", logPrefix),
+			"saveNewHashesToDB", cfg.saveNewHashesToDB,
+			"checkRoot", cfg.checkRoot,
+			"recoveryActive", recoveryActive,
+			"recoveryStartBlock", cfg.zk.L1MissedInfoRecoveryStart,
+			"currentBlock", to)
+
+		// Special log for recovery point
+		if to == cfg.zk.L1MissedInfoRecoveryStart {
+			log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Processing RECOVERY START POINT block", logPrefix),
+				"recovery_block", to)
+		}
+	}
+
 	eridb := db2.NewEriDb(tx)
 	smt := smt.NewSMT(eridb, false)
 
@@ -158,20 +181,57 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		expectedRootHash := syncHeadHeader.Root
 		headerHash := syncHeadHeader.Hash()
 		if root != expectedRootHash {
-			if cfg.zk.DebugLimit > 0 {
-				err = fmt.Errorf("wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", to, root, expectedRootHash, headerHash)
-				log.Error("Hashing Failed", "block", to, "err", err)
-				// return trie.EmptyRoot, err
-				syncHeadHeader.Root = root
-				if err := rawdb.WriteHeader(tx, syncHeadHeader); err != nil {
-					return trie.EmptyRoot, err
+			recoveryActive := cfg.zk.L1MissedInfoRecovery &&
+				(cfg.zk.L1MissedInfoRecoveryStart == 0 || to >= cfg.zk.L1MissedInfoRecoveryStart)
+
+			atRecoveryPoint := to == cfg.zk.L1MissedInfoRecoveryStart
+
+			// Create error message for root mismatch
+			rootErr := fmt.Errorf("wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", to, root, expectedRootHash, headerHash)
+
+			// Handle different modes based on conditions
+			if recoveryActive {
+				// L1 missed info recovery mode - write the calculated state root
+				if atRecoveryPoint {
+					log.Info(fmt.Sprintf("[%s] L1 missed info recovery: State root mismatch at RECOVERY POINT detected", logPrefix),
+						"block", to,
+						"calculated_root", root.Hex(),
+						"header_root", expectedRootHash.Hex())
+				} else {
+					log.Info(fmt.Sprintf("[%s] L1 missed info recovery: State root mismatch detected", logPrefix),
+						"block", to,
+						"calculated_root", root.Hex(),
+						"header_root", expectedRootHash.Hex())
 				}
 
-				if err = rawdb.WriteCanonicalHash(tx, root, to); err != nil {
-					return trie.EmptyRoot, fmt.Errorf("[saveHeader] failed to canonical hash: %w", err)
-				}
+				if cfg.saveNewHashesToDB {
+					// Create a new header with the updated root
+					updatedHeader := *syncHeadHeader
+					updatedHeader.Root = root
+					// Use WriteHeader_zkEvm instead of directly modifying the header
+					if err := rawdb.WriteHeader_zkEvm(tx, &updatedHeader); err != nil {
+						return trie.EmptyRoot, fmt.Errorf("failed to write updated header: %w", err)
+					}
 
-				log.Info(fmt.Sprintf("[%s] State root updated", logPrefix))
+					// Update the canonical hash
+					if err = rawdb.WriteCanonicalHash(tx, updatedHeader.Hash(), to); err != nil {
+						return trie.EmptyRoot, fmt.Errorf("failed to write canonical hash: %w", err)
+					}
+
+					log.Info(fmt.Sprintf("[%s] L1 missed info recovery: State root updated for block", logPrefix),
+						"block", to,
+						"old_root", expectedRootHash.Hex(),
+						"new_root", root.Hex())
+				} else {
+					log.Warn(fmt.Sprintf("[%s] L1 missed info recovery: State root mismatch detected but saveNewHashesToDB is disabled", logPrefix))
+				}
+			} else if cfg.zk.DebugLimit > 0 {
+				// Debug limit mode - report error without writing state root
+				log.Error(fmt.Sprintf("[%s] Debug mode: Hashing failed", logPrefix), "block", to, "err", rootErr)
+				return trie.EmptyRoot, rootErr
+			} else {
+				// Normal mode - return error
+				return trie.EmptyRoot, rootErr
 			}
 		}
 

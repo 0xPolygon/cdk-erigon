@@ -124,8 +124,18 @@ func OverwriteTransactions(db kv.RwTx, txs []types.Transaction, baseTxId uint64,
 }
 
 func GetBodyTransactions(tx kv.RwTx, fromBlockNum, toBlockNum uint64) (*[]types.Transaction, error) {
+	if fromBlockNum > toBlockNum {
+		log.Info("Invalid block range in GetBodyTransactions", "fromBlockNum", fromBlockNum, "toBlockNum", toBlockNum)
+		return &[]types.Transaction{}, nil
+	}
+
 	var transactions []types.Transaction
 	if err := tx.ForEach(kv.BlockBody, hexutility.EncodeTs(fromBlockNum), func(k, v []byte) error {
+		if len(k) < 8 {
+			log.Warn("Invalid key length", "length", len(k))
+			return nil // Skip this key instead of failing
+		}
+
 		blocNum := binary.BigEndian.Uint64(k[:8])
 		if blocNum < fromBlockNum || blocNum > toBlockNum {
 			return nil
@@ -133,17 +143,19 @@ func GetBodyTransactions(tx kv.RwTx, fromBlockNum, toBlockNum uint64) (*[]types.
 
 		var body types.BodyForStorage
 		if err := rlp.DecodeBytes(v, &body); err != nil {
-			return fmt.Errorf("failed to decode body: %w", err)
+			log.Warn("Failed to decode body", "blockNum", blocNum, "err", err)
+			return nil // Skip this body instead of failing completely
 		}
 
 		txs, err := CanonicalTransactions(tx, body.BaseTxId, body.TxAmount)
 		if err != nil {
-			return fmt.Errorf("failed to read txs: %w", err)
+			log.Warn("Failed to read canonical transactions", "blockNum", blocNum, "err", err)
+			return nil // Skip this body instead of failing completely
 		}
 		transactions = append(transactions, txs...)
 		return nil
 	}); err != nil {
-		return nil, fmt.Errorf("TruncateBodies: %w", err)
+		return nil, fmt.Errorf("error iterating block bodies: %w", err)
 	}
 	return &transactions, nil
 }

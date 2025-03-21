@@ -252,6 +252,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.DebugStep,
 	&utils.DebugStepAfter,
 	&utils.DebugDisableStateRootCheck,
+	&utils.L1MissedInfoRecoveryFlag,
+	&utils.L1MissedInfoRecoveryStartFlag,
 	&utils.OtsSearchMaxCapFlag,
 	&utils.PanicOnReorg,
 	&utils.ShadowSequencer,

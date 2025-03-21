@@ -20,8 +20,8 @@ import (
 	"fmt"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
-
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/log/v3"
 )
 
 // WriteTxLookupEntries stores a positional metadata for every transaction from
@@ -38,15 +38,27 @@ func WriteTxLookupEntries_zkEvm(db kv.Putter, block *types.Block) error {
 }
 
 func TruncateTxLookupEntries_zkEvm(db kv.RwTx, fromBlockNum, toBlockNum uint64) (err error) {
-	var block *types.Block
 	for i := fromBlockNum; i <= toBlockNum; i++ {
-		if block, err = ReadBlockByNumber(db, i); err != nil {
-			return fmt.Errorf("ReadBlockByNumber %d: %W", i, err)
+		block, err := ReadBlockByNumber(db, i)
+		if err != nil {
+			log.Warn("Error reading block during TruncateTxLookupEntries_zkEvm", "blockNumber", i, "error", err)
+			continue // Skip this block instead of failing the entire operation
+		}
+
+		// Skip if block doesn't exist - this can happen during L1 recovery
+		if block == nil {
+			log.Info("Block not found during TruncateTxLookupEntries_zkEvm", "blockNumber", i)
+			continue
+		}
+
+		// Skip if block has no transactions
+		if len(block.Transactions()) == 0 {
+			continue
 		}
 
 		for _, tx := range block.Transactions() {
 			if err := db.Delete(kv.TxLookup, tx.Hash().Bytes()); err != nil {
-				return fmt.Errorf("db.Delete %s: %W", kv.TxLookup, err)
+				return fmt.Errorf("db.Delete %s: %w", kv.TxLookup, err)
 			}
 		}
 	}

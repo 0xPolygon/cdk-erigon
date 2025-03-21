@@ -941,6 +941,16 @@ var (
 		Usage: "Check the state root after each block",
 		Value: false,
 	}
+	L1MissedInfoRecoveryFlag = cli.BoolFlag{
+		Name:  "zkevm.l1-missed-info-recovery",
+		Usage: "Enable L1 missed info recovery mode which: (1) forces stepping 1 block at a time, (2) enables special mode to ensure correct L1 data is used, and (3) writes corrected state roots to fix inconsistencies",
+		Value: false,
+	}
+	L1MissedInfoRecoveryStartFlag = cli.Uint64Flag{
+		Name:  "zkevm.l1-missed-info-recovery-start",
+		Usage: "Known-good block height to start L1 missed info recovery from",
+		Value: 0,
+	}
 	RpcBatchConcurrencyFlag = cli.UintFlag{
 		Name:  "rpc.batch.concurrency",
 		Usage: "Does limit amount of goroutines to process 1 batch request. Means 1 bach request can't overload server. 1 batch still can have unlimited amount of request",

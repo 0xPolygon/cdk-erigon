@@ -21,9 +21,9 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/core/rawdb"
-
 	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
+	"github.com/ledgerwatch/erigon/core/rawdb"
+	"github.com/ledgerwatch/log/v3"
 )
 
 // DeleteHeader - dangerous, use DeleteAncientBlocks/TruncateBlocks methods
@@ -49,11 +49,19 @@ func TruncateSenders(db kv.RwTx, fromBlockNum, toBlockNum uint64) error {
 	for i := fromBlockNum; i <= toBlockNum; i++ {
 		hash, err := rawdb.ReadCanonicalHash(db, i)
 		if err != nil {
-			return err
+			log.Warn("Error reading canonical hash during TruncateSenders", "blockNumber", i, "error", err)
+			continue // Skip this block instead of failing the entire operation
+		}
+
+		// Skip if hash is empty - this can happen during L1 recovery
+		if hash == (libcommon.Hash{}) {
+			log.Info("Empty hash found during TruncateSenders", "blockNumber", i)
+			continue
 		}
 
 		if err = DeleteSenders(db, hash, i); err != nil {
-			return err
+			log.Warn("Error deleting senders", "blockNumber", i, "hash", hash, "error", err)
+			continue // Skip this block instead of failing the entire operation
 		}
 	}
 

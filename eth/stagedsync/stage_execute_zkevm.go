@@ -8,7 +8,6 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/cmp"
 	"github.com/ledgerwatch/erigon-lib/config3"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/wrap"
@@ -103,6 +102,21 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 		return fmt.Errorf("getExecRange: %w", err)
 	}
 
+	// Add a clear message about the L1 recovery mode execution behavior
+	if cfg.zk.L1MissedInfoRecovery && cfg.zk.L1MissedInfoRecoveryStart > 0 {
+		if s.BlockNumber < cfg.zk.L1MissedInfoRecoveryStart {
+			log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Executing in BATCH MODE until recovery point", s.LogPrefix()),
+				"current_progress", s.BlockNumber,
+				"recovery_start", cfg.zk.L1MissedInfoRecoveryStart,
+				"execution_range", fmt.Sprintf("%d to %d", s.BlockNumber+1, to))
+		} else {
+			log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Executing in SINGLE BLOCK MODE after recovery point", s.LogPrefix()),
+				"current_progress", s.BlockNumber,
+				"recovery_start", cfg.zk.L1MissedInfoRecoveryStart,
+				"execution_block", s.BlockNumber+1)
+		}
+	}
+
 	log.Info(fmt.Sprintf("[%s] Blocks execution", s.LogPrefix()), "from", s.BlockNumber, "to", to)
 
 	stateStream := !initialCycle && cfg.stateStream && to-s.BlockNumber < stateStreamLimit
@@ -120,9 +134,16 @@ Loop:
 			break
 		}
 
+		// Debug step mode
 		if blockNum > cfg.zk.DebugStepAfter && cfg.zk.DebugStep > 0 && (blockNum-highestBlockExecuted) > cfg.zk.DebugStep {
 			log.Info(fmt.Sprintf("[%s] Debug step reached, stopping blocks loop", s.LogPrefix()), "blockNumber", blockNum)
 			break
+		}
+
+		// L1MissedInfoRecovery mode - ONLY log if we're at or after the recovery start block
+		// We will break at the end of the loop, not here
+		if cfg.zk.L1MissedInfoRecovery && blockNum >= cfg.zk.L1MissedInfoRecoveryStart {
+			log.Info(fmt.Sprintf("[%s] L1 missed info recovery mode processing single block", s.LogPrefix()), "blockNumber", blockNum, "recovery_start", cfg.zk.L1MissedInfoRecoveryStart)
 		}
 
 		if stoppedErr = common.Stopped(quit); stoppedErr != nil {
@@ -205,6 +226,41 @@ Loop:
 		if err := postExecuteCommitValues(s.LogPrefix(), cfg, tx, eridb, batch, datastreamBlockHash, block, senders); err != nil {
 			return fmt.Errorf("postExecuteCommitValues: %w", err)
 		}
+
+		// Break the loop after processing a block if L1MissedInfoRecovery is active and we're at or past the recovery point
+		if cfg.zk.L1MissedInfoRecovery && blockNum >= cfg.zk.L1MissedInfoRecoveryStart {
+			log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Completed single block at/after recovery point", s.LogPrefix()),
+				"blockNumber", blockNum,
+				"recovery_start", cfg.zk.L1MissedInfoRecoveryStart,
+				"stopping_execution", true)
+
+			// Save progress for this single block before breaking
+			if err = s.Update(batch, stageProgress); err != nil {
+				return fmt.Errorf("s.Update before break: %w", err)
+			}
+
+			// Force a flush of the current batch to ensure this block's state is committed
+			flushCtx, cancelFlush := context.WithTimeout(context.Background(), 5*time.Second)
+			err := batch.Flush(flushCtx, tx)
+			cancelFlush()
+			if err != nil {
+				return fmt.Errorf("batch.Flush before break: %w", err)
+			}
+
+			// Update headers stage progress to ensure notifications fire
+			if err = stages.SaveStageProgress(tx, stages.Headers, stageProgress); err != nil {
+				return fmt.Errorf("SaveStageProgress before break: %w", err)
+			}
+
+			break Loop
+		} else if cfg.zk.L1MissedInfoRecovery && blockNum < cfg.zk.L1MissedInfoRecoveryStart {
+			// In batch mode before recovery point - continue executing without breaking
+			log.Debug(fmt.Sprintf("[%s] L1 missed info recovery: Continuing batch execution before recovery point", s.LogPrefix()),
+				"blockNumber", blockNum,
+				"recovery_start", cfg.zk.L1MissedInfoRecoveryStart,
+				"continuing_execution", true)
+			// Do NOT break the loop here - keep executing blocks in batch mode
+		}
 	}
 
 	if err = s.Update(batch, stageProgress); err != nil {
@@ -258,44 +314,60 @@ func getBlockHashValues(cfg ExecuteBlockCfg, ctx context.Context, tx kv.RwTx, nu
 
 // returns calculated "to" block number for execution and the total blocks to be executed
 func getExecRange(cfg ExecuteBlockCfg, tx kv.RwTx, stageProgress, toBlock uint64, logPrefix string) (uint64, uint64, error) {
+	// Set from to the next block after our current progress
+	from := stageProgress + 1
+	to := toBlock
+
+	///// DEBUG BISECT /////
 	if cfg.zk.DebugLimit > 0 {
-		prevStageProgress, err := stages.GetStageProgress(tx, stages.Senders)
-		if err != nil {
-			return 0, 0, fmt.Errorf("getStageProgress: %w", err)
-		}
-		to := prevStageProgress
 		if cfg.zk.DebugLimit < to {
 			to = cfg.zk.DebugLimit
 		}
-		total := to - stageProgress
-		return to, total, nil
+	}
+	/////////////////////////
+
+	// If L1MissedInfoRecovery mode is enabled, handle special recovery logic
+	if cfg.zk.L1MissedInfoRecovery {
+		// If there's a recovery start point specified, use it
+		if cfg.zk.L1MissedInfoRecoveryStart > 0 {
+			// Case 1: We haven't reached the recovery point yet - execute in batch mode
+			if stageProgress < cfg.zk.L1MissedInfoRecoveryStart {
+				if to > cfg.zk.L1MissedInfoRecoveryStart || to == 0 {
+					// Execute up to the recovery point only (inclusive)
+					to = cfg.zk.L1MissedInfoRecoveryStart
+					log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Batch execution to recovery point (inclusive)", logPrefix),
+						"from", from,
+						"to", to)
+				} else {
+					// Execute whatever batch we can before the recovery point
+					log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Batch execution before recovery point", logPrefix),
+						"from", from,
+						"to", to)
+				}
+			} else {
+				// Case 2: We're at or past the recovery point - execute one block at a time
+				// This is critical for state root verification during recovery
+				if to > from {
+					to = from
+					log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Single block execution after recovery point", logPrefix),
+						"single_block", to)
+				}
+			}
+		} else {
+			// Recovery start block value must be specified when recovery mode is enabled
+			log.Error(fmt.Sprintf("[%s] L1 missed info recovery mode is enabled but L1MissedInfoRecoveryStart is not set", logPrefix))
+			return 0, 0, fmt.Errorf("L1MissedInfoRecoveryStart must be set when L1MissedInfoRecovery is enabled")
+		}
 	}
 
-	shouldShortCircuit, noProgressTo, err := utils.ShouldShortCircuitExecution(tx, logPrefix, cfg.zk.L2ShortCircuitToVerifiedBatch)
-	if err != nil {
-		return 0, 0, fmt.Errorf("ShouldShortCircuitExecution: %w", err)
-	}
-	prevStageProgress, err := stages.GetStageProgress(tx, stages.Senders)
-	if err != nil {
-		return 0, 0, fmt.Errorf("getStageProgress: %w", err)
+	if to <= from { // Ensure we have something to execute
+		// Log that we're skipping execution because there's nothing to execute
+		log.Info(fmt.Sprintf("[%s] Execution skipped at block", logPrefix), "to", toBlock, "from", from, "stageProgress", stageProgress, "to-from", to-from)
+		return from, from, nil
 	}
 
-	// skip if no progress
-	if prevStageProgress == 0 && toBlock == 0 {
-		return 0, 0, nil
-	}
-
-	to := prevStageProgress
-	if toBlock > 0 {
-		to = cmp.Min(prevStageProgress, toBlock)
-	}
-
-	if shouldShortCircuit {
-		to = noProgressTo
-	}
-
+	log.Info(fmt.Sprintf("[%s] Executing blocks range", logPrefix), "from", from, "to", to, "to-from", to-from)
 	total := to - stageProgress
-
 	return to, total, nil
 }
 

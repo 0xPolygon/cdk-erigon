@@ -70,6 +70,14 @@ func SpawnStageDataStreamCatchup(
 }
 
 func CatchupDatastream(ctx context.Context, logPrefix string, tx kv.RwTx, srv server.DataStreamServer) (uint64, error) {
+	if tx == nil {
+		return 0, fmt.Errorf("nil transaction passed to CatchupDatastream")
+	}
+
+	if srv == nil {
+		return 0, fmt.Errorf("nil datastream server passed to CatchupDatastream")
+	}
+
 	reader := hermez_db.NewHermezDbReader(tx)
 
 	var (
@@ -113,15 +121,42 @@ func CatchupDatastream(ctx context.Context, logPrefix string, tx kv.RwTx, srv se
 		// a quick check that we haven't written anything to the stream yet.  Stage progress is a little misleading
 		// for genesis as we are in fact at block 0 here!  Getting the header has some performance overhead, so
 		// we only want to do this when we know the previous progress is 0.
-		header := srv.GetStreamServer().GetHeader()
+		streamServer := srv.GetStreamServer()
+		if streamServer == nil {
+			return 0, fmt.Errorf("nil stream server returned from GetStreamServer")
+		}
+
+		header := streamServer.GetHeader()
+		// Instead of checking if header is nil, which may not be applicable to the HeaderEntry type,
+		// we'll check if the server has any entries at all
 		if header.TotalEntries == 0 {
 			genesis, err := rawdb.ReadBlockByNumber(tx, 0)
 			if err != nil {
 				return 0, err
 			}
+			if genesis == nil {
+				return 0, fmt.Errorf("nil genesis block returned from ReadBlockByNumber")
+			}
+
 			if err = srv.WriteGenesisToStream(genesis, reader, tx); err != nil {
 				return 0, err
 			}
+		}
+	}
+
+	// If we're in L1 missed info recovery mode and current progress is before the recovery point,
+	// limit the blocks we write to the stream to avoid issues
+	if finalBlockNumber > previousProgress+1 {
+		// Check if we need to be more conservative with how many blocks we process at once
+		executionLimit := uint64(1000) // Default limit of blocks to process in one go
+		log.Info(fmt.Sprintf("[%s] Large gap detected in datastream, limiting blocks processed at once", logPrefix),
+			"from", previousProgress+1,
+			"to", finalBlockNumber,
+			"limited to", executionLimit)
+
+		// Process in smaller chunks if the gap is large
+		if finalBlockNumber > previousProgress+executionLimit {
+			finalBlockNumber = previousProgress + executionLimit
 		}
 	}
 

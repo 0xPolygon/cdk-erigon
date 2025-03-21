@@ -98,32 +98,41 @@ func (srv *ZkEVMDataStreamServer) WriteBlocksToStreamConsecutively(
 	reader DbReader,
 	from, to uint64,
 ) error {
+	if tx == nil {
+		return fmt.Errorf("nil transaction passed to WriteBlocksToStreamConsecutively")
+	}
+
+	if reader == nil {
+		return fmt.Errorf("nil reader passed to WriteBlocksToStreamConsecutively")
+	}
+
 	var err error
 
 	// logger stuff
 	t := utils.StartTimer("write-stream", "writeblockstostream")
 	defer t.LogTimer()
 	logTicker := time.NewTicker(10 * time.Second)
+	defer logTicker.Stop()
 	totalToWrite := to - (from - 1)
 	copyFrom := from
 	//////////
 
 	latestbatchNum, err := reader.GetBatchNoByL2Block(from - 1)
 	if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
-		return err
+		return fmt.Errorf("failed to get batch number by L2 block for previous block %d: %w", from-1, err)
 	}
 
 	batchNum, err := reader.GetBatchNoByL2Block(from)
 	if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
-		return err
+		return fmt.Errorf("failed to get batch number by L2 block %d: %w", from, err)
 	}
 
 	if err = srv.UnwindIfNecessary(logPrefix, reader, from, latestbatchNum, batchNum); err != nil {
-		return err
+		return fmt.Errorf("failed to unwind if necessary: %w", err)
 	}
 
 	if err = srv.streamServer.StartAtomicOp(); err != nil {
-		return err
+		return fmt.Errorf("failed to start atomic operation: %w", err)
 	}
 	defer srv.streamServer.RollbackAtomicOp()
 
@@ -134,12 +143,16 @@ func (srv *ZkEVMDataStreamServer) WriteBlocksToStreamConsecutively(
 	// but we know for certain if it is a 1st block from a new batch
 	islastEntrybatchEnd, err := srv.IsLastEntryBatchEnd()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to check if last entry is batch end: %w", err)
 	}
 
 	lastBlock, err := rawdb.ReadBlockByNumber(tx, from-1)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read block %d: %w", from-1, err)
+	}
+
+	if lastBlock == nil && from > 0 {
+		return fmt.Errorf("previous block %d not found", from-1)
 	}
 
 	entries := make([]DataStreamEntryProto, 0, insertEntryCount)
@@ -147,7 +160,7 @@ func (srv *ZkEVMDataStreamServer) WriteBlocksToStreamConsecutively(
 
 	batchesProgress, err := stages.GetStageProgress(tx, stages.Batches)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get stage progress for Batches: %w", err)
 	}
 LOOP:
 	for currentBlockNumber := from; currentBlockNumber <= to; currentBlockNumber++ {
@@ -163,19 +176,23 @@ LOOP:
 
 		block, err := rawdb.ReadBlockByNumber(tx, currentBlockNumber)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read block %d: %w", currentBlockNumber, err)
+		}
+
+		if block == nil {
+			return fmt.Errorf("block %d not found", currentBlockNumber)
 		}
 
 		batchNum, err := reader.GetBatchNoByL2Block(currentBlockNumber)
 		if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
-			return err
+			return fmt.Errorf("failed to get batch number for block %d: %w", currentBlockNumber, err)
 		}
 
 		// fork id changes only per batch so query it only once per batch
 		if batchNum != latestbatchNum {
 			forkId, err = reader.GetForkId(batchNum)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to get fork ID for batch %d: %w", batchNum, err)
 			}
 		}
 
@@ -183,8 +200,13 @@ LOOP:
 
 		blockEntries, err := createBlockWithBatchCheckStreamEntriesProto(reader, tx, block, lastBlock, batchNum, latestbatchNum, srv.chainId, forkId, islastEntrybatchEnd, checkBatchEnd)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to create block entries for block %d: %w", currentBlockNumber, err)
 		}
+
+		if blockEntries == nil || blockEntries.Entries() == nil {
+			return fmt.Errorf("nil block entries returned for block %d", currentBlockNumber)
+		}
+
 		entries = append(entries, blockEntries.Entries()...)
 
 		latestbatchNum = batchNum
@@ -198,24 +220,27 @@ LOOP:
 		if len(entries) >= commitEntryCountLimit {
 			log.Info(fmt.Sprintf("[%s] Commit count reached, committing entries", logPrefix), "block", currentBlockNumber)
 			if err = srv.commitEntriesToStreamProto(entries); err != nil {
-				return err
+				return fmt.Errorf("failed to commit entries to stream: %w", err)
 			}
 			entries = make([]DataStreamEntryProto, 0, insertEntryCount)
 			if err = srv.streamServer.CommitAtomicOp(); err != nil {
-				return err
+				return fmt.Errorf("failed to commit atomic operation: %w", err)
 			}
 			if err = srv.streamServer.StartAtomicOp(); err != nil {
-				return err
+				return fmt.Errorf("failed to start new atomic operation: %w", err)
 			}
 		}
 	}
 
-	if err = srv.commitEntriesToStreamProto(entries); err != nil {
-		return err
+	// Commit any remaining entries
+	if len(entries) > 0 {
+		if err = srv.commitEntriesToStreamProto(entries); err != nil {
+			return fmt.Errorf("failed to commit final entries to stream: %w", err)
+		}
 	}
 
 	if err = srv.commitAtomicOp(&to, &batchNum, &latestbatchNum); err != nil {
-		return err
+		return fmt.Errorf("failed to commit final atomic operation: %w", err)
 	}
 
 	return nil
@@ -232,17 +257,25 @@ func (srv *ZkEVMDataStreamServer) WriteBlockWithBatchStartToStream(
 	batchNum, prevBlockBatchNum uint64,
 	prevBlock, block eritypes.Block,
 ) (err error) {
+	if tx == nil {
+		return fmt.Errorf("nil transaction passed to WriteBlockWithBatchStartToStream")
+	}
+
+	if reader == nil {
+		return fmt.Errorf("nil reader passed to WriteBlockWithBatchStartToStream")
+	}
+
 	t := utils.StartTimer("write-stream", "writeblockstostream")
 	defer t.LogTimer()
 
 	blockNum := block.NumberU64()
 
 	if err = srv.UnwindIfNecessary(logPrefix, reader, blockNum, prevBlockBatchNum, batchNum); err != nil {
-		return err
+		return fmt.Errorf("failed to unwind if necessary: %w", err)
 	}
 
 	if err = srv.streamServer.StartAtomicOp(); err != nil {
-		return err
+		return fmt.Errorf("failed to start atomic operation: %w", err)
 	}
 	defer srv.streamServer.RollbackAtomicOp()
 
@@ -251,31 +284,35 @@ func (srv *ZkEVMDataStreamServer) WriteBlockWithBatchStartToStream(
 	if prevBlockBatchNum != batchNum {
 		gers, err := reader.GetBatchGlobalExitRootsProto(prevBlockBatchNum, batchNum)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get batch global exit roots proto: %w", err)
 		}
 
 		if batchStartEntries, err = createBatchStartEntriesProto(reader, tx, batchNum, prevBlockBatchNum, batchNum-prevBlockBatchNum, srv.GetChainId(), block.Root(), gers); err != nil {
-			return err
+			return fmt.Errorf("failed to create batch start entries: %w", err)
 		}
 	}
 
 	blockEntries, err := createFullBlockStreamEntriesProto(reader, tx, &block, &prevBlock, block.Transactions(), forkId, batchNum, make(map[uint64]uint64))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create block entries: %w", err)
+	}
+
+	if blockEntries == nil || blockEntries.Entries() == nil {
+		return fmt.Errorf("nil block entries returned for block %d", blockNum)
 	}
 
 	if batchStartEntries != nil {
 		if err = srv.commitEntriesToStreamProto(batchStartEntries.Entries()); err != nil {
-			return err
+			return fmt.Errorf("failed to commit batch start entries: %w", err)
 		}
 	}
 
 	if err = srv.commitEntriesToStreamProto(blockEntries.Entries()); err != nil {
-		return err
+		return fmt.Errorf("failed to commit block entries: %w", err)
 	}
 
 	if err = srv.commitAtomicOp(&blockNum, &batchNum, nil); err != nil {
-		return err
+		return fmt.Errorf("failed to commit atomic operation: %w", err)
 	}
 
 	return nil

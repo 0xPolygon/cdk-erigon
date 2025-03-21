@@ -94,6 +94,8 @@ type Zk struct {
 	DebugStep                  uint64
 	DebugStepAfter             uint64
 	DebugDisableStateRootCheck bool
+	L1MissedInfoRecovery       bool
+	L1MissedInfoRecoveryStart  uint64
 
 	PoolManagerUrl              string
 	DisableVirtualCounters      bool

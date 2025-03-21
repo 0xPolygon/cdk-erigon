@@ -254,6 +254,15 @@ func SpawnStageBatches(
 		return rollback(ctx, cfg, logPrefix, eriDb, hermezDb, unwindBlock, uint16(latestForkId), tx, u)
 	}
 	if highestDSL2Block < stageProgressBlockNo {
+		// Skip unwinding if we're in L1 missed info recovery mode
+		if cfg.zkCfg.L1MissedInfoRecovery {
+			log.Info(fmt.Sprintf("[%s] Datastream behind, but skipping unwind due to L1 missed info recovery mode", logPrefix),
+				"datastreamBlock", highestDSL2Block, "dbBlock", stageProgressBlockNo)
+			// In recovery mode, if datastream is behind our local state, we should skip this stage
+			// This allows recovery to proceed correctly
+			return nil
+		}
+
 		log.Info(fmt.Sprintf("[%s] Datastream behind, unwinding", logPrefix))
 		if _, err := unwindFn(highestDSL2Block); err != nil {
 			return err
@@ -278,8 +287,18 @@ func SpawnStageBatches(
 		return fmt.Errorf("GetStageProgress: %w", err)
 	}
 
-	// just exit the stage early if there is more execution work to do
+	// Skip batch processing if execution stage needs to catch up
 	if stageExecProgress < stageProgressBlockNo {
+		// In L1 missed info recovery mode, we prioritize execution to catch up
+		if cfg.zkCfg.L1MissedInfoRecovery {
+			log.Info(fmt.Sprintf("[%s] Execution behind in L1 missed info recovery mode, skipping batches stage to prioritize execution",
+				logPrefix),
+				"execution_progress", stageExecProgress,
+				"batches_progress", stageProgressBlockNo,
+				"recovery_start", cfg.zkCfg.L1MissedInfoRecoveryStart)
+			return nil
+		}
+
 		log.Info(fmt.Sprintf("[%s] Execution behind, skipping stage", logPrefix))
 		return nil
 	}
@@ -291,7 +310,52 @@ func SpawnStageBatches(
 		return fmt.Errorf("ReadCanonicalHash %d: %w", stageProgressBlockNo, err)
 	}
 
-	batchProcessor, err := NewBatchesProcessor(ctx, logPrefix, tx, hermezDb, eriDb, cfg.zkCfg.SyncLimit, cfg.zkCfg.DebugLimit, cfg.zkCfg.DebugStepAfter, cfg.zkCfg.DebugStep, stageProgressBlockNo, stageProgressBatchNo, lastProcessedBlockHash, dsQueryClient, progressChan, cfg.chainConfig, cfg.miningConfig, unwindFn)
+	// If L1MissedInfoRecovery is enabled and a start block is specified, use it as our known-good block
+	if cfg.zkCfg.L1MissedInfoRecovery && cfg.zkCfg.L1MissedInfoRecoveryStart > 0 {
+		log.Info(fmt.Sprintf("[%s] L1 missed info recovery mode enabled with start block %d",
+			logPrefix, cfg.zkCfg.L1MissedInfoRecoveryStart))
+
+		// In L1 recovery mode, we'll continue with the current progress without unwinding
+		// This allows us to download as much data as possible while the recovery mode is active
+
+		// Check if we should adjust our progress for very first run
+		if stageProgressBlockNo < cfg.zkCfg.L1MissedInfoRecoveryStart {
+			// Set the progress to start before the recovery point without unwinding
+			// This is only for the first run when current progress is lower than recovery start
+			log.Info(fmt.Sprintf("[%s] Current progress (%d) is before recovery start (%d), continuing normal sync",
+				logPrefix, stageProgressBlockNo, cfg.zkCfg.L1MissedInfoRecoveryStart))
+
+			// When we're below the recovery point, try to get as many blocks as possible
+			// to speed up reaching the recovery point
+			if highestDSL2Block > stageProgressBlockNo {
+				log.Info(fmt.Sprintf("[%s] Batches stage will process blocks up to datastream tip in recovery mode",
+					logPrefix),
+					"from_block", stageProgressBlockNo,
+					"to_block", highestDSL2Block,
+					"recovery_start", cfg.zkCfg.L1MissedInfoRecoveryStart)
+			}
+		} else {
+			// We're at or past the recovery start point
+			log.Info(fmt.Sprintf("[%s] Current progress (%d) is at or after recovery start (%d)",
+				logPrefix, stageProgressBlockNo, cfg.zkCfg.L1MissedInfoRecoveryStart))
+
+			if highestDSL2Block > stageProgressBlockNo {
+				log.Info(fmt.Sprintf("[%s] Batches stage will continue processing blocks even after recovery point",
+					logPrefix),
+					"from_block", stageProgressBlockNo,
+					"to_block", highestDSL2Block)
+			}
+		}
+
+		// Update our hash regardless to ensure consistency
+		lastProcessedBlockHash, err = eriDb.ReadCanonicalHash(stageProgressBlockNo)
+		if err != nil {
+			return fmt.Errorf("ReadCanonicalHash for current progress block %d: %w",
+				stageProgressBlockNo, err)
+		}
+	}
+
+	batchProcessor, err := NewBatchesProcessor(ctx, logPrefix, tx, hermezDb, eriDb, cfg.zkCfg.SyncLimit, cfg.zkCfg.DebugLimit, cfg.zkCfg.DebugStepAfter, cfg.zkCfg.DebugStep, stageProgressBlockNo, stageProgressBatchNo, lastProcessedBlockHash, dsQueryClient, progressChan, cfg.chainConfig, cfg.miningConfig, unwindFn, cfg.zkCfg.L1MissedInfoRecovery, cfg.zkCfg.L1MissedInfoRecoveryStart)
 	if err != nil {
 		return fmt.Errorf("NewBatchesProcessor: %w", err)
 	}

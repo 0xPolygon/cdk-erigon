@@ -74,10 +74,12 @@ type BatchesProcessor struct {
 	stageProgressBlockNo,
 	highestHashableL2BlockNo,
 	lastForkId uint64
-	highestL1InfoTreeIndex uint32
-	dsQueryClient          DsQueryClient
-	progressChan           chan uint64
-	unwindFn               func(uint64) (uint64, error)
+	highestL1InfoTreeIndex    uint32
+	dsQueryClient             DsQueryClient
+	progressChan              chan uint64
+	unwindFn                  func(uint64) (uint64, error)
+	l1MissedInfoRecovery      bool
+	l1MissedInfoRecoveryStart uint64
 
 	highestSeenBatchNo,
 	lastBlockHeight,
@@ -102,6 +104,8 @@ func NewBatchesProcessor(
 	chainConfig *chain.Config,
 	miningConfig *params.MiningConfig,
 	unwindFn func(uint64) (uint64, error),
+	l1MissedInfoRecovery bool,
+	l1MissedInfoRecoveryStart uint64,
 ) (*BatchesProcessor, error) {
 	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 	if err != nil {
@@ -114,27 +118,29 @@ func NewBatchesProcessor(
 	}
 
 	return &BatchesProcessor{
-		ctx:                  ctx,
-		logPrefix:            logPrefix,
-		tx:                   tx,
-		hermezDb:             hermezDb,
-		eriDb:                eriDb,
-		syncBlockLimit:       syncBlockLimit,
-		debugBlockLimit:      debugBlockLimit,
-		debugStep:            debugStep,
-		debugStepAfter:       debugStepAfter,
-		stageProgressBlockNo: stageProgressBlockNo,
-		lastBlockHeight:      stageProgressBlockNo,
-		highestSeenBatchNo:   stageProgressBatchNo,
-		highestVerifiedBatch: highestVerifiedBatch,
-		dsQueryClient:        dsQueryClient,
-		progressChan:         progressChan,
-		lastBlockHash:        lastProcessedBlockHash,
-		lastBlockRoot:        emptyHash,
-		lastForkId:           lastForkId,
-		unwindFn:             unwindFn,
-		chainConfig:          chainConfig,
-		miningConfig:         miningConfig,
+		ctx:                       ctx,
+		logPrefix:                 logPrefix,
+		tx:                        tx,
+		hermezDb:                  hermezDb,
+		eriDb:                     eriDb,
+		syncBlockLimit:            syncBlockLimit,
+		debugBlockLimit:           debugBlockLimit,
+		debugStep:                 debugStep,
+		debugStepAfter:            debugStepAfter,
+		stageProgressBlockNo:      stageProgressBlockNo,
+		lastBlockHeight:           stageProgressBlockNo,
+		highestSeenBatchNo:        stageProgressBatchNo,
+		highestVerifiedBatch:      highestVerifiedBatch,
+		dsQueryClient:             dsQueryClient,
+		progressChan:              progressChan,
+		lastBlockHash:             lastProcessedBlockHash,
+		lastBlockRoot:             emptyHash,
+		lastForkId:                lastForkId,
+		unwindFn:                  unwindFn,
+		chainConfig:               chainConfig,
+		miningConfig:              miningConfig,
+		l1MissedInfoRecovery:      l1MissedInfoRecovery,
+		l1MissedInfoRecoveryStart: l1MissedInfoRecoveryStart,
 	}, nil
 }
 
@@ -250,6 +256,13 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 		// if the block is older or the batch number is different, we need to unwind because the block has definately changed
 		log.Warn(fmt.Sprintf("[%s] Block already processed. Triggering unwind...", p.logPrefix),
 			"block", blockEntry.L2BlockNumber, "ds batch", blockEntry.BatchNumber, "db batch", dbBatchNum)
+
+		// Skip unwinding if we're in L1 missed info recovery mode
+		if p.l1MissedInfoRecovery {
+			log.Info(fmt.Sprintf("[%s] Skipping unwind due to L1 missed info recovery mode", p.logPrefix))
+			return false, nil
+		}
+
 		if _, err := p.unwind(blockEntry.L2BlockNumber); err != nil {
 			return false, err
 		}
@@ -273,6 +286,13 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 			"ds parent block hash", p.lastBlockHash,
 			"ds parent block number", blockEntry.L2BlockNumber-1,
 		)
+
+		// Skip unwinding if we're in L1 missed info recovery mode
+		if p.l1MissedInfoRecovery {
+			log.Info(fmt.Sprintf("[%s] Skipping unwind due to L1 missed info recovery mode", p.logPrefix))
+			return false, nil
+		}
+
 		//parent blockhash is wrong, so unwind to it, then restat stream from it to get the correct one
 		if _, err := p.unwind(blockEntry.L2BlockNumber - 1); err != nil {
 			return false, err
@@ -283,6 +303,13 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 	// unwind if we already have this block
 	if blockEntry.L2BlockNumber < p.lastBlockHeight+1 {
 		log.Warn(fmt.Sprintf("[%s] Block %d, already processed unwinding...", p.logPrefix, blockEntry.L2BlockNumber))
+
+		// Skip unwinding if we're in L1 missed info recovery mode
+		if p.l1MissedInfoRecovery {
+			log.Info(fmt.Sprintf("[%s] Skipping unwind due to L1 missed info recovery mode", p.logPrefix))
+			return false, nil
+		}
+
 		if _, err := p.unwind(blockEntry.L2BlockNumber); err != nil {
 			return false, err
 		}
@@ -314,6 +341,39 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 			log.Info(fmt.Sprintf("[%s] Debug step reached, stopping stage\n", p.logPrefix))
 			endLoop = true
 		}
+	}
+
+	// When L1 missed info recovery is enabled, we don't stop processing blocks
+	// Instead, we continue downloading all the way to the datastream tip in one go
+	if p.l1MissedInfoRecovery && blockEntry.L2BlockNumber >= p.l1MissedInfoRecoveryStart {
+		// Just log progress occasionally but don't stop the loop
+		blocksDownloaded := blockEntry.L2BlockNumber - p.stageProgressBlockNo
+
+		// If we're at exactly the recovery point, log it specifically
+		if blockEntry.L2BlockNumber == p.l1MissedInfoRecoveryStart {
+			log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Processing RECOVERY START POINT block in batches stage",
+				p.logPrefix),
+				"recovery_block", blockEntry.L2BlockNumber,
+				"batch_number", blockEntry.BatchNumber)
+		} else if blocksDownloaded > 0 && blocksDownloaded%10000 == 0 {
+			// Otherwise log progress periodically
+			log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Downloaded %d blocks, continuing to tip",
+				p.logPrefix, blocksDownloaded),
+				"current_block", blockEntry.L2BlockNumber,
+				"batch_number", blockEntry.BatchNumber)
+		}
+
+		// Additionally log state roots at and after recovery point for debugging
+		if blockEntry.L2BlockNumber >= p.l1MissedInfoRecoveryStart &&
+			(blockEntry.L2BlockNumber == p.l1MissedInfoRecoveryStart || blockEntry.L2BlockNumber%1000 == 0) {
+			log.Debug(fmt.Sprintf("[%s] L1 missed info recovery: Block state root",
+				p.logPrefix),
+				"block_number", blockEntry.L2BlockNumber,
+				"state_root", blockEntry.StateRoot.Hex(),
+				"batch_number", blockEntry.BatchNumber)
+		}
+
+		// Don't set endLoop = true - we want to download all blocks to the tip
 	}
 	/////// END DEBUG BISECTION ///////
 
@@ -362,28 +422,31 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 
 	// BEGIN SPECIAL MODE:
-	// we need to do a reverse lookup of the l1infotreeupdate by the index
-	// indexes are contiguous but in this case the index is not attached to the right data on L1 (the correct L1 data was originally missed)
-	// this RPC node now contains the correct l1 data, so going forward we can map the index to the correct data
-	hdbReader := hermez_db.NewHermezDbReader(p.tx)
-	l1InfoTreeUpdate, err := hdbReader.GetL1InfoTreeUpdate(uint64(l2Block.L1InfoTreeIndex))
-	if err != nil {
-		return fmt.Errorf("get l1 info tree update by ger error: %w", err)
-	}
-	if l1InfoTreeUpdate.GER != l2Block.GlobalExitRoot {
-		log.Error(fmt.Sprintf("[%s] Batch Number: %d, Block Number: %d, L1 info tree update ger mismatch: %x, %x", p.logPrefix, l2Block.BatchNumber, l2Block.L2BlockNumber, l1InfoTreeUpdate.GER, l2Block.GlobalExitRoot))
-	}
+	// Only use special mode if l1MissedInfoRecovery flag is enabled
+	if p.l1MissedInfoRecovery && l2Block.L2BlockNumber >= p.l1MissedInfoRecoveryStart {
+		// we need to do a reverse lookup of the l1infotreeupdate by the index
+		// indexes are contiguous but in this case the index is not attached to the right data on L1 (the correct L1 data was originally missed)
+		// this RPC node now contains the correct l1 data, so going forward we can map the index to the correct data
+		hdbReader := hermez_db.NewHermezDbReader(p.tx)
+		l1InfoTreeUpdate, err := hdbReader.GetL1InfoTreeUpdate(uint64(l2Block.L1InfoTreeIndex))
+		if err != nil {
+			return fmt.Errorf("get l1 info tree db read error: %w", err)
+		}
+		if l1InfoTreeUpdate.GER != l2Block.GlobalExitRoot {
+			log.Error(fmt.Sprintf("[%s] Batch Number: %d, Block Number: %d, L1 info tree update ger mismatch: %x, %x", p.logPrefix, l2Block.BatchNumber, l2Block.L2BlockNumber, l1InfoTreeUpdate.GER, l2Block.GlobalExitRoot))
+		}
 
-	if l1InfoTreeUpdate.ParentHash != l2Block.L1BlockHash {
-		log.Error(fmt.Sprintf("[%s] Batch Number: %d, Block Number: %d, L1 info tree update parent hash mismatch: %x, %x", p.logPrefix, l2Block.BatchNumber, l2Block.L2BlockNumber, l1InfoTreeUpdate.ParentHash, l2Block.L1BlockHash))
-	}
+		if l1InfoTreeUpdate.ParentHash != l2Block.L1BlockHash {
+			log.Error(fmt.Sprintf("[%s] Batch Number: %d, Block Number: %d, L1 info tree update parent hash mismatch: %x, %x", p.logPrefix, l2Block.BatchNumber, l2Block.L2BlockNumber, l1InfoTreeUpdate.ParentHash, l2Block.L1BlockHash))
+		}
 
-	// we overwrite these with the data from the L1
-	l2Block.GlobalExitRoot = l1InfoTreeUpdate.GER
+		// we overwrite these with the data from the L1
+		l2Block.GlobalExitRoot = l1InfoTreeUpdate.GER
 
-	// TODO: added late night - not synced this way yet - maybe try with this if we get mismatched roots lower down
-	if l1InfoTreeUpdate.ParentHash != emptyHash {
-		l2Block.L1BlockHash = l1InfoTreeUpdate.ParentHash
+		// TODO: added late night - not synced this way yet - maybe try with this if we get mismatched roots lower down
+		if l1InfoTreeUpdate.ParentHash != emptyHash {
+			l2Block.L1BlockHash = l1InfoTreeUpdate.ParentHash
+		}
 	}
 	/// END SPECIAL MODE
 
