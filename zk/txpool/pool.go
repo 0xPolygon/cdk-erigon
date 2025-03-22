@@ -2286,7 +2286,7 @@ func (s *bestSlice) Swap(i, j int) {
 	s.ms[i].bestIndex, s.ms[j].bestIndex = i, j
 }
 func (s *bestSlice) Less(i, j int) bool {
-	return s.ms[i].better(s.ms[j], *uint256.NewInt(s.pendingBaseFee))
+	return s.ms[i].better(s.ms[j], s.pendingBaseFee)
 }
 func (s *bestSlice) UnsafeRemove(i *metaTx) {
 	s.Swap(i.bestIndex, len(s.ms)-1)
@@ -2474,19 +2474,19 @@ type BestQueue struct {
 	pendingBastFee uint64
 }
 
-func (mt *metaTx) better(than *metaTx, pendingBaseFee uint256.Int) bool {
+func (mt *metaTx) better(than *metaTx, pendingBaseFee uint64) bool {
 	subPool := mt.subPool
 	thanSubPool := than.subPool
 
 	difference := &uint256.Int{}
-	difference.Sub(&mt.minFeeCap, &pendingBaseFee)
+	difference.SubUint64(&mt.minFeeCap, pendingBaseFee)
 
 	if difference.Sign() >= 0 {
 		subPool |= EnoughFeeCapBlock
 	}
 
 	thanDifference := &uint256.Int{}
-	thanDifference.Sub(&than.minFeeCap, &pendingBaseFee)
+	thanDifference.SubUint64(&than.minFeeCap, pendingBaseFee)
 	if thanDifference.Sign() >= 0 {
 		thanSubPool |= EnoughFeeCapBlock
 	}
@@ -2501,14 +2501,14 @@ func (mt *metaTx) better(than *metaTx, pendingBaseFee uint256.Int) bool {
 			if difference.CmpUint64(mt.minTip) <= 0 {
 				effectiveTip = *difference
 			} else {
-				effectiveTip = *uint256.NewInt(mt.minTip)
+				effectiveTip[0] = mt.minTip
 			}
 		}
 		if (thanSubPool & EnoughFeeCapBlock) == EnoughFeeCapBlock {
 			if thanDifference.CmpUint64(than.minTip) <= 0 {
 				thanEffectiveTip = *thanDifference
 			} else {
-				thanEffectiveTip = *uint256.NewInt(than.minTip)
+				thanEffectiveTip[0] = than.minTip
 			}
 		}
 		if !effectiveTip.Eq(&thanEffectiveTip) {
@@ -2576,7 +2576,7 @@ func (mt *metaTx) worse(than *metaTx, pendingBaseFee uint256.Int) bool {
 
 func (p BestQueue) Len() int { return len(p.ms) }
 func (p BestQueue) Less(i, j int) bool {
-	return p.ms[i].better(p.ms[j], *uint256.NewInt(p.pendingBastFee))
+	return p.ms[i].better(p.ms[j], p.pendingBastFee)
 }
 func (p BestQueue) Swap(i, j int) {
 	p.ms[i], p.ms[j] = p.ms[j], p.ms[i]
