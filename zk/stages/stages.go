@@ -345,7 +345,26 @@ func DefaultZkStages(
 			Description: "Generate intermediate hashes and computing state root",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
-				_, err := SpawnZkIntermediateHashesStage(s, u, txc.Tx, zkInterHashesCfg, ctx)
+				// if zk config
+				// if !zkInterHashesCfg.zk.Type1Rollup {
+				type1Rollup := true
+				if !type1Rollup {
+					_, err := SpawnZkIntermediateHashesStage(s, u, txc.Tx, zkInterHashesCfg, ctx)
+					return err
+				}
+
+				trieCfg := stages.StageTrieCfg(
+					zkInterHashesCfg.db,
+					zkInterHashesCfg.checkRoot,
+					zkInterHashesCfg.saveNewHashesToDB,
+					zkInterHashesCfg.badBlockHalt,
+					zkInterHashesCfg.tmpDir,
+					zkInterHashesCfg.blockReader,
+					zkInterHashesCfg.hd,
+					zkInterHashesCfg.historyV3,
+					zkInterHashesCfg.agg)
+
+				_, err := stages.SpawnIntermediateHashesStage(s, u, txc.Tx, trieCfg, ctx, logger)
 				return err
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
