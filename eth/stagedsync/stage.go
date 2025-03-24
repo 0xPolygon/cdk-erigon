@@ -57,6 +57,13 @@ func (s *StageState) FlushSmtCache() error {
 	return s.state.FlushSmtCache()
 }
 
+func (s *StageState) PrevUnwindPoint() *uint64 {
+	if s.state == nil {
+		return nil
+	}
+	return s.state.PrevUnwindPoint()
+}
+
 func (s *StageState) LogPrefix() string { return s.state.LogPrefix() }
 
 // Update updates the stage state (current block number) in the database. Can be called multiple times during stage execution.

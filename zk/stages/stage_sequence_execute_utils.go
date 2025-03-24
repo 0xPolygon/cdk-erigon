@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/c2h5oh/datasize"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -56,6 +57,12 @@ type HasChangeSetWriter interface {
 	ChangeSetWriter() *state.ChangeSetWriter
 }
 
+// Designed to be used to call the normal stage loop hook earlier in the process as we want this to be
+// done per block rather than per batch.
+type DoneHook interface {
+	AfterRun(tx kv.Tx, finishProgressBefore uint64, prevUnwindPoint *uint64) error
+}
+
 type SequenceBlockCfg struct {
 	db            kv.RwDB
 	dbsmt         kv.RwDB
@@ -86,6 +93,9 @@ type SequenceBlockCfg struct {
 	yieldSize      uint16
 
 	infoTreeUpdater *l1infotree.Updater
+
+	decodedTxCache *expirable.LRU[common.Hash, *types.Transaction]
+	doneHook       DoneHook
 }
 
 func StageSequenceBlocksCfg(
@@ -116,6 +126,7 @@ func StageSequenceBlocksCfg(
 	legacyVerifier *verifier.LegacyExecutorVerifier,
 	yieldSize uint16,
 	infoTreeUpdater *l1infotree.Updater,
+	doneHook DoneHook,
 ) SequenceBlockCfg {
 
 	return SequenceBlockCfg{
@@ -144,6 +155,7 @@ func StageSequenceBlocksCfg(
 		legacyVerifier:   legacyVerifier,
 		yieldSize:        yieldSize,
 		infoTreeUpdater:  infoTreeUpdater,
+		doneHook:         doneHook,
 	}
 }
 
@@ -173,10 +185,10 @@ func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockC
 
 func validateIfDatastreamIsAheadOfExecution(
 	s *stagedsync.StageState,
-	// u stagedsync.Unwinder,
+// u stagedsync.Unwinder,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
-	// historyCfg stagedsync.HistoryCfg,
+// historyCfg stagedsync.HistoryCfg,
 ) error {
 	roTx, err := cfg.db.BeginRo(ctx)
 	if err != nil {
