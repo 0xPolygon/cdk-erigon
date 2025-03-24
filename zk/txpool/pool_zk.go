@@ -211,9 +211,6 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 }
 
 func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, []*metaTx, error) {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-
 	if p.isDeniedYieldingTransactions() {
 		//log.Trace("Denied yielding transactions, cannot proceed")
 		return false, 0, nil, nil
@@ -227,7 +224,10 @@ func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availa
 
 	isShanghai := p.isShanghai()
 	isLondon := p.isLondon()
-	_ = isLondon
+
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
 	best := p.pending.best
 
 	txs.Resize(uint(cmp.Min(int(n), len(best.ms))))
