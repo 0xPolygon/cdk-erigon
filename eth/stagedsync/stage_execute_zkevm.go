@@ -335,9 +335,22 @@ func getExecRange(cfg ExecuteBlockCfg, tx kv.RwTx, stageProgress, toBlock uint64
 				if to > cfg.zk.L1MissedInfoRecoveryStart || to == 0 {
 					// Execute up to the recovery point only (inclusive)
 					to = cfg.zk.L1MissedInfoRecoveryStart
-					log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Batch execution to recovery point (inclusive)", logPrefix),
-						"from", from,
-						"to", to)
+					// check batches stage incase were not at the recovery height
+					// we may have returned early from the datastream due to conn issues
+					batchesProgress, err := stages.GetStageProgress(tx, stages.Batches)
+					if err != nil {
+						return 0, 0, err
+					}
+					if to > batchesProgress {
+						to = batchesProgress - 1
+						log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Batch execution to highest datastream block", logPrefix),
+							"from", from,
+							"to", to)
+					} else {
+						log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Batch execution to recovery point (inclusive)", logPrefix),
+							"from", from,
+							"to", to)
+					}
 				} else {
 					// Execute whatever batch we can before the recovery point
 					log.Info(fmt.Sprintf("[%s] L1 missed info recovery: Batch execution before recovery point", logPrefix),

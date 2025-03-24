@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"math/big"
 	"sync/atomic"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	txtype "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
@@ -30,6 +30,7 @@ type ProcessorErigonDb interface {
 	WriteHeader(batchNo *big.Int, blockHash common.Hash, stateRoot, txHash, parentHash common.Hash, coinbase common.Address, ts, gasLimit uint64, chainConfig *chain.Config) (*ethTypes.Header, error)
 	WriteBody(batchNo *big.Int, headerHash common.Hash, txs []ethTypes.Transaction) error
 	ReadCanonicalHash(L2BlockNumber uint64) (common.Hash, error)
+	GetHeader(blockNo uint64) (*ethTypes.Header, error)
 }
 
 type ProcessorHermezDb interface {
@@ -424,28 +425,33 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 	// BEGIN SPECIAL MODE:
 	// Only use special mode if l1MissedInfoRecovery flag is enabled
 	if p.l1MissedInfoRecovery && l2Block.L2BlockNumber >= p.l1MissedInfoRecoveryStart {
-		// we need to do a reverse lookup of the l1infotreeupdate by the index
-		// indexes are contiguous but in this case the index is not attached to the right data on L1 (the correct L1 data was originally missed)
-		// this RPC node now contains the correct l1 data, so going forward we can map the index to the correct data
-		hdbReader := hermez_db.NewHermezDbReader(p.tx)
-		l1InfoTreeUpdate, err := hdbReader.GetL1InfoTreeUpdate(uint64(l2Block.L1InfoTreeIndex))
-		if err != nil {
-			return fmt.Errorf("get l1 info tree db read error: %w", err)
-		}
-		if l1InfoTreeUpdate.GER != l2Block.GlobalExitRoot {
-			log.Error(fmt.Sprintf("[%s] Batch Number: %d, Block Number: %d, L1 info tree update ger mismatch: %x, %x", p.logPrefix, l2Block.BatchNumber, l2Block.L2BlockNumber, l1InfoTreeUpdate.GER, l2Block.GlobalExitRoot))
-		}
 
-		if l1InfoTreeUpdate.ParentHash != l2Block.L1BlockHash {
-			log.Error(fmt.Sprintf("[%s] Batch Number: %d, Block Number: %d, L1 info tree update parent hash mismatch: %x, %x", p.logPrefix, l2Block.BatchNumber, l2Block.L2BlockNumber, l1InfoTreeUpdate.ParentHash, l2Block.L1BlockHash))
-		}
+		// if info index is 0 we must look back to find the correct index because the stream pushes 0 for none changes.
+		infoTreeIndex := l2Block.L1InfoTreeIndex
+		if infoTreeIndex != 0 {
+			// we need to do a reverse lookup of the l1infotreeupdate by the index
+			// indexes are contiguous but in this case the index is not attached to the right data on L1 (the correct L1 data was originally missed)
+			// this RPC node now contains the correct l1 data, so going forward we can map the index to the correct data
+			hdbReader := hermez_db.NewHermezDbReader(p.tx)
+			l1InfoTreeUpdate, err := hdbReader.GetL1InfoTreeUpdate(uint64(infoTreeIndex))
+			if err != nil {
+				return fmt.Errorf("get l1 info tree db read error: %w", err)
+			}
+			if l1InfoTreeUpdate.GER != l2Block.GlobalExitRoot {
+				log.Error(fmt.Sprintf("[%s] Batch Number: %d, Block Number: %d, L1 info tree update ger mismatch: %x, %x", p.logPrefix, l2Block.BatchNumber, l2Block.L2BlockNumber, l1InfoTreeUpdate.GER, l2Block.GlobalExitRoot))
+			}
 
-		// we overwrite these with the data from the L1
-		l2Block.GlobalExitRoot = l1InfoTreeUpdate.GER
+			if l1InfoTreeUpdate.ParentHash != l2Block.L1BlockHash {
+				log.Error(fmt.Sprintf("[%s] Batch Number: %d, Block Number: %d, L1 info tree update parent hash mismatch: %x, %x", p.logPrefix, l2Block.BatchNumber, l2Block.L2BlockNumber, l1InfoTreeUpdate.ParentHash, l2Block.L1BlockHash))
+			}
 
-		// TODO: added late night - not synced this way yet - maybe try with this if we get mismatched roots lower down
-		if l1InfoTreeUpdate.ParentHash != emptyHash {
-			l2Block.L1BlockHash = l1InfoTreeUpdate.ParentHash
+			// we overwrite these with the data from the L1
+			l2Block.GlobalExitRoot = l1InfoTreeUpdate.GER
+
+			// TODO: added late night - not synced this way yet - maybe try with this if we get mismatched roots lower down
+			if l1InfoTreeUpdate.ParentHash != emptyHash {
+				l2Block.L1BlockHash = l1InfoTreeUpdate.ParentHash
+			}
 		}
 	}
 	/// END SPECIAL MODE
