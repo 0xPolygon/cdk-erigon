@@ -137,6 +137,8 @@ min-run: build-docker ## Runs a minimal node
 	$(RUN_DOCKER_DS)
 	sleep 10
 	$(RUN_DOCKER_RPC)
+	$(RUN_DOCKER_PROMETHEUS)
+	$(RUN_DOCKER_GRAFANA)
 
 .PHONY: test
 test: test-1 ## Runs all e2e tests
