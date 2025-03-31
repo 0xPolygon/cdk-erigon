@@ -439,11 +439,11 @@ func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *sta
 		return trie.EmptyRoot, err
 	}
 
-	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes finished. Commiting batch", logPrefix), "taken", time.Since(now))
-
 	lr := dbSmt.LastRoot()
 
 	hash = common.BigToHash(lr)
+
+	log.Info(fmt.Sprintf("[%s] Regeneration trie hashes finished. Commiting batch", logPrefix), "taken", time.Since(now), "root", hash.Hex())
 
 	// do not put this outside, because sequencer uses this function to calculate root for each block
 	hermezDb := hermez_db.NewHermezDb(db)

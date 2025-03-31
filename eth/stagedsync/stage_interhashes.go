@@ -142,6 +142,8 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 		return trie.EmptyRoot, err
 	}
 
+	logger.Info(fmt.Sprintf("[%s] Intermediate hashes stage completed", logPrefix), "root", root.Hex())
+
 	if !useExternalTx {
 		if err := tx.Commit(); err != nil {
 			return trie.EmptyRoot, err
@@ -551,6 +553,7 @@ func (p *HashPromoter) Unwind(logPrefix string, s *StageState, u *UnwindState, s
 }
 
 func IncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, to uint64, cfg TrieCfg, expectedRootHash libcommon.Hash, quit <-chan struct{}, logger log.Logger) (libcommon.Hash, error) {
+	logger.Info(fmt.Sprintf("[%s] Incremental state promotion of intermediate hashes", logPrefix), "from", s.BlockNumber, "to", to)
 	p := NewHashPromoter(db, cfg.tmpDir, quit, logPrefix, logger)
 	rl := trie.NewRetainList(0)
 	if cfg.historyV3 {

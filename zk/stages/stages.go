@@ -116,7 +116,12 @@ func SequencerZkStages(
 				return SpawnSequencerInterhashesStage(s, u, txc.Tx, ctx, zkInterHashesCfg, true)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
-				return UnwindSequencerInterhashsStage(u, s, txc.Tx, ctx, zkInterHashesCfg)
+				// NEEDED????
+				if !type1Rollup {
+					return UnwindSequencerInterhashsStage(u, s, txc.Tx, ctx, zkInterHashesCfg)
+				}
+
+				return stages.UnwindIntermediateHashesStage(u, s, txc.Tx, trieConfig(zkInterHashesCfg), ctx, logger)
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
 				return PruneSequencerInterhashesStage(p, tx, zkInterHashesCfg, ctx)
@@ -220,6 +225,21 @@ func SequencerZkStages(
 			},
 		},
 	}
+}
+
+const type1Rollup = true
+
+func trieConfig(zkInterHashesCfg ZkInterHashesCfg) stages.TrieCfg {
+	return stages.StageTrieCfg(
+		zkInterHashesCfg.db,
+		zkInterHashesCfg.checkRoot,
+		zkInterHashesCfg.saveNewHashesToDB,
+		zkInterHashesCfg.badBlockHalt,
+		zkInterHashesCfg.tmpDir,
+		zkInterHashesCfg.blockReader,
+		zkInterHashesCfg.hd,
+		zkInterHashesCfg.historyV3,
+		zkInterHashesCfg.agg)
 }
 
 func DefaultZkStages(
@@ -347,28 +367,20 @@ func DefaultZkStages(
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
 				// if zk config
 				// if !zkInterHashesCfg.zk.Type1Rollup {
-				type1Rollup := true
 				if !type1Rollup {
 					_, err := SpawnZkIntermediateHashesStage(s, u, txc.Tx, zkInterHashesCfg, ctx)
 					return err
 				}
 
-				trieCfg := stages.StageTrieCfg(
-					zkInterHashesCfg.db,
-					zkInterHashesCfg.checkRoot,
-					zkInterHashesCfg.saveNewHashesToDB,
-					zkInterHashesCfg.badBlockHalt,
-					zkInterHashesCfg.tmpDir,
-					zkInterHashesCfg.blockReader,
-					zkInterHashesCfg.hd,
-					zkInterHashesCfg.historyV3,
-					zkInterHashesCfg.agg)
-
-				_, err := stages.SpawnIntermediateHashesStage(s, u, txc.Tx, trieCfg, ctx, logger)
+				_, err := stages.SpawnIntermediateHashesStage(s, u, txc.Tx, trieConfig(zkInterHashesCfg), ctx, logger)
 				return err
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
-				return UnwindZkIntermediateHashesStage(u, s, txc.Tx, zkInterHashesCfg, ctx, false)
+				if !type1Rollup {
+					return UnwindZkIntermediateHashesStage(u, s, txc.Tx, zkInterHashesCfg, ctx, false)
+				}
+
+				return stages.UnwindIntermediateHashesStage(u, s, txc.Tx, trieConfig(zkInterHashesCfg), ctx, logger)
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
 				// TODO: implement this in zk interhashes

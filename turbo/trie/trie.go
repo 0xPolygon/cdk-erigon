@@ -39,6 +39,22 @@ var (
 	emptyState = crypto.Keccak256Hash(nil)
 )
 
+// Define trie interface
+type MerkleTrie interface {
+	Get(key []byte) (value []byte, gotValue bool)
+	GetAccount(key []byte) (value *accounts.Account, gotValue bool)
+	GetAccountCode(key []byte) (value []byte, gotValue bool)
+	GetAccountCodeSize(key []byte) (value int, gotValue bool)
+	Update(key, value []byte)
+	UpdateAccount(key []byte, acc *accounts.Account)
+	UpdateAccountCode(key []byte, code codeNode) error
+	UpdateAccountCodeSize(key []byte, codeSize int) error
+	NeedLoadCode(addrHash libcommon.Hash, codeHash libcommon.Hash, bytecode bool) (bool, *LoadRequestForCode)
+	FindSubTriesToLoad(rl RetainDecider) (prefixes [][]byte, fixedbits []int, hooks [][]byte)
+	HookSubTries(subTries SubTries, hooks [][]byte) error
+	Delete(key []byte)
+}
+
 // Trie is a Merkle Patricia Trie.
 // The zero value is an empty trie with no database.
 // Use New to create a trie that sits on top of a database.
