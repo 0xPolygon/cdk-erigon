@@ -256,6 +256,23 @@ func (l *statisticsInstance) Summary() string {
 		zkHashAccountCount, zkHashStoreCount, zkHashCodeCount)
 
 	log.Info(result)
+	
+	// Report metrics to Prometheus
+	// Batch level metrics
+	SeqBatchDuration.Set(float64(batchDuration))
+	SeqSequencingBatchTiming.Set(float64(sequencingBatchTiming))
+	
+	// Process transaction metrics
+	SeqProcessTxTiming.Set(float64(processTxTiming))
+	SeqGetTxTiming.Set(float64(getTxTiming))
+	SeqGetTxPauseTiming.Set(float64(getTxPauseTiming))
+	
+	// State and finalization metrics
+	SeqPbStateTiming.Set(float64(pbStateTiming))
+	SeqZkIncIntermediateHashesTiming.Set(float64(zkIncIntermediateHashesTiming))
+	SeqFinaliseBlockWriteTiming.Set(float64(finaliseBlockWriteTiming))
+	SeqBatchCommitDBTiming.Set(float64(batchCommitDBTiming))
+	
 	l.resetStatistics()
 	return result
 }

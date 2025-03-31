@@ -11,7 +11,6 @@ scrape_configs:
       - targets:
           - xlayer-rpc:9095
           - xlayer-seq:9095
-          - xlayer-mainnet-seq:9095
           - xlayer-mainnet-lrp-replay:9095
 
   - job_name: erigon
