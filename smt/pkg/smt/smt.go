@@ -1,7 +1,6 @@
 package smt
 
 import (
-	"container/list"
 	"math/big"
 
 	"context"
@@ -704,50 +703,49 @@ type queueEntry struct {
 }
 
 func (s *RoSMT) traverse(ctx context.Context, node *big.Int, action TraverseAction, prefix []byte) error {
-	queue := list.New()
-	queue.PushBack(queueEntry{node: node, prefix: prefix})
+	if node == nil || node.Cmp(big.NewInt(0)) == 0 {
+		return nil
+	}
 
-	for queue.Len() > 0 {
-		e := queue.Front()
-		current := e.Value.(queueEntry)
-		queue.Remove(e)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
-		if current.node == nil || current.node.Cmp(big.NewInt(0)) == 0 {
-			continue
+	ky := utils.ScalarToRoot(node)
+
+	nodeValue, err := s.DbRo.Get(ky)
+
+	if err != nil {
+		return err
+	}
+
+	shouldContinue, err := action(prefix, ky, nodeValue)
+
+	if err != nil {
+		return err
+	}
+
+	//if nodeValue.IsNil() {
+	//	return nil
+	//}
+
+	if nodeValue.IsFinalNode() || !shouldContinue {
+		return nil
+	}
+
+	for i := 0; i < 2; i++ {
+		if len(nodeValue) < i*4+4 {
+			return errors.New("nodeValue has insufficient length")
 		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		ky := utils.ScalarToRoot(current.node)
-		nodeValue, err := s.DbRo.Get(ky)
+		child := utils.NodeKeyFromBigIntArray(nodeValue[i*4 : i*4+4])
+		childPrefix := make([]byte, len(prefix)+1)
+		copy(childPrefix, prefix)
+		childPrefix[len(prefix)] = byte(i)
+		err := s.traverse(ctx, child.ToBigInt(), action, childPrefix)
 		if err != nil {
 			return err
-		}
-
-		shouldContinue, err := action(current.prefix, ky, nodeValue)
-		if err != nil {
-			return err
-		}
-
-		if nodeValue.IsFinalNode() || !shouldContinue {
-			continue
-		}
-
-		for i := 0; i < 2; i++ {
-			if len(nodeValue) < i*4+4 {
-				return errors.New("nodeValue has insufficient length")
-			}
-
-			child := utils.NodeKeyFromBigIntArray(nodeValue[i*4 : i*4+4])
-			childPrefix := make([]byte, len(current.prefix)+1)
-			copy(childPrefix, current.prefix)
-			childPrefix[len(current.prefix)] = byte(i)
-
-			queue.PushBack(queueEntry{node: child.ToBigInt(), prefix: childPrefix})
 		}
 	}
 

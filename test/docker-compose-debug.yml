@@ -5,7 +5,7 @@ networks:
 services:
   xlayer-executor:
     container_name: xlayer-executor
-    image: hermeznetwork/zkevm-prover:v9.0.0-RC1-fork.13
+    image: hermeznetwork/zkevm-prover:v9.0.0-RC3-fork.13
     platform: linux/amd64
     environment:
       - EXPERIMENTAL_DOCKER_DESKTOP_FORCE_QEMU=1
@@ -74,7 +74,7 @@ services:
 
   xlayer-prover:
     container_name: xlayer-prover
-    image: hermeznetwork/zkevm-prover:v9.0.0-RC1-fork.13
+    image: hermeznetwork/zkevm-prover:v9.0.0-RC3-fork.13
     platform: linux/amd64
     environment:
       - EXPERIMENTAL_DOCKER_DESKTOP_FORCE_QEMU=1
