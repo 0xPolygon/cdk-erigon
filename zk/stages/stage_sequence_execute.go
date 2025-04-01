@@ -470,10 +470,12 @@ func sequencingBatchStep(
 			}
 
 			if len(batchState.blockState.transactionsForInclusion) == 0 {
-				pauseTime := time.Now()
-				time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
-				metrics.GetLogStatistics().CumulativeCounting(metrics.GetTxPauseCounter)
-				metrics.GetLogStatistics().CumulativeTiming(metrics.GetTxPauseTiming, time.Since(pauseTime))
+				if !batchState.isAnyRecovery() {
+					pauseTime := time.Now()
+					time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
+					metrics.GetLogStatistics().CumulativeCounting(metrics.GetTxPauseCounter)
+					metrics.GetLogStatistics().CumulativeTiming(metrics.GetTxPauseTiming, time.Since(pauseTime))
+				}
 			} else {
 				log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 			}
@@ -840,7 +842,7 @@ func sequencingBatchStep(
 		if err := cfg.doneHook.AfterRun(batchContext.sdb.tx, block.NumberU64()-1, s.PrevUnwindPoint()); err != nil {
 			return err
 		}
-		
+
 		// For X Layer
 		metrics.GetLogStatistics().SetTag(metrics.FinalizeBlockNumber, strconv.Itoa(int(blockNumber)))
 		metrics.GetLogStatistics().SummaryCheckpoint()
