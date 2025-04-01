@@ -67,6 +67,8 @@ type DeprecatedTxPoolConfig struct {
 	EnableFreeGasList bool
 	// FreeGasList project name to FreeGasInfo
 	FreeGasList []FreeGasInfo
+	// EnableTimsort is the switch to use timsort on the best slice of txpool
+	EnableTimsort bool
 }
 
 // FreeGasInfo contains the details for what tx should be free

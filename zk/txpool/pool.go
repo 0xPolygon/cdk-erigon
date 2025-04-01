@@ -42,6 +42,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/gasprice/gaspricecfg"
 	"github.com/ledgerwatch/log/v3"
+	"github.com/psilva261/timsort/v2"
 	"github.com/status-im/keycard-go/hexutils"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
@@ -387,7 +388,7 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		discardReasonsLRU:       discardHistory,
 		all:                     byNonce,
 		recentlyConnectedPeers:  &recentlyConnectedPeers{},
-		pending:                 NewPendingSubPool(PendingSubPool, cfg.PendingSubPoolLimit),
+		pending:                 NewPendingSubPool(PendingSubPool, cfg.PendingSubPoolLimit, ethCfg.DeprecatedTxPool.EnableTimsort),
 		baseFee:                 NewSubPool(BaseFeeSubPool, cfg.BaseFeeSubPoolLimit),
 		queued:                  NewSubPool(QueuedSubPool, cfg.QueuedSubPoolLimit),
 		newPendingTxs:           newTxs,
@@ -2260,17 +2261,18 @@ func (b *BySenderAndNonce) replaceOrInsert(mt *metaTx) *metaTx {
 // It's more expensive to maintain "slice sort" invariant, but it allow do cheap copy of
 // pending.best slice for mining (because we consider txs and metaTx are immutable)
 type PendingPool struct {
-	sorted atomic.Bool // means `PendingPool.best` is sorted or not
-	best   *bestSlice
-	worst  *WorstQueue
-	limit  int
-	t      SubPoolType
-	mtx    sync.RWMutex
+	sorted        atomic.Bool // means `PendingPool.best` is sorted or not
+	best          *bestSlice
+	worst         *WorstQueue
+	limit         int
+	t             SubPoolType
+	mtx           sync.RWMutex
+	enbaleTimsort bool
 }
 
-func NewPendingSubPool(t SubPoolType, limit int) *PendingPool {
-	log.Info("new sub pool", "SubPoolType", PendingSubPool, "limit", limit)
-	return &PendingPool{limit: limit, t: t, best: &bestSlice{ms: []*metaTx{}}, worst: &WorstQueue{ms: []*metaTx{}}}
+func NewPendingSubPool(t SubPoolType, limit int, enableTimsort bool) *PendingPool {
+	log.Info("new sub pool", "SubPoolType", PendingSubPool, "limit", limit, "enableTimsort", enableTimsort)
+	return &PendingPool{limit: limit, t: t, best: &bestSlice{ms: []*metaTx{}}, worst: &WorstQueue{ms: []*metaTx{}}, enbaleTimsort: enableTimsort}
 }
 
 // bestSlice - is similar to best queue, but with O(n log n) complexity and
@@ -2310,7 +2312,11 @@ func (p *PendingPool) EnforceBestInvariants() {
 		p.mtx.Lock()
 		defer p.mtx.Unlock()
 
-		sort.Sort(p.best)
+		if p.enbaleTimsort {
+			timsort.TimSort(p.best)
+		} else {
+			sort.Sort(p.best)
+		}
 		p.sorted.Swap(true)
 	}
 }

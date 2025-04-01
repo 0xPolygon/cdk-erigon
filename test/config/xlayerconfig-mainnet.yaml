@@ -78,5 +78,6 @@ zkevm.pre-run-address-list: ["0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E"]
 zkevm.block-info-concurrent: true
 
 # to reduce lock race in stress test
+txpool.enabletimsort: true
 zkevm.bulk-add-txs: true
 zkevm.enable-add-tx-notify: true
