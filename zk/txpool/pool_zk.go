@@ -44,6 +44,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 	minFeeCap := uint256.NewInt(0).SetAllOne()
 	minTip := uint64(math.MaxUint64)
 	var toDel []*metaTx // can't delete items while iterate them
+	pending.mtx.Lock()
 
 	senderAddr := common.Address{}
 	freeType, gpMul := p.checkFreeGasSenderXLayer(senderID, &senderAddr)
@@ -60,7 +61,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 			// del from sub-pool
 			switch mt.currentSubPool {
 			case PendingSubPool:
-				pending.Remove(mt)
+				pending.RemoveNoLock(mt)
 			case BaseFeeSubPool:
 				baseFee.Remove(mt)
 			case QueuedSubPool:
@@ -170,7 +171,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 		// Some fields of mt might have changed, need to fix the invariants in the subpool best and worst queues
 		switch mt.currentSubPool {
 		case PendingSubPool:
-			pending.Updated(mt)
+			pending.UpdatedNoLock(mt)
 		case BaseFeeSubPool:
 			baseFee.Updated(mt)
 		case QueuedSubPool:
@@ -178,6 +179,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 		}
 		return true
 	})
+	pending.mtx.Unlock()
 	for _, mt := range toDel {
 		discard(mt, NonceTooLow)
 	}
@@ -344,37 +346,27 @@ func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGas
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	cache := p._stateCache
-	toDelete := make([]*metaTx, 0)
-
-	p.all.ascendAll(func(mt *metaTx) bool {
-		for _, id := range ids {
-			if bytes.Equal(mt.Tx.IDHash[:], id[:]) {
-				toDelete = append(toDelete, mt)
-				switch mt.currentSubPool {
-				case PendingSubPool:
-					p.pending.Remove(mt)
-				case BaseFeeSubPool:
-					p.baseFee.Remove(mt)
-				case QueuedSubPool:
-					p.queued.Remove(mt)
-				default:
-					//already removed
-				}
-			}
-		}
-		return true
-	})
-
 	sendersWithChangedState := make(map[uint64]struct{})
-	for _, mt := range toDelete {
-		p.discardLocked(mt, Mined)
-		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
+	for _, id := range ids {
+		if mt, ok := p.byHash[string(id[:])]; ok {
+			sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
+			switch mt.currentSubPool {
+			case PendingSubPool:
+				p.pending.Remove(mt)
+			case BaseFeeSubPool:
+				p.baseFee.Remove(mt)
+			case QueuedSubPool:
+				p.queued.Remove(mt)
+			default:
+				//already removed
+			}
+			p.discardLocked(mt, Mined)
+		}
 	}
 
 	baseFee := p.pendingBaseFee.Load()
 
-	cacheView, err := cache.View(ctx, tx)
+	cacheView, err := p._stateCache.View(ctx, tx)
 	if err != nil {
 		return err
 	}
