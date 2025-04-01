@@ -90,7 +90,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 			// use the max uint64 as default because the remain claimTx should handle first
 			var newGpBig uint64 = math.MaxUint64
 			if p.gpCache != nil {
-				_, dGp := p.gpCache.GetLatest()
+				dGp := p.gpCache.GetLatestPriceReadOnly()
 				if dGp != nil {
 					newGpBig = dGp.Uint64() * gpMul
 					// newGpBig = newGpBig.Mul(dGp, big.NewInt(int64(gpMul)))

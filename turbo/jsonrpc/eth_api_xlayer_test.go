@@ -1,6 +1,7 @@
 package jsonrpc
 
 import (
+	"github.com/ledgerwatch/erigon-lib/common"
 	"math/big"
 	"testing"
 
@@ -141,4 +142,17 @@ func TestRawGPCache_GetMinGPMoreRecent_OverwriteOldValues(t *testing.T) {
 
 	expectedMin := big.NewInt(7)
 	require.Equal(t, expectedMin.Int64(), minRGP.Int64())
+}
+
+func TestGasPriceCache(t *testing.T) {
+	gp := NewGasPriceCache()
+	gp.SetLatest(common.Hash{1, 2, 3}, big.NewInt(10))
+	p := gp.GetLatestPriceReadOnly()
+	if p.Cmp(big.NewInt(10)) != 0 {
+		t.Fatal("invalid price")
+	}
+	head, p2 := gp.GetLatest()
+	if p2.Cmp(p) != 0 || head != [32]byte{1, 2, 3} {
+		t.Fatal("invalid")
+	}
 }

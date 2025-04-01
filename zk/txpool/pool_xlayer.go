@@ -51,6 +51,7 @@ type XLayerConfig struct {
 
 type GPCache interface {
 	GetLatest() (common.Hash, *big.Int)
+	GetLatestPriceReadOnly() *big.Int
 	SetLatest(hash common.Hash, price *big.Int)
 	GetLatestRawGP() *big.Int
 	SetLatestRawGP(rgp *big.Int)

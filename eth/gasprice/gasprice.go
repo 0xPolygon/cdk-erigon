@@ -46,6 +46,7 @@ type OracleBackend interface {
 
 type Cache interface {
 	GetLatest() (libcommon.Hash, *big.Int)
+	GetLatestPriceReadOnly() *big.Int
 	SetLatest(hash libcommon.Hash, price *big.Int)
 	GetLatestRawGP() *big.Int
 	SetLatestRawGP(rgp *big.Int)
