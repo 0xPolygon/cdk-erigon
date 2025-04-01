@@ -43,6 +43,7 @@ type DeprecatedTxPoolConfig struct {
 	StartOnInit   bool
 	TracedSenders []string // List of senders for which tx pool should print out debugging info
 	CommitEvery   time.Duration
+	EnableTimsort bool // EnableTimsort determines whether Timsort is used to sort the 'best' slice of the pending subpool.
 }
 
 // DeprecatedDefaultTxPoolConfig contains the default configurations for the transaction

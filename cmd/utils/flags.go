@@ -247,6 +247,10 @@ var (
 		Usage: "Transactions older than this distance will be purged",
 		Value: txpoolcfg.DefaultConfig.PurgeDistance,
 	}
+	TxPoolEnableTimsort = cli.BoolFlag{
+		Name:  "txpool.enabletimsort",
+		Usage: "Enable Timsort sorting for the 'best' slice in the pending TxPool subpool",
+	}
 	// Miner settings
 	MiningEnabledFlag = cli.BoolFlag{
 		Name:  "mine",
@@ -2029,6 +2033,9 @@ func setTxPool(ctx *cli.Context, fullCfg *ethconfig.Config) {
 	cfg := &fullCfg.DeprecatedTxPool
 	if ctx.IsSet(TxPoolDisableFlag.Name) {
 		cfg.Disable = ctx.Bool(TxPoolDisableFlag.Name)
+	}
+	if ctx.IsSet(TxPoolEnableTimsort.Name) {
+		cfg.EnableTimsort = ctx.Bool(TxPoolEnableTimsort.Name)
 	}
 	if ctx.IsSet(TxPoolLocalsFlag.Name) {
 		locals := libcommon.CliString2Array(ctx.String(TxPoolLocalsFlag.Name))
