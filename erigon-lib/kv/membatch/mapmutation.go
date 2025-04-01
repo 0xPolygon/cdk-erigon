@@ -79,11 +79,10 @@ func NewHashBatchWithCache(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger
 func (m *Mapmutation) getMem(table string, key []byte) ([]byte, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if _, ok := m.puts[table]; !ok {
-		return nil, false
-	}
-	if value, ok := m.puts[table][*(*string)(unsafe.Pointer(&key))]; ok {
-		return value, ok
+	if ptm, ok := m.puts[table]; ok {
+		if value, ok := ptm[*(*string)(unsafe.Pointer(&key))]; ok {
+			return value, ok
+		}
 	}
 
 	return nil, false
@@ -166,24 +165,30 @@ func (m *Mapmutation) Has(table string, key []byte) (bool, error) {
 func (m *Mapmutation) Put(table string, k, v []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.puts[table]; !ok {
-		m.puts[table] = make(map[string][]byte)
+
+	var ok bool
+	var putsTable map[string][]byte
+	if putsTable, ok = m.puts[table]; !ok {
+		putsTable = make(map[string][]byte)
+		m.puts[table] = putsTable
 	}
-	if _, ok := m.modifiedCache[table]; !ok {
-		m.modifiedCache[table] = make(map[string][]byte)
+
+	var modifiedTableCache map[string][]byte
+	if modifiedTableCache, ok = m.modifiedCache[table]; !ok {
+		modifiedTableCache = make(map[string][]byte)
+		m.modifiedCache[table] = modifiedTableCache
 	}
 
 	stringKey := string(k)
 
-	m.modifiedCache[table][stringKey] = v
+	modifiedTableCache[stringKey] = v
 
-	var ok bool
-	if _, ok = m.puts[table][stringKey]; ok {
-		m.size += len(v) - len(m.puts[table][stringKey])
-		m.puts[table][stringKey] = v
+	if preValue, ok := putsTable[stringKey]; ok {
+		m.size += len(v) - len(preValue)
+		putsTable[stringKey] = v
 		return nil
 	}
-	m.puts[table][stringKey] = v
+	putsTable[stringKey] = v
 	m.size += len(k) + len(v)
 	m.count++
 
