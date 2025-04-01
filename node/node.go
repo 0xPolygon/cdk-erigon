@@ -296,7 +296,7 @@ func (n *Node) DataDir() string {
 	return n.config.Dirs.DataDir
 }
 
-func OpenDatabase(ctx context.Context, config *nodecfg.Config, label kv.Label, name string, readonly bool, logger log.Logger) (kv.RwDB, error) {
+func OpenDatabase(ctx context.Context, config *nodecfg.Config, label kv.Label, name string, readonly bool, isStandaloneSMTDatabase bool, logger log.Logger) (kv.RwDB, error) {
 	switch label {
 	case kv.ChainDB:
 		name = "chaindata"
@@ -371,7 +371,7 @@ func OpenDatabase(ctx context.Context, config *nodecfg.Config, label kv.Label, n
 	if err != nil {
 		return nil, err
 	}
-	migrator := migrations.NewMigrator(label)
+	migrator := migrations.NewMigrator(label, isStandaloneSMTDatabase)
 	if err := migrator.VerifyVersion(db); err != nil {
 		return nil, err
 	}
@@ -410,7 +410,7 @@ func OpenDatabaseSMT(ctx context.Context, config *nodecfg.Config, logger log.Log
 	label := kv.SmtDB
 	name := kv.SmtDB.String()
 
-	var db kv.RwDB
+	var db kv.RwDB = nil
 	if config.Dirs.DataDir == "" {
 		db = memdb.New("")
 		return db, nil
@@ -428,6 +428,7 @@ func OpenDatabaseSMT(ctx context.Context, config *nodecfg.Config, logger log.Log
 		opts := mdbx.NewMDBX(logger).
 			Path(dbPath).Label(label).
 			GrowthStep(16 * datasize.MB).
+			SyncPeriod(30 * time.Second).
 			DBVerbosity(config.DatabaseVerbosity).RoTxsLimiter(roTxsLimiter)
 
 		if exclusive {

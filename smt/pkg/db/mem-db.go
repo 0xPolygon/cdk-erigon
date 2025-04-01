@@ -20,6 +20,7 @@ type MemDb struct {
 	DbHashKey   map[string][]byte
 	DbCode      map[string][]byte
 	LastRoot    *big.Int
+	LastHeight  uint64
 	Depth       uint8
 
 	lock sync.RWMutex
@@ -33,6 +34,7 @@ func NewMemDb() *MemDb {
 		DbHashKey:   make(map[string][]byte),
 		DbCode:      make(map[string][]byte),
 		LastRoot:    big.NewInt(0),
+		LastHeight:  0,
 		Depth:       0,
 	}
 }
@@ -42,8 +44,8 @@ func (m *MemDb) OpenBatch(quitCh <-chan struct{}) {
 
 func (m *MemDb) SetCache(map[string]map[string][]byte) {}
 
-func (m *MemDb) RetriveAndCleanCache() (map[string]map[string][]byte, map[string]map[string][]byte) {
-	return nil, nil
+func (m *MemDb) RetriveAndCleanCache() map[string]map[string][]byte {
+	return nil
 }
 
 func (m *MemDb) CommitBatch() error {
@@ -65,6 +67,21 @@ func (m *MemDb) SetLastRoot(value *big.Int) error {
 	defer m.lock.Unlock()
 
 	m.LastRoot = value
+	return nil
+}
+
+func (m *MemDb) GetLastHeight() (uint64, error) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	return m.LastHeight, nil
+}
+
+func (m *MemDb) SetLastHeight(value uint64) error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	m.LastHeight = value
 	return nil
 }
 

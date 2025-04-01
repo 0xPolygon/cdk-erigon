@@ -16,16 +16,17 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
-type Mapmutation struct {
-	puts   map[string]map[string][]byte // table -> key -> value ie. blocks -> hash -> blockBod
-	db     kv.Tx
-	quit   <-chan struct{}
-	clean  func()
-	mu     sync.RWMutex
-	size   int
-	count  uint64
-	tmpdir string
-	logger log.Logger
+type MapmutationWithDoubleCache struct {
+	modifiedCache  map[string]map[string][]byte // table -> key -> value ie. blocks -> hash -> blockBod
+	immutableCache map[string]map[string][]byte
+	db             kv.Tx
+	quit           <-chan struct{}
+	clean          func()
+	mu             sync.RWMutex
+	size           int
+	count          uint64
+	tmpdir         string
+	logger         log.Logger
 }
 
 // NewBatch - starts in-mem batch
@@ -36,7 +37,7 @@ type Mapmutation struct {
 // defer batch.Close()
 // ... some calculations on `batch`
 // batch.Commit()
-func NewHashBatch(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger log.Logger) *Mapmutation {
+func NewHashCacheBatch(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger log.Logger) *MapmutationWithDoubleCache {
 	clean := func() {}
 	if quit == nil {
 		ch := make(chan struct{})
@@ -44,29 +45,36 @@ func NewHashBatch(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger log.Logg
 		quit = ch
 	}
 
-	return &Mapmutation{
-		db:     tx,
-		puts:   make(map[string]map[string][]byte),
-		quit:   quit,
-		clean:  clean,
-		tmpdir: tmpdir,
-		logger: logger,
+	return &MapmutationWithDoubleCache{
+		db:            tx,
+		modifiedCache: make(map[string]map[string][]byte),
+		quit:          quit,
+		clean:         clean,
+		tmpdir:        tmpdir,
+		logger:        logger,
 	}
 }
 
-func (m *Mapmutation) getMem(table string, key []byte) ([]byte, bool) {
+func (m *MapmutationWithDoubleCache) getMem(table string, key []byte) ([]byte, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if ptm, ok := m.puts[table]; ok {
-		if value, ok := ptm[*(*string)(unsafe.Pointer(&key))]; ok {
+	if _, ok := m.modifiedCache[table]; ok {
+		if value, ok := m.modifiedCache[table][*(*string)(unsafe.Pointer(&key))]; ok {
 			return value, ok
 		}
+	}
+
+	if _, ok := m.immutableCache[table]; !ok {
+		return nil, false
+	}
+	if value, ok := m.immutableCache[table][*(*string)(unsafe.Pointer(&key))]; ok {
+		return value, ok
 	}
 
 	return nil, false
 }
 
-func (m *Mapmutation) IncrementSequence(bucket string, amount uint64) (res uint64, err error) {
+func (m *MapmutationWithDoubleCache) IncrementSequence(bucket string, amount uint64) (res uint64, err error) {
 	v, ok := m.getMem(kv.Sequence, []byte(bucket))
 	if !ok && m.db != nil {
 		v, err = m.db.GetOne(kv.Sequence, []byte(bucket))
@@ -88,7 +96,7 @@ func (m *Mapmutation) IncrementSequence(bucket string, amount uint64) (res uint6
 
 	return currentV, nil
 }
-func (m *Mapmutation) ReadSequence(bucket string) (res uint64, err error) {
+func (m *MapmutationWithDoubleCache) ReadSequence(bucket string) (res uint64, err error) {
 	v, ok := m.getMem(kv.Sequence, []byte(bucket))
 	if !ok && m.db != nil {
 		v, err = m.db.GetOne(kv.Sequence, []byte(bucket))
@@ -105,7 +113,7 @@ func (m *Mapmutation) ReadSequence(bucket string) (res uint64, err error) {
 }
 
 // Can only be called from the worker thread
-func (m *Mapmutation) GetOne(table string, key []byte) ([]byte, error) {
+func (m *MapmutationWithDoubleCache) GetOne(table string, key []byte) ([]byte, error) {
 	if value, ok := m.getMem(table, key); ok {
 		return value, nil
 	}
@@ -120,7 +128,7 @@ func (m *Mapmutation) GetOne(table string, key []byte) ([]byte, error) {
 	return nil, nil
 }
 
-func (m *Mapmutation) Last(table string) ([]byte, []byte, error) {
+func (m *MapmutationWithDoubleCache) Last(table string) ([]byte, []byte, error) {
 	c, err := m.db.Cursor(table)
 	if err != nil {
 		return nil, nil, err
@@ -129,7 +137,7 @@ func (m *Mapmutation) Last(table string) ([]byte, []byte, error) {
 	return c.Last()
 }
 
-func (m *Mapmutation) Has(table string, key []byte) (bool, error) {
+func (m *MapmutationWithDoubleCache) Has(table string, key []byte) (bool, error) {
 	if _, ok := m.getMem(table, key); ok {
 		return ok, nil
 	}
@@ -140,56 +148,77 @@ func (m *Mapmutation) Has(table string, key []byte) (bool, error) {
 }
 
 // puts a table key with a value and if the table is not found then it appends a table
-func (m *Mapmutation) Put(table string, k, v []byte) error {
+func (m *MapmutationWithDoubleCache) Put(table string, k, v []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.puts[table]; !ok {
-		m.puts[table] = make(map[string][]byte)
+	if _, ok := m.modifiedCache[table]; !ok {
+		m.modifiedCache[table] = make(map[string][]byte)
 	}
 
 	stringKey := string(k)
 
 	var ok bool
-	if _, ok = m.puts[table][stringKey]; ok {
-		m.size += len(v) - len(m.puts[table][stringKey])
-		m.puts[table][stringKey] = v
+	if _, ok = m.modifiedCache[table][stringKey]; ok {
+		m.size += len(v) - len(m.modifiedCache[table][stringKey])
+		m.modifiedCache[table][stringKey] = v
 		return nil
 	}
-	m.puts[table][stringKey] = v
+	m.modifiedCache[table][stringKey] = v
 	m.size += len(k) + len(v)
 	m.count++
 
 	return nil
 }
 
-func (m *Mapmutation) Append(table string, key []byte, value []byte) error {
+func (m *MapmutationWithDoubleCache) Append(table string, key []byte, value []byte) error {
 	return m.Put(table, key, value)
 }
 
-func (m *Mapmutation) AppendDup(table string, key []byte, value []byte) error {
+func (m *MapmutationWithDoubleCache) AppendDup(table string, key []byte, value []byte) error {
 	return m.Put(table, key, value)
 }
 
-func (m *Mapmutation) BatchSize() int {
+func (m *MapmutationWithDoubleCache) BatchSize() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.size
 }
 
-func (m *Mapmutation) ForEach(bucket string, fromPrefix []byte, walker func(k, v []byte) error) error {
+func (m *MapmutationWithDoubleCache) ForEach(bucket string, fromPrefix []byte, walker func(k, v []byte) error) error {
 	m.panicOnEmptyDB()
 
 	// take a readlock on the cache
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	tmpCache := make(map[string]map[string][]byte, len(m.immutableCache))
+	for table, bucket := range m.immutableCache {
+		if _, ok := tmpCache[table]; !ok {
+			tmpCache[table] = make(map[string][]byte, len(bucket)*2)
+		}
+
+		for k, v := range bucket {
+			tmpCache[table][k] = v
+		}
+	}
+
+	for table, bucket := range m.modifiedCache {
+		if _, ok := tmpCache[table]; !ok {
+			tmpCache[table] = make(map[string][]byte, len(bucket))
+		}
+
+		for k, v := range bucket {
+			tmpCache[table][k] = v
+		}
+	}
+
 	// if the bucket is not in the cache, then we can just use the db
-	if _, ok := m.puts[bucket]; !ok {
+	if _, ok := tmpCache[bucket]; !ok {
 		return m.db.ForEach(bucket, fromPrefix, walker)
 	}
 
 	// create an ordered structure to hold our data
-	keys := make([]string, 0, len(m.puts[bucket]))
+	keys := make([]string, 0, len(tmpCache[bucket]))
 	values := make(map[string][]byte)
 
 	// otherwise fill the ordered data structure
@@ -204,7 +233,7 @@ func (m *Mapmutation) ForEach(bucket string, fromPrefix []byte, walker func(k, v
 	}
 
 	// range the cache, and perform an ordered insert to the local structure
-	for k, v := range m.puts[bucket] {
+	for k, v := range tmpCache[bucket] {
 		// ordered insert to keys
 		index := sort.Search(len(keys), func(i int) bool { return keys[i] >= k })
 		keys = append(keys, "")
@@ -236,26 +265,26 @@ func (m *Mapmutation) ForEach(bucket string, fromPrefix []byte, walker func(k, v
 	return nil
 }
 
-func (m *Mapmutation) ForPrefix(bucket string, prefix []byte, walker func(k, v []byte) error) error {
+func (m *MapmutationWithDoubleCache) ForPrefix(bucket string, prefix []byte, walker func(k, v []byte) error) error {
 	m.panicOnEmptyDB()
 	return m.db.ForPrefix(bucket, prefix, walker)
 }
 
-func (m *Mapmutation) ForAmount(bucket string, prefix []byte, amount uint32, walker func(k, v []byte) error) error {
+func (m *MapmutationWithDoubleCache) ForAmount(bucket string, prefix []byte, amount uint32, walker func(k, v []byte) error) error {
 	m.panicOnEmptyDB()
 	return m.db.ForAmount(bucket, prefix, amount, walker)
 }
 
-func (m *Mapmutation) Delete(table string, k []byte) error {
+func (m *MapmutationWithDoubleCache) Delete(table string, k []byte) error {
 	return m.Put(table, k, nil)
 }
 
-func (m *Mapmutation) doCommit(tx kv.RwTx) error {
+func (m *MapmutationWithDoubleCache) doCommit(tx kv.RwTx) error {
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
 	count := 0
 	total := float64(m.count)
-	for table, bucket := range m.puts {
+	for table, bucket := range m.modifiedCache {
 		collector := etl.NewCollector("", m.tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize/2), m.logger)
 		defer collector.Close()
 		collector.SortAndFlushInBackground(true)
@@ -282,7 +311,7 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	return nil
 }
 
-func (m *Mapmutation) Flush(ctx context.Context, tx kv.RwTx) error {
+func (m *MapmutationWithDoubleCache) Flush(ctx context.Context, tx kv.RwTx) error {
 	if tx == nil {
 		return errors.New("rwTx needed")
 	}
@@ -292,20 +321,22 @@ func (m *Mapmutation) Flush(ctx context.Context, tx kv.RwTx) error {
 		return err
 	}
 
-	m.puts = map[string]map[string][]byte{}
+	m.modifiedCache = map[string]map[string][]byte{}
+	m.immutableCache = map[string]map[string][]byte{}
 	m.size = 0
 	m.count = 0
 	return nil
 }
 
-func (m *Mapmutation) Close() {
+func (m *MapmutationWithDoubleCache) Close() {
 	if m.clean == nil {
 		return
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.puts = map[string]map[string][]byte{}
+	m.modifiedCache = map[string]map[string][]byte{}
+	m.immutableCache = map[string]map[string][]byte{}
 	m.size = 0
 	m.count = 0
 	m.size = 0
@@ -314,18 +345,35 @@ func (m *Mapmutation) Close() {
 	m.clean = nil
 
 }
-func (m *Mapmutation) Commit() error { panic("not db txn, use .Flush method") }
-func (m *Mapmutation) Rollback()     { panic("not db txn, use .Close method") }
+func (m *MapmutationWithDoubleCache) Commit() error { panic("not db txn, use .Flush method") }
+func (m *MapmutationWithDoubleCache) Rollback()     { panic("not db txn, use .Close method") }
 
-func (m *Mapmutation) panicOnEmptyDB() {
+func (m *MapmutationWithDoubleCache) panicOnEmptyDB() {
 	if m.db == nil {
 		panic("Not implemented")
 	}
 }
 
-func (m *Mapmutation) SetCache(cache map[string]map[string][]byte) {
+func (m *MapmutationWithDoubleCache) SetCache(cache map[string]map[string][]byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.puts = cache
+	m.immutableCache = cache
+}
+
+func (m *MapmutationWithDoubleCache) RetrieveAndCleanSmtCache(smtTables []string) map[string]map[string][]byte {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	deltaTargetCached := make(map[string]map[string][]byte, len(smtTables))
+
+	for _, table := range smtTables {
+		if bucket, ok := m.modifiedCache[table]; ok {
+			deltaTargetCached[table] = bucket
+
+			delete(m.modifiedCache, table)
+		}
+	}
+
+	return deltaTargetCached
 }

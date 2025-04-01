@@ -97,7 +97,7 @@ services:
 
   xlayer-seq:
     container_name: xlayer-seq
-    image: cdk-erigon
+    image: cdk-erigon-debug
     environment:
       - CDK_ERIGON_SEQUENCER=1
       - WRITE_MAP=true
@@ -106,6 +106,7 @@ services:
       - 8123:8545
       - 6900:6900
       - 9092:9095
+      - 4002:4000
     volumes:
       - ./data/seq/:/home/erigon/data/
       - ./config/test.erigon.seq.config.yaml:/usr/src/app/config.yaml
@@ -113,11 +114,11 @@ services:
       - ./config/dynamic-mynetwork-chainspec.json:/usr/src/app/dynamic-mynetwork-chainspec.json
       - ./config/dynamic-mynetwork-conf.json:/usr/src/app/dynamic-mynetwork-conf.json
     command: >
-      cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
+      dlv --listen=:4000 --headless=true --log=true --accept-multiclient --api-version=2 exec /usr/local/bin/cdk-erigon -- --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
 
   xlayer-rpc:
     container_name: xlayer-rpc
-    image: cdk-erigon
+    image: cdk-erigon-debug
     environment:
       - CDK_ERIGON_SEQUENCER=0
       - WRITE_MAP=true
@@ -126,6 +127,7 @@ services:
       - 8124:8545
       - 6901:6900
       - 9091:9095
+      - 4001:4000
     volumes:
       - ./data/rpc/:/home/erigon/data/
       - ./config/test.erigon.rpc.config.yaml:/usr/src/app/config.yaml
@@ -133,7 +135,7 @@ services:
       - ./config/dynamic-mynetwork-chainspec.json:/usr/src/app/dynamic-mynetwork-chainspec.json
       - ./config/dynamic-mynetwork-conf.json:/usr/src/app/dynamic-mynetwork-conf.json
     command: >
-      cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
+      dlv --listen=:4000 --headless=true --log=true --accept-multiclient --api-version=2 exec /usr/local/bin/cdk-erigon -- --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
 
   xlayer-mock-l1-network:
     container_name: xlayer-mock-l1-network
@@ -384,7 +386,7 @@ services:
 
   xlayer-mainnet-seq:
     container_name: xlayer-seq
-    image: cdk-erigon
+    image: cdk-erigon-debug
     environment:
       - CDK_ERIGON_SEQUENCER=1
       - WRITE_MAP=true
@@ -393,11 +395,12 @@ services:
       - 8123:8545
       - 6900:6900
       - 9092:9095
+      - 4002:4000
     volumes:
       - ./mainnet/seq:/home/erigon/data/
       - ./config/xlayerconfig-mainnet.yaml:/usr/src/app/config.yaml
     command: >
-      cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
+      dlv --listen=:4000 --headless=true --log=true --accept-multiclient --api-version=2 exec /usr/local/bin/cdk-erigon -- --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
 
   xlayer-mainnet-rpc:
     container_name: xlayer-rpc

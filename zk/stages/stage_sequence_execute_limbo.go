@@ -11,7 +11,7 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
-func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBundle *legacy_executor_verifier.VerifierBundle) error {
+func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBundle *legacy_executor_verifier.VerifierBundle, cache map[string]map[string][]byte) error {
 	legacyVerifier := batchContext.cfg.legacyVerifier
 	request := verifierBundle.Request
 	blockNumber := request.GetLastBlockNumber()
@@ -24,7 +24,7 @@ func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBun
 		return err
 	}
 
-	witness, err := legacyVerifier.WitnessGenerator.GetWitnessByBlockRange(batchContext.sdb.tx, batchContext.sdb.txsmt, batchContext.ctx, blockNumber, blockNumber, false, batchContext.cfg.zk.WitnessFull)
+	witness, err := legacyVerifier.WitnessGenerator.GetWitnessByBlockRange(batchContext.sdb.tx, batchContext.sdb.txsmt, batchContext.ctx, blockNumber, blockNumber, false, batchContext.cfg.zk.WitnessFull, cache)
 	if err != nil {
 		return err
 	}

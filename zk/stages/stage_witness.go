@@ -96,11 +96,13 @@ func SpawnStageWitness(
 		freshSmtTx = true
 		log.Debug(fmt.Sprintf("[%s] no txsmt provided, creating a new one", logPrefix))
 		var err error
-		txsmt, err = cfg.dbsmt.BeginRw(ctx)
-		if err != nil {
-			return fmt.Errorf("cfg.db.BeginRw, %w", err)
+		if cfg.dbsmt != nil {
+			txsmt, err = cfg.dbsmt.BeginRw(ctx)
+			if err != nil {
+				return fmt.Errorf("cfg.db.BeginRw, %w", err)
+			}
+			defer txsmt.Rollback()
 		}
-		defer txsmt.Rollback()
 	}
 
 	stageWitnessProgressBlockNo, err := stages.GetStageProgress(tx, stages.Witness)
@@ -177,7 +179,7 @@ func SpawnStageWitness(
 			}
 		}
 
-		w, err := g.GetWitnessByBlockRange(tx, txsmt, ctx, startBlock, endBlock, false, false)
+		w, err := g.GetWitnessByBlockRange(tx, txsmt, ctx, startBlock, endBlock, false, false, nil)
 		if err != nil {
 			return fmt.Errorf("GetWitnessByBlockRange: %w", err)
 		}
@@ -205,7 +207,7 @@ func SpawnStageWitness(
 			return fmt.Errorf("tx.Commit: %w", err)
 		}
 	}
-	if freshSmtTx {
+	if freshSmtTx && txsmt != nil {
 		if err = txsmt.Commit(); err != nil {
 			return fmt.Errorf("tx.Commit: %w", err)
 		}

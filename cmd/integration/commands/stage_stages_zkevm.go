@@ -28,6 +28,7 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx, _ := common2.RootContext()
 		logger := debug.SetupCobra(cmd, "integration")
+		kv.InitStandaloneSMT(standaloneSmtDb)
 		db, err := openDB(dbCfg(kv.ChainDB, chaindata), true, logger)
 		if err != nil {
 			logger.Error("Opening DB", "error", err)
@@ -35,12 +36,15 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 		}
 		defer db.Close()
 
-		dbsmt, err := openDB(dbCfg(kv.SmtDB, chaindata), true, logger)
-		if err != nil {
-			logger.Error("Opening SMT DB", "error", err)
-			return
+		var dbsmt kv.RwDB = nil
+		if standaloneSmtDb {
+			dbsmt, err = openDB(dbCfg(kv.SmtDB, smtDbPath), false, logger)
+			if err != nil {
+				logger.Error("Opening SMT DB", "error", err)
+				return
+			}
+			defer dbsmt.Close()
 		}
-		defer dbsmt.Close()
 
 		if err := unwindZk(ctx, db, dbsmt); err != nil {
 			if !errors.Is(err, context.Canceled) {
@@ -50,27 +54,34 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 		}
 
 		if len(datadirCompare) > 0 {
-			dbCompare, err := openDB(dbCfg(kv.ChainDB, filepath.Join(datadirCompare, "chaindata")), true, logger)
-			if err != nil {
-				logger.Error("Opening DB", "error", err)
-				return
-			}
-			defer dbCompare.Close()
-
-			diff, err := compareDbs(db, dbCompare)
-			if err != nil {
-				log.Error(err.Error())
-				return
-			}
-			if len(diff) > 0 {
-				log.Error("Databases are different")
-				for _, d := range diff {
-					log.Error(d)
-				}
-				return
+			compareDB(db, kv.ChainDB, "chaindata", logger)
+			if standaloneSmtDb {
+				compareDB(db, kv.SmtDB, "smt", logger)
 			}
 		}
 	},
+}
+
+func compareDB(db kv.RwDB, label kv.Label, dbDirName string, logger log.Logger) {
+	dbCompare, err := openDB(dbCfg(label, filepath.Join(datadirCompare, dbDirName)), true, logger)
+	if err != nil {
+		logger.Error("Opening DB", "error", err)
+		return
+	}
+	defer dbCompare.Close()
+
+	diff, err := compareDbs(db, dbCompare, label)
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
+	if len(diff) > 0 {
+		log.Error("Databases are different")
+		for _, d := range diff {
+			log.Error(d)
+		}
+		return
+	}
 }
 
 func init() {
@@ -80,6 +91,7 @@ func init() {
 	withDataDirCompare(stateStagesZk)
 	withUnwind(stateStagesZk)
 	withUnwindBatchNo(stateStagesZk) // populates package global flag unwindBatchNo
+	withStandaloneSmtDb(stateStagesZk)
 	rootCmd.AddCommand(stateStagesZk)
 }
 
@@ -93,17 +105,23 @@ func unwindZk(ctx context.Context, db, dbsmt kv.RwDB) error {
 	}
 	defer tx.Rollback()
 
-	txsmt, err := dbsmt.BeginRw(ctx)
-	if err != nil {
-		return err
+	var txsmt kv.RwTx = nil
+	if dbsmt != nil {
+		txsmt, err = dbsmt.BeginRw(ctx)
+		if err != nil {
+			return err
+		}
+		defer txsmt.Rollback()
+		if err := smtdb.CreateEriDbBuckets(txsmt); err != nil {
+			return err
+		}
+	} else {
+		if err := smtdb.CreateEriDbBuckets(tx); err != nil {
+			return err
+		}
 	}
-	defer txsmt.Rollback()
 
 	if err := hermez_db.CreateHermezBuckets(tx); err != nil {
-		return err
-	}
-
-	if err := smtdb.CreateEriDbBuckets(txsmt); err != nil {
 		return err
 	}
 
@@ -114,28 +132,44 @@ func unwindZk(ctx context.Context, db, dbsmt kv.RwDB) error {
 		return err
 	}
 
-	err = stateStages.RunUnwind(db, wrap.TxContainer{Tx: tx})
+	err = stateStages.RunUnwind(db, wrap.TxContainer{Tx: tx, TxSmt: txsmt})
 	if err != nil {
 		return err
 	}
 
 	if err := tx.Commit(); err != nil {
-		txsmt.Rollback()
+		if txsmt != nil {
+			txsmt.Rollback()
+		}
 		return err
 	}
 
-	return txsmt.Commit()
+	if txsmt != nil {
+		return txsmt.Commit()
+	}
+	return nil
 }
 
-func compareDbs(db1, db2 kv.RwDB) ([]string, error) {
+func compareDbs(db1, db2 kv.RwDB, label kv.Label) ([]string, error) {
 	var discrepancies []string
 
-	excludedTables := []string{
-		kv.Senders,
+	excludedTables := []string{}
+	if label == kv.ChainDB {
+		excludedTables = append(excludedTables, kv.Senders)
+	}
+
+	var tables []string
+	switch label {
+	case kv.ChainDB:
+		tables = kv.ChaindataTables
+	case kv.SmtDB:
+		tables = kv.TablesSmt
+	default:
+		return nil, fmt.Errorf("unsupported label %s", label)
 	}
 
 LOOP:
-	for _, table := range kv.ChaindataTables {
+	for _, table := range tables {
 		// if table is excluded, skip it
 		for _, excludedTable := range excludedTables {
 			if table == excludedTable {

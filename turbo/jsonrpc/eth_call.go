@@ -126,11 +126,15 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 		return 0, err
 	}
 	defer dbtx.Rollback()
-	dbtxsmt, err := api.dbsmt.BeginRo(ctx)
-	if err != nil {
-		return 0, err
+
+	var dbtxsmt kv.Tx = nil
+	if api.dbsmt != nil {
+		dbtxsmt, err = api.dbsmt.BeginRo(ctx)
+		if err != nil {
+			return 0, err
+		}
+		defer dbtxsmt.Rollback()
 	}
-	defer dbtxsmt.Rollback()
 
 	// Binary search the gas requirement, as it may be higher than the amount used
 	var (

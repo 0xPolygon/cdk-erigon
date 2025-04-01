@@ -1067,11 +1067,15 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, d
 	if api.ethApi.historyV3(tx) {
 		return nil, fmt.Errorf("not supported by Erigon3")
 	}
-	txsmt, err := dbsmt.BeginRo(ctx)
-	if err != nil {
-		return nil, err
+
+	var txsmt kv.Tx = nil
+	if dbsmt != nil {
+		txsmt, err := dbsmt.BeginRo(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer txsmt.Rollback()
 	}
-	defer txsmt.Rollback()
 
 	blockNr, _, _, err := rpchelper.GetCanonicalBlockNumber_zkevm(startBlockNrOrHash, tx, api.ethApi.filters) // DoCall cannot be executed on non-canonical blocks
 	if err != nil {
@@ -1092,7 +1096,7 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, d
 		return nil, err
 	}
 
-	return generator.GetWitnessByBlockRange(tx, txsmt, ctx, blockNr, endBlockNr, debug, fullWitness)
+	return generator.GetWitnessByBlockRange(tx, txsmt, ctx, blockNr, endBlockNr, debug, fullWitness, nil)
 }
 
 type WitnessMode string
@@ -1112,11 +1116,14 @@ func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64
 	}
 	defer tx.Rollback()
 
-	txsmt, err := api.dbsmt.BeginRo(ctx)
-	if err != nil {
-		return nil, err
+	var txsmt kv.Tx = nil
+	if api.dbsmt != nil {
+		txsmt, err = api.dbsmt.BeginRo(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer txsmt.Rollback()
 	}
-	defer txsmt.Rollback()
 
 	hermezDb := hermez_db.NewHermezDbReader(tx)
 	badBatch, err := hermezDb.GetInvalidBatch(batchNumber)
@@ -1154,7 +1161,6 @@ func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64
 		}
 	}
 
-	log.Info("call api.getBatchWitness", "is smt db ok?", txsmt != nil)
 	return api.getBatchWitness(ctx, tx, txsmt, batchNumber, false, checkedMode)
 }
 
@@ -1609,11 +1615,15 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 	if api.historyV3(tx) {
 		return nil, fmt.Errorf("not supported by Erigon3")
 	}
-	txsmt, err := zkapi.dbsmt.BeginRo(ctx)
-	if err != nil {
-		return nil, err
+
+	var txsmt kv.Tx = nil
+	if zkapi.dbsmt != nil {
+		txsmt, err = zkapi.dbsmt.BeginRo(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer txsmt.Rollback()
 	}
-	defer txsmt.Rollback()
 
 	blockNr, _, _, err := rpchelper.GetBlockNumber_zkevm(blockNrOrHash, tx, api.filters)
 	if err != nil {
@@ -1635,10 +1645,14 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 	if err = utils.PopulateMemoryMutationTables(batch); err != nil {
 		return nil, err
 	}
-	batchSmt := membatchwithdb.NewMemoryBatch(txsmt, api.dirs.Tmp, api.logger)
-	defer batchSmt.Rollback()
-	if err = utils.PopulateMemoryMutationTablesSmt(batchSmt); err != nil {
-		return nil, err
+	// if there is no standalone smt db, keep batchSmt nil
+	var batchSmt *membatchwithdb.MemoryMutation = nil
+	if txsmt != nil {
+		batchSmt = membatchwithdb.NewMemoryBatch(txsmt, api.dirs.Tmp, api.logger)
+		defer batchSmt.Rollback()
+		if err = utils.PopulateMemoryMutationTablesSmt(batchSmt); err != nil {
+			return nil, err
+		}
 	}
 
 	if blockNr < latestBlock {
@@ -1712,7 +1726,11 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		return nil, err
 	}
 
-	smtTrie := smt.NewRoSMT(smtDb.NewRoEriDb(txsmt, tx))
+	smtDB := smtDb.NewRoEriDb(txsmt, tx)
+	if txsmt == nil {
+		smtDB = smtDb.NewRoEriDb(tx, tx)
+	}
+	smtTrie := smt.NewRoSMT(smtDB)
 
 	proofs, err := smt.BuildProofs(smtTrie, rl, ctx)
 	if err != nil {

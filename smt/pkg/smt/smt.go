@@ -1,6 +1,7 @@
 package smt
 
 import (
+	"container/list"
 	"math/big"
 
 	"context"
@@ -29,17 +30,19 @@ type DB interface {
 	DeleteByNodeKey(key utils.NodeKey) error
 	SetLastRoot(lr *big.Int) error
 	SetDepth(uint8) error
+	SetLastHeight(uint64) error
 	CommitBatch() error
 	OpenBatch(quitCh <-chan struct{})
 	RollbackBatch()
 	SetCache(cache map[string]map[string][]byte)
-	RetriveAndCleanCache() (map[string]map[string][]byte, map[string]map[string][]byte)
+	RetriveAndCleanCache() map[string]map[string][]byte
 	RoDB
 }
 
 type RoDB interface {
 	GetDepth() (uint8, error)
 	GetLastRoot() (*big.Int, error)
+	GetLastHeight() (uint64, error)
 	GetCode(codeHash []byte) ([]byte, error)
 	GetHashKey(key utils.NodeKey) (utils.NodeKey, error)
 	GetKeySource(key utils.NodeKey) ([]byte, error)
@@ -109,6 +112,20 @@ func (s *SMT) SetLastRoot(lr *big.Int) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (s *RoSMT) LastHeight() (uint64, error) {
+	s.clearUpMutex.Lock()
+	defer s.clearUpMutex.Unlock()
+
+	return s.DbRo.GetLastHeight()
+}
+
+func (s *SMT) SetLastHeight(newHeight uint64) error {
+	s.clearUpMutex.Lock()
+	defer s.clearUpMutex.Unlock()
+
+	return s.Db.SetLastHeight(newHeight)
 }
 
 func (s *SMT) StartPeriodicCheck(doneChan chan bool) {
@@ -681,46 +698,56 @@ func (s *RoSMT) Traverse(ctx context.Context, node *big.Int, action TraverseActi
 	return s.traverse(ctx, node, action, []byte{})
 }
 
+type queueEntry struct {
+	node   *big.Int
+	prefix []byte
+}
+
 func (s *RoSMT) traverse(ctx context.Context, node *big.Int, action TraverseAction, prefix []byte) error {
-	if node == nil || node.Cmp(big.NewInt(0)) == 0 {
-		return nil
-	}
+	queue := list.New()
+	queue.PushBack(queueEntry{node: node, prefix: prefix})
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
+	for queue.Len() > 0 {
+		e := queue.Front()
+		current := e.Value.(queueEntry)
+		queue.Remove(e)
 
-	ky := utils.ScalarToRoot(node)
-
-	nodeValue, err := s.DbRo.Get(ky)
-
-	if err != nil {
-		return err
-	}
-
-	shouldContinue, err := action(prefix, ky, nodeValue)
-
-	if err != nil {
-		return err
-	}
-
-	if nodeValue.IsFinalNode() || !shouldContinue {
-		return nil
-	}
-
-	for i := 0; i < 2; i++ {
-		if len(nodeValue) < i*4+4 {
-			return errors.New("nodeValue has insufficient length")
+		if current.node == nil || current.node.Cmp(big.NewInt(0)) == 0 {
+			continue
 		}
-		child := utils.NodeKeyFromBigIntArray(nodeValue[i*4 : i*4+4])
-		childPrefix := make([]byte, len(prefix)+1)
-		copy(childPrefix, prefix)
-		childPrefix[len(prefix)] = byte(i)
-		err := s.traverse(ctx, child.ToBigInt(), action, childPrefix)
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		ky := utils.ScalarToRoot(current.node)
+		nodeValue, err := s.DbRo.Get(ky)
 		if err != nil {
 			return err
+		}
+
+		shouldContinue, err := action(current.prefix, ky, nodeValue)
+		if err != nil {
+			return err
+		}
+
+		if nodeValue.IsFinalNode() || !shouldContinue {
+			continue
+		}
+
+		for i := 0; i < 2; i++ {
+			if len(nodeValue) < i*4+4 {
+				return errors.New("nodeValue has insufficient length")
+			}
+
+			child := utils.NodeKeyFromBigIntArray(nodeValue[i*4 : i*4+4])
+			childPrefix := make([]byte, len(current.prefix)+1)
+			copy(childPrefix, current.prefix)
+			childPrefix[len(current.prefix)] = byte(i)
+
+			queue.PushBack(queueEntry{node: child.ToBigInt(), prefix: childPrefix})
 		}
 	}
 

@@ -101,11 +101,15 @@ func (api *APIImpl) preRunWorker(txn types.Transaction, chainId *big.Int) (hexut
 		return 0, err
 	}
 	defer dbtx.Rollback()
-	dbtxsmt, err := api.dbsmt.BeginRo(ctx)
-	if err != nil {
-		return 0, err
+
+	var dbtxsmt kv.Tx = nil
+	if api.dbsmt != nil {
+		dbtxsmt, err = api.dbsmt.BeginRo(ctx)
+		if err != nil {
+			return 0, err
+		}
+		defer dbtxsmt.Rollback()
 	}
-	defer dbtxsmt.Rollback()
 
 	block, stateReader, chainConfig, err := api.prepareBlockAndState(ctx, dbtx)
 	if err != nil {

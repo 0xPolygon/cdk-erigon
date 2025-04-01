@@ -97,12 +97,16 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	}
 	useExternalSmtTx := txsmt != nil
 	if !useExternalSmtTx {
-		var err error
-		txsmt, err = cfg.dbsmt.BeginRw(ctx)
-		if err != nil {
-			return trie.EmptyRoot, err
+		if cfg.dbsmt != nil {
+			var err error
+			txsmt, err = cfg.dbsmt.BeginRw(ctx)
+			if err != nil {
+				return trie.EmptyRoot, err
+			}
+			defer txsmt.Rollback()
+		} else {
+			txsmt = nil
 		}
-		defer txsmt.Rollback()
 	}
 
 	to, err := s.ExecutionAt(tx)
@@ -138,6 +142,9 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	shouldIncrement := shouldIncrementBecauseOfAFlag || shouldIncrementBecauseOfExecutionConditions
 
 	eridb := db2.NewEriDb(txsmt, tx)
+	if txsmt == nil {
+		eridb = db2.NewEriDb(tx, tx)
+	}
 	smt := smt.NewSMT(eridb, false)
 
 	if shouldIncrement {
@@ -194,7 +201,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 			return trie.EmptyRoot, err
 		}
 	}
-	if !useExternalSmtTx {
+	if !useExternalSmtTx && txsmt != nil {
 		if err := txsmt.Commit(); err != nil {
 			return trie.EmptyRoot, err
 		}
@@ -214,11 +221,15 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 	}
 	useExternalSmtTx := txsmt != nil
 	if !useExternalSmtTx {
-		txsmt, err = cfg.dbsmt.BeginRw(ctx)
-		if err != nil {
-			return err
+		if cfg.dbsmt != nil {
+			txsmt, err = cfg.dbsmt.BeginRw(ctx)
+			if err != nil {
+				return err
+			}
+			defer txsmt.Rollback()
+		} else {
+			txsmt = nil
 		}
-		defer txsmt.Rollback()
 	}
 	if !silent {
 		log.Debug(fmt.Sprintf("[%s] Unwinding intermediate hashes", s.LogPrefix()), "from", s.BlockNumber, "to", u.UnwindPoint)
@@ -235,7 +246,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 		expectedRootHash = syncHeadHeader.Root
 	}
 
-	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, txsmt, cfg.checkRoot, &expectedRootHash, silent); err != nil {
+	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, txsmt, cfg.checkRoot, &expectedRootHash, silent, s.GetSmtHistorySnapshotCache(s.BlockNumber)); err != nil {
 		return err
 	}
 	hermezDb := hermez_db.NewHermezDb(tx)
@@ -251,7 +262,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 			return err
 		}
 	}
-	if !useExternalSmtTx {
+	if !useExternalSmtTx && txsmt != nil {
 		if err := txsmt.Commit(); err != nil {
 			return err
 		}
@@ -453,7 +464,53 @@ func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *sta
 		}
 	}
 
+	// ToDO: remove this
+	depth, err := dbSmt.Db.GetDepth()
+	if err != nil {
+		log.Error("depth err", err)
+	}
+	height, err := dbSmt.Db.GetLastHeight()
+	if err != nil {
+		log.Error("height err", err)
+	}
+	root, err := dbSmt.Db.GetLastRoot()
+	if err != nil {
+		log.Error("root err", err)
+	}
+	log.Info("---SMT root before---", "depth", depth, "height", height, "root", common.BigToHash(root))
+	log.Info("Debug SetStorage parameters",
+		"accChanges count", len(accChanges),
+		"codeChanges count", len(codeChanges),
+		"storageChanges count", len(storageChanges))
+	for addr, acc := range accChanges {
+		log.Info("Account change",
+			"address", addr.Hex(),
+			"balance", acc.Balance,
+			"nonce", acc.Nonce,
+			"codeHash", acc.CodeHash)
+	}
+	for addr, code := range codeChanges {
+		log.Info("Code change",
+			"address", addr.Hex(),
+			"codeLength", len(code))
+	}
+	for addr, storage := range storageChanges {
+		log.Info("Storage change",
+			"address", addr.Hex(),
+			"storageKeysCount", len(storage))
+		for key, value := range storage {
+			log.Debug("Storage detail",
+				"address", addr.Hex(),
+				"key", key,
+				"value", value)
+		}
+	}
+
 	if _, _, err := dbSmt.SetStorage(ctx, logPrefix, accChanges, codeChanges, storageChanges); err != nil {
+		return trie.EmptyRoot, err
+	}
+
+	if err := dbSmt.SetLastHeight(to); err != nil {
 		return trie.EmptyRoot, err
 	}
 
@@ -468,6 +525,21 @@ func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *sta
 	if err := hermezDb.WriteSmtDepth(to, uint64(dbSmt.GetDepth())); err != nil {
 		return trie.EmptyRoot, err
 	}
+
+	// ToDO: remove this
+	depth, err = dbSmt.Db.GetDepth()
+	if err != nil {
+		log.Error("depth err", err)
+	}
+	height, err = dbSmt.Db.GetLastHeight()
+	if err != nil {
+		log.Error("height err", err)
+	}
+	root, err = dbSmt.Db.GetLastRoot()
+	if err != nil {
+		log.Error("root err", err)
+	}
+	log.Info("---SMT root after---", "depth", depth, "height", height, "root", common.BigToHash(root))
 
 	return hash, nil
 }

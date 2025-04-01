@@ -61,7 +61,7 @@ func initGenesis(cliCtx *cli.Context) error {
 	stack := MakeConfigNodeDefault(cliCtx, logger)
 	defer stack.Close()
 
-	chaindb, err := node.OpenDatabase(cliCtx.Context, stack.Config(), kv.ChainDB, "", false, logger)
+	chaindb, err := node.OpenDatabase(cliCtx.Context, stack.Config(), kv.ChainDB, "", false, false, logger)
 	if err != nil {
 		utils.Fatalf("Failed to open database: %v", err)
 	}

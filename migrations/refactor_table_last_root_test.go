@@ -13,6 +13,7 @@ import (
 )
 
 func TestRefactorTableLastRoot(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	require, tmpDir, db := require.New(t), t.TempDir(), memdb.NewTestDB(t)
 
 	randomRootHash := "0xbb0ed7f7111626844cb6dfbc7c82877eb298cb7b3b3271cf0760bdbc93564531"
@@ -22,7 +23,26 @@ func TestRefactorTableLastRoot(t *testing.T) {
 	err := prepareDb(db, randomRootHash, oldBucketName, lastRootKey)
 	require.NoError(err)
 
-	migrator := NewMigrator(kv.ChainDB)
+	migrator := NewMigrator(kv.ChainDB, false)
+	migrator.Migrations = []Migration{refactorTableLastRoot}
+	err = migrator.Apply(db, tmpDir, log.New())
+	require.NoError(err)
+
+	assertDb(t, db, randomRootHash, lastRootKey)
+}
+
+func TestRefactorTableLastRootSplitSMTDb(t *testing.T) {
+	kv.InitStandaloneSMT(true)
+	require, tmpDir, db := require.New(t), t.TempDir(), memdb.NewTestDB(t)
+
+	randomRootHash := "0xbb0ed7f7111626844cb6dfbc7c82877eb298cb7b3b3271cf0760bdbc93564531"
+	oldBucketName := "HermezSmtLastRoot"
+	lastRootKey := []byte("lastRoot")
+
+	err := prepareDb(db, randomRootHash, oldBucketName, lastRootKey)
+	require.NoError(err)
+
+	migrator := NewMigrator(kv.SmtDB, true)
 	migrator.Migrations = []Migration{refactorTableLastRoot}
 	err = migrator.Apply(db, tmpDir, log.New())
 	require.NoError(err)

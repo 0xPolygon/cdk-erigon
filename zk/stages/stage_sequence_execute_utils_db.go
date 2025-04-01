@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
@@ -41,25 +42,37 @@ func newStageDb(ctx context.Context, db, dbsmt kv.RwDB, supportAC bool) (sdb *st
 	}
 
 	if supportAC {
-		// Support Async IO, only need to create read only transaction
-		var txsmt kv.Tx
-		if txsmt, err = dbsmt.BeginRo(ctx); err != nil {
-			log.Error("failed to start smt tx", "err", err)
-			return nil, err
+		// Support Async IO, only need to create read-only transaction
+		var txsmt kv.Tx = nil
+		if dbsmt != nil {
+			// use multi mdbx
+			if txsmt, err = dbsmt.BeginRo(ctx); err != nil {
+				log.Error("failed to start smt tx", "err", err)
+				return nil, err
+			}
+			eridb := db2.NewEriCacheDb(sdb.ctx, txsmt, tx)
+			sdb.SetTx(tx, txsmt, eridb)
+		} else {
+			// use only one mdbx
+			eridb := db2.NewEriDb(tx, tx)
+			sdb.SetTx(tx, tx, eridb)
 		}
-
-		eridb := db2.NewEriCacheDb(sdb.ctx, txsmt, tx)
-		sdb.SetTx(tx, txsmt, eridb)
 	} else {
-		// Support Sync IO，so need to create read write transaction
-		var txsmt kv.RwTx
-		if txsmt, err = dbsmt.BeginRw(ctx); err != nil {
-			log.Error("failed to start smt tx", "err", err)
-			return nil, err
+		// Support Sync IO，so need to create read-write transaction
+		var txsmt kv.RwTx = nil
+		if dbsmt != nil {
+			// use multi mdbx
+			if txsmt, err = dbsmt.BeginRw(ctx); err != nil {
+				log.Error("failed to start smt tx", "err", err)
+				return nil, err
+			}
+			eridb := db2.NewEriDb(txsmt, tx)
+			sdb.SetTx(tx, txsmt, eridb)
+		} else {
+			// use only one mdbx
+			eridb := db2.NewEriDb(tx, tx)
+			sdb.SetTx(tx, tx, eridb)
 		}
-
-		eridb := db2.NewEriDb(txsmt, tx)
-		sdb.SetTx(tx, txsmt, eridb)
 	}
 
 	return sdb, nil
@@ -77,7 +90,7 @@ func (sdb *stageDb) SetTx(tx kv.RwTx, txsmt kv.Tx, eridb smtNs.DB) {
 
 func (sdb *stageDb) CommitAndStart() (err error) {
 	if err = sdb.tx.Commit(); err != nil {
-		if !sdb.supportAC {
+		if !sdb.supportAC && sdb.dbsmt != nil {
 			sdb.txsmt.Rollback()
 		}
 		return err
@@ -89,41 +102,65 @@ func (sdb *stageDb) CommitAndStart() (err error) {
 	}
 
 	if !sdb.supportAC {
-		if err = sdb.txsmt.Commit(); err != nil {
-			return err
-		}
+		// Support Sync IO，so need to create read-write transaction
+		if sdb.dbsmt != nil {
+			// use multi mdbx
+			if err = sdb.txsmt.Commit(); err != nil {
+				return err
+			}
 
-		txsmt, err := sdb.dbsmt.BeginRw(sdb.ctx)
-		if err != nil {
-			return err
-		}
-		eridb := db2.NewEriDb(txsmt, tx)
+			txsmt, err := sdb.dbsmt.BeginRw(sdb.ctx)
+			if err != nil {
+				return err
+			}
+			eridb := db2.NewEriDb(txsmt, tx)
 
-		sdb.SetTx(tx, txsmt, eridb)
+			sdb.SetTx(tx, txsmt, eridb)
+		} else {
+			// use only one mdbx, tx has already commit and create new tx
+			eridb := db2.NewEriDb(tx, tx)
+			sdb.SetTx(tx, tx, eridb)
+		}
 	} else {
-		sdb.SetTx(tx, sdb.txsmt, sdb.eridb)
+		// Support Async IO, only need to create read-only transaction
+		if sdb.dbsmt != nil {
+			// use multi mdbx, no need to commit txsmt here and also no need to create new tx
+			sdb.SetTx(tx, sdb.txsmt, sdb.eridb)
+		} else {
+			// use only one mdbx, tx has already commit and create new tx
+			eridb := db2.NewEriDb(tx, tx)
+			sdb.SetTx(tx, tx, eridb)
+		}
 	}
 
 	return nil
 }
 
-func (sdb *stageDb) Commit(s *stagedsync.StageState, flushSmt bool) error {
-	if !sdb.supportAC && flushSmt {
-		smtCache, deltaCache := sdb.eridb.RetriveAndCleanCache()
-		s.SetSmtCache(smtCache, deltaCache)
+func (sdb *stageDb) Commit(s *stagedsync.StageState, blockNumber uint64, flushSmt bool) error {
+	if sdb.supportAC && flushSmt {
+		blockCache := sdb.eridb.RetriveAndCleanCache()
+		s.SetSmtCache(blockNumber, blockCache)
 	}
 
 	err := sdb.tx.Commit()
 	if err != nil {
-		if !sdb.supportAC {
+		if sdb.dbsmt != nil {
 			sdb.txsmt.Rollback()
+			// TODO: should we clear the cache?
 		}
 		return err
 	}
 
-	if !sdb.supportAC {
+	if !sdb.supportAC && sdb.dbsmt != nil {
 		return sdb.txsmt.Commit()
 	} else {
 		return nil
+	}
+}
+
+func (sdb *stageDb) Rollback() {
+	sdb.tx.Rollback()
+	if sdb.txsmt != nil {
+		sdb.txsmt.Rollback()
 	}
 }

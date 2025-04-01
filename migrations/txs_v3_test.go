@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 	"math/big"
 	"testing"
 	"time"
+
+	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
@@ -25,6 +26,7 @@ import (
 )
 
 func TestTxsV3(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	require, tmpDir, db := require.New(t), t.TempDir(), memdb.NewTestDB(t)
 	txn := &types.DynamicFeeTransaction{Tip: u256.N1, FeeCap: u256.N1, ChainID: u256.N1, CommonTx: types.CommonTx{Value: u256.N1, Gas: 1, Nonce: 1}}
 	buf := bytes.NewBuffer(nil)
@@ -65,7 +67,7 @@ func TestTxsV3(t *testing.T) {
 	})
 	require.NoError(err)
 
-	migrator := migrations.NewMigrator(kv.ChainDB)
+	migrator := migrations.NewMigrator(kv.ChainDB, false)
 	migrator.Migrations = []migrations.Migration{migrations.TxsV3}
 	logger := log.New()
 	err = migrator.Apply(db, tmpDir, logger)

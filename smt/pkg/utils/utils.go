@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -170,6 +171,19 @@ func (nv *NodeValue12) GetNodeValue8() *NodeValue8 {
 func (nv *NodeValue12) Get0to8() [8]uint64 {
 	// slice it from 0-8
 	return [8]uint64{nv[0].Uint64(), nv[1].Uint64(), nv[2].Uint64(), nv[3].Uint64(), nv[4].Uint64(), nv[5].Uint64(), nv[6].Uint64(), nv[7].Uint64()}
+}
+
+func (nv *NodeValue12) IsNil() bool {
+	if nv != nil {
+		isNil := true
+		for i := 0; i < 12; i++ {
+			isNil = isNil && nv[i] == nil
+		}
+
+		return isNil
+	} else {
+		return true
+	}
 }
 
 func (nv *NodeValue12) IsUniqueSibling() (int, error) {
@@ -1010,6 +1024,23 @@ func DecodeKeySource(keySource []byte) (int, common.Address, common.Hash, error)
 		storagePosition = common.BytesToHash(keySource[length.Addr+1 : length.Addr+length.Hash+1])
 	}
 	return t, accountAddr, storagePosition, nil
+}
+
+func ConvertUint64ToBytes(n uint64) []byte {
+	bytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(bytes, n)
+	// or use binary.LittleEndian.PutUint64(bytes, n)
+	return bytes
+}
+
+func ConvertBytesToUint64(bytes []byte) (uint64, error) {
+	if bytes == nil || len(bytes) == 0 {
+		return 0, nil
+	}
+
+	n := binary.BigEndian.Uint64(bytes)
+	// or use binary.LittleEndian.Uint64(bytes)
+	return n, nil
 }
 
 func UnsafeBytesToString(b []byte) string {

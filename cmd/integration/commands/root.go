@@ -75,7 +75,7 @@ func dbCfg(label kv.Label, path string) kv2.MdbxOpts {
 func openDB(opts kv2.MdbxOpts, applyMigrations bool, logger log.Logger) (kv.RwDB, error) {
 	db := opts.MustOpen()
 	if applyMigrations {
-		migrator := migrations.NewMigrator(opts.GetLabel())
+		migrator := migrations.NewMigrator(opts.GetLabel(), standaloneSmtDb)
 		has, err := migrator.HasPendingMigrations(db)
 		if err != nil {
 			return nil, err

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ID=`docker ps | grep "xlayer-seq$" | tr -s ' ' | cut -d ' ' -f 1`
+ID=`docker ps -a | grep "xlayer-seq$" | tr -s ' ' | cut -d ' ' -f 1`
 if [ -z "$ID" ]; then
 	echo "No seq docker container found!"
 	exit 1

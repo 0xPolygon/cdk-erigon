@@ -13,6 +13,7 @@ type XLayerConfig struct {
 	EnableInnerTx bool
 	// Sequencer
 	SequencerBatchSleepDuration time.Duration
+	StandaloneSMTDatabase       bool
 
 	// Local Replay
 	SequencerReplay                   bool
@@ -26,10 +27,12 @@ type XLayerConfig struct {
 	PreRunCacheTTL  time.Duration
 	PreRunChanNum   int
 	PreRunTaskNum   int
+
 	// Executor
 	ExecutorMock        bool
 	BlockInfoConcurrent bool
 
+	EnableAsyncCommit bool
 	// Bulk Add Txs
 	BulkAddTxs         bool
 	BulkAddTxsSize     int

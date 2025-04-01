@@ -224,6 +224,9 @@ func NewReusableCaller(
 	txCtx := core.NewEVMTxContext(msg)
 
 	eriDb := db2.NewRoEriDb(txsmt, tx)
+	if txsmt == nil {
+		eriDb = db2.NewRoEriDb(tx, tx)
+	}
 	smt := smt.NewRoSMT(eriDb)
 	hermezDb := hermez_db.NewHermezDbReader(tx)
 

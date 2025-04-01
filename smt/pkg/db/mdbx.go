@@ -33,19 +33,20 @@ const TableMetadata = "HermezSmtMetadata"
 const TableHashKey = "HermezSmtHashKey"
 
 const MetaLastRoot = "lastRoot"
+const MetaLastHeight = "lastHeight"
 const MetaDepth = "depth"
 
 var HermezSmtTables = []string{TableSmt, TableStats, TableAccountValues, TableMetadata, TableHashKey}
 
 type EriDb struct {
-	kvTx        kv.RwTx
+	kvTxSMT     kv.RwTx
 	tx          SmtDbTx
 	kvTxChainDB kv.RwTx
 	*EriRoDb
 }
 
 type EriRoDb struct {
-	kvTxRo        kv.Getter
+	kvTxRoSMT     kv.Getter
 	kvTxRoChainDB kv.Getter
 }
 
@@ -59,63 +60,87 @@ func CreateEriDbBuckets(tx kv.RwTx) error {
 	return nil
 }
 
-func NewEriDb(txsmt, txcdb kv.RwTx) *EriDb {
+func NewEriDb(txsmt kv.RwTx, txcdb kv.RwTx) *EriDb {
+	var tx kv.RwTx = txsmt
+	if tx == nil {
+		tx = txcdb
+	}
 	return &EriDb{
-		tx:          txsmt,
-		kvTx:        txsmt,
+		tx:          tx,
+		kvTxSMT:     tx,
 		kvTxChainDB: txcdb,
 		EriRoDb:     NewRoEriDb(txsmt, txcdb),
 	}
 }
 
 func NewRoEriDb(txsmt, txcdb kv.Getter) *EriRoDb {
+	var tx kv.Getter = txsmt
+	if tx == nil {
+		tx = txcdb
+	}
 	return &EriRoDb{
-		kvTxRo:        txsmt,
+		kvTxRoSMT:     tx,
 		kvTxRoChainDB: txcdb,
 	}
 }
 
 func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
-	batch := membatch.NewHashBatch(m.kvTx, quitCh, "./tempdb", log.New())
+	batch := membatch.NewHashBatch(m.kvTxSMT, quitCh, "./tempdb", log.New())
+	defer func() {
+		batch.Close()
+	}()
 	m.tx = batch
-	m.kvTxRo = batch
+	m.kvTxRoSMT = batch
 }
 
-func (m *EriDb) SetCache(smtCachedMapValue map[string]map[string][]byte) {}
+func (m *EriDb) SetCache(smtCachedMapValue map[string]map[string][]byte) {
+	if smtCachedMapValue == nil {
+		smtCachedMapValue = make(map[string]map[string][]byte)
+	}
 
-func (m *EriDb) RetriveAndCleanCache() (map[string]map[string][]byte, map[string]map[string][]byte) {
-	return nil, nil
+	mapCache, ok := m.tx.(*membatch.Mapmutation)
+	if !ok {
+		return // don't roll back a kvRw tx
+	}
+
+	mapCache.SetCache(smtCachedMapValue)
+}
+
+func (m *EriDb) RetriveAndCleanCache() map[string]map[string][]byte {
+	return nil
 }
 
 func (m *EriDb) CommitBatch() error {
 	batch, ok := m.tx.(kv.PendingMutations)
 	if !ok {
-
 		return nil // don't roll back a kvRw tx
 	}
 	// err := m.tx.Commit()
-	err := batch.Flush(context.Background(), m.kvTx)
+	err := batch.Flush(context.Background(), m.kvTxSMT)
 	if err != nil {
 		// m.tx.Rollback()
 		batch.Close()
 		return err
 	}
-	m.tx = m.kvTx
-	m.kvTxRo = m.kvTx
+	m.tx = m.kvTxSMT
+	m.kvTxRoSMT = m.kvTxSMT
 	return nil
 }
 
 func (m *EriDb) RollbackBatch() {
+	if m.tx == nil {
+		return
+	}
 	if _, ok := m.tx.(kv.PendingMutations); !ok {
 		return // don't roll back a kvRw tx
 	}
 	m.tx.(kv.PendingMutations).Close()
-	m.tx = m.kvTx
-	m.kvTxRo = m.kvTx
+	m.tx = m.kvTxSMT
+	m.kvTxRoSMT = m.kvTxSMT
 }
 
 func (m *EriRoDb) GetLastRoot() (*big.Int, error) {
-	data, err := m.kvTxRo.GetOne(TableStats, []byte(MetaLastRoot))
+	data, err := m.kvTxRoSMT.GetOne(TableStats, []byte(MetaLastRoot))
 	if err != nil {
 		return big.NewInt(0), err
 	}
@@ -132,8 +157,22 @@ func (m *EriDb) SetLastRoot(r *big.Int) error {
 	return m.tx.Put(TableStats, []byte(MetaLastRoot), []byte(v))
 }
 
+func (m *EriRoDb) GetLastHeight() (uint64, error) {
+	data, err := m.kvTxRoSMT.GetOne(TableStats, []byte(MetaLastHeight))
+	if err != nil {
+		return 0, err
+	}
+
+	return utils.ConvertBytesToUint64(data)
+}
+
+func (m *EriDb) SetLastHeight(blockHeight uint64) error {
+	v := utils.ConvertUint64ToBytes(blockHeight)
+	return m.tx.Put(TableStats, []byte(MetaLastHeight), []byte(v))
+}
+
 func (m *EriRoDb) GetDepth() (uint8, error) {
-	data, err := m.kvTxRo.GetOne(TableStats, []byte(MetaDepth))
+	data, err := m.kvTxRoSMT.GetOne(TableStats, []byte(MetaDepth))
 	if err != nil {
 		return 0, err
 	}
@@ -153,7 +192,7 @@ func (m *EriRoDb) Get(key utils.NodeKey) (utils.NodeValue12, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
 
-	data, err := m.kvTxRo.GetOne(TableSmt, []byte(k))
+	data, err := m.kvTxRoSMT.GetOne(TableSmt, []byte(k))
 	if err != nil {
 		return utils.NodeValue12{}, err
 	}
@@ -195,7 +234,7 @@ func (m *EriRoDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
 
-	data, err := m.kvTxRo.GetOne(TableAccountValues, []byte(k))
+	data, err := m.kvTxRoSMT.GetOne(TableAccountValues, []byte(k))
 	if err != nil {
 		return utils.NodeValue8{}, err
 	}
@@ -238,7 +277,7 @@ func (m *EriDb) DeleteKeySource(key utils.NodeKey) error {
 func (m *EriRoDb) GetKeySource(key utils.NodeKey) ([]byte, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 
-	data, err := m.kvTxRo.GetOne(TableMetadata, keyConc.Bytes())
+	data, err := m.kvTxRoSMT.GetOne(TableMetadata, keyConc.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +305,7 @@ func (m *EriDb) DeleteHashKey(key utils.NodeKey) error {
 func (m *EriRoDb) GetHashKey(key utils.NodeKey) (utils.NodeKey, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 
-	data, err := m.kvTxRo.GetOne(TableHashKey, keyConc.Bytes())
+	data, err := m.kvTxRoSMT.GetOne(TableHashKey, keyConc.Bytes())
 	if err != nil {
 		return utils.NodeKey{}, err
 	}
@@ -311,7 +350,7 @@ func (m *EriDb) AddCode(code []byte) error {
 }
 
 func (m *EriRoDb) PrintDb() {
-	err := m.kvTxRo.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
+	err := m.kvTxRoSMT.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
 		println(string(k), string(v))
 		return nil
 	})
@@ -323,7 +362,7 @@ func (m *EriRoDb) PrintDb() {
 func (m *EriRoDb) GetDb() map[string][]string {
 	transformedDb := make(map[string][]string)
 
-	err := m.kvTxRo.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
+	err := m.kvTxRoSMT.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
 		hk := string(k)
 
 		vConc := utils.ConvertHexToBigInt(string(v))

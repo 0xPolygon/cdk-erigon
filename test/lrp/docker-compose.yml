@@ -10,11 +10,27 @@ services:
     volumes:
       - ./mainnet/seq:/home/erigon/data/
       - ./xlayerconfig-mainnet.yaml:/usr/src/app/config.yaml
+    profiles:
+      - legacy-db
     command: |
       integration state_stages_zkevm \
         --config=/usr/src/app/config.yaml \
         --chain xlayer-mainnet \
         --datadir /home/erigon/data/ \
+        --unwind-batch-no=170700
+
+  xlayer-mainnet-unwind-with-standalone-smt-db:
+    container_name: ${USER_PREFIX:-default}-xlayer-mainnet-unwind
+    image: cdk-erigon:${IMAGE_TAG}
+    extends: xlayer-mainnet-unwind
+    profiles:
+      - split-db
+    command: |
+      integration state_stages_zkevm \
+        --config=/usr/src/app/config.yaml \
+        --chain xlayer-mainnet \
+        --datadir /home/erigon/data/ \
+        --standalone-smt-db=true \
         --unwind-batch-no=170700
 
   xlayer-mainnet-replay:
@@ -80,11 +96,27 @@ services:
     extends: xlayer-mainnet-unwind
     environment:
       - CDK_ERIGON_SEQUENCER=1
+    profiles:
+      - legacy-db
     command: |
       integration state_stages_zkevm \
         --config=/usr/src/app/config.yaml \
         --chain xlayer-mainnet \
         --datadir /home/erigon/data/ \
+        --unwind-batch-no=170700
+
+  xlayer-mainnet-unwind-seq-with-standalone-smt-db:
+    container_name: ${USER_PREFIX:-default}-xlayer-mainnet-unwind-seq
+    image: cdk-erigon:${IMAGE_TAG}
+    extends: xlayer-mainnet-unwind-seq
+    profiles:
+      - split-db
+    command: |
+      integration state_stages_zkevm \
+        --config=/usr/src/app/config.yaml \
+        --chain xlayer-mainnet \
+        --datadir /home/erigon/data/ \
+        --standalone-smt-db=true \
         --unwind-batch-no=170700
 
   xlayer-executor:

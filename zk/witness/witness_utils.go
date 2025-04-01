@@ -32,7 +32,7 @@ var (
 	ErrNoWitnesses = errors.New("witness count is 0")
 )
 
-func UnwindForWitness(ctx context.Context, tx kv.RwTx, txsmt kv.RwTx, startBlock, latestBlock uint64, dirs datadir.Dirs, historyV3 bool, agg *state.Aggregator) (err error) {
+func UnwindForWitness(ctx context.Context, tx kv.RwTx, txsmt kv.RwTx, startBlock, latestBlock uint64, dirs datadir.Dirs, historyV3 bool, agg *state.Aggregator, cache map[string]map[string][]byte) (err error) {
 	unwindState := &stagedsync.UnwindState{UnwindPoint: startBlock - 1}
 	stageState := &stagedsync.StageState{BlockNumber: latestBlock}
 
@@ -53,7 +53,7 @@ func UnwindForWitness(ctx context.Context, tx kv.RwTx, txsmt kv.RwTx, startBlock
 		expectedRootHash = syncHeadHeader.Root
 	}
 
-	if _, err := zkSmt.UnwindZkSMT(ctx, "api.generateWitness", stageState.BlockNumber, unwindState.UnwindPoint, tx, txsmt, true, &expectedRootHash, true); err != nil {
+	if _, err := zkSmt.UnwindZkSMT(ctx, "api.generateWitness", stageState.BlockNumber, unwindState.UnwindPoint, tx, txsmt, true, &expectedRootHash, true, cache); err != nil {
 		return fmt.Errorf("UnwindZkSMT: %w", err)
 	}
 
@@ -164,6 +164,9 @@ func BuildWitnessFromTrieDbState(ctx context.Context, tx kv.Tx, txsmt kv.Tx, tds
 	}
 
 	eridb := db2.NewRoEriDb(txsmt, tx)
+	if txsmt == nil {
+		eridb = db2.NewRoEriDb(tx, tx)
+	}
 	smtTrie := smt.NewRoSMT(eridb)
 
 	if witness, err = smtTrie.BuildWitness(rl, ctx); err != nil {

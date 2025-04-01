@@ -123,11 +123,15 @@ func (zkapi *ZkEvmAPIImpl) EstimateCounters(ctx context.Context, rpcTx *zkevmRPC
 		return nil, err
 	}
 	defer dbtx.Rollback()
-	dbtxsmt, err := zkapi.dbsmt.BeginRo(ctx)
-	if err != nil {
-		return nil, err
+
+	var dbtxsmt kv.Tx = nil
+	if zkapi.dbsmt != nil {
+		dbtxsmt, err = zkapi.dbsmt.BeginRo(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer dbtxsmt.Rollback()
 	}
-	defer dbtxsmt.Rollback()
 
 	chainConfig, err := api.chainConfig(ctx, dbtx)
 	if err != nil {
@@ -182,6 +186,9 @@ func (zkapi *ZkEvmAPIImpl) EstimateCounters(ctx context.Context, rpcTx *zkevmRPC
 	txCtx := core.NewEVMTxContext(msg)
 
 	eriDb := db2.NewRoEriDb(dbtxsmt, dbtx)
+	if dbtxsmt == nil {
+		eriDb = db2.NewRoEriDb(dbtx, dbtx)
+	}
 	smt := smt.NewRoSMT(eriDb)
 	hermezDb := hermez_db.NewHermezDbReader(dbtx)
 

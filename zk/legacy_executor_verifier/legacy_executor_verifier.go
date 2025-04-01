@@ -2,6 +2,8 @@ package legacy_executor_verifier
 
 import (
 	"context"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
+	"github.com/ledgerwatch/erigon/zk/smt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -111,7 +113,7 @@ func (vb *VerifierBundle) isInternalError() bool {
 }
 
 type WitnessGenerator interface {
-	GetWitnessByBlockRange(tx kv.Tx, txsmt kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error)
+	GetWitnessByBlockRange(tx kv.Tx, txsmt kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool, cache map[string]map[string][]byte) ([]byte, error)
 }
 
 type LegacyExecutorVerifier struct {
@@ -127,6 +129,8 @@ type LegacyExecutorVerifier struct {
 
 	promises    []*Promise[*VerifierBundle]
 	mtxPromises *sync.Mutex
+
+	cache *smt.SmtCache
 }
 
 func NewLegacyExecutorVerifier(
@@ -149,6 +153,10 @@ func NewLegacyExecutorVerifier(
 		promises:               make([]*Promise[*VerifierBundle], 0),
 		mtxPromises:            &sync.Mutex{},
 	}
+}
+
+func (v *LegacyExecutorVerifier) SetSmtCache(cache *smt.SmtCache) {
+	v.cache = cache
 }
 
 func (v *LegacyExecutorVerifier) StartAsyncVerification(
@@ -250,13 +258,26 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest) *Promise[
 			return verifierBundle, err
 		}
 
-		txsmt, err := v.dbsmt.BeginRo(innerCtx)
-		if err != nil {
-			return verifierBundle, err
+		var txsmt kv.Tx = nil
+		if v.dbsmt != nil {
+			txsmt, err = v.dbsmt.BeginRo(innerCtx)
+			if err != nil {
+				return verifierBundle, err
+			}
+			defer txsmt.Rollback()
 		}
-		defer txsmt.Rollback()
 
-		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, txsmt, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
+		latestBlock, err := stages.GetStageProgress(tx, stages.Execution)
+		if err != nil {
+			return nil, err
+		}
+
+		block := minUint64(latestBlock, blockNumbers[len(blockNumbers)-1])
+		cache := map[string]map[string][]byte{}
+		if v.cache != nil {
+			cache = v.cache.CascadeGetCurrentBatchSnapshotCache(block)
+		}
+		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, txsmt, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull, cache)
 		if err != nil {
 			return verifierBundle, err
 		}
@@ -353,6 +374,15 @@ func (v *LegacyExecutorVerifier) VerifyWithMockExecutor(request *VerifierRequest
 		}
 		defer tx.Rollback()
 
+		var txsmt kv.Tx = nil
+		if v.dbsmt != nil {
+			txsmt, err = v.dbsmt.BeginRo(innerCtx)
+			if err != nil {
+				return verifierBundle, err
+			}
+			defer txsmt.Rollback()
+		}
+
 		hermezDb := hermez_db.NewHermezDbReader(tx)
 
 		l1InfoTreeMinTimestamps := make(map[uint64]uint64)
@@ -361,13 +391,17 @@ func (v *LegacyExecutorVerifier) VerifyWithMockExecutor(request *VerifierRequest
 			return verifierBundle, err
 		}
 
-		txsmt, err := v.dbsmt.BeginRo(innerCtx)
+		latestBlock, err := stages.GetStageProgress(tx, stages.Execution)
 		if err != nil {
-			return verifierBundle, err
+			return nil, err
 		}
-		defer txsmt.Rollback()
 
-		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, txsmt, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
+		block := minUint64(latestBlock, blockNumbers[len(blockNumbers)-1])
+		cache := map[string]map[string][]byte{}
+		if v.cache != nil {
+			cache = v.cache.CascadeGetCurrentBatchSnapshotCache(block)
+		}
+		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, txsmt, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull, cache)
 		if err != nil {
 			return verifierBundle, err
 		}
@@ -598,4 +632,11 @@ func filterTransactionByIndexes(
 	}
 
 	return filteredTransactions
+}
+
+func minUint64(a, b uint64) uint64 {
+	if a <= b {
+		return a
+	}
+	return b
 }

@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
-	"github.com/ledgerwatch/erigon-lib/kv/membatch"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	"github.com/ledgerwatch/erigon-lib/kv/membatch"
 
 	lru "github.com/hashicorp/golang-lru/arc/v2"
 	"github.com/ledgerwatch/log/v3"
@@ -45,53 +46,105 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/shards"
 	"github.com/ledgerwatch/erigon/turbo/silkworm"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
+	"github.com/ledgerwatch/erigon/zk/smt"
 )
 
 func AsyncFlushSmtData(ctx context.Context,
 	_db kv.RwDB,
 	s *stagedsync.Sync,
+	config ethconfig.XLayerConfig,
 	logger log.Logger,
 ) {
-	db, ok := _db.(*mdbx.MdbxKV)
-	if !ok {
-		logger.Error("invalid database type, expected *mdbx.MdbxKV")
+	if !sequencer.IsSequencer() || !config.EnableAsyncCommit {
+		logger.Info("AsyncFlushSmtData skipped",
+			"isSequencer", sequencer.IsSequencer(),
+			"enableAsyncCommit", config.EnableAsyncCommit)
 		return
 	}
 
+	db, ok := _db.(*mdbx.MdbxKV)
+	if !ok {
+		logger.Error("invalid database type, expected *mdbx.MdbxKV", "type", fmt.Sprintf("%T", _db))
+		return
+	}
+
+	cache := s.GetCache()
+	const maxWorkers = 6
+	workerPool := make(chan struct{}, maxWorkers)
 	var wg sync.WaitGroup
-	defer wg.Wait() // 等待所有 FlushDataToDB goroutine 完成
+
+	defer func() {
+		logger.Info("Waiting for all flush operations to complete...")
+		wg.Wait()
+		logger.Info("All flush operations completed, exiting AsyncFlushSmtData")
+	}()
 
 	for {
 		select {
-		case smtCache, ok := <-s.SmtCacheCh:
+		case saveData, ok := <-cache.SmtCacheDataCh:
 			if !ok {
 				logger.Info("SmtCacheCh closed, stopping AsyncFlushSmtData")
 				return
 			}
-
-			wg.Add(1)
-			go FlushDataToDB(&wg, ctx, db, logger, smtCache)
+			dispatchFlushTask(ctx, &wg, workerPool, db, cache, saveData, logger)
 
 		case <-ctx.Done():
 			logger.Info("AsyncFlushSmtData received stop signal", "reason", ctx.Err())
+			handleShutdown(ctx, s, config, &wg, workerPool, db, cache, logger)
 			return
 		}
 	}
 }
 
-func FlushDataToDB(wg *sync.WaitGroup, ctx context.Context, db *mdbx.MdbxKV, logger log.Logger, smtCache map[string]map[string][]byte) {
-	defer wg.Done()
+func dispatchFlushTask(ctx context.Context, wg *sync.WaitGroup, workerPool chan struct{},
+	db *mdbx.MdbxKV, cache *smt.SmtCache, saveData smt.SmtCacheSave, logger log.Logger) {
+	select {
+	case workerPool <- struct{}{}: // get working slot
+		wg.Add(1)
+		go func() {
+			defer func() {
+				<-workerPool // release working slot
+				wg.Done()
+			}()
+			FlushDataToDB(ctx, db, logger, cache, saveData)
+		}()
 
+	case <-ctx.Done():
+		logger.Debug("Skipped flush task due to context cancellation", "reason", ctx.Err())
+	}
+}
+
+func handleShutdown(ctx context.Context, s *stagedsync.Sync, config ethconfig.XLayerConfig,
+	wg *sync.WaitGroup, workerPool chan struct{}, db *mdbx.MdbxKV, cache *smt.SmtCache, logger log.Logger) {
+	s.FlushSmtCache(config.StandaloneSMTDatabase, true)
+
+	for len(cache.SmtCacheDataCh) > 0 {
+		select {
+		case saveData, ok := <-cache.SmtCacheDataCh:
+			if !ok {
+				logger.Info("SmtCacheCh closed during shutdown")
+				return
+			}
+			dispatchFlushTask(context.Background(), wg, workerPool, db, cache, saveData, logger)
+		default:
+			logger.Debug("No more data in SmtCacheDataCh during shutdown")
+			return
+		}
+	}
+}
+
+func FlushDataToDB(ctx context.Context, db *mdbx.MdbxKV, logger log.Logger, cache *smt.SmtCache, saveData smt.SmtCacheSave) {
 	err := db.Batch(func(tx kv.RwTx) error {
-		batch := membatch.NewHashBatchWithCache(tx, ctx.Done(), "", logger, smtCache)
+		batch := membatch.NewHashBatch(tx, ctx.Done(), "", logger)
 		defer batch.Close()
-
+		batch.SetCache(saveData.SmtData)
 		return batch.Flush(ctx, tx)
 	})
-
 	if err != nil {
 		logger.Error("failed to flush data to DB", "error", err)
+		return
 	}
+	cache.TruncateSmtCacheList(saveData.BlockHeight)
 }
 
 // StageLoop runs the continuous loop of staged sync
