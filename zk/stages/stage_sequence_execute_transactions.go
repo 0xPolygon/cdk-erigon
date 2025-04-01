@@ -20,8 +20,9 @@ import (
 	"github.com/erigontech/erigon/zk/utils"
 )
 
-func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, []common.Hash, bool, error) {
+func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executionAt, forkId uint64, alreadyYielded mapset.Set[[32]byte]) ([]types.Transaction, []common.Hash, []uint64, bool, error) {
 	var ids []common.Hash
+	var senderIDs []uint64
 	var transactions []types.Transaction
 	var allConditionsOk bool
 	var err error
@@ -39,7 +40,7 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 		if allConditionsOk, _, err = cfg.txPool.YieldBest(cfg.yieldSize, &slots, poolTx, executionAt, gasLimit, 0, alreadyYielded); err != nil {
 			return err
 		}
-		yieldedTxs, yieldedIds, toRemove, err := extractTransactionsFromSlot(&slots, executionAt, cfg)
+		yieldedTxs, yieldedIds, yieldedSenderIDs, toRemove, err := extractTransactionsFromSlot(&slots, executionAt, cfg)
 		if err != nil {
 			return err
 		}
@@ -48,12 +49,13 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 		}
 		transactions = append(transactions, yieldedTxs...)
 		ids = append(ids, yieldedIds...)
+		senderIDs = append(senderIDs, yieldedSenderIDs...)
 		return nil
 	}); err != nil {
-		return nil, nil, allConditionsOk, err
+		return nil, nil, nil, allConditionsOk, err
 	}
 
-	return transactions, ids, allConditionsOk, err
+	return transactions, ids, senderIDs, allConditionsOk, err
 }
 
 func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *common.Hash, executionAt uint64) ([]types.Transaction, error) {
@@ -68,7 +70,7 @@ func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *comm
 		if slots != nil {
 			// ignore the toRemove value here, we know the RLP will be sound as we had to read it from the pool
 			// in the first place to get it into limbo
-			transactions, _, _, err = extractTransactionsFromSlot(slots, executionAt, cfg)
+			transactions, _, _, _, err = extractTransactionsFromSlot(slots, executionAt, cfg)
 			if err != nil {
 				return err
 			}
@@ -82,8 +84,9 @@ func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *comm
 	return transactions, nil
 }
 
-func extractTransactionsFromSlot(slot *types2.TxsRlp, currentHeight uint64, cfg SequenceBlockCfg) ([]types.Transaction, []common.Hash, []common.Hash, error) {
+func extractTransactionsFromSlot(slot *types2.TxsRlp, currentHeight uint64, cfg SequenceBlockCfg) ([]types.Transaction, []common.Hash, []uint64, []common.Hash, error) {
 	ids := make([]common.Hash, 0, len(slot.TxIds))
+	senderIDs := make([]uint64, 0, len(slot.SenderIDs))
 	transactions := make([]types.Transaction, 0, len(slot.Txs))
 	toRemove := make([]common.Hash, 0)
 
@@ -113,8 +116,9 @@ func extractTransactionsFromSlot(slot *types2.TxsRlp, currentHeight uint64, cfg 
 		// Recover sender later only for those transactions that are included in the block
 		transactions = append(transactions, transaction)
 		ids = append(ids, slot.TxIds[idx])
+		senderIDs = append(senderIDs, slot.SenderIDs[idx])
 	}
-	return transactions, ids, toRemove, nil
+	return transactions, ids, senderIDs, toRemove, nil
 }
 
 type overflowType uint8

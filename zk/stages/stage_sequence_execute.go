@@ -343,6 +343,7 @@ func sequencingBatchStep(
 		innerBreak := false
 		emptyBlockOverflow := false
 		sendersToTriggerStatechanges := make(map[common.Address]struct{})
+		senderIDsTxMap := make(map[uint64]types.Transaction)
 
 	OuterLoopTransactions:
 		for {
@@ -411,8 +412,9 @@ func sequencingBatchStep(
 
 				var newTransactions []types.Transaction
 				var newIds []common.Hash
+				var senderIDs []uint64
 
-				newTransactions, newIds, _, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
+				newTransactions, newIds, senderIDs, _, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
 				if err != nil {
 					return err
 				}
@@ -420,6 +422,7 @@ func sequencingBatchStep(
 				batchState.blockState.transactionsForInclusion = append(batchState.blockState.transactionsForInclusion, newTransactions...)
 				for idx, tx := range newTransactions {
 					batchState.blockState.transactionHashesToSlots[tx.Hash()] = newIds[idx]
+					senderIDsTxMap[senderIDs[idx]] = tx
 				}
 			}
 
@@ -458,7 +461,7 @@ func sequencingBatchStep(
 							"error", err,
 							"hash", transaction.Hash())
 						badTxHashes = append(badTxHashes, txHash)
-						batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, batchState.blockState.transactionHashesToSlots[txHash])
+						batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, transaction)
 						continue
 					}
 
@@ -518,7 +521,7 @@ func sequencingBatchStep(
 					// we mark it for being discarded
 					log.Warn(fmt.Sprintf("[%s] error adding transaction to batch, discarding from pool", logPrefix), "hash", txHash, "err", err)
 					badTxHashes = append(badTxHashes, txHash)
-					batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, batchState.blockState.transactionHashesToSlots[txHash])
+					batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, transaction)
 				}
 
 				switch anyOverflow {
@@ -703,8 +706,7 @@ func sequencingBatchStep(
 		}
 
 		// remove mined transactions from the pool
-		toRemove := append(batchState.blockState.builtBlockElements.txSlots, batchState.blockState.transactionsToDiscard...)
-		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, toRemove); err != nil {
+		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, senderIDsTxMap); err != nil {
 			return err
 		}
 
@@ -712,8 +714,8 @@ func sequencingBatchStep(
 		for _, txHash := range batchState.blockState.builtBlockElements.txSlots {
 			cfg.decodedTxCache.Remove(txHash)
 		}
-		for _, txHash := range batchState.blockState.transactionsToDiscard {
-			cfg.decodedTxCache.Remove(txHash)
+		for _, tx := range batchState.blockState.transactionsToDiscard {
+			cfg.decodedTxCache.Remove(tx.Hash())
 		}
 
 		// now trigger sender state changes in the pool where we encountered nonce issues during execution

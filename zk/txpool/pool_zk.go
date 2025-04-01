@@ -1,7 +1,6 @@
 package txpool
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -14,7 +13,7 @@ import (
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon-lib/txpool/txpoolcfg"
 	"github.com/erigontech/erigon-lib/types"
-	types2 "github.com/erigontech/erigon-lib/types"
+	types2 "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/zk/utils"
 	"github.com/holiman/uint256"
 )
@@ -48,6 +47,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 	cumulativeRequiredBalance := uint256.NewInt(0)
 	minFeeCap := uint256.NewInt(0).SetAllOne()
 	minTip := uint64(math.MaxUint64)
+
 	var toDel []*metaTx // can't delete items while iterate them
 	byNonce.ascend(senderID, func(mt *metaTx) bool {
 		if mt.Tx.Traced {
@@ -252,6 +252,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		txs.TxIds[count] = mt.Tx.IDHash
 		copy(txs.Senders.At(count), sender.Bytes())
 		txs.IsLocal[count] = isLocal
+		txs.SenderIDs[count] = mt.Tx.SenderID
 		toSkip.Add(mt.Tx.IDHash)
 		count++
 	}
@@ -284,15 +285,15 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 
 	for i := 0; i < len(best.ms); i++ {
 		mt := best.ms[i]
-		if bytes.Equal(mt.Tx.IDHash[:], txHash[:]) {
+		if mt.Tx.IDHash == txHash {
 			p.overflowZkCounters = append(p.overflowZkCounters, mt)
 			break
 		}
 	}
 }
 
-func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGasLimit uint64, ids []common.Hash) error {
-	if len(ids) == 0 {
+func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGasLimit uint64, txs map[uint64]types2.Transaction) error {
+	if len(txs) == 0 {
 		return nil
 	}
 	cache := p.cache()
@@ -300,31 +301,31 @@ func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGas
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	toDelete := make([]*metaTx, 0)
-
-	p.all.ascendAll(func(mt *metaTx) bool {
-		for _, id := range ids {
-			if bytes.Equal(mt.Tx.IDHash[:], id[:]) {
-				toDelete = append(toDelete, mt)
-				switch mt.currentSubPool {
-				case PendingSubPool:
-					p.pending.Remove(mt)
-				case BaseFeeSubPool:
-					p.baseFee.Remove(mt)
-				case QueuedSubPool:
-					p.queued.Remove(mt)
-				default:
-					//already removed
-				}
-			}
+	for senderID, tx := range txs {
+		mt := p.all.get(senderID, tx.GetNonce())
+		if mt == nil {
+			log.Info("Transaction not found in pool", "senderID", senderID, "nonce", tx.GetNonce())
+			continue
 		}
-		return true
-	})
-
-	sendersWithChangedState := make(map[uint64]struct{})
-	for _, mt := range toDelete {
+		if mt.Tx.IDHash != tx.Hash() {
+			log.Error("Transaction ID hash mismatch", "expected", tx.Hash(), "actual", mt.Tx.IDHash)
+			continue
+		}
+		if mt.Tx.Traced {
+			log.Info(fmt.Sprintf("TX TRACING: RemoveMinedTransactions loop iteration idHash=%x senderID=%d, senderNonce=%d, txn.nonce=%d, currentSubPool=%s", mt.Tx.IDHash, mt.Tx.SenderID, mt.Tx.Nonce, mt.Tx.Nonce, mt.currentSubPool))
+		}
 		p.discardLocked(mt, Mined)
-		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
+
+		switch mt.currentSubPool {
+		case PendingSubPool:
+			p.pending.Remove(mt)
+		case BaseFeeSubPool:
+			p.baseFee.Remove(mt)
+		case QueuedSubPool:
+			p.queued.Remove(mt)
+		default:
+			//already removed
+		}
 	}
 
 	baseFee := p.pendingBaseFee.Load()
@@ -333,7 +334,7 @@ func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGas
 	if err != nil {
 		return err
 	}
-	for senderID := range sendersWithChangedState {
+	for senderID := range txs {
 		nonce, balance, err := p.senders.info(cacheView, senderID)
 		if err != nil {
 			return err
@@ -418,7 +419,7 @@ func (p *TxPool) StartIfNotStarted(ctx context.Context, txPoolDb kv.RoDB, coreTx
 	return nil
 }
 
-func markAsLocal(txSlots *types2.TxSlots) {
+func markAsLocal(txSlots *types.TxSlots) {
 	for i := range txSlots.IsLocal {
 		txSlots.IsLocal[i] = true
 	}

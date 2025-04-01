@@ -928,10 +928,11 @@ func (s *TxSlots) Append(slot *TxSlot, sender []byte, isLocal bool) {
 }
 
 type TxsRlp struct {
-	TxIds   []common.Hash
-	Txs     [][]byte
-	Senders Addresses
-	IsLocal []bool
+	TxIds     []common.Hash
+	Txs       [][]byte
+	Senders   Addresses
+	IsLocal   []bool
+	SenderIDs []uint64
 }
 
 // Resize internal arrays to len=targetSize, shrinks if need. It rely on `append` algorithm to realloc
@@ -948,11 +949,15 @@ func (s *TxsRlp) Resize(targetSize uint) {
 	for uint(len(s.TxIds)) < targetSize {
 		s.TxIds = append(s.TxIds, common.Hash{})
 	}
+	for uint(len(s.SenderIDs)) < targetSize {
+		s.SenderIDs = append(s.SenderIDs, 0)
+	}
 	//todo: set nil to overflow txs
 	s.Txs = s.Txs[:targetSize]
 	s.Senders = s.Senders[:length.Addr*targetSize]
 	s.IsLocal = s.IsLocal[:targetSize]
 	s.TxIds = s.TxIds[:targetSize]
+	s.SenderIDs = s.SenderIDs[:targetSize]
 }
 
 var addressesGrowth = make([]byte, length.Addr)

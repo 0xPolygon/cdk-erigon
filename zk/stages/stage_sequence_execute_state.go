@@ -257,7 +257,7 @@ type BlockState struct {
 	transactionHashesToSlots map[common.Hash]common.Hash
 	builtBlockElements       BuiltBlockElements
 	blockL1RecoveryData      *zktx.DecodedBatchL2Data
-	transactionsToDiscard    []common.Hash
+	transactionsToDiscard    []types.Transaction
 }
 
 func newBlockState() *BlockState {
