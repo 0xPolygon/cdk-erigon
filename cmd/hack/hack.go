@@ -45,7 +45,7 @@ import (
 	"github.com/erigontech/erigon/cmd/hack/flow"
 	"github.com/erigontech/erigon/cmd/hack/tool"
 	"github.com/erigontech/erigon/common"
-	"github.com/erigontech/erigon/common/paths"
+	// "github.com/erigontech/erigon/common/paths"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/rawdb/blockio"
@@ -316,7 +316,8 @@ func repairCurrent() {
 }
 
 func dumpStorage() {
-	db := mdbx.MustOpen(paths.DefaultDataDir() + "/geth/chaindata")
+	// db := mdbx.MustOpen(paths.DefaultDataDir() + "/geth/chaindata")
+	db := mdbx.MustOpen("/Volumes/WD_1TB_DATA/work/gateway/chain-data/dynamic-integration8-type-1/chaindata")
 	defer db.Close()
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
 		return tx.ForEach(kv.E2StorageHistory, nil, func(k, v []byte) error {

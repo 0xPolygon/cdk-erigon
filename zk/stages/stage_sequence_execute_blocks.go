@@ -8,6 +8,7 @@ import (
 
 	"math/big"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/state"
@@ -15,6 +16,7 @@ import (
 	"github.com/erigontech/erigon/core/vm"
 	"github.com/erigontech/erigon/eth/stagedsync"
 	"github.com/erigontech/erigon/smt/pkg/blockinfo"
+	"github.com/erigontech/erigon/turbo/trie"
 	"github.com/erigontech/erigon/zk/erigon_db"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	zktypes "github.com/erigontech/erigon/zk/types"
@@ -187,7 +189,33 @@ func finaliseBlock(
 	quit := batchContext.ctx.Done()
 	batchContext.sdb.eridb.OpenBatch(quit)
 	// this is actually the interhashes stage
-	newRoot, err := zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.eridb, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
+	var type1Rollup bool = true
+	var newRoot common.Hash
+	if !type1Rollup {
+		newRoot, err = zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.eridb, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
+	} else {
+		logger := log.New()
+		var syncHeadHeader *types.Header
+		cfg := batchContext.cfg.zk
+		chainCfg := batchContext.cfg.chainConfig
+		blockReader, blockWriter, allSnapshots, allBorSnapshots, agg, err := setUpBlockReader(ctx, chainKv, config.Dirs, config, config.HistoryV3, chainConfig.Bor != nil, logger)
+		if err != nil {
+			return nil, err
+		}
+		trieCfg := stagedsync.StageTrieCfg(
+			batchContext.sdb.tx, true, true, true, "", nil, nil, false, nil
+		)
+			// cfg, batchContext.sdb.tx, chainCfg, batchContext.sdb.eridb, "", nil, nil, false, nil)
+		if syncHeadHeader, err = cfg.blockReader.HeaderByNumber(ctx, tx, to); err != nil {
+			return trie.EmptyRoot, err
+		}
+		if syncHeadHeader == nil {
+			return trie.EmptyRoot, fmt.Errorf("no header found with number %d", to)
+		}
+
+		expectedRootHash := syncHeadHeader.Root
+		newRoot, err = stagedsync.IncrementIntermediateHashes(batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, newHeader.Number.Uint64()-1, trieCfg, expectedRootHash, quit, logger)
+	}
 	if err != nil {
 		batchContext.sdb.eridb.RollbackBatch()
 		return nil, err
@@ -326,4 +354,54 @@ func addSenders(
 	}
 
 	return rawdb.WriteSenders(tx, finalHeader.Hash(), newNum.Uint64(), senders)
+}
+
+func setUpBlockReader(ctx context.Context, db kv.RwDB, dirs datadir.Dirs, snConfig *ethconfig.Config, histV3 bool, isBor bool, logger log.Logger) (services.FullBlockReader, *blockio.BlockWriter, *freezeblocks.RoSnapshots, *freezeblocks.BorRoSnapshots, *libstate.Aggregator, error) {
+	var minFrozenBlock uint64
+
+	if frozenLimit := snConfig.Sync.FrozenBlockLimit; frozenLimit != 0 {
+		if maxSeedable := snapcfg.MaxSeedableSegment(snConfig.Genesis.Config.ChainName, dirs.Snap); maxSeedable > frozenLimit {
+			minFrozenBlock = maxSeedable - frozenLimit
+		}
+	}
+
+	allSnapshots := freezeblocks.NewRoSnapshots(snConfig.Snapshot, dirs.Snap, minFrozenBlock, logger)
+
+	var allBorSnapshots *freezeblocks.BorRoSnapshots
+	if isBor {
+		allBorSnapshots = freezeblocks.NewBorRoSnapshots(snConfig.Snapshot, dirs.Snap, minFrozenBlock, logger)
+	}
+
+	blockReader := freezeblocks.NewBlockReader(allSnapshots, allBorSnapshots)
+	blockWriter := blockio.NewBlockWriter(histV3)
+
+	agg, err := libstate.NewAggregator(ctx, dirs.SnapHistory, dirs.Tmp, config3.HistoryV3AggregationStep, db, logger)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	allSegmentsDownloadComplete, err := rawdb.AllSegmentsDownloadCompleteFromDB(db)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	if allSegmentsDownloadComplete {
+		if snConfig.Snapshot.NoDownloader {
+			allSnapshots.ReopenFolder()
+			if isBor {
+				allBorSnapshots.ReopenFolder()
+			}
+		} else {
+			allSnapshots.OptimisticalyReopenWithDB(db)
+			if isBor {
+				allBorSnapshots.OptimisticalyReopenWithDB(db)
+			}
+		}
+		if err = agg.OpenFolder(); err != nil {
+			return nil, nil, nil, nil, nil, err
+		}
+	} else {
+		logger.Debug("[rpc] download of segments not complete yet. please wait StageSnapshots to finish")
+	}
+
+	return blockReader, blockWriter, allSnapshots, allBorSnapshots, agg, nil
 }

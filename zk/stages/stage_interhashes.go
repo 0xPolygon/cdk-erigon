@@ -78,6 +78,7 @@ func StageZkInterHashesCfg(
 }
 
 func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context) (root common.Hash, err error) {
+	panic("SpawnZkIntermediateHashesStage should not be called")
 	logPrefix := s.LogPrefix()
 
 	quit := ctx.Done()

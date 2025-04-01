@@ -43,7 +43,11 @@ var stateRootCmd = &cobra.Command{
 	Short: "Exerimental command to re-execute blocks from beginning and compute state root",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logger := debug.SetupCobra(cmd, "stateroot")
-		return StateRoot(cmd.Context(), genesis, block, datadirCli, logger)
+		err := StateRoot(cmd.Context(), genesis, block, datadirCli, logger)
+		if err != nil {
+			logger.Error("Error", "err", err)
+		}
+		return err
 	},
 }
 
@@ -62,6 +66,7 @@ func blocksIO(db kv.RoDB) (services.FullBlockReader, *blockio.BlockWriter) {
 }
 
 func StateRoot(ctx context.Context, genesis *types.Genesis, blockNum uint64, datadir string, logger log.Logger) error {
+	logger.Info("Starting state root calculation")
 	sigs := make(chan os.Signal, 1)
 	interruptCh := make(chan bool, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -126,13 +131,17 @@ func StateRoot(ctx context.Context, genesis *types.Genesis, blockNum uint64, dat
 			tx.Rollback()
 		}
 	}()
+	logger.Info("Genesis state written")
 	for !interrupt {
 		block++
+		logger.Info("Processing", "block", block)
 		if block >= blockNum {
+			logger.Info("Finished", "block", block)
 			break
 		}
 		var b *types.Block
 		b, err = blockReader.BlockByNumber(ctx, historyTx, block)
+		logger.Info("Block", "block", block, "b", b, "err", err)
 		if err != nil {
 			return err
 		}
@@ -145,6 +154,7 @@ func StateRoot(ctx context.Context, genesis *types.Genesis, blockNum uint64, dat
 		if rwTx, err = db.BeginRw(ctx); err != nil {
 			return err
 		}
+		logger.Info("Processing 2", "block", block)
 		w = state.NewPlainStateWriter(rwTx, nil, block)
 		r := state.NewPlainStateReader(tx)
 		intraBlockState := state.New(r)
@@ -172,6 +182,8 @@ func StateRoot(ctx context.Context, genesis *types.Genesis, blockNum uint64, dat
 				return err
 			}
 			fmt.Printf("root for block %d=[%x]\n", block, root)
+			logger.Info("root", "block", block, "root", root)
+			panic("stop")
 		}
 		if block%1000 == 0 {
 			logger.Info("Processed", "blocks", block)
