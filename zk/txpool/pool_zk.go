@@ -48,7 +48,6 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 	cumulativeRequiredBalance := uint256.NewInt(0)
 	minFeeCap := uint256.NewInt(0).SetAllOne()
 	minTip := uint64(math.MaxUint64)
-	var toDel []*metaTx // can't delete items while iterate them
 	byNonce.ascend(senderID, func(mt *metaTx) bool {
 		if mt.Tx.Traced {
 			log.Info(fmt.Sprintf("TX TRACING: onSenderStateChange loop iteration idHash=%x senderID=%d, senderNonce=%d, txn.nonce=%d, currentSubPool=%s", mt.Tx.IDHash, senderID, senderNonce, mt.Tx.Nonce, mt.currentSubPool))
@@ -68,7 +67,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 			default:
 				//already removed
 			}
-			toDel = append(toDel, mt)
+			discard(mt, NonceTooLow)
 			return true
 		}
 		if minFeeCap.Gt(&mt.Tx.FeeCap) {
@@ -149,9 +148,6 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 		}
 		return true
 	})
-	for _, mt := range toDel {
-		discard(mt, NonceTooLow)
-	}
 }
 
 // zk: the implementation of best here is changed only to not take into account block gas limits as we don't care about
@@ -296,16 +292,22 @@ func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGas
 		return nil
 	}
 	cache := p.cache()
+	baseFee := p.pendingBaseFee.Load()
+
+	cacheView, err := cache.View(ctx, tx)
+	if err != nil {
+		return err
+	}
+	sendersWithChangedState := make(map[uint64]struct{})
 
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	toDelete := make([]*metaTx, 0)
-
 	p.all.ascendAll(func(mt *metaTx) bool {
 		for _, id := range ids {
-			if bytes.Equal(mt.Tx.IDHash[:], id[:]) {
-				toDelete = append(toDelete, mt)
+			if mt.Tx.IDHash == id {
+				p.discardLocked(mt, Mined)
+				sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
 				switch mt.currentSubPool {
 				case PendingSubPool:
 					p.pending.Remove(mt)
@@ -321,18 +323,6 @@ func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGas
 		return true
 	})
 
-	sendersWithChangedState := make(map[uint64]struct{})
-	for _, mt := range toDelete {
-		p.discardLocked(mt, Mined)
-		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
-	}
-
-	baseFee := p.pendingBaseFee.Load()
-
-	cacheView, err := cache.View(ctx, tx)
-	if err != nil {
-		return err
-	}
 	for senderID := range sendersWithChangedState {
 		nonce, balance, err := p.senders.info(cacheView, senderID)
 		if err != nil {
