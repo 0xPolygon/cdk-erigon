@@ -22,6 +22,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/metrics"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
+	"github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
@@ -487,6 +488,9 @@ func sequencingBatchStep(
 				}
 			}
 
+			// For X Layer
+			txpool.ArquireTxPoolLock(false)
+
 			if len(batchState.blockState.transactionsForInclusion) == 0 {
 				pauseTime := time.Now()
 				time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
@@ -792,6 +796,9 @@ func sequencingBatchStep(
 			return fmt.Errorf("[%s] %w: %s = %s", s.LogPrefix(), zk.ErrLimboState, batchState.limboRecoveryData.limboTxHash.Hex(), stateRoot.Hex())
 		}
 
+		// For X Layer
+		txpool.ArquireTxPoolLock(true)
+
 		if !batchState.isL1Recovery() {
 			commitTime := time.Now()
 			// commit block data here so it is accessible in other threads
@@ -881,7 +888,7 @@ func sequencingBatchStep(
 		if err := cfg.doneHook.AfterRun(batchContext.sdb.tx, block.NumberU64()-1, s.PrevUnwindPoint()); err != nil {
 			return err
 		}
-		
+
 		// For X Layer
 		metrics.GetLogStatistics().SetTag(metrics.FinalizeBlockNumber, strconv.Itoa(int(blockNumber)))
 		metrics.GetLogStatistics().SummaryCheckpoint()

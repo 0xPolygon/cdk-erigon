@@ -21,6 +21,13 @@ import (
 
 // SendRawTransaction implements eth_sendRawTransaction. Creates new message call transaction or a contract creation for previously-signed transactions.
 func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility.Bytes) (common.Hash, error) {
+	if !api.BulkAddTxs {
+		return api.sendRawTransactionSingle(ctx, encodedTx)
+	}
+	return api.sendRawTransactionBulk(ctx, encodedTx)
+}
+
+func (api *APIImpl) sendRawTransactionSingle(ctx context.Context, encodedTx hexutility.Bytes) (common.Hash, error) {
 	t := utils.StartTimer("rpc", "sendrawtransaction")
 	defer t.LogTimer()
 

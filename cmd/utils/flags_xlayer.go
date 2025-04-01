@@ -230,6 +230,26 @@ var (
 		Usage: "pre-run task num",
 		Value: 8,
 	}
+	BulkAddTxsFlag = cli.BoolFlag{
+		Name:  "zkevm.bulk-add-txs",
+		Usage: "Whether to enable bulk transaction addition",
+		Value: false,
+	}
+	BulkAddTxsSizeFlag = cli.IntFlag{
+		Name:  "zkevm.bulk-add-txs-size",
+		Usage: "the size of the batched txs added to txpool",
+		Value: 30,
+	}
+	BulkAddTxsWaitTimeFlag = cli.DurationFlag{
+		Name:  "zkevm.bulk-add-txs-wait-time",
+		Usage: "maximum waiting time for bulk adding transactions",
+		Value: 5 * time.Millisecond,
+	}
+	EnableAddTxNotify = cli.BoolFlag{
+		Name:  "zkevm.enable-add-tx-notify",
+		Usage: "Enable notifications to limit added transactions",
+		Value: false,
+	}
 
 	// Local Replay
 	SequencerReplay = cli.BoolFlag{
@@ -419,4 +439,11 @@ func SetPreRunList(ctx *cli.Context, cfg *ethconfig.Config) {
 		cfg.XLayer.PreRunChanNum = ctx.Int(PreRunChanNum.Name)
 		cfg.XLayer.PreRunTaskNum = ctx.Int(PreRunTaskNum.Name)
 	}
+}
+
+func SetBulkAddTxs(ctx *cli.Context, cfg *ethconfig.Config) {
+	cfg.XLayer.BulkAddTxs = ctx.Bool(BulkAddTxsFlag.Name)
+	cfg.XLayer.BulkAddTxsSize = ctx.Int(BulkAddTxsFlag.Name)
+	cfg.XLayer.BulkAddTxsWaitTime = ctx.Duration(BulkAddTxsWaitTimeFlag.Name)
+	cfg.XLayer.EnableAddTxNotify = ctx.Bool(EnableAddTxNotify.Name)
 }

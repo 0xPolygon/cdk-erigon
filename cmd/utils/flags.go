@@ -2436,6 +2436,9 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	} else {
 		cfg.DisableTxPoolGossip = txpoolcfg.DefaultConfig.NoGossip
 	}
+
+	// For X Layer
+	SetBulkAddTxs(ctx, cfg)
 }
 
 // SetDNSDiscoveryDefaults configures DNS discovery with the given URL if

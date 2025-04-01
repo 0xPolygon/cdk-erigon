@@ -102,3 +102,7 @@ zkevm.seal-batch-immediately-on-overflow: true
 zkevm.sequencer-timeout-on-empty-tx-pool: 5ms
 zkevm.pre-run-address-list: ["0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"]
 zkevm.block-info-concurrent: true
+
+# to reduce lock race in stress test
+zkevm.bulk-add-txs: true
+zkevm.enable-add-tx-notify: true

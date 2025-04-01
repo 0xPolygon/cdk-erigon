@@ -3,6 +3,7 @@ package txpool
 import (
 	"math/big"
 	"strings"
+	"sync/atomic"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/types"
@@ -47,6 +48,7 @@ type XLayerConfig struct {
 	EnableFreeGasList  bool
 	FreeGasFromNameMap map[string]string                 // map[from]projectName
 	FreeGasList        map[string]*ethconfig.FreeGasInfo // map[projectName]FreeGasInfo
+	EnableNotify       bool
 }
 
 type GPCache interface {
@@ -173,4 +175,14 @@ func (p *TxPool) setFreeGasList(freeGasList []ethconfig.FreeGasInfo) {
 		infoCopy := info
 		p.xlayerCfg.FreeGasList[info.Name] = &infoCopy
 	}
+}
+
+var requireTxPoolLock atomic.Bool
+
+func ArquireTxPoolLock(acquire bool) {
+	requireTxPoolLock.Swap(acquire)
+}
+
+func IsAcquireTxPoolLock() bool {
+	return requireTxPoolLock.Load()
 }

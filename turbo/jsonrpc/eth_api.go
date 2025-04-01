@@ -388,10 +388,15 @@ type APIImpl struct {
 	DisableVirtualCounters        bool
 
 	// For X Layer
-	L2GasPricer     gasprice.L2GasPricer
-	EnableInnerTx   bool
-	PreRunList      map[common.Address]struct{}
-	preRunProcessor *PreRunProcessor
+	L2GasPricer        gasprice.L2GasPricer
+	EnableInnerTx      bool
+	PreRunList         map[common.Address]struct{}
+	preRunProcessor    *PreRunProcessor
+	BulkAddTxs         bool
+	BulkAddTxsSize     int
+	BulkAddTxsWaitTime time.Duration
+	txChan             chan txRequest
+	EnableNotify       bool
 }
 
 // NewEthAPI returns APIImpl instance
@@ -434,9 +439,14 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBacken
 		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
 
 		// For X Layer
-		L2GasPricer:   gasprice.NewL2GasPriceSuggester(context.Background(), ethCfg.GPO),
-		EnableInnerTx: ethCfg.XLayer.EnableInnerTx,
-		PreRunList:    ethCfg.XLayer.PreRunList,
+		L2GasPricer:        gasprice.NewL2GasPriceSuggester(context.Background(), ethCfg.GPO),
+		EnableInnerTx:      ethCfg.XLayer.EnableInnerTx,
+		PreRunList:         ethCfg.XLayer.PreRunList,
+		BulkAddTxs:         ethCfg.XLayer.BulkAddTxs,
+		BulkAddTxsSize:     ethCfg.XLayer.BulkAddTxsSize,
+		BulkAddTxsWaitTime: ethCfg.XLayer.BulkAddTxsWaitTime,
+		EnableNotify:       ethCfg.XLayer.EnableAddTxNotify,
+		txChan:             make(chan txRequest, 1000),
 	}
 
 	// For X Layer
@@ -454,7 +464,9 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBacken
 			}
 		}
 	})
-
+	if apii.BulkAddTxs {
+		go apii.worker()
+	}
 	return apii
 }
 
