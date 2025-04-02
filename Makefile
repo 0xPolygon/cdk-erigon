@@ -159,6 +159,7 @@ db-tools:
 	rm -rf vendor
 	@echo "Run \"$(GOBIN)/mdbx_stat -h\" to get info about mdbx db file."
 
+smt-db-split: smt-db-split.cmd
 
 ## test-unwind:                       run the unwind tests
 test-unwind:
