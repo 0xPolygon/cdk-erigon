@@ -383,6 +383,7 @@ type APIImpl struct {
 	LogsMaxRange                  uint64
 	DisableStateRootCheck         bool
 	DisableVirtualCounters        bool
+	UsingEthereumHardfork         bool
 }
 
 // NewEthAPI returns APIImpl instance
@@ -425,6 +426,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		LogsMaxRange:                  LogsMaxRange,
 		DisableStateRootCheck:         disableStateRootCheck,
 		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
+		UsingEthereumHardfork:         ethCfg.UsingEthereumHardfork(),
 	}
 }
 

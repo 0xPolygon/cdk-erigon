@@ -139,6 +139,27 @@ func attemptAddTransaction(
 	blockDataSizeChecker *BlockDataChecker,
 	ethBlockGasPool *core.GasPool,
 ) (*types.Receipt, *evmtypes.ExecutionResult, *vm.TransactionCounter, overflowType, error) {
+	if cfg.zk.UsingEthereumHardfork() {
+		return addTransaction(cfg, sdb, ibs, blockContext, header, transaction, effectiveGasPrice, ethBlockGasPool)
+	} else {
+		return addTransactionZkevm(cfg, sdb, ibs, batchCounters, blockContext, header, transaction, effectiveGasPrice, l1Recovery, forkId, l1InfoIndex, blockDataSizeChecker, ethBlockGasPool)
+	}
+}
+
+func addTransactionZkevm(
+	cfg SequenceBlockCfg,
+	sdb *stageDb,
+	ibs *state.IntraBlockState,
+	batchCounters *vm.BatchCounterCollector,
+	blockContext *evmtypes.BlockContext,
+	header *types.Header,
+	transaction types.Transaction,
+	effectiveGasPrice uint8,
+	l1Recovery bool,
+	forkId, l1InfoIndex uint64,
+	blockDataSizeChecker *BlockDataChecker,
+	ethBlockGasPool *core.GasPool,
+) (*types.Receipt, *evmtypes.ExecutionResult, *vm.TransactionCounter, overflowType, error) {
 	var batchDataOverflow, overflow bool
 	var err error
 
@@ -242,4 +263,58 @@ func attemptAddTransaction(
 	ibs.FinalizeTx(evm.ChainRules(), noop)
 
 	return receipt, execResult, txCounters, overflowNone, nil
+}
+
+func addTransaction(
+	cfg SequenceBlockCfg,
+	sdb *stageDb,
+	ibs *state.IntraBlockState,
+	blockContext *evmtypes.BlockContext,
+	header *types.Header,
+	transaction types.Transaction,
+	effectiveGasPrice uint8,
+	ethBlockGasPool *core.GasPool,
+) (*types.Receipt, *evmtypes.ExecutionResult, *vm.TransactionCounter, overflowType, error) {
+	var err error
+
+	ibs.Init(transaction.Hash(), common.Hash{}, 0)
+
+	gasUsed := header.GasUsed
+
+	evm := vm.NewEVM(*blockContext, evmtypes.TxContext{}, ibs, cfg.chainConfig, *cfg.vmConfig)
+
+	receipt, execResult, err := core.ApplyTransaction_zkevm(
+		cfg.chainConfig,
+		cfg.engine,
+		evm,
+		ethBlockGasPool,
+		ibs,
+		noop,
+		header,
+		transaction,
+		&gasUsed,
+		effectiveGasPrice,
+		false,
+	)
+	if err != nil {
+		if errors.Is(err, core.ErrGasLimitReached) {
+			log.Debug("Transaction gas limit reached", "txHash", transaction.Hash())
+			return nil, nil, nil, overflowGas, nil
+		}
+		return nil, nil, nil, overflowNone, err
+	}
+
+	log.Debug("Transaction added", "txHash", transaction.Hash())
+
+	header.GasUsed = gasUsed
+
+	if err = sdb.hermezDb.WriteEffectiveGasPricePercentage(transaction.Hash(), effectiveGasPrice); err != nil {
+		return nil, nil, nil, overflowNone, err
+	}
+
+	if err = ibs.FinalizeTx(evm.ChainRules(), noop); err != nil {
+		return nil, nil, nil, overflowNone, err
+	}
+
+	return receipt, execResult, nil, overflowNone, nil
 }

@@ -136,7 +136,8 @@ func sequencingBatchStep(
 	runLoopBlocks := true
 	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
 	batchState := newBatchState(forkId, batchNumberForStateInitialization, executionAt+1, cfg.zk.UseExecutors(), cfg.zk.IsL1Recovery(), cfg.txPool, resequenceBatchJob)
-	blockDataSizeChecker := NewBlockDataChecker(cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()))
+	shouldCountersBeInfinite := cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()) || cfg.zk.UsingEthereumHardfork()
+	blockDataSizeChecker := NewBlockDataChecker(shouldCountersBeInfinite)
 	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState)
 
 	// injected batch
@@ -194,7 +195,7 @@ func sequencingBatchStep(
 		return err
 	}
 
-	batchCounters := prepareBatchCounters(batchContext, batchState)
+	batchCounters := prepareBatchCounters(batchContext, batchState, shouldCountersBeInfinite)
 
 	if batchState.isL1Recovery() {
 		if cfg.zk.L1SyncStopBatch > 0 && batchState.batchNumber > cfg.zk.L1SyncStopBatch {
@@ -266,7 +267,7 @@ func sequencingBatchStep(
 		logTicker.Reset(10 * time.Second)
 		blockTimer := time.NewTimer(cfg.zk.SequencerBlockSealTime)
 		emptyBlockTimer := time.NewTimer(cfg.zk.SequencerEmptyBlockSealTime)
-		ethBlockGasPool := new(core.GasPool).AddGas(transactionGasLimit) // used only in normalcy mode per block
+		ethBlockGasPool := new(core.GasPool).AddGas(transactionGasLimit)
 
 		if batchState.isL1Recovery() {
 			blockNumbersInBatchSoFar, err := batchContext.sdb.hermezDb.GetL2BlockNosByBatch(batchState.batchNumber)
@@ -544,7 +545,7 @@ func sequencingBatchStep(
 						*/
 
 						// now check if this transaction on it's own would overflow counters for the batch
-						tempCounters := prepareBatchCounters(batchContext, batchState)
+						tempCounters := prepareBatchCounters(batchContext, batchState, shouldCountersBeInfinite)
 						singleTxOverflow, err := tempCounters.SingleTransactionOverflowCheck(txCounters)
 						if err != nil {
 							return err

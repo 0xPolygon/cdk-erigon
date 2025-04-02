@@ -1016,7 +1016,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		}
 
 		backend.preStartTasks.PurgeWitnessCache = config.WitnessCachePurge
-		backend.preStartTasks.PurgeBadTxs = config.BadTxPurge
+		backend.preStartTasks.PurgeBadTxs = config.BadTxPurge || config.UsingEthereumHardfork()
 
 		// entering ZK territory!
 		cfg := backend.config
@@ -1416,14 +1416,14 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 }
 
 func (s *Ethereum) PreStart() error {
-	if s.preStartTasks.WarmUpDataStream {
-		log.Info("[PreStart] warming up data stream")
-		tx, err := s.chainDB.BeginRw(context.Background())
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
+	tx, err := s.chainDB.BeginRw(context.Background())
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 
+	if s.preStartTasks.WarmUpDataStream {
+		log.Info("[PreStart] Warming up data stream")
 		// we don't know when the server has actually started as it doesn't expose a signal that is has spun up
 		// so here we loop and take a brief pause waiting for it to be ready
 		attempts := 0
@@ -1444,44 +1444,32 @@ func (s *Ethereum) PreStart() error {
 				break
 			}
 		}
-		if err = tx.Commit(); err != nil {
-			return err
-		}
 	}
 
 	if s.preStartTasks.PurgeWitnessCache {
-		log.Warn("[PreStart] purge witness cache enabled, purging...", "zkevm.witness-cache-purge", s.config.WitnessCachePurge)
-		tx, err := s.chainDB.BeginRw(context.Background())
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
+		log.Warn("[PreStart] Purge witness cache enabled, purging...", "zkevm.witness-cache-purge", s.config.WitnessCachePurge)
 		hermezDb := hermez_db.NewHermezDb(tx)
 		if err := hermezDb.PurgeWitnessCaches(); err != nil {
 			return fmt.Errorf("failed to purge witness caches: %w", err)
 		}
-		if err = tx.Commit(); err != nil {
-			return fmt.Errorf("tx.Commit: %w", err)
-		}
 	}
 
 	if s.preStartTasks.PurgeBadTxs {
-		log.Warn("[PreStart] purge bad transactions cache enabled, purging...", "zkevm.bad-tx-purge", s.config.BadTxPurge)
-		tx, err := s.chainDB.BeginRw(context.Background())
-		if err != nil {
-			return err
+		if s.config.Hardfork == ethconfig.HardforkTypeEthereum {
+			log.Warn("[PreStart] Node running in ethereum hardfork. Counters turned off. Purging any bad tx hash counters.", "zkevm.hardfork", s.config.Hardfork)
 		}
-		defer tx.Rollback()
+
+		if s.config.BadTxPurge {
+			log.Warn("[PreStart] Purge bad transactions cache enabled, purging...", "zkevm.bad-tx-purge", s.config.BadTxPurge)
+		}
+
 		hermezDb := hermez_db.NewHermezDb(tx)
 		if err = hermezDb.PurgeBadTxHashes(); err != nil {
 			return fmt.Errorf("failed to purge bad transactions: %w", err)
 		}
-		if err = tx.Commit(); err != nil {
-			return fmt.Errorf("tx.Commit: %w", err)
-		}
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (s *Ethereum) APIs() []rpc.API {
