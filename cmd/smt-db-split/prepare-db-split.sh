@@ -5,17 +5,19 @@ if [ $# -lt 2 ]; then
 	exit 1
 fi
 
+PWD=`pwd`
+
 # make sure you we have dbtools
 if [ -e /usr/local/bin/mdbx_copy ]; then
 	# this is inside Docker
 	DBCPY=/usr/local/bin/mdbx_copy
 else
-	DBCPY=../build/bin/mdbx_copy
+	DBCPY=../../build/bin/mdbx_copy
 fi
 if [ ! -e $DBCPY ]; then
-	cd ..
+	cd ../..
 	make db-tools
-	cd test
+	cd $PWD
 	if [ ! -e $DBCPY ]; then
 		echo "dbtools (mdbx_copy) not found"
 		exit 1
@@ -27,12 +29,12 @@ if [ -e /usr/local/bin/smt-db-split ]; then
 	# this is inside Docker
 	DBSPLIT=/usr/local/bin/smt-db-split
 else
-	DBSPLIT=../build/bin/smt-db-split
+	DBSPLIT=../../build/bin/smt-db-split
 fi
 if [ ! -e $DBSPLIT ]; then
-	cd ..
+	cd ../..
 	make smt-db-split
-	cd test
+	cd $PWD
 	if [ ! -e $DBSPLIT ]; then
 		echo "smt-db-split binary not found"
 		exit 1
