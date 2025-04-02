@@ -206,7 +206,7 @@ func finaliseBlock(
 	doFinStart := time.Now()
 	finalHeader := finalBlock.HeaderNoCopy()
 	finalHeader.Root = newRoot
-	finalHeader.Coinbase = batchState.getCoinbase(batchContext.cfg)
+	finalHeader.Coinbase = batchState.getCoinbase(batchContext.cfg, batchState.resequenceBatchJob)
 	finalHeader.ReceiptHash = types.DeriveSha(builtBlockElements.receipts)
 	finalHeader.Bloom = types.CreateBloom(builtBlockElements.receipts)
 	newNum := finalBlock.Number()
