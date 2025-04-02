@@ -1,12 +1,17 @@
 #!/bin/bash
 
-if [ $# -lt 1 ]; then
-	echo "$0 <mainnet dir>"
+if [ $# -lt 2 ]; then
+	echo "$0 <original_db_path> <split_db_path>"
 	exit 1
 fi
 
 # make sure you we have dbtools
-DBCPY=../build/bin/mdbx_copy
+if [ -e /usr/local/bin/mdbx_copy ]; then
+	# this is inside Docker
+	DBCPY=/usr/local/bin/mdbx_copy
+else
+	DBCPY=../build/bin/mdbx_copy
+fi
 if [ ! -e $DBCPY ]; then
 	cd ..
 	make db-tools
@@ -18,11 +23,16 @@ if [ ! -e $DBCPY ]; then
 fi
 
 # compile smt-db-split
-DBSPLIT=../cmd/smt-db-split/smt-db-split
+if [ -e /usr/local/bin/smt-db-split ]; then
+	# this is inside Docker
+	DBSPLIT=/usr/local/bin/smt-db-split
+else
+	DBSPLIT=../build/bin/smt-db-split
+fi
 if [ ! -e $DBSPLIT ]; then
-	cd ../cmd/smt-db-split
-	go build
-	cd ../../test
+	cd ..
+	make smt-db-split
+	cd test
 	if [ ! -e $DBSPLIT ]; then
 		echo "smt-db-split binary not found"
 		exit 1
@@ -30,7 +40,10 @@ if [ ! -e $DBSPLIT ]; then
 fi
 
 SRC=$1
-DST="mainnet-split"
+DST=$2
+echo "WARNING: we are deleting destination folder: $DST"
+rm -rf $DST
+mkdir -p $DST
 echo "Copy from folder: $SRC"
 echo "Copy to folder: $DST"
 
