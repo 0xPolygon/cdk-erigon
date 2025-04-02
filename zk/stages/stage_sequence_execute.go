@@ -346,7 +346,7 @@ func sequencingBatchStep(
 		// For X Layer
 		metrics.GetLogStatistics().CumulativeCounting(metrics.BlockCounter)
 
-		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg), cfg.chainConfig, cfg.miningConfig)
+		header, parentBlock, err := prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg, batchState.resequenceBatchJob), cfg.chainConfig, cfg.miningConfig)
 		if err != nil {
 			return err
 		}
@@ -376,7 +376,7 @@ func sequencingBatchStep(
 
 		ibs := state.New(sdb.stateReader)
 		getHashFn := core.GetHashFn(header, func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(sdb.tx, hash, number) })
-		coinbase := batchState.getCoinbase(&cfg)
+		coinbase := batchState.getCoinbase(&cfg, batchState.resequenceBatchJob)
 		blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &coinbase)
 		batchState.blockState.builtBlockElements.resetBlockBuildingArrays()
 
@@ -494,10 +494,12 @@ func sequencingBatchStep(
 			txpool.ArquireTxPoolLock(false)
 
 			if len(batchState.blockState.transactionsForInclusion) == 0 {
-				pauseTime := time.Now()
-				time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
-				metrics.GetLogStatistics().CumulativeCounting(metrics.GetTxPauseCounter)
-				metrics.GetLogStatistics().CumulativeTiming(metrics.GetTxPauseTiming, time.Since(pauseTime))
+				if !batchState.isAnyRecovery() {
+					pauseTime := time.Now()
+					time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
+					metrics.GetLogStatistics().CumulativeCounting(metrics.GetTxPauseCounter)
+					metrics.GetLogStatistics().CumulativeTiming(metrics.GetTxPauseTiming, time.Since(pauseTime))
+				}
 			} else {
 				log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 			}
