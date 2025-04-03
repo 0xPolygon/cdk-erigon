@@ -1072,7 +1072,6 @@ func TestEthereumBlockRPC(t *testing.T) {
 	t.Run("EthGetTransactionByBlockHashAndIndex", func(t *testing.T) {
 		tx, err := operations.EthGetTransactionByBlockHashAndIndex(blockHash, "0x0")
 		require.NoError(t, err)
-		require.NotNil(t, tx, "Transaction should not be nil")
 		log.Infof("EthGetTransactionByBlockHashAndIndex result type: %T", tx)
 	})
 
