@@ -26,9 +26,7 @@ type Syncer interface {
 	IsDownloading() bool
 	GetHeader(blockNumber uint64) (*types.Header, error)
 	L1QueryHeaders(logs []types.Log) (map[uint64]*types.Header, error)
-	StopQueryBlocks()
-	ConsumeQueryBlocks()
-	WaitQueryBlocksToFinish()
+	StopSyncer()
 	QueryForRootLog(to uint64) (*types.Log, error)
 }
 
@@ -71,9 +69,7 @@ func (u *Updater) GetLatestUpdate() *zkTypes.L1InfoTreeUpdate {
 func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
 	defer func() {
 		if err != nil {
-			u.syncer.StopQueryBlocks()
-			u.syncer.ConsumeQueryBlocks()
-			u.syncer.WaitQueryBlocksToFinish()
+			u.syncer.StopSyncer()
 		}
 	}()
 
@@ -106,9 +102,7 @@ func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
 func (u *Updater) CheckForInfoTreeUpdates(logPrefix string, tx kv.RwTx) (allLogs []types.Log, err error) {
 	defer func() {
 		if err != nil {
-			u.syncer.StopQueryBlocks()
-			u.syncer.ConsumeQueryBlocks()
-			u.syncer.WaitQueryBlocksToFinish()
+			u.syncer.StopSyncer()
 		}
 	}()
 
@@ -245,6 +239,7 @@ LOOP:
 
 func (u *Updater) CheckL2RpcForInfoTreeUpdates(logPrefix string, tx kv.RwTx) (infoTrees []zkTypes.L1InfoTreeUpdate, err error) {
 	u.l2Syncer.RunSyncInfoTree()
+	// TODO: Fix, this method do nothing
 	go u.l2Syncer.ConsumeInfoTree()
 
 	infoTreeChan := u.l2Syncer.GetInfoTreeChan()

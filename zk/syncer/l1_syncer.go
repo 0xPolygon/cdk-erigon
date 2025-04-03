@@ -66,7 +66,7 @@ type L1Syncer struct {
 	l1ContractAddresses []common.Address
 	topics              [][]common.Hash
 	blockRange          uint64
-	queryDelay          uint64
+	queryDelay          uint64 // milliseconds
 
 	latestL1Block uint64
 
@@ -123,26 +123,35 @@ func (s *L1Syncer) GetLastCheckedL1Block() uint64 {
 	return s.lastCheckedL1Block.Load()
 }
 
-func (s *L1Syncer) StopQueryBlocks() {
+func (s *L1Syncer) stopQueryBlocks() {
 	s.flagStop.Store(true)
 }
 
-func (s *L1Syncer) ConsumeQueryBlocks() {
+func (s *L1Syncer) consumeQueryBlocks() {
 	for {
 		select {
+		case <-s.ctx.Done():
+			return
 		case <-s.logsChan:
+			// Data may be lost
 		case <-s.logsChanProgress:
-		default:
+			// Data may be lost (logs, not critical)
+		case <-time.After(time.Second):
 			if !s.isSyncStarted.Load() {
 				return
 			}
-			time.Sleep(time.Second)
 		}
 	}
 }
 
-func (s *L1Syncer) WaitQueryBlocksToFinish() {
+func (s *L1Syncer) waitQueryBlocksToFinish() {
 	s.wgRunLoopDone.Wait()
+}
+
+func (s *L1Syncer) StopSyncer() {
+	s.stopQueryBlocks()
+	s.consumeQueryBlocks()
+	s.waitQueryBlocksToFinish()
 }
 
 // Channels
@@ -387,6 +396,8 @@ loop:
 	for {
 		select {
 		case <-s.ctx.Done():
+			// TODO: Breaking this loop not stopping CheckForInfoTreeUpdates and other processes
+			// eth/stagedsync/sync.go will return error: Error while executing stage [STEP] context canceled
 			break loop
 		case res := <-results:
 			if s.flagStop.Load() {

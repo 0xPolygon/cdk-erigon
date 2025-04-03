@@ -85,9 +85,7 @@ func SpawnL1SequencerSyncStage(
 		cfg.syncer.RunQueryBlocks(progress)
 		defer func() {
 			if funcErr != nil {
-				cfg.syncer.StopQueryBlocks()
-				cfg.syncer.ConsumeQueryBlocks()
-				cfg.syncer.WaitQueryBlocksToFinish()
+				cfg.syncer.StopSyncer()
 			}
 		}()
 	}

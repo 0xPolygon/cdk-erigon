@@ -116,9 +116,7 @@ func SpawnSequencerL1BlockSyncStage(
 		cfg.syncer.RunQueryBlocks(l1BlockHeight)
 		defer func() {
 			if funcErr != nil {
-				cfg.syncer.StopQueryBlocks()
-				cfg.syncer.ConsumeQueryBlocks()
-				cfg.syncer.WaitQueryBlocksToFinish()
+				cfg.syncer.StopSyncer()
 			}
 		}()
 	}
