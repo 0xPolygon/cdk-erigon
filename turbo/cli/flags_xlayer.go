@@ -34,7 +34,7 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		BlockInfoConcurrent:               ctx.Bool(utils.BlockInfoConcurrent.Name),
 		EnableAsyncCommit:                 ctx.Bool(utils.EnableAsyncCommit.Name),
 		BulkAddTxs:                        ctx.Bool(utils.BulkAddTxsFlag.Name),
-		BulkAddTxsSize:                    ctx.Int(utils.BulkAddTxsFlag.Name),
+		BulkAddTxsSize:                    ctx.Int(utils.BulkAddTxsSizeFlag.Name),
 		BulkAddTxsWaitTime:                ctx.Duration(utils.BulkAddTxsWaitTimeFlag.Name),
 		EnableAddTxNotify:                 ctx.Bool(utils.EnableAddTxNotify.Name),
 	}

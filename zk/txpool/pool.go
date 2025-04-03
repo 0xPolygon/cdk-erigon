@@ -978,16 +978,18 @@ func (p *TxPool) punishSpammer(spammer uint64) {
 }
 
 func fillDiscardReasons(reasons []DiscardReason, newTxs types.TxSlots, discardReasonsLRU *simplelru.LRU[string, DiscardReason]) []DiscardReason {
+	j := 0
 	for i := range reasons {
 		if reasons[i] != NotSet {
 			continue
 		}
-		reason, ok := discardReasonsLRU.Get(string(newTxs.Txs[i].IDHash[:]))
+		reason, ok := discardReasonsLRU.Get(string(newTxs.Txs[j].IDHash[:]))
 		if ok {
 			reasons[i] = reason
 		} else {
 			reasons[i] = Success
 		}
+		j++
 	}
 	return reasons
 }
@@ -1039,13 +1041,15 @@ func (p *TxPool) AddLocalTxs(ctx context.Context, newTransactions types.TxSlots,
 	p.promoted.AppendOther(announcements)
 
 	reasons = fillDiscardReasons(reasons, newTxs, p.discardReasonsLRU)
-	for i, reason := range reasons {
+	i := 0
+	for _, reason := range reasons {
 		if reason == Success {
 			txn := newTxs.Txs[i]
 			if txn.Traced {
 				log.Info(fmt.Sprintf("TX TRACING: AddLocalTxs promotes idHash=%x, senderId=%d", txn.IDHash, txn.SenderID))
 			}
 			p.promoted.Append(txn.Type, txn.Size, txn.IDHash[:])
+			i++
 		}
 	}
 	if p.promoted.Len() > 0 {

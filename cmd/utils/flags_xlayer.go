@@ -456,7 +456,7 @@ func SetPreRunList(ctx *cli.Context, cfg *ethconfig.Config) {
 
 func SetBulkAddTxs(ctx *cli.Context, cfg *ethconfig.Config) {
 	cfg.XLayer.BulkAddTxs = ctx.Bool(BulkAddTxsFlag.Name)
-	cfg.XLayer.BulkAddTxsSize = ctx.Int(BulkAddTxsFlag.Name)
+	cfg.XLayer.BulkAddTxsSize = ctx.Int(BulkAddTxsSizeFlag.Name)
 	cfg.XLayer.BulkAddTxsWaitTime = ctx.Duration(BulkAddTxsWaitTimeFlag.Name)
 	cfg.XLayer.EnableAddTxNotify = ctx.Bool(EnableAddTxNotify.Name)
 }
