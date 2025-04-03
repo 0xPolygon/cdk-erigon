@@ -6,12 +6,14 @@ on:
       - zkevm
       - zkevm-2.60
       - stable/**
+      - feature/v0.6.0
   pull_request:
     branches:
       - dev
       - zkevm
       - zkevm-2.60
       - stable/**
+      - feature/v0.6.0
     types:
       - opened
       - reopened
@@ -81,7 +83,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        da-mode: [ "rollup", "cdk-validium" ]
+        da-mode: [ "cdk-validium" ]
+        ac-split: ["default", "ac-split"]
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4

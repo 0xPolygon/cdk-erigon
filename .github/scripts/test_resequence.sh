@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e  # Exit immediately if a command exits with a non-zero status
+
 get_latest_l2_batch() {
     local latest_block
     latest_block=$(cast block latest --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)" | grep "number" | awk '{print $2}')
@@ -110,6 +112,16 @@ stop_cdk_erigon_sequencer() {
 set -e
 
 stop_cdk_erigon_sequencer
+
+AC_SPLIT=${1:-false}
+
+if [ "$AC_SPLIT" = "ac-split" ]; then
+    echo "Will use ac-split"
+    kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 'printf "\n" >> /etc/cdk-erigon/config.yaml && echo "zkevm.standalone-smt-db: true" >> /etc/cdk-erigon/config.yaml && echo "zkevm.enable-async-commit: true" >> /etc/cdk-erigon/config.yaml'
+else
+    echo "Will not use ac-split"
+    kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 'printf "\n" >> /etc/cdk-erigon/config.yaml && echo "zkevm.standalone-smt-db: false" >> /etc/cdk-erigon/config.yaml && echo "zkevm.enable-async-commit: false" >> /etc/cdk-erigon/config.yaml'
+fi
 
 echo "Copying and modifying config"
 kurtosis service exec cdk-v1  cdk-erigon-sequencer-001 'cp \-r /etc/cdk-erigon/ /tmp/ && sed -i '\''s/zkevm\.executor-strict: true/zkevm.executor-strict: false/;s/zkevm\.executor-urls: zkevm-stateless-executor-001:50071/zkevm.executor-urls: ","/;$a zkevm.disable-virtual-counters: true'\'' /tmp/cdk-erigon/config.yaml'

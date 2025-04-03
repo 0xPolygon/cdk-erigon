@@ -52,6 +52,12 @@ runs:
         sed -i '/zkevm\.pool-manager-url/d' ./templates/cdk-erigon/config.yml
         sed -i '$a\zkevm.disable-virtual-counters: true' ./templates/cdk-erigon/config.yml
         sed -i '/zkevm.l2-datastreamer-timeout:/d' templates/cdk-erigon/config.yml
+        if [ "${{ matrix.ac-split }}" = "ac-split" ]; then
+          echo "Will use ac-split"
+          echo -e "\n"  >> templates/cdk-erigon/config.yml
+          echo "zkevm.standalone-smt-db: true" >> templates/cdk-erigon/config.yml
+          echo "zkevm.enable-async-commit: true" >> templates/cdk-erigon/config.yml
+        fi
 
     - name: Create params.yml overrides
       working-directory: ./kurtosis-cdk
