@@ -141,6 +141,7 @@ COMMANDS += verkle
 COMMANDS += evm
 COMMANDS += sentinel
 COMMANDS += acl
+COMMANDS += smt-db-split
 
 # build each command using %.cmd rule
 $(COMMANDS): %: %.cmd
@@ -158,7 +159,6 @@ db-tools:
 	cd vendor/github.com/erigontech/mdbx-go/mdbxdist && cp mdbx_chk $(GOBIN) && cp mdbx_copy $(GOBIN) && cp mdbx_dump $(GOBIN) && cp mdbx_drop $(GOBIN) && cp mdbx_load $(GOBIN) && cp mdbx_stat $(GOBIN)
 	rm -rf vendor
 	@echo "Run \"$(GOBIN)/mdbx_stat -h\" to get info about mdbx db file."
-
 
 ## test-unwind:                       run the unwind tests
 test-unwind:

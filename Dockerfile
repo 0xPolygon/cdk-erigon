@@ -17,6 +17,10 @@ RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
     make BUILD_TAGS=nosqlite,noboltdb,nosilkworm all
 
+RUN --mount=type=cache,target=/root/.cache \
+    --mount=type=cache,target=/tmp/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    make smt-db-split
 
 FROM docker.io/library/golang:1.24-alpine3.21 AS tools-builder
 RUN apk --no-cache add build-base linux-headers git bash ca-certificates libstdc++
@@ -91,6 +95,7 @@ COPY --from=builder /app/build/bin/state /usr/local/bin/state
 COPY --from=builder /app/build/bin/txpool /usr/local/bin/txpool
 COPY --from=builder /app/build/bin/verkle /usr/local/bin/verkle
 COPY --from=builder /app/build/bin/acl /usr/local/bin/acl
+COPY --from=builder /app/build/bin/smt-db-split /usr/local/bin/smt-db-split
 
 EXPOSE 8545 \
        8551 \
