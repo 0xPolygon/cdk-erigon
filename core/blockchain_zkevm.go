@@ -37,7 +37,6 @@ import (
 	"github.com/erigontech/erigon/core/vm"
 	"github.com/erigontech/erigon/core/vm/evmtypes"
 	"github.com/erigontech/erigon/zk/hermez_db"
-	"github.com/erigontech/erigon/zk/utils"
 )
 
 type EphemeralExecResultZk struct {
@@ -67,10 +66,6 @@ func ExecuteBlockEphemerallyZk(
 	header := block.Header()
 	blockTransactions := block.Transactions()
 	blockGasLimit := block.GasLimit()
-
-	if !chainConfig.IsForkID8Elderberry(block.NumberU64()) {
-		blockGasLimit = utils.ForkId7BlockGasLimit
-	}
 
 	gp := new(GasPool).AddGas(blockGasLimit)
 

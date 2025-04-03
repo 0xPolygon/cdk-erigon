@@ -69,6 +69,10 @@ func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string, l2ShortCircuitToV
 		if err != nil {
 			return false, 0, err
 		}
+
+		if shortCircuitBlock == 0 {
+			break
+		}
 	}
 
 	log.Info(fmt.Sprintf("[%s] Short circuit", logPrefix), "batch", shortCircuitBatch, "block", shortCircuitBlock)
