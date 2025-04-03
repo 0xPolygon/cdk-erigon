@@ -179,7 +179,8 @@ func SpawnStageWitness(
 			}
 		}
 
-		w, err := g.GetWitnessByBlockRange(tx, txsmt, ctx, startBlock, endBlock, false, false, nil)
+		cache := s.GetSmtHistorySnapshotCache(endBlock)
+		w, err := g.GetWitnessByBlockRange(tx, txsmt, ctx, startBlock, endBlock, false, false, cache)
 		if err != nil {
 			return fmt.Errorf("GetWitnessByBlockRange: %w", err)
 		}

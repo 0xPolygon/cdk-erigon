@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	smt2 "github.com/ledgerwatch/erigon/zk/smt"
 	"math/big"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
@@ -96,6 +97,7 @@ type ZkEvmAPIImpl struct {
 	l2SequencerUrl   string
 	semaphores       map[string]chan struct{}
 	datastreamServer server.DataStreamServer
+	cache            *smt2.SmtCache
 }
 
 func (api *ZkEvmAPIImpl) initializeSemaphores(functionLimits map[string]int) {
@@ -118,6 +120,7 @@ func NewZkEvmAPI(
 	l1Syncer *syncer.L1Syncer,
 	l2SequencerUrl string,
 	dataStreamServer server.DataStreamServer,
+	cache *smt2.SmtCache,
 ) *ZkEvmAPIImpl {
 
 	a := &ZkEvmAPIImpl{
@@ -129,6 +132,7 @@ func NewZkEvmAPI(
 		l1Syncer:         l1Syncer,
 		l2SequencerUrl:   l2SequencerUrl,
 		datastreamServer: dataStreamServer,
+		cache:            cache,
 	}
 
 	a.initializeSemaphores(map[string]int{
@@ -1070,7 +1074,7 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, d
 
 	var txsmt kv.Tx = nil
 	if dbsmt != nil {
-		txsmt, err := dbsmt.BeginRo(ctx)
+		txsmt, err = dbsmt.BeginRo(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -1096,7 +1100,11 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, d
 		return nil, err
 	}
 
-	return generator.GetWitnessByBlockRange(tx, txsmt, ctx, blockNr, endBlockNr, debug, fullWitness, nil)
+	cache := make(map[string]map[string][]byte)
+	if api.cache != nil {
+		cache = api.cache.CascadeGetCurrentBatchSnapshotCache(endBlockNr)
+	}
+	return generator.GetWitnessByBlockRange(tx, txsmt, ctx, blockNr, endBlockNr, debug, fullWitness, cache)
 }
 
 type WitnessMode string
