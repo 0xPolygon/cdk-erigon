@@ -43,16 +43,36 @@ fi
 
 SRC=$1
 DST=$2
+TSTAMP=`date +%Y%m%d%H%M%S`
+TMP=temp-$TSTAMP
+mkdir -p $TMP
+
 echo "WARNING: we are deleting destination folder: $DST"
 rm -rf $DST
 mkdir -p $DST
 echo "Copy from folder: $SRC"
 echo "Copy to folder: $DST"
 
+mkdir -p $TMP/seq/chaindata/
+mkdir -p $TMP/seq/smt/
+cp mdbx_opts/opts_chaindb.json $TMP/seq/chaindata/
+cp mdbx_opts/opts_smt.json $TMP/seq/smt/
+
 mkdir -p $DST/seq/chaindata/
 mkdir -p $DST/seq/smt/
-cp mdbx_opts/opts_chaindb.json $DST/seq/chaindata/
-cp mdbx_opts/opts_smt.json $DST/seq/smt/
-$DBCPY -c $SRC/seq/chaindata/mdbx.dat $DST/seq/chaindata/mdbx.dat
-cp $DST/seq/chaindata/mdbx.dat $DST/seq/smt/mdbx.dat
-$DBSPLIT $DST/seq
+
+if [ $# -gt 2 ]; then
+	if [ $3 == "-d" ]; then
+		echo "Dry-run done."
+		exit 0
+	fi
+fi
+
+$DBCPY -c $SRC/seq/chaindata/mdbx.dat $TMP/seq/chaindata/mdbx.dat
+cp $TMP/seq/chaindata/mdbx.dat $TMP/seq/smt/mdbx.dat
+$DBSPLIT $TMP/seq
+$DBCPY -c $TMP/seq/chaindata/mdbx.dat $DST/seq/chaindata/mdbx.dat
+$DBCPY -c $TMP/seq/smt/mdbx.dat $DST/seq/smt/mdbx.dat
+
+rm -rf $TMP
+echo "Done."
