@@ -6,7 +6,6 @@ on:
       - zkevm
       - zkevm-2.60
       - stable/**
-      - feature/v0.6.0
   pull_request:
     branches:
       - dev
