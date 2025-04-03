@@ -110,11 +110,21 @@ dump_data "$secondStop" "sync to second stop"
 
 # Unwind to first stop
 echo "[$(date)] Unwinding to batch: $unwindBatch"
-go run ./cmd/integration state_stages_zkevm \
-    --datadir="$dataPath/rpc-datadir" \
-    --config="$CONFIG_FILE" \
-    --chain=dynamic-integration \
-    --unwind-batch-no="$unwindBatch" || { echo "Failed to unwind"; exit 1; }
+if [ "$AC_SPLIT" = "ac-split" ]; then
+    go run ./cmd/integration state_stages_zkevm \
+        --datadir="$dataPath/rpc-datadir" \
+        --config="$CONFIG_FILE" \
+        --chain=dynamic-integration \
+        --unwind-batch-no="$unwindBatch" \
+        --standalone-smt-db=true \
+        --smt-db-path="$dataPath/rpc-datadir/smt"|| { echo "Failed to unwind"; exit 1; }
+else
+    go run ./cmd/integration state_stages_zkevm \
+        --datadir="$dataPath/rpc-datadir" \
+        --config="$CONFIG_FILE" \
+        --chain=dynamic-integration \
+        --unwind-batch-no="$unwindBatch" || { echo "Failed to unwind"; exit 1; }
+fi
 
 dump_data "${firstStop}-unwound" "after unwind"
 
