@@ -156,16 +156,16 @@ func (bs *BatchState) getBlockHeaderForcedTimestamp() uint64 {
 	return math.MaxUint64
 }
 
-func (bs *BatchState) getCoinbase(cfg *SequenceBlockCfg, resequenceBatchJob *ResequenceBatchJob) common.Address {
+func (bs *BatchState) getCoinbase(cfg *SequenceBlockCfg) common.Address {
 	if bs.batchNumber > 1 && bs.isL1Recovery() {
 		return bs.batchL1RecoveryData.recoveredBatchData.Coinbase
 	}
 	// For X Layer replay we need to use the resequenceBatchJob's CurrentBlock as the coinbase
 	if cfg.zk.XLayer.SequencerReplay {
-		if resequenceBatchJob.CurrentBlock() != nil {
-			return resequenceBatchJob.CurrentBlock().Coinbase
+		if bs.resequenceBatchJob.CurrentBlock() != nil {
+			return bs.resequenceBatchJob.CurrentBlock().Coinbase
 		} else {
-			return resequenceBatchJob.PreviousBlock().Coinbase
+			return bs.resequenceBatchJob.PreviousBlock().Coinbase
 		}
 	}
 
