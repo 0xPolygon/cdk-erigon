@@ -277,6 +277,7 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 	headersQueue := make(chan *ethTypes.Header, logsSize)
 
 	process := func(em IEtherman) {
+		// TODO: Use calls with timeout
 		ctx := context.Background()
 		for {
 			l, ok := <-logQueue
