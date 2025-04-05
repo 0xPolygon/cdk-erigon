@@ -172,7 +172,7 @@ compare_dumps() {
         file_comparison="$comparison_dir/$filename"
 
         if [[ ! -f "$file_comparison" ]]; then
-            echo "[$(date)] Error: $filename missing in $comparison_dir." >&2
+            echo "[$(date)] File $filename missing in $comparison_dir." >&2
             exit 1
         fi
 
@@ -195,14 +195,13 @@ compare_dumps() {
                 :
             else
                 # Unexpected difference; print to stderr with more context
-                echo "[$(date)] $label Error - Unexpected differences in $filename" >&2
+                echo "[$(date)] $label - Unexpected differences in $filename" >&2
                 echo "[$(date)] Dumping differences for $filename:" >&2
                 diff -u "$file" "$file_comparison" >&2 || true
                 exit 1
             fi
         fi
     done
-    echo "[$(date)] $label - All files compared successfully." >&2
 }
 
 # Compare first stop dumps
