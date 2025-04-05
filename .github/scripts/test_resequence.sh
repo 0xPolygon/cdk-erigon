@@ -8,14 +8,14 @@ get_latest_l2_batch() {
 
     local latest_batch
     latest_batch=$(cast rpc zkevm_batchNumberByBlockNumber "$latest_block" --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)" | sed 's/^"//;s/"$//')
-    
+
     if [[ -z "$latest_batch" ]]; then
         echo "Error: Failed to get latest batch number" >&2
         return 1
     fi
-    
+
     latest_batch_dec=$((latest_batch))
-    
+
     echo "$latest_batch_dec"
 }
 
@@ -114,10 +114,11 @@ set -e
 stop_cdk_erigon_sequencer
 
 AC_SPLIT=${1:-false}
-
+INTEGRATION_TOOL_EXTRA_FLAGS=""
 if [ "$AC_SPLIT" = "ac-split" ]; then
     echo "Will use ac-split"
     kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 'printf "\n" >> /etc/cdk-erigon/config.yaml && echo "zkevm.standalone-smt-db: true" >> /etc/cdk-erigon/config.yaml && echo "zkevm.enable-async-commit: true" >> /etc/cdk-erigon/config.yaml'
+    INTEGRATION_TOOL_EXTRA_FLAGS="--standalone-smt-db=true --smt-db-path=/home/erigon/data/dynamic-kurtosis-sequencer/smt"
 else
     echo "Will not use ac-split"
     kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 'printf "\n" >> /etc/cdk-erigon/config.yaml && echo "zkevm.standalone-smt-db: false" >> /etc/cdk-erigon/config.yaml && echo "zkevm.enable-async-commit: false" >> /etc/cdk-erigon/config.yaml'
@@ -155,7 +156,7 @@ echo "Rolling back to batch $latest_verified_batch"
 cast send "0x2F50ef6b8e8Ee4E579B17619A92dE3E2ffbD8AD2" "rollbackBatches(address,uint64)" "0x1Fe038B54aeBf558638CA51C91bC8cCa06609e91" "$latest_verified_batch" --private-key "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" --rpc-url "$(kurtosis port print cdk-v1 el-1-geth-lighthouse rpc)"
 
 echo "Using integration tool to unwind to batch $latest_verified_batch"
-kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 "integration state_stages_zkevm --config=/etc/cdk-erigon/config.yaml --unwind-batch-no=$latest_verified_batch --chain dynamic-kurtosis --datadir /home/erigon/data/dynamic-kurtosis-sequencer"
+kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 "integration state_stages_zkevm --config=/etc/cdk-erigon/config.yaml --unwind-batch-no=$latest_verified_batch --chain dynamic-kurtosis --datadir /home/erigon/data/dynamic-kurtosis-sequencer $INTEGRATION_TOOL_EXTRA_FLAGS"
 
 echo "Starting cdk-erigon with resequencing and counter enabled"
 kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 "timeout 300s cdk-erigon --pprof=true --pprof.addr 0.0.0.0 --config /etc/cdk-erigon/config.yaml --datadir /home/erigon/data/dynamic-kurtosis-sequencer  --zkevm.sequencer-resequence-strict=false --zkevm.sequencer-resequence=true --zkevm.sequencer-resequence-reuse-l1-info-index=true"

@@ -13,6 +13,8 @@ unwindBatch=70
 datastreamPort=6900
 logFile="script.log"
 
+AC_SPLIT=${1:-false}
+
 # Redirect stdout to log file and keep stderr to console
 exec > >(tee -i "$logFile")  # Redirect stdout to log file
 exec 2> >(tee -a "$logFile" >&2)  # Redirect stderr to log file and keep it on console
@@ -71,12 +73,15 @@ dump_data() {
     local stop=$1
     local label=$2
     echo "[$(date)] Dumping data - $label ($stop)"
-    go run ./cmd/hack --action=dumpAll --chaindata="$dataPath/rpc-datadir/chaindata" --output="$dataPath/$stop" || { echo "Failed to dump data for $label"; exit 1; }
+    if [ "$AC_SPLIT" = "ac-split" ]; then
+        go run ./cmd/hack --action=dumpAll --standalone-smt-db=true --smt-db-path="$dataPath/rpc-datadir/smt" --chaindata="$dataPath/rpc-datadir/chaindata" --output="$dataPath/$stop" || { echo "Failed to dump data for $label"; exit 1; }
+    else
+        go run ./cmd/hack --action=dumpAll --chaindata="$dataPath/rpc-datadir/chaindata" --output="$dataPath/$stop" || { echo "Failed to dump data for $label"; exit 1; }
+    fi
 }
 
-AC_SPLIT=${1:-false}
-
-CONFIG_FILE="zk/tests/unwinds/config/dynamic-integration8.yaml"
+CONFIG_FILE="temp-dynamic-integration8.yaml"
+cp zk/tests/unwinds/config/dynamic-integration8.yaml $CONFIG_FILE
 
 if [ "$AC_SPLIT" = "ac-split" ]; then
     echo "Will use ac-split"
@@ -167,8 +172,18 @@ compare_dumps() {
         file_comparison="$comparison_dir/$filename"
 
         if [[ ! -f "$file_comparison" ]]; then
-            echo "[$(date)] File $filename missing in $comparison_dir." >&2
+            echo "[$(date)] Error: $filename missing in $comparison_dir." >&2
             exit 1
+        fi
+
+        # ignore key "lastHeight" in HermezSmtStats.txt (hex 6c617374486569676874)
+        if [[ "$filename" == "HermezSmtStats.txt" ]]; then
+            found=`grep "6c617374486569676874" $file || true`
+            if [ -z "$found" ]; then
+                # remove key "lastHeight" from comparison file
+                cat $file_comparison | grep -v "6c617374486569676874" | tee temp.txt > /dev/null
+                mv temp.txt $file_comparison
+            fi
         fi
 
         if cmp -s "$file" "$file_comparison"; then
@@ -180,13 +195,14 @@ compare_dumps() {
                 :
             else
                 # Unexpected difference; print to stderr with more context
-                echo "[$(date)] $label - Unexpected differences in $filename" >&2
+                echo "[$(date)] $label Error - Unexpected differences in $filename" >&2
                 echo "[$(date)] Dumping differences for $filename:" >&2
                 diff -u "$file" "$file_comparison" >&2 || true
                 exit 1
             fi
         fi
     done
+    echo "[$(date)] $label - All files compared successfully." >&2
 }
 
 # Compare first stop dumps
@@ -211,3 +227,5 @@ second_comparison_expected_diffs=(
 compare_dumps "$dataPath/${secondStop}" "$dataPath/${secondStop}-sync-again" "Sync forward again" second_comparison_expected_diffs[@]
 
 echo "[$(date)] No error"
+
+rm $CONFIG_FILE
