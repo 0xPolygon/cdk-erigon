@@ -1283,3 +1283,166 @@ func TestZKEVMRPC(t *testing.T) {
 		log.Infof("ZKEVMGetFullBlockByNumber result type: %T", block)
 	})
 }
+
+func TestFixedNonceTooLowTransactions(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+
+	ctx := context.Background()
+	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
+	require.NoError(t, err)
+
+	// Use a fixed sender address and private key
+	sender := common.HexToAddress(operations.DefaultL2AdminAddress)
+	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(operations.DefaultL2AdminPrivateKey, "0x"))
+	require.NoError(t, err)
+	signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), 1, 0)
+
+	// Get the initial nonce
+	baseNonce, err := client.PendingNonceAt(ctx, sender)
+	require.NoError(t, err)
+	log.Infof("Starting nonce: %d", baseNonce)
+
+	// Fixed transaction parameters
+	const (
+		totalTxs       = 20 // Total number of transactions
+		batchSize      = 5  // Number of transactions per batch
+		nonceTooLowCnt = 5  // Fixed number of NonceTooLow transactions
+	)
+
+	// Generate transactions with a fixed pattern
+	var txs []types.Transaction
+	currentNonce := baseNonce
+	lowNonceIndexes := map[int]bool{1: true, 4: true, 8: true, 12: true, 16: true} // Fixed low nonce transaction indices
+
+	for i := 0; i < totalTxs; i++ {
+		var nonce uint64
+		if lowNonceIndexes[i] {
+			// Choose a nonce that is explicitly lower than the current nonce for low nonce transactions
+			nonce = baseNonce + uint64(i/4) // Ensure nonce is lower than the current valid value
+		} else {
+			// Normally increment nonce
+			nonce = currentNonce
+			currentNonce++
+		}
+
+		to := common.HexToAddress(operations.DefaultL2NewAcc1Address)
+		value := uint256.NewInt(uint64(1000 + i)) // Fixed value for easy verification
+		gas := uint64(21000)
+		gasPrice := uint256.NewInt(1 * encoding.Gwei) // Fixed gas price
+
+		tx := &types.LegacyTx{
+			CommonTx: types.CommonTx{
+				Nonce: nonce,
+				To:    &to,
+				Gas:   gas,
+				Value: value,
+				Data:  nil,
+			},
+			GasPrice: gasPrice,
+		}
+
+		signedTx, err := types.SignTx(tx, *signer, privateKey)
+		require.NoError(t, err)
+		txs = append(txs, signedTx)
+		log.Infof("Generated tx %d: nonce=%d, value=%s", i, nonce, value.String())
+	}
+
+	// Send transactions and record results
+	type txResult struct {
+		tx     types.Transaction
+		err    error
+		sentAt time.Time
+	}
+	var results []txResult
+
+	expectedNextNonce := baseNonce
+	maxSuccessNonce := baseNonce - 1
+	for i := 0; i < len(txs); i += batchSize {
+		end := i + batchSize
+		if end > len(txs) {
+			end = len(txs)
+		}
+		batch := txs[i:end]
+
+		// Requery nonce before sending
+		currentNonce, err := client.PendingNonceAt(ctx, sender)
+		if err == nil && currentNonce > expectedNextNonce {
+			expectedNextNonce = currentNonce
+		}
+		log.Infof("Sending batch %d-%d, expected next nonce: %d", i, end-1, expectedNextNonce)
+
+		for _, tx := range batch {
+			err := client.SendTransaction(ctx, tx)
+			results = append(results, txResult{
+				tx:     tx,
+				err:    err,
+				sentAt: time.Now(),
+			})
+			if err != nil {
+				log.Infof("Tx %s failed: %v", tx.Hash().Hex(), err)
+			} else {
+				log.Infof("Tx %s sent successfully", tx.Hash().Hex())
+				if tx.GetNonce() > maxSuccessNonce {
+					maxSuccessNonce = tx.GetNonce()
+				}
+				expectedNextNonce = tx.GetNonce() + 1
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+
+	// Validate results
+	nonceTooLowCount := 0
+	successCount := 0
+	for _, result := range results {
+		if result.err != nil {
+			errStr := result.err.Error()
+			if strings.Contains(errStr, "nonce too low") || strings.Contains(errStr, "NONCE_TOO_LOW") {
+				nonceTooLowCount++
+				log.Infof("NonceTooLow detected: tx nonce=%d, expected next nonce=%d",
+					result.tx.GetNonce(), expectedNextNonce)
+				require.True(t, result.tx.GetNonce() < expectedNextNonce,
+					"NonceTooLow error should occur when nonce %d < expected nonce %d",
+					result.tx.GetNonce(), expectedNextNonce)
+			} else if strings.Contains(errStr, "could not replace existing tx") {
+				// Treat "could not replace existing tx" as a "nonce too low" scenario
+				nonceTooLowCount++
+				log.Infof("NonceTooLow (replacement) detected: tx nonce=%d, expected next nonce=%d",
+					result.tx.GetNonce(), expectedNextNonce)
+				require.True(t, result.tx.GetNonce() < expectedNextNonce,
+					"NonceTooLow error should occur when nonce %d < expected nonce %d",
+					result.tx.GetNonce(), expectedNextNonce)
+			}
+		} else {
+			successCount++
+			// Asynchronously verify transaction is mined
+			go func(tx types.Transaction) {
+				err := operations.WaitTxToBeMined(ctx, client, tx, operations.DefaultTimeoutTxToBeMined)
+				if err == nil {
+					log.Debugf("Transaction mined: %s", tx.Hash().Hex())
+				} else {
+					log.Warnf("Transaction %s failed to be mined: %v", tx.Hash().Hex(), err)
+				}
+			}(result.tx)
+		}
+	}
+
+	// Assert fixed results
+	log.Infof("Expected NonceTooLow: %d, Actual: %d, Successful: %d",
+		nonceTooLowCnt, nonceTooLowCount, successCount)
+
+	require.Equal(t, nonceTooLowCnt, nonceTooLowCount, "NonceTooLow count does not match expectation")
+	require.Equal(t, totalTxs-nonceTooLowCnt, successCount, "Number of successful transactions does not match expectation")
+
+	// Wait for all transactions to be confirmed (optional)
+	time.Sleep(5 * time.Second)
+
+	// Validate the final nonce
+	finalNonce, err := client.PendingNonceAt(ctx, sender)
+	require.NoError(t, err)
+	expectedFinalNonce := baseNonce + uint64(totalTxs-nonceTooLowCnt)
+	require.Equal(t, expectedFinalNonce, finalNonce,
+		"Final nonce is incorrect, expected: %d, actual: %d", expectedFinalNonce, finalNonce)
+}

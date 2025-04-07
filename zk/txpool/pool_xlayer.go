@@ -50,7 +50,7 @@ type XLayerConfig struct {
 	FreeGasList        map[string]*ethconfig.FreeGasInfo // map[projectName]FreeGasInfo
 	// EnableTimsort is the switch to use timsort on the best slice of txpool
 	EnableTimsort bool
-	EnableNotify       bool
+	EnableNotify  bool
 }
 
 type GPCache interface {
@@ -129,7 +129,7 @@ func (p *TxPool) checkFreeGasSenderXLayer(senderID uint64, address *common.Addre
 	}
 	*address = addr
 	// is claim tx
-	if p.apolloCfg.CheckFreeClaimAddr(p.xlayerCfg.FreeClaimGasAddrs, addr) {
+	if p.apolloCfg != nil && p.apolloCfg.CheckFreeClaimAddr(p.xlayerCfg.FreeClaimGasAddrs, addr) {
 		return claim, p.xlayerCfg.GasPriceMultiple
 	}
 
@@ -144,7 +144,8 @@ func (p *TxPool) checkFreeGasSenderXLayer(senderID uint64, address *common.Addre
 
 func (p *TxPool) checkFreeGasTxXLayer(addr common.Address, tx *types.TxSlot) (freeType int, gpMul uint64) {
 	// specific project
-	if p.apolloCfg.GetEnableFreeGasList(p.xlayerCfg.EnableFreeGasList) {
+
+	if p.apolloCfg != nil && p.apolloCfg.GetEnableFreeGasList(p.xlayerCfg.EnableFreeGasList) {
 		fromToName, freeGpList := p.xlayerCfg.FreeGasFromNameMap, p.xlayerCfg.FreeGasList
 		info := freeGpList[fromToName[strings.ToLower(addr.String())]]
 		if info != nil &&
