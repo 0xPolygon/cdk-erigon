@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"unsafe"
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/length"
@@ -820,88 +821,70 @@ func HashContractBytecodeBigIntV1(bc string) *big.Int {
 	return ArrayToScalar(tmpHash[:])
 }
 
-func charToDigit(c byte) int {
+func charToByte(c byte) byte {
 	if c >= '0' && c <= '9' {
-		return int(c - '0')
+		return c - '0'
 	}
 	if c >= 'a' && c <= 'f' {
-		return int(c - 'a' + 10)
+		return c - 'a' + 10
 	}
 	if c >= 'A' && c <= 'F' {
-		return int(c - 'A' + 10)
+		return c - 'A' + 10
 	}
 	// should not reach here
 	return 0
 }
 
 func HashContractBytecodeBigInt(bc string) *big.Int {
-	bytecode := bc
+	bytecode := strings.TrimPrefix(bc, "0x")
 
-	if strings.HasPrefix(bc, "0x") {
-		bytecode = bc[2:]
+	targetBytesLen := len(bytecode) / 2
+	if len(bytecode)%2 != 0 {
+		targetBytesLen += 1
 	}
+
+	targetBytesLen += 1
+
+	if targetBytesLen%56 != 0 {
+		targetBytesLen = targetBytesLen + (56 - targetBytesLen%56)
+	}
+
+	targetBytesLen = targetBytesLen / 7 * 8
+
+	targetBytes := make([]byte, targetBytesLen)
+
+	counter := 0
+	offset := 0
+	i := 0
 
 	if len(bytecode)%2 != 0 {
-		bytecode = "0" + bytecode
+		targetBytes[offset] = charToByte(bytecode[0])
+		offset += 1
+		counter += 1
+		i += 1
 	}
 
-	// MT is 56 (multiplier)
-	MT := BYTECODE_ELEMENTS_HASH * BYTECODE_BYTES_ELEMENT
-	lenBytecode := len(bytecode)/2 + 1 // + 1 because we append 01
-	if lenBytecode%MT != 0 {
-		lenBytecode += MT - lenBytecode%MT // padding
-	}
-	bb := make([]byte, lenBytecode)
-	for i := 0; i < len(bytecode)/2; i++ {
-		// use strconv.ParseInt
-		// x, _ := strconv.ParseInt(bytecode[2*i:2*i+2], 16, 64)
-		// bb[i] = byte(x)
-		// simple
-		bb[i] = byte((charToDigit(bytecode[2*i]) << 4) + charToDigit(bytecode[2*i+1]))
-	}
-	for i := len(bytecode) / 2; i < len(bb); i++ {
-		bb[i] = 0
-	}
-
-	bbPtr := len(bytecode) / 2
-	bb[bbPtr] = 0x01
-	bbPtr = len(bb) - 1
-	bb[bbPtr] |= 0x80
-
-	numBytes := float64(len(bb))
-	numHashes := int(math.Ceil(numBytes / (BYTECODE_ELEMENTS_HASH * BYTECODE_BYTES_ELEMENT)))
-	tmpHash := [4]uint64{0, 0, 0, 0}
-	bytesPointer := 0
-
-	maxBytesToAdd := BYTECODE_ELEMENTS_HASH * BYTECODE_BYTES_ELEMENT
-	var elementsToHash []uint64
-	var in [8]uint64
-	var capacity [4]uint64
-	for i := 0; i < numHashes; i++ {
-		elementsToHash = tmpHash[:]
-
-		subsetBytecode := bb[bytesPointer : bytesPointer+maxBytesToAdd]
-		bytesPointer += maxBytesToAdd
-
-		var tmpElem uint64
-		tmpElem = 0
-		counter := 0
-
-		for j := 0; j < maxBytesToAdd; j++ {
-			tmpElem += uint64(subsetBytecode[j]) << (8 * counter)
-			counter += 1
-
-			if counter == BYTECODE_BYTES_ELEMENT {
-				elementsToHash = append(elementsToHash, tmpElem)
-				tmpElem = 0
-				counter = 0
-			}
+	for ; i < len(bytecode); i += 2 {
+		targetBytes[offset] = charToByte(bytecode[i])<<4 | charToByte(bytecode[i+1])
+		offset += 1
+		counter += 1
+		if counter == BYTECODE_BYTES_ELEMENT {
+			counter = 0
+			offset += 1
+			// targetBytes[offset] = 0
 		}
+	}
 
-		copy(in[:], elementsToHash[4:12])
-		copy(capacity[:], elementsToHash[:4])
+	targetBytes[offset] = 0x01
+	targetBytes[len(targetBytes)-2] |= 0x80
 
-		tmpHash = Hash(in, capacity)
+	tmpData := &[8]uint64{}
+	tmpHash := (*[4]uint64)(unsafe.Pointer(tmpData))
+	var result = (*[4]uint64)(unsafe.Pointer(unsafe.SliceData(tmpData[4:])))
+	for i := 0; i < len(targetBytes); i += 64 {
+		in := (*[8]uint64)(unsafe.Pointer(unsafe.SliceData(targetBytes[i:])))
+		hashFunc(in, tmpHash, result)
+		tmpHash, result = result, tmpHash
 	}
 
 	return ArrayToScalar(tmpHash[:])

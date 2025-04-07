@@ -57,20 +57,40 @@ func BenchmarkConvertBigIntToHex(b *testing.B) {
 func BenchmarkHashContractBytecode(b *testing.B) {
 	str := strings.Repeat("e", 1000)
 	b.Run("1", func(b *testing.B) {
+		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			HashContractBytecodeBigIntV1(str)
 		}
 	})
 	b.Run("2", func(b *testing.B) {
+		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			HashContractBytecodeBigInt(str)
 		}
 	})
 	b.Run("3", func(b *testing.B) {
+		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			HashContractBytecode(str)
 		}
 	})
+}
+
+func TestHashContractBytecodeBigInt(t *testing.T) {
+	cases := []string{
+		"0x123456789abcdef",
+		"0x1",
+		"0x123456789abcdef123456789abcdef123456789abcdef123456789ab123456789abcdef123456789abcdef123456789abcdef123456789ab",
+		"0x123456789abcdef123456789abcdef123456789abcdef123456789ab123456789abcdef123456789abcdef123456789abcdef123456789",
+		strings.Repeat("e", 1000),
+	}
+	for _, s := range cases {
+		expect := HashContractBytecodeBigIntV1(s)
+		actual := HashContractBytecodeBigInt(s)
+		if expect.Cmp(actual) != 0 {
+			t.Errorf("HashContractBytecodeBigInt(%s) = %v, want %v", s, actual, expect)
+		}
+	}
 }
 
 // for input strings of even size
