@@ -903,6 +903,26 @@ var (
 		Usage: "When enabled a RPC node can use the L2 to build the InfoTree.",
 		Value: false,
 	}
+	ZkevmLogExcludeFlags = cli.StringSliceFlag{
+		Name:  "zkevm.log-exclude-flags",
+		Usage: "Exclude zkevm flags from startup logging on zkevm flags.",
+		Value: cli.NewStringSlice("zkevm.l1-rpc-url"),
+	}
+	Hardfork = cli.StringFlag{
+		Name:  "zkevm.hardfork",
+		Usage: "Values { hermez | ethereum }. Default, hermez.",
+		Value: "hermez",
+	}
+	Commitment = cli.StringFlag{
+		Name:  "zkevm.commitment",
+		Usage: "Values { smt | pmt }. Default, smt.",
+		Value: "smt",
+	}
+	InjectGers = cli.BoolFlag{
+		Name:  "zkevm.inject-gers",
+		Usage: "Inject L1 information into the scalable contract and ger manager. Default true.",
+		Value: true,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",
@@ -2536,6 +2556,24 @@ func CobraFlags(cmd *cobra.Command, urfaveCliFlagsLists ...[]cli.Flag) {
 			default:
 				panic(fmt.Errorf("unexpected type: %T", flag))
 			}
+		}
+	}
+}
+
+func LogActiveZkevmFlags(logger log.Logger, ctx *cli.Context) {
+	excludeList := ctx.StringSlice(ZkevmLogExcludeFlags.Name)
+	excludeMap := make(map[string]struct{}, len(excludeList))
+	for _, ex := range excludeList {
+		excludeMap[ex] = struct{}{}
+	}
+
+	for _, flag := range ctx.App.Flags {
+		flagName := flag.Names()[0]
+		if strings.HasPrefix(flagName, "zkevm.") && ctx.IsSet(flagName) {
+			if _, excluded := excludeMap[flagName]; excluded {
+				continue
+			}
+			logger.Info("[Flags] Zkevm flag set from config", "name", flagName, "value", ctx.Generic(flagName))
 		}
 	}
 }
