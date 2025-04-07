@@ -21,20 +21,22 @@ import (
 const maximumOverflowTransactionAttempts = 5
 
 type BatchContext struct {
-	ctx        context.Context
-	cfg        *SequenceBlockCfg
-	historyCfg *stagedsync.HistoryCfg
-	s          *stagedsync.StageState
-	sdb        *stageDb
+	ctx            context.Context
+	cfg            *SequenceBlockCfg
+	historyCfg     *stagedsync.HistoryCfg
+	s              *stagedsync.StageState
+	sdb            *stageDb
+	interhashesCfg ZkInterHashesCfg
 }
 
-func newBatchContext(ctx context.Context, cfg *SequenceBlockCfg, historyCfg *stagedsync.HistoryCfg, s *stagedsync.StageState, sdb *stageDb) *BatchContext {
+func newBatchContext(ctx context.Context, cfg *SequenceBlockCfg, historyCfg *stagedsync.HistoryCfg, s *stagedsync.StageState, sdb *stageDb, interhashesCfg ZkInterHashesCfg) *BatchContext {
 	return &BatchContext{
-		ctx:        ctx,
-		cfg:        cfg,
-		historyCfg: historyCfg,
-		s:          s,
-		sdb:        sdb,
+		ctx:            ctx,
+		cfg:            cfg,
+		historyCfg:     historyCfg,
+		s:              s,
+		sdb:            sdb,
+		interhashesCfg: interhashesCfg,
 	}
 }
 

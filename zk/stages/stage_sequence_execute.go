@@ -29,6 +29,7 @@ func SpawnSequencingStage(
 	ctx context.Context,
 	cfg SequenceBlockCfg,
 	historyCfg stagedsync.HistoryCfg,
+	zkInterHashesCfg ZkInterHashesCfg,
 	quiet bool,
 ) (err error) {
 	roTx, err := cfg.db.BeginRo(ctx)
@@ -65,7 +66,7 @@ func SpawnSequencingStage(
 				return err
 			}
 		} else {
-			return resequence(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs)
+			return resequence(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs, zkInterHashesCfg)
 		}
 	}
 
@@ -75,7 +76,7 @@ func SpawnSequencingStage(
 		return nil
 	}
 
-	return sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil)
+	return sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil, zkInterHashesCfg)
 }
 
 func sequencingBatchStep(
@@ -85,6 +86,7 @@ func sequencingBatchStep(
 	cfg SequenceBlockCfg,
 	historyCfg stagedsync.HistoryCfg,
 	resequenceBatchJob *ResequenceBatchJob,
+	zkInterHashesCfg ZkInterHashesCfg,
 ) (err error) {
 	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting sequencing stage", logPrefix))
@@ -95,7 +97,14 @@ func sequencingBatchStep(
 		return err
 	}
 
-	sdb, err := newStageDb(ctx, cfg.db)
+	// sdb, err := newStageDb(ctx, cfg.db)
+	var sdb *stageDb
+	if type1Rollup {
+		sdb, err = newStageDb(ctx, zkInterHashesCfg.db) // ????
+	} else {
+		sdb, err = newStageDb(ctx, cfg.db)
+	}
+
 	if err != nil {
 		return err
 	}
@@ -134,7 +143,7 @@ func sequencingBatchStep(
 
 	var block *types.Block
 	runLoopBlocks := true
-	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
+	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb, zkInterHashesCfg)
 	batchState := newBatchState(forkId, batchNumberForStateInitialization, executionAt+1, cfg.zk.UseExecutors(), cfg.zk.IsL1Recovery(), cfg.txPool, resequenceBatchJob)
 	shouldCountersBeInfinite := cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()) || cfg.chainConfig.IsNormalcy(executionAt)
 	blockDataSizeChecker := NewBlockDataChecker(shouldCountersBeInfinite)

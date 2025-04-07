@@ -65,25 +65,30 @@ func blocksIO(db kv.RoDB) (services.FullBlockReader, *blockio.BlockWriter) {
 	return br, bw
 }
 
-func StateRoot(ctx context.Context, genesis *types.Genesis, blockNum uint64, datadir string, logger log.Logger) error {
+func StateRoot(ctx context.Context, genesis *types.Genesis, blockNum uint64, datadir string, logger log.Logger) (err error) {
 	logger.Info("Starting state root calculation")
 	sigs := make(chan os.Signal, 1)
 	interruptCh := make(chan bool, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	defer func() {
+		log.Info("Stopping state root calculation", "err", err)
+	}()
 
 	go func() {
 		<-sigs
 		interruptCh <- true
 	}()
 	dirs := datadir2.New(datadir)
-	historyDb, err := kv2.NewMDBX(logger).Path(dirs.Chaindata).Open(ctx)
+	var historyDb kv.RoDB
+	historyDb, err = kv2.NewMDBX(logger).Path(dirs.Chaindata).Open(ctx)
 	if err != nil {
 		return err
 	}
 	defer historyDb.Close()
-	historyTx, err1 := historyDb.BeginRo(ctx)
-	if err1 != nil {
-		return err1
+	var historyTx kv.Tx
+	historyTx, err = historyDb.BeginRo(ctx)
+	if err != nil {
+		return err
 	}
 	defer historyTx.Rollback()
 	stateDbPath := filepath.Join(datadir, "staterootdb")
@@ -94,9 +99,10 @@ func StateRoot(ctx context.Context, genesis *types.Genesis, blockNum uint64, dat
 	} else if err = os.RemoveAll(stateDbPath); err != nil {
 		return err
 	}
-	db, err2 := kv2.NewMDBX(logger).Path(stateDbPath).Open(ctx)
-	if err2 != nil {
-		return err2
+	var db kv.RwDB
+	db, err = kv2.NewMDBX(logger).Path(stateDbPath).Open(ctx)
+	if err != nil {
+		return err
 	}
 	defer db.Close()
 	blockReader, _ := blocksIO(db)
@@ -114,9 +120,10 @@ func StateRoot(ctx context.Context, genesis *types.Genesis, blockNum uint64, dat
 	if rwTx, err = db.BeginRw(ctx); err != nil {
 		return err
 	}
-	_, genesisIbs, _, err4 := core.GenesisToBlock(genesis, "", logger)
-	if err4 != nil {
-		return err4
+	var genesisIbs *state.IntraBlockState
+	_, genesisIbs, _, err = core.GenesisToBlock(genesis, "", logger)
+	if err != nil {
+		return err
 	}
 	w := state.NewPlainStateWriter(rwTx, nil, 0)
 	if err = genesisIbs.CommitBlock(&chain2.Rules{}, w); err != nil {

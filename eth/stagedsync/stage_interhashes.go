@@ -104,6 +104,7 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 			return trie.EmptyRoot, fmt.Errorf("no header found with number %d", to)
 		}
 		expectedRootHash = syncHeadHeader.Root
+		logger.Info(fmt.Sprintf("[%s] Expected root hash", s.LogPrefix()), "hash", expectedRootHash.Hex(), "block", to)
 		headerHash = syncHeadHeader.Hash()
 	}
 	logPrefix := s.LogPrefix()
@@ -185,7 +186,12 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	}
 
 	if cfg.checkRoot && hash != expectedRootHash {
-		panic(fmt.Sprintf("Wrong trie root of block %d: %x, expected (from header): %x", cfg.agg.EndTxNumMinimax(), hash, expectedRootHash))
+		// _, n, err := rawdbv3.TxNums.FindBlockNum(db, cfg.agg.EndTxNumMinimax())
+		// if err != nil {
+		// 	logger.Error("Failed to find block number for tx", cfg.agg.EndTxNumMinimax(), "err", err)
+		// }
+		n := cfg.agg.EndTxNumMinimax()
+		panic(fmt.Sprintf("Wrong trie root of block %d: %x, expected (from header): %x", n, hash, expectedRootHash))
 		return hash, nil
 	}
 	logger.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", hash.Hex())
@@ -622,6 +628,8 @@ func IncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, to
 	if err != nil {
 		return trie.EmptyRoot, err
 	}
+
+	logger.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", hash.Hex(), "from", s.BlockNumber, "to", to)
 
 	if cfg.checkRoot && hash != expectedRootHash {
 		panic(fmt.Sprintf("Wrong trie root of block %d: %x, expected (from header): %x", s.BlockNumber, hash, expectedRootHash))
