@@ -464,48 +464,6 @@ func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *sta
 		}
 	}
 
-	// ToDO: remove this
-	depth, err := dbSmt.Db.GetDepth()
-	if err != nil {
-		log.Error("depth err", err)
-	}
-	height, err := dbSmt.Db.GetLastHeight()
-	if err != nil {
-		log.Error("height err", err)
-	}
-	root, err := dbSmt.Db.GetLastRoot()
-	if err != nil {
-		log.Error("root err", err)
-	}
-	log.Info("---SMT root before---", "depth", depth, "height", height, "root", common.BigToHash(root))
-	log.Info("Debug SetStorage parameters",
-		"accChanges count", len(accChanges),
-		"codeChanges count", len(codeChanges),
-		"storageChanges count", len(storageChanges))
-	for addr, acc := range accChanges {
-		log.Info("Account change",
-			"address", addr.Hex(),
-			"balance", acc.Balance,
-			"nonce", acc.Nonce,
-			"codeHash", acc.CodeHash)
-	}
-	for addr, code := range codeChanges {
-		log.Info("Code change",
-			"address", addr.Hex(),
-			"codeLength", len(code))
-	}
-	for addr, storage := range storageChanges {
-		log.Info("Storage change",
-			"address", addr.Hex(),
-			"storageKeysCount", len(storage))
-		for key, value := range storage {
-			log.Debug("Storage detail",
-				"address", addr.Hex(),
-				"key", key,
-				"value", value)
-		}
-	}
-
 	if _, _, err := dbSmt.SetStorage(ctx, logPrefix, accChanges, codeChanges, storageChanges); err != nil {
 		return trie.EmptyRoot, err
 	}
@@ -525,21 +483,6 @@ func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *sta
 	if err := hermezDb.WriteSmtDepth(to, uint64(dbSmt.GetDepth())); err != nil {
 		return trie.EmptyRoot, err
 	}
-
-	// ToDO: remove this
-	depth, err = dbSmt.Db.GetDepth()
-	if err != nil {
-		log.Error("depth err", err)
-	}
-	height, err = dbSmt.Db.GetLastHeight()
-	if err != nil {
-		log.Error("height err", err)
-	}
-	root, err = dbSmt.Db.GetLastRoot()
-	if err != nil {
-		log.Error("root err", err)
-	}
-	log.Info("---SMT root after---", "depth", depth, "height", height, "root", common.BigToHash(root))
 
 	return hash, nil
 }
