@@ -61,7 +61,7 @@ func TestSmtCacheList(t *testing.T) {
 					"key5": {"subkey5": "value5"},
 				}))
 
-				cache, found := list.cascadeGetCacheShapshot(2, false)
+				cache, found := list.cascadeGetCacheShapshot(2)
 				if !found {
 					t.Errorf("Expected to find snapshot for BlockHeight 2")
 				}
@@ -76,7 +76,7 @@ func TestSmtCacheList(t *testing.T) {
 				}
 
 				// Test case 2: Non-existent height
-				_, found = list.cascadeGetCacheShapshot(4, false)
+				_, found = list.cascadeGetCacheShapshot(4)
 				if found {
 					t.Errorf("Expected not to find snapshot for BlockHeight 4")
 				}
@@ -95,7 +95,7 @@ func TestSmtCacheList(t *testing.T) {
 					"key4": {"subkey6": "value6"},
 				}))
 
-				cache, found = list.cascadeGetCacheShapshot(2, false)
+				cache, found = list.cascadeGetCacheShapshot(2)
 				if !found {
 					t.Errorf("Expected to find snapshot for BlockHeight 2")
 				}
@@ -125,7 +125,7 @@ func TestSmtCacheList(t *testing.T) {
 					"key5": {"subkey5": "value5"},
 				}))
 
-				cache, found := list.getAllCacheShapshot(false)
+				cache, found := list.getAllCacheShapshot()
 				if !found {
 					t.Errorf("Expected to find snapshot for BlockHeight 2")
 				}
@@ -141,7 +141,7 @@ func TestSmtCacheList(t *testing.T) {
 				}
 
 				// Test case 2: Non-existent height
-				_, found = list.cascadeGetCacheShapshot(4, false)
+				_, found = list.cascadeGetCacheShapshot(4)
 				if found {
 					t.Errorf("Expected not to find snapshot for BlockHeight 4")
 				}
@@ -160,7 +160,7 @@ func TestSmtCacheList(t *testing.T) {
 					"key4": {"subkey6": "value6"},
 				}))
 
-				cache, found = list.getAllCacheShapshot(false)
+				cache, found = list.getAllCacheShapshot()
 				if !found {
 					t.Errorf("Expected to find snapshot for BlockHeight 2")
 				}
@@ -199,13 +199,13 @@ func TestSmtCacheList(t *testing.T) {
 					t.Errorf("Expected head to be nil after deleting head, got %v", list.head)
 				}
 
-				cache, found := list.getAllCacheShapshot(false)
+				cache, found := list.getAllCacheShapshot()
 				if found {
 					t.Errorf("Expected to not find snapshot for empty List")
 				}
 				assert.Nil(t, cache, "Expect cache is nil")
 
-				cache, found = list.cascadeGetCacheShapshot(2, false)
+				cache, found = list.cascadeGetCacheShapshot(2)
 				if found {
 					t.Errorf("Expected to not find snapshot for BlockHeight 2")
 				}
@@ -229,7 +229,7 @@ func TestSmtCacheList(t *testing.T) {
 				if list.Length() != 2 {
 					t.Errorf("Expected length 2 after deleting BlockHeight 1, got %d", list.Length())
 				}
-				if list.head == nil || list.head.BlcokHeight != 3 {
+				if list.head == nil || list.head.BlockHeight != 3 {
 					t.Errorf("Expected head BlockHeight 3, got %v", list.head)
 				}
 
@@ -257,7 +257,7 @@ func TestSmtCacheList(t *testing.T) {
 				if list.Length() != 0 {
 					t.Errorf("Expected length 0 for empty list, got %d", list.Length())
 				}
-				_, found := list.cascadeGetCacheShapshot(1, false)
+				_, found := list.cascadeGetCacheShapshot(1)
 				if found {
 					t.Errorf("Expected not to find snapshot in empty list")
 				}
@@ -305,7 +305,7 @@ func TestSmtCacheListAsyncOp(t *testing.T) {
 					"key1": {"subkey1": "value1_child"},
 				}))
 
-				cache, found := list.cascadeGetCacheShapshot(2, false)
+				cache, found := list.cascadeGetCacheShapshot(2)
 				if !found {
 					t.Errorf("Expected to find snapshot for BlockHeight 2")
 				}

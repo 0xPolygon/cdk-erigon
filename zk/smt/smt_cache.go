@@ -7,6 +7,8 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 )
 
+var flushSmtCachePeriod = uint64(100)
+
 type SmtCacheSave struct {
 	SmtData     map[string]map[string][]byte
 	BlockHeight uint64
@@ -17,20 +19,20 @@ type SmtCache struct {
 	LastPushedHeight uint64
 	ConfirmedHeap    *Uint64MinHeap
 
-	SmtCacheDataCh       chan SmtCacheSave
-	SmtCacheSnapshotList *SmtCacheList
-	SmtCacheSnapshotLock sync.RWMutex // Added lock for SmtCacheSnapshotList
+	SmtCacheSnapshotList *SmtCacheList // used by seq, witness verify and truncated thread, need lock
+	SmtCacheSnapshotLock sync.RWMutex  // Added lock for SmtCacheSnapshotList
 
-	PreBatchSnapshotImage         map[string]map[string][]byte
+	PreBatchSnapshotImage         map[string]map[string][]byte // used by seq, witness verify and truncated thread, need lock
 	PreBatchImageLastUpdateHeight uint64
-	PreBatchImageLock             sync.RWMutex
+	PreBatchImageLock             sync.RWMutex // Added lock for PreBatchSnapshotImage
 
-	CurrentBatchBlockSnapshotList *SmtCacheList
-	CurrentBatchSnapshotLock      sync.RWMutex // Added lock for CurrentBatchBlockSnapshotList
-	//CurrentBatchDeltaSmtCache     map[string]map[string][]byte
+	LastRecordBlockHeight         uint64
+	CurrentBatchBlockSnapshotList *SmtCacheList // used by seq and witness verify thread, need lock
+	CurrentBatchSnapshotLock      sync.RWMutex  // Added lock for CurrentBatchBlockSnapshotList
 
-	DeltaSmtCache     map[string]map[string][]byte
-	LongLivedSmtCache map[string]map[string][]byte
+	SmtCacheDataCh    chan SmtCacheSave
+	ToPushedSmtCache  map[string]map[string][]byte // only used by seq thread, no need lock protect
+	LongLivedSmtCache map[string]map[string][]byte // only used by seq thread, no need lock protect
 	LastResetHeight   uint64
 }
 
@@ -42,12 +44,12 @@ func CreateNewSmtCache() *SmtCache {
 
 		SmtCacheDataCh:       make(chan SmtCacheSave, 1000),
 		SmtCacheSnapshotList: NewSmtCacheList(),
-		DeltaSmtCache:        make(map[string]map[string][]byte),
+		ToPushedSmtCache:     make(map[string]map[string][]byte),
 		LongLivedSmtCache:    make(map[string]map[string][]byte),
-		LastResetHeight:      uint64(0),
+		LastResetHeight:      0,
 
+		LastRecordBlockHeight:         0,
 		CurrentBatchBlockSnapshotList: NewSmtCacheList(),
-		//CurrentBatchDeltaSmtCache:     make(map[string]map[string][]byte),
 		PreBatchSnapshotImage:         make(map[string]map[string][]byte),
 		PreBatchImageLastUpdateHeight: 0,
 	}
@@ -74,41 +76,39 @@ func (cache *SmtCache) TruncateSmtCacheList(blockHeight uint64) {
 	}
 
 	if truncateHeight > 0 {
-		if truncateHeight-cache.PreBatchImageLastUpdateHeight > 20 {
-			cache.SmtCacheSnapshotLock.RLock()
-			deltaSmtCache, _ := cache.SmtCacheSnapshotList.getAllCacheShapshot(false)
-			cache.SmtCacheSnapshotLock.RUnlock()
+		//if truncateHeight-cache.PreBatchImageLastUpdateHeight > flushSmtCachePeriod*2 {
+		cache.SmtCacheSnapshotLock.RLock()
+		tmpSmtCache, _ := cache.SmtCacheSnapshotList.getAllCacheShapshot()
+		cache.SmtCacheSnapshotLock.RUnlock()
 
-			if deltaSmtCache == nil {
-				deltaSmtCache = map[string]map[string][]byte{}
-			}
-			cache.PreBatchImageLock.Lock()
-			cache.PreBatchSnapshotImage = deltaSmtCache
-			cache.PreBatchImageLastUpdateHeight = truncateHeight
-			cache.PreBatchImageLock.Unlock()
+		if tmpSmtCache == nil {
+			tmpSmtCache = map[string]map[string][]byte{}
 		}
+		cache.PreBatchImageLock.Lock()
+		cache.PreBatchSnapshotImage = tmpSmtCache
+		cache.PreBatchImageLastUpdateHeight = truncateHeight
+		cache.PreBatchImageLock.Unlock()
+		//}
 	}
 }
 
 func (cache *SmtCache) GetSmtCache() map[string]map[string][]byte {
-	return cache.LongLivedSmtCache // Thread 3 only, no lock needed
+	return cache.LongLivedSmtCache
 }
 
 func (cache *SmtCache) CascadeGetCurrentBatchSnapshotCache(blockNumber uint64) map[string]map[string][]byte {
 	cache.CurrentBatchSnapshotLock.RLock()
-	cacheData, ok := cache.CurrentBatchBlockSnapshotList.cascadeGetCacheShapshot(blockNumber, false)
+	cacheData, ok := cache.CurrentBatchBlockSnapshotList.cascadeGetCacheShapshot(blockNumber)
 	cache.CurrentBatchSnapshotLock.RUnlock()
 
 	if !ok {
 		cache.SmtCacheSnapshotLock.RLock()
-		cacheData, _ = cache.SmtCacheSnapshotList.cascadeGetCacheShapshot(blockNumber, false)
+		cacheData, _ = cache.SmtCacheSnapshotList.cascadeGetCacheShapshot(blockNumber)
 		cache.SmtCacheSnapshotLock.RUnlock()
 		return cacheData
 	}
 
 	cache.PreBatchImageLock.RLock()
-	defer cache.PreBatchImageLock.RUnlock()
-
 	result := make(map[string]map[string][]byte, len(cache.PreBatchSnapshotImage))
 
 	// Use a wait group to synchronize goroutines
@@ -135,6 +135,7 @@ func (cache *SmtCache) CascadeGetCurrentBatchSnapshotCache(blockNumber uint64) m
 		}(table, bucket)
 	}
 	wg.Wait() // Wait for all PreBatchSnapshotImage copies to complete
+	cache.PreBatchImageLock.RUnlock()
 
 	// Then process cacheData
 	for table, bucket := range cacheData {
@@ -176,84 +177,88 @@ func (cache *SmtCache) SetSmtCache(blockNumber uint64, blockCache map[string]map
 	cache.CurrentBatchBlockSnapshotList.Push(blockNumber, blockCache)
 	cache.CurrentBatchSnapshotLock.Unlock()
 
-	// Merge blockCache into deltaCache (Thread 3 only, no lock needed)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 	for table, bucket := range blockCache {
-		if _, exists := cache.DeltaSmtCache[table]; !exists { // TODO: replace DeltaSmtCache with CurrentBatchDeltaSmtCache
-			cache.DeltaSmtCache[table] = make(map[string][]byte, len(bucket))
-		}
+		wg.Add(1)
+		go func(table string, bucket map[string][]byte) {
+			defer wg.Done()
 
-		if _, exists := cache.LongLivedSmtCache[table]; !exists {
-			cache.LongLivedSmtCache[table] = make(map[string][]byte, len(bucket))
-		}
+			mu.Lock()
+			innerMap, exists := cache.LongLivedSmtCache[table]
+			if !exists {
+				innerMap = make(map[string][]byte, len(bucket))
+				cache.LongLivedSmtCache[table] = innerMap
+			}
+			mu.Unlock()
 
-		for k, v := range bucket {
-			cache.DeltaSmtCache[table][k] = v
-			cache.LongLivedSmtCache[table][k] = v
-		}
+			var tableMu sync.Mutex
+			tableMu.Lock()
+			for k, v := range bucket {
+				innerMap[k] = v
+			}
+			tableMu.Unlock()
+		}(table, bucket)
 	}
+	wg.Wait()
+
+	cache.LastRecordBlockHeight = blockNumber
 
 }
 
 func (cache *SmtCache) FlushSmtCache(batchPush, grace bool) error {
-	// 1. merge current batch cache image to PreBatchSnapshotImage
-	cache.CurrentBatchSnapshotLock.Lock()
-	currentBatchImage, _ := cache.CurrentBatchBlockSnapshotList.getAllCacheShapshot(false)
-	cache.CurrentBatchSnapshotLock.Unlock()
+	// 1. merge current batch cache image to PreBatchSnapshotImage and ToPushedSmtCache
+	cache.CurrentBatchSnapshotLock.RLock()
+	currentBatchImage, _ := cache.CurrentBatchBlockSnapshotList.getAllCacheShapshot()
+	cache.CurrentBatchSnapshotLock.RUnlock()
 
 	cache.PreBatchImageLock.Lock()
 	for table, bucket := range currentBatchImage {
+		if _, exists := cache.ToPushedSmtCache[table]; !exists {
+			cache.ToPushedSmtCache[table] = make(map[string][]byte, len(bucket))
+		}
+
 		if _, exists := cache.PreBatchSnapshotImage[table]; !exists {
 			cache.PreBatchSnapshotImage[table] = make(map[string][]byte, len(bucket))
 		}
+
 		for key, value := range bucket {
+			cache.ToPushedSmtCache[table][key] = value
 			cache.PreBatchSnapshotImage[table][key] = value // replace the old value with the latest one
 		}
 	}
 	cache.PreBatchImageLock.Unlock()
 
-	// 2. TODO:  merge current batch delta smt to DeltaSmtCache
-	//for table, bucket := range cache.CurrentBatchDeltaSmtCache {
-	//	if _, exists := cache.DeltaSmtCache[table]; !exists {
-	//		cache.DeltaSmtCache[table] = make(map[string][]byte)
-	//	}
-	//
-	//	for key, value := range bucket {
-	//		cache.DeltaSmtCache[table][key] = value // replace the old value with the latest one
-	//	}
-	//}
-
-	// 3. clean current batch cache image
+	// 2. clean current batch cache image
 	cache.CurrentBatchSnapshotLock.Lock()
 	cache.CurrentBatchBlockSnapshotList = NewSmtCacheList()
 	cache.CurrentBatchSnapshotLock.Unlock()
 
-	//cache.CurrentBatchDeltaSmtCache = map[string]map[string][]byte{}
-
-	height, err := utils.ConvertBytesToUint64(cache.DeltaSmtCache["HermezSmtStats"]["lastHeight"])
+	height, err := utils.ConvertBytesToUint64(cache.ToPushedSmtCache["HermezSmtStats"]["lastHeight"])
 	if err != nil {
 		return err
 	}
 
-	if height-cache.LastResetHeight > 1000 {
+	if height-cache.LastResetHeight > 10*flushSmtCachePeriod {
 		cache.SmtCacheSnapshotLock.RLock()
-		deltaSmtCache, _ := cache.SmtCacheSnapshotList.getAllCacheShapshot(false)
+		tmpSmtCache, _ := cache.SmtCacheSnapshotList.getAllCacheShapshot()
 		cache.SmtCacheSnapshotLock.RUnlock()
 
-		if deltaSmtCache == nil {
-			deltaSmtCache = map[string]map[string][]byte{}
+		if tmpSmtCache == nil {
+			tmpSmtCache = map[string]map[string][]byte{}
 		}
 
 		// Reset LongLivedSmtCache, prevent excessive memory usage.
-		cache.LongLivedSmtCache = deltaSmtCache
+		cache.LongLivedSmtCache = tmpSmtCache
 		cache.LastResetHeight = height
 	}
 
-	if batchPush && (height-cache.LastPushedHeight < 100) && !grace {
+	if batchPush && (height-cache.LastPushedHeight < flushSmtCachePeriod) && !grace {
 		return nil
 	}
 
 	data := SmtCacheSave{
-		cache.DeltaSmtCache,
+		cache.ToPushedSmtCache,
 		height,
 	}
 
@@ -262,36 +267,46 @@ func (cache *SmtCache) FlushSmtCache(batchPush, grace bool) error {
 		cache.PushedHeap.ThreadSafePush(height)
 		cache.LastPushedHeight = height
 
-		cache.DeltaSmtCache = map[string]map[string][]byte{}
+		cache.ToPushedSmtCache = map[string]map[string][]byte{}
 		return nil
 	default:
 		return errors.New("failed to flush: channel is full or no receiver")
 	}
 }
 
-func (cache *SmtCache) ResetCurrentBatch(lastBlockHeight uint64) {
-	// 1. clean CurrentBatchBlockSnapshotList and CurrentBatchDeltaSmtCache
-	cache.CurrentBatchSnapshotLock.Lock()
-	currentBatchBlockList := cache.CurrentBatchBlockSnapshotList.getBlockList()
-	cache.CurrentBatchBlockSnapshotList = NewSmtCacheList()
-	cache.CurrentBatchSnapshotLock.Unlock()
+func (cache *SmtCache) ResetCurrentBatch(resetBlockHeight uint64) {
+	if resetBlockHeight > cache.LastRecordBlockHeight {
+		return
+	}
+	deleteBlockList := make([]uint64, resetBlockHeight-cache.LastRecordBlockHeight+1)
 
-	//cache.CurrentBatchDeltaSmtCache = map[string]map[string][]byte{}
+	for i := resetBlockHeight; i <= cache.LastRecordBlockHeight; i++ {
+		deleteBlockList = append(deleteBlockList, i)
+	}
+
+	// 1. clean CurrentBatchBlockSnapshotList
+	cache.CurrentBatchSnapshotLock.Lock()
+	//currentBatchBlockList := cache.CurrentBatchBlockSnapshotList.getBlockList()
+	//cache.CurrentBatchBlockSnapshotList = NewSmtCacheList()
+	for _, blockNumber := range deleteBlockList {
+		cache.CurrentBatchBlockSnapshotList.deleteTargetCache(blockNumber)
+	}
+	cache.CurrentBatchSnapshotLock.Unlock()
 
 	// 2. delete all block cache in current batch
 	cache.SmtCacheSnapshotLock.Lock()
-	for _, blockNumber := range currentBatchBlockList {
+	for _, blockNumber := range deleteBlockList {
 		cache.SmtCacheSnapshotList.deleteTargetCache(blockNumber)
 	}
 
-	// 3. reset longLive cache
-	deltaSmtCache, _ := cache.SmtCacheSnapshotList.getAllCacheShapshot(false)
+	// 3. reset longLive cache for it has already been polluted
+	tmpSmtCache, _ := cache.SmtCacheSnapshotList.getAllCacheShapshot()
 	cache.SmtCacheSnapshotLock.Unlock()
 
-	if deltaSmtCache == nil {
-		deltaSmtCache = map[string]map[string][]byte{}
+	if tmpSmtCache == nil {
+		tmpSmtCache = map[string]map[string][]byte{}
 	}
 
-	cache.LongLivedSmtCache = deltaSmtCache
-	cache.LastResetHeight = lastBlockHeight
+	cache.LongLivedSmtCache = tmpSmtCache
+	cache.LastResetHeight = resetBlockHeight - 1
 }

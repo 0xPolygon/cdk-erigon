@@ -5,63 +5,70 @@ import (
 	"sync"
 )
 
-// SmtCacheSnapshot defines the node structure for the singly linked list
+// SmtCacheSnapshot defines the node structure for the doubly linked list
 type SmtCacheSnapshot struct {
-	BlcokHeight    uint64
-	DeltaSmtCache  map[string]map[string][]byte
-	parentSnapshot *SmtCacheSnapshot // Pointer to the parent snapshot
+	BlockHeight   uint64 // Corrected typo: BlcokHeight -> BlockHeight
+	DeltaSmtCache map[string]map[string][]byte
+	next          *SmtCacheSnapshot // Pointer to the next (older) block snapshot
+	pre           *SmtCacheSnapshot // Pointer to the previous (newer) block snapshot
 }
 
-// SmtCacheList manages the singly linked list
+// SmtCacheList manages the doubly linked list
 type SmtCacheList struct {
 	head      *SmtCacheSnapshot // Head of the list (most recent snapshot)
+	tail      *SmtCacheSnapshot // Tail of the list (oldest snapshot)
 	length    int               // Current number of nodes in the list
-	maxHeight uint64
-	mutex     sync.RWMutex // Read-write mutex for concurrent access
+	maxHeight uint64            // Maximum block height in the list
+	mutex     sync.RWMutex      // Read-write mutex for concurrent access
 }
 
-// NewSmtCacheList creates a new empty linked list
+// NewSmtCacheList creates a new empty doubly linked list
 func NewSmtCacheList() *SmtCacheList {
 	return &SmtCacheList{
 		head:      nil,
+		tail:      nil,
 		length:    0,
-		maxHeight: uint64(0),
+		maxHeight: 0,
 	}
 }
 
-// Push adds a new node to the head of the list (helper method)
+// Push adds a new node to the head of the list
 func (l *SmtCacheList) Push(blockHeight uint64, deltaSmtCache map[string]map[string][]byte) {
 	l.mutex.Lock() // Exclusive lock for write operation
 	defer l.mutex.Unlock()
 
 	newNode := &SmtCacheSnapshot{
-		BlcokHeight:    blockHeight,
-		DeltaSmtCache:  deltaSmtCache,
-		parentSnapshot: l.head,
+		BlockHeight:   blockHeight,
+		DeltaSmtCache: deltaSmtCache,
+		next:          l.head,
+		pre:           nil,
 	}
+
+	if l.head != nil {
+		l.head.pre = newNode // Link the old head to the new node
+	} else {
+		l.tail = newNode // If list was empty, set tail to the new node
+	}
+
 	l.head = newNode
 	l.maxHeight = blockHeight
 	l.length++ // Increment length when adding a node
 }
 
-// findNode finds a node by BlockHeight (helper method)
-func (l *SmtCacheList) findNode(blockHeight uint64) *SmtCacheSnapshot {
-	l.mutex.RLock() // Read lock for read-only operation
-	defer l.mutex.RUnlock()
-
+// findNodeUnsafe finds a node by BlockHeight
+func (l *SmtCacheList) findNodeUnsafe(blockHeight uint64) *SmtCacheSnapshot {
 	current := l.head
 	for current != nil {
-		if current.BlcokHeight == blockHeight {
+		if current.BlockHeight == blockHeight {
 			return current
 		}
-		current = current.parentSnapshot
+		current = current.next
 	}
 	return nil
 }
 
-// cascadeGetCacheShapshot retrieves the DeltaSmtCache for a given BlockHeight and merges it with all parent snapshots,
-// return deep copy data if needCopy is true
-func (l *SmtCacheList) cascadeGetCacheShapshot(blockHeight uint64, needCopy bool) (map[string]map[string][]byte, bool) {
+// cascadeGetCacheShapshot retrieves the DeltaSmtCache for a given BlockHeight and merges it with all older snapshots
+func (l *SmtCacheList) cascadeGetCacheShapshot(blockHeight uint64) (map[string]map[string][]byte, bool) {
 	l.mutex.RLock() // Read lock for read-only operation
 	defer l.mutex.RUnlock()
 
@@ -69,86 +76,118 @@ func (l *SmtCacheList) cascadeGetCacheShapshot(blockHeight uint64, needCopy bool
 	mergedCache := make(map[string]map[string][]byte)
 
 	// Find the specified node
-	node := l.findNode(blockHeight)
+	node := l.findNodeUnsafe(blockHeight)
 	if node == nil {
 		return mergedCache, false
 	}
 
-	// Merge DeltaSmtCache from the current node and all parent snapshots
-	current := node
-	for current != nil {
-		for outerKey, innerMap := range current.DeltaSmtCache {
-			if _, exists := mergedCache[outerKey]; !exists {
-				mergedCache[outerKey] = make(map[string][]byte)
+	// Traverse from the found node towards older snapshots (tail)
+	current := l.tail
+	for current != node.pre {
+		for table, bucket := range current.DeltaSmtCache {
+			if _, exists := mergedCache[table]; !exists {
+				mergedCache[table] = make(map[string][]byte)
 			}
-			for innerKey, value := range innerMap {
-				// If the key already exists, keep the earliest value (parent priority)
-				if _, exists := mergedCache[outerKey][innerKey]; !exists {
-					if needCopy {
-						valueCopy := make([]byte, len(value))
-						copy(valueCopy, value)
-						mergedCache[outerKey][innerKey] = valueCopy
-					} else {
-						mergedCache[outerKey][innerKey] = value
-					}
-				}
+			for key, value := range bucket {
+				mergedCache[table][key] = value
 			}
 		}
-		current = current.parentSnapshot
+		current = current.pre
 	}
 
 	return mergedCache, true
 }
 
-// getAllCacheShapshot retrieves all DeltaSmtCache and merges it with all parent snapshots
-func (l *SmtCacheList) getAllCacheShapshot(needDeepCopy bool) (map[string]map[string][]byte, bool) {
+// getAllCacheShapshot retrieves and merges all DeltaSmtCache from the head to the tail
+func (l *SmtCacheList) getAllCacheShapshot() (map[string]map[string][]byte, bool) {
 	l.mutex.RLock() // Read lock for read-only operation
 	defer l.mutex.RUnlock()
 
-	headBlockNumber := uint64(0)
-	if l.head != nil {
-		headBlockNumber = l.head.BlcokHeight
-	} else {
+	if l.head == nil {
 		return nil, false
 	}
 
-	cache, found := l.cascadeGetCacheShapshot(headBlockNumber, needDeepCopy)
-	return cache, found
-
+	return l.cascadeGetCacheShapshot(l.head.BlockHeight)
 }
 
-// cascadeDeleteCache deletes the node with the specified BlockHeight and all its parent snapshots
+// cascadeDeleteCache deletes the node with the specified BlockHeight and all its older snapshots
 func (l *SmtCacheList) cascadeDeleteCache(blockHeight uint64) bool {
 	l.mutex.Lock() // Exclusive lock for write operation
 	defer l.mutex.Unlock()
 
-	if l.head == nil {
+	node := l.findNodeUnsafe(blockHeight)
+	if node == nil {
 		return false
 	}
 
-	// Special case: delete the head node and all its parents
-	if l.head.BlcokHeight == blockHeight {
-		l.head = nil // Clear the entire list
-		l.length = 0 // Reset length to 0 since all nodes are deleted
+	// If deleting the head, clear everything up to the tail
+	if node == l.head {
+		l.head = nil
+		l.tail = nil
+		l.length = 0
 		return true
 	}
 
-	// Traverse to find and delete the node and its parents
-	current := l.head
-	l.length = 1
-	for current.parentSnapshot != nil {
-		if current.parentSnapshot.BlcokHeight == blockHeight {
-			current.parentSnapshot = nil // Truncate the list, removing the target and its parents
-			return true
-		} else {
-			current = current.parentSnapshot
-			l.length += 1
-		}
+	cur := l.head
+	l.length = 0
+	for cur != node {
+		l.length++
+		cur = cur.next
 	}
-	return false
+
+	// Truncate the list from the node to the tail
+	l.tail = node.pre
+	node.pre.next = nil
+	node.pre = nil
+
+	return true
 }
 
-// Traverse prints the list for debugging (helper method)
+// deleteTargetCache deletes only the node with the specified BlockHeight
+func (l *SmtCacheList) deleteTargetCache(blockHeight uint64) bool {
+	l.mutex.Lock() // Exclusive lock for write operation
+	defer l.mutex.Unlock()
+
+	node := l.findNodeUnsafe(blockHeight)
+	if node == nil {
+		return false
+	}
+
+	// Case 1: Deleting the head
+	if node == l.head {
+		l.head = node.next
+		node.next = nil
+
+		l.length--
+		if l.head != nil {
+			l.head.pre = nil
+		} else {
+			l.tail = nil
+		}
+		return true
+	}
+
+	// Case 2: Deleting the tail
+	if node == l.tail {
+		l.tail = node.pre
+		node.pre = nil
+		l.tail.next = nil
+
+		l.length--
+		return true
+	}
+
+	// Case 3: Deleting a middle node
+	node.pre.next = node.next
+	node.next.pre = node.pre
+	node.pre = nil
+	node.next = nil
+	l.length--
+
+	return true
+}
+
+// Traverse prints the list for debugging
 func (l *SmtCacheList) Traverse() {
 	l.mutex.RLock() // Read lock for read-only operation
 	defer l.mutex.RUnlock()
@@ -156,12 +195,12 @@ func (l *SmtCacheList) Traverse() {
 	current := l.head
 	for current != nil {
 		for table, bucket := range current.DeltaSmtCache {
-			log.Info("Traverse", "BlockHeight", current.BlcokHeight, "table", table)
+			log.Info("Traverse", "BlockHeight", current.BlockHeight, "table", table)
 			for k, v := range bucket {
 				log.Info("Traverse", "\ttable", table, "key", k, "val", string(v))
 			}
 		}
-		current = current.parentSnapshot
+		current = current.next
 	}
 }
 
@@ -170,10 +209,10 @@ func (l *SmtCacheList) Length() int {
 	l.mutex.RLock() // Read lock for read-only operation
 	defer l.mutex.RUnlock()
 
-	return l.length // Directly return cached length
+	return l.length
 }
 
-// Length returns the number of nodes in the list
+// MaxBlockHeight returns the maximum block height in the list
 func (l *SmtCacheList) MaxBlockHeight() uint64 {
 	l.mutex.RLock() // Read lock for read-only operation
 	defer l.mutex.RUnlock()
@@ -181,38 +220,7 @@ func (l *SmtCacheList) MaxBlockHeight() uint64 {
 	return l.maxHeight // Directly return cached length
 }
 
-// deleteTargetCache deletes the node with the specified BlockHeight
-func (l *SmtCacheList) deleteTargetCache(blockHeight uint64) bool {
-	l.mutex.Lock() // Exclusive lock for write operation
-	defer l.mutex.Unlock()
-
-	if l.head == nil {
-		return false
-	}
-
-	// Special case: delete the head node and all its parents
-	if l.head.BlcokHeight == blockHeight {
-		l.head = l.head.parentSnapshot // Delete the head node
-		l.length -= 1
-		return true
-	}
-
-	// Traverse to find and delete the node and its parents
-	current := l.head
-	for current.parentSnapshot != nil {
-		if current.parentSnapshot.BlcokHeight == blockHeight {
-			current.parentSnapshot = current.parentSnapshot.parentSnapshot // Delete the target node
-			l.length -= 1
-
-			return true
-		} else {
-			current = current.parentSnapshot
-		}
-	}
-
-	return false
-}
-
+// getBlockList returns a slice of all block heights in the list
 func (l *SmtCacheList) getBlockList() []uint64 {
 	l.mutex.RLock() // Read lock for read-only operation
 	defer l.mutex.RUnlock()
@@ -221,11 +229,11 @@ func (l *SmtCacheList) getBlockList() []uint64 {
 		return []uint64{}
 	}
 
-	blockNumberList := make([]uint64, l.length)
+	blockNumberList := make([]uint64, 0, l.length)
 	current := l.head
 	for current != nil {
-		blockNumberList = append(blockNumberList, current.BlcokHeight)
-		current = current.parentSnapshot
+		blockNumberList = append(blockNumberList, current.BlockHeight)
+		current = current.next
 	}
 
 	return blockNumberList

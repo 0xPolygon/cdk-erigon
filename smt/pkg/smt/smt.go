@@ -697,55 +697,70 @@ func (s *RoSMT) Traverse(ctx context.Context, node *big.Int, action TraverseActi
 	return s.traverse(ctx, node, action, []byte{})
 }
 
-type queueEntry struct {
+// Define the stack entry structure
+type stackEntry struct {
 	node   *big.Int
 	prefix []byte
 }
 
+// traverse performs an iterative pre-order DFS traversal of the SMT
 func (s *RoSMT) traverse(ctx context.Context, node *big.Int, action TraverseAction, prefix []byte) error {
+	// Early return if the node is nil or zero
 	if node == nil || node.Cmp(big.NewInt(0)) == 0 {
 		return nil
 	}
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
+	// Initialize stack with pre-allocated capacity to reduce allocations
+	stack := make([]stackEntry, 0, 1024)
+	stack = append(stack, stackEntry{node: node, prefix: prefix})
 
-	ky := utils.ScalarToRoot(node)
+	// Main loop: process nodes until the stack is empty
+	for len(stack) > 0 {
+		// Pop the top element from the stack
+		topIdx := len(stack) - 1
+		current := stack[topIdx]
+		stack = stack[:topIdx]
 
-	nodeValue, err := s.DbRo.Get(ky)
-
-	if err != nil {
-		return err
-	}
-
-	shouldContinue, err := action(prefix, ky, nodeValue)
-
-	if err != nil {
-		return err
-	}
-
-	//if nodeValue.IsNil() {
-	//	return nil
-	//}
-
-	if nodeValue.IsFinalNode() || !shouldContinue {
-		return nil
-	}
-
-	for i := 0; i < 2; i++ {
-		if len(nodeValue) < i*4+4 {
-			return errors.New("nodeValue has insufficient length")
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
-		child := utils.NodeKeyFromBigIntArray(nodeValue[i*4 : i*4+4])
-		childPrefix := make([]byte, len(prefix)+1)
-		copy(childPrefix, prefix)
-		childPrefix[len(prefix)] = byte(i)
-		err := s.traverse(ctx, child.ToBigInt(), action, childPrefix)
+
+		// Convert node to key and retrieve node value from database
+		ky := utils.ScalarToRoot(current.node)
+		nodeValue, err := s.DbRo.Get(ky)
 		if err != nil {
 			return err
+		}
+
+		// Execute the action on the current node
+		shouldContinue, err := action(current.prefix, ky, nodeValue)
+		if err != nil {
+			return err
+		}
+
+		// Stop traversing children if the node is final or action indicates no continuation
+		if nodeValue.IsFinalNode() || !shouldContinue {
+			continue
+		}
+
+		// Push children onto the stack in reverse order (right to left) to ensure left is processed first
+		for i := 1; i >= 0; i-- {
+			if len(nodeValue) < i*4+4 {
+				return errors.New("nodeValue has insufficient length")
+			}
+
+			child := utils.NodeKeyFromBigIntArray(nodeValue[i*4 : i*4+4])
+			childBigInt := child.ToBigInt()
+			if childBigInt != nil && childBigInt.Cmp(big.NewInt(0)) != 0 {
+				childPrefix := make([]byte, len(current.prefix)+1)
+				copy(childPrefix, current.prefix)
+				childPrefix[len(current.prefix)] = byte(i)
+
+				stack = append(stack, stackEntry{node: childBigInt, prefix: childPrefix})
+			}
 		}
 	}
 

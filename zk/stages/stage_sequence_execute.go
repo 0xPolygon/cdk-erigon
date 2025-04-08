@@ -98,19 +98,32 @@ func SpawnSequencingStage(
 		return nil
 	}
 
+	if cfg.zk.XLayer.EnableAsyncCommit {
+		s.FlushSmtCacheWait()
+	}
+
 	if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil); err == nil {
 		if !cfg.zk.XLayer.EnableAsyncCommit {
 			return err
 		}
 
-		// enable split smt db
-		err = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, false)
+		s.FlushSmtCacheSignalInc()
+		go func() {
+			defer s.FlushSmtCacheDone()
+			// enable split smt db
+			_ = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, false)
+		}()
 	} else {
 		if !cfg.zk.XLayer.EnableAsyncCommit {
 			return err
 		}
 
-		//s.ResetCurrentBatchCache(s.BlockNumber)
+		s.FlushSmtCacheSignalInc()
+		go func() {
+			defer s.FlushSmtCacheDone()
+
+			s.ResetCurrentBatchCache(s.BlockNumber)
+		}()
 	}
 
 	return err

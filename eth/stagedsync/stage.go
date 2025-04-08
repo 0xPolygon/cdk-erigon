@@ -57,14 +57,27 @@ func (s *StageState) GetSmtHistorySnapshotCache(blockNumber uint64) map[string]m
 
 func (s *StageState) SetSmtCache(blockNumber uint64, blockCache map[string]map[string][]byte) {
 	s.state.SetSmtCache(blockNumber, blockCache)
+	s.BlockNumber = blockNumber
 }
 
 func (s *StageState) FlushSmtCache(batchPush, grace bool) error {
 	return s.state.FlushSmtCache(batchPush, grace)
 }
 
-func (s *StageState) ResetCurrentBatchCache(blockNumber uint64) {
-	s.state.ResetCurrentBatchCache(blockNumber)
+func (s *StageState) FlushSmtCacheWait() {
+	s.state.FlushSmtCacheWait()
+}
+
+func (s *StageState) FlushSmtCacheSignalInc() {
+	s.state.FlushSmtCacheSignalInc()
+}
+
+func (s *StageState) FlushSmtCacheDone() {
+	s.state.FlushSmtCacheDone()
+}
+
+func (s *StageState) ResetCurrentBatchCache(resetBlockHeight uint64) {
+	s.state.ResetCurrentBatchCache(resetBlockHeight)
 }
 
 func (s *StageState) PrevUnwindPoint() *uint64 {
