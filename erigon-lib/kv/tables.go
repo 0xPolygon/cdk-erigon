@@ -963,13 +963,9 @@ func sortBuckets() {
 	})
 }
 
-/*
-// we now call reinit() in backend.New()
 func init() {
-	fmt.Println("[cdk-erigon-lib] init() in erigon-lib/kv/tables.go")
-	reinit()
+	InitStandaloneSMT(false)
 }
-*/
 
 func reinit() {
 	sortBuckets()
@@ -1028,6 +1024,7 @@ func reinit() {
 }
 
 func InitStandaloneSMT(standalone bool) {
+	fmt.Printf("[erigon-lib/kv/tables.go] InitStandaloneSMT(%v) called\n", standalone)
 	if standalone {
 		ChaindataDeprecatedTables = append(ChaindataDeprecatedTables, TablesSmt...)
 	} else {

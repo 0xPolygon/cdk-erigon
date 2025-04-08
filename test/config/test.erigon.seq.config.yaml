@@ -102,7 +102,7 @@ zkevm.seal-batch-immediately-on-overflow: true
 zkevm.sequencer-timeout-on-empty-tx-pool: 5ms
 zkevm.pre-run-address-list: [""]
 zkevm.block-info-concurrent: true
-zkevm.standalone-smt-db: true  # true: enalbe split smt db, false: not split
+zkevm.standalone-smt-db: true  # true: enable split smt db, false: not split
 zkevm.enable-async-commit: true
 
 # to reduce lock race in stress test
