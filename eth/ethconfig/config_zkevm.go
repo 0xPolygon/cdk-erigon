@@ -118,7 +118,7 @@ var DefaultZkConfig = Zk{
 }
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
-	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && !c.HasExecutors())
+	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && !c.HasExecutors()) || c.XLayer.SequencerReplay
 }
 
 func (c *Zk) HasExecutors() bool {
