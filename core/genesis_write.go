@@ -53,6 +53,7 @@ import (
 	"github.com/erigontech/erigon/params"
 	eridb "github.com/erigontech/erigon/smt/pkg/db"
 	"github.com/erigontech/erigon/smt/pkg/smt"
+	"github.com/erigontech/erigon/turbo/trie"
 )
 
 // CommitGenesisBlock writes or updates the genesis block in db.
@@ -590,9 +591,11 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
-	var err error
+	// TODO Add if else for type1 rollup
 	sparseDb := eridb.NewMemDb()
 	sparseTree := smt.NewSMT(sparseDb, false)
+	var type1Rollup = true
+	var err error
 	go func() { // we may run inside write tx, can't open 2nd write tx in same goroutine
 		// TODO(yperbasis): use memdb.MemoryMutation instead
 		defer wg.Done()
@@ -636,6 +639,7 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 			statedb.SetNonce(addr, account.Nonce)
 
 			for k, value := range account.Storage {
+				k := k
 				val := uint256.NewInt(0).SetBytes(value.Bytes())
 				statedb.SetState(addr, &k, *val)
 			}
@@ -650,16 +654,24 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 				statedb.SetIncarnation(addr, state.FirstContractIncarnation)
 			}
 
-			ro, err = processAccount(sparseTree, ro, &account, addr)
-			if err != nil {
-				return
+			if !type1Rollup {
+				ro, err = processAccount(sparseTree, ro, &account, addr)
+				if err != nil {
+					return
+				}
 			}
 		}
 		if err = statedb.FinalizeTx(&chain.Rules{}, w); err != nil {
 			return
 		}
 
-		root = libcommon.BigToHash(ro)
+		if type1Rollup {
+			if root, err = trie.CalcRoot("genesis", tx); err != nil {
+				return
+			}
+		} else {
+			root = libcommon.BigToHash(ro)
+		}
 	}()
 	wg.Wait()
 	if err != nil {
@@ -668,6 +680,9 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 
 	head.Root = root
 
+	logger.Info("Writing genesis block", "hash", head.Hash().Hex(), "number", head.Number, "root", head.Root.Hex())
+
+	// os.Exit(0)
 	return types.NewBlock(head, nil, nil, nil, withdrawals), statedb, sparseTree, nil
 }
 

@@ -163,7 +163,7 @@ func NewTrieDbState(root common.Hash, db kv.Tx, blockNr uint64, stateReader Stat
 		db:             db,
 		stateReader:    stateReader,
 		blockNr:        blockNr,
-		hashBuilder:    trie.NewHashBuilder(false),
+		hashBuilder:    trie.NewHashBuilder(true),
 		incarnationMap: make(map[common.Address]uint64),
 		preimageMap:    make(map[common.Hash][]byte),
 	}
@@ -203,7 +203,7 @@ func (tds *TrieDbState) Copy() *TrieDbState {
 		tMu:            new(sync.Mutex),
 		db:             tds.db,
 		blockNr:        n,
-		hashBuilder:    trie.NewHashBuilder(false),
+		hashBuilder:    trie.NewHashBuilder(true),
 		incarnationMap: make(map[common.Address]uint64),
 	}
 

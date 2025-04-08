@@ -132,7 +132,7 @@ type RootHashAggregator struct {
 
 func NewRootHashAggregator() *RootHashAggregator {
 	return &RootHashAggregator{
-		hb: NewHashBuilder(false),
+		hb: NewHashBuilder(true),
 	}
 }
 
@@ -144,7 +144,7 @@ func NewFlatDBTrieLoader(logPrefix string, rd RetainDeciderWithMarker, hc HashCo
 	return &FlatDBTrieLoader{
 		logPrefix: logPrefix,
 		receiver: &RootHashAggregator{
-			hb:    NewHashBuilder(false),
+			hb:    NewHashBuilder(true),
 			hc:    hc,
 			shc:   shc,
 			trace: trace,

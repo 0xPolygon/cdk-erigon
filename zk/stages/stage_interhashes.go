@@ -1,6 +1,7 @@
 package stages
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/erigontech/erigon-lib/common"
@@ -37,6 +38,13 @@ import (
 	zkSmt "github.com/erigontech/erigon/zk/smt"
 	"github.com/status-im/keycard-go/hexutils"
 )
+
+type AccountDump struct {
+	Balance  string
+	Nonce    uint64
+	Storage  map[string]string
+	Codehash common.Hash
+}
 
 type ZkInterHashesCfg struct {
 	db                kv.RwDB
@@ -264,6 +272,7 @@ func regenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.R
 
 	defer eridb.CloseAccountCollectors()
 
+	accDump := make(map[string]AccountDump)
 	progressChan, stopProgressPrinter := zk.ProgressPrinterWithoutValues(fmt.Sprintf("[%s] SMT regenerate progress", logPrefix), total*2)
 
 	progCt := uint64(0)
@@ -277,6 +286,12 @@ func regenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.R
 				if err != nil {
 					return err
 				}
+			}
+			accDump[addr.Hex()] = AccountDump{
+				Balance:  a.Balance.Hex(),
+				Nonce:    a.Nonce,
+				Storage:  as,
+				Codehash: a.CodeHash,
 			}
 
 			a = &accounts.Account{}
@@ -315,6 +330,17 @@ func regenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.R
 	if err != nil {
 		return trie.EmptyRoot, err
 	}
+
+	accDump[addr.Hex()] = AccountDump{
+		Balance:  a.Balance.Hex(),
+		Nonce:    a.Nonce,
+		Storage:  as,
+		Codehash: a.CodeHash,
+	}
+
+	//dump accDump to file
+	file, _ := json.MarshalIndent(accDump, "", " ")
+	_ = os.WriteFile("storageDump-regen.json", file, 0644)
 
 	dataCollectTime := time.Since(dataCollectStartTime)
 	log.Info(fmt.Sprintf("[%s] Collecting account data finished in %v", logPrefix, dataCollectTime))

@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/bits"
+	"os"
 	"slices"
 	"sync/atomic"
 
@@ -633,6 +634,7 @@ func IncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, to
 
 	if cfg.checkRoot && hash != expectedRootHash {
 		panic(fmt.Sprintf("Wrong trie root of block %d: %x, expected (from header): %x", s.BlockNumber, hash, expectedRootHash))
+		os.Exit(1)
 		return hash, nil
 	}
 
