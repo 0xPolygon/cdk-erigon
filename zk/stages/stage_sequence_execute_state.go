@@ -160,6 +160,14 @@ func (bs *BatchState) getCoinbase(cfg *SequenceBlockCfg) common.Address {
 	if bs.batchNumber > 1 && bs.isL1Recovery() {
 		return bs.batchL1RecoveryData.recoveredBatchData.Coinbase
 	}
+	// For X Layer replay we need to use the resequenceBatchJob's CurrentBlock as the coinbase
+	if cfg.zk.XLayer.SequencerReplay {
+		if bs.resequenceBatchJob.CurrentBlock() != nil {
+			return bs.resequenceBatchJob.CurrentBlock().Coinbase
+		} else {
+			return bs.resequenceBatchJob.PreviousBlock().Coinbase
+		}
+	}
 
 	return cfg.zk.AddressSequencer
 }
@@ -352,6 +360,13 @@ func (r *ResequenceBatchJob) AtNewBlockBoundary() bool {
 func (r *ResequenceBatchJob) CurrentBlock() *dsTypes.FullL2Block {
 	if r.HasMoreBlockToProcess() {
 		return r.batchToProcess[r.StartBlockIndex]
+	}
+	return nil
+}
+
+func (r *ResequenceBatchJob) PreviousBlock() *dsTypes.FullL2Block {
+	if r.StartBlockIndex > 0 {
+		return r.batchToProcess[r.StartBlockIndex-1]
 	}
 	return nil
 }
