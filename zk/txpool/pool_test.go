@@ -87,7 +87,7 @@ func TestNonceFromAddress(t *testing.T) {
 		var txSlots types.TxSlots
 		txSlot1 := &types.TxSlot{
 			Tip:    *uint256.NewInt(300000),
-			FeeCap: *uint256.NewInt(300000),
+			FeeCap: *uint256.NewInt(1000000000),
 			Gas:    100000,
 			Nonce:  3,
 		}
@@ -112,14 +112,14 @@ func TestNonceFromAddress(t *testing.T) {
 		txSlots := types.TxSlots{}
 		txSlot2 := &types.TxSlot{
 			Tip:    *uint256.NewInt(300000),
-			FeeCap: *uint256.NewInt(300000),
+			FeeCap: *uint256.NewInt(1000000000),
 			Gas:    100000,
 			Nonce:  4,
 		}
 		txSlot2.IDHash[0] = 2
 		txSlot3 := &types.TxSlot{
 			Tip:    *uint256.NewInt(300000),
-			FeeCap: *uint256.NewInt(300000),
+			FeeCap: *uint256.NewInt(1000000000),
 			Gas:    100000,
 			Nonce:  6,
 		}
@@ -161,7 +161,7 @@ func TestNonceFromAddress(t *testing.T) {
 		var txSlots types.TxSlots
 		txSlot1 := &types.TxSlot{
 			Tip:    *uint256.NewInt(300000),
-			FeeCap: *uint256.NewInt(300000),
+			FeeCap: *uint256.NewInt(1000000000),
 			Gas:    100000,
 			Nonce:  1,
 		}

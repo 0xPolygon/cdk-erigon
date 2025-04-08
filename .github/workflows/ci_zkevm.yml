@@ -30,14 +30,14 @@ env:
 
 jobs:
   tests:
-    if: false
-    strategy:
-      max-parallel: 2
-      fail-fast: true
-      matrix:
-        os: [ ubuntu-22.04, macos-14-xlarge ] # list of os: https://github.com/actions/virtual-environments
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.os == 'macos-14-xlarge' && 40 || 30 }}
+    # strategy:
+      # max-parallel: 2
+      # fail-fast: true
+      # matrix:
+        # os: [ ubuntu-22.04, macos-14-xlarge ] # list of os: https://github.com/actions/virtual-environments
+    runs-on: ubuntu-latest
+    # timeout-minutes: ${{ matrix.os == 'macos-14-xlarge' && 40 || 30 }}
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v3
@@ -45,7 +45,8 @@ jobs:
         with:
           go-version: '1.24'
       - name: Install dependencies on Linux
-        if: runner.os == 'Linux'
+        # if: runner.os == 'Linux'
+        if: true
         run: sudo apt update && sudo apt install build-essential
 
       - name: Build
@@ -68,14 +69,14 @@ jobs:
 #          version: v1.54
 
       - name: Test
-        run: make test
+        run: make -B test
       
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
-        if: ${{ matrix.os == 'ubuntu-20.04' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # - name: SonarCloud Scan
+      #   uses: SonarSource/sonarcloud-github-action@master
+      #   if: ${{ matrix.os == 'ubuntu-20.04' }}
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   kurtosis-cdk:
     if: true

@@ -533,6 +533,11 @@ func (sub *GossipSubscription) Listen() {
 					continue
 				}
 				if !sub.subscribed.Load() && time.Now().Before(expirationTime) {
+					if sub.topic == nil {
+						log.Warn("[Gossip] Topic is nil, skipping subscription")
+						time.Sleep(30 * time.Second)
+						continue
+					}
 					sub.stopCh = make(chan struct{}, 3)
 					sub.sub, err = sub.topic.Subscribe()
 					if err != nil {
@@ -561,7 +566,9 @@ func (sub *GossipSubscription) OverwriteSubscriptionExpiry(expiry time.Time) {
 // calls the cancel func for the subscriber and closes the topic and sub
 func (s *GossipSubscription) Close() {
 	s.closeOnce.Do(func() {
-		close(s.stopCh)
+		if s.stopCh != nil {
+			close(s.stopCh)
+		}
 		if s.cf != nil {
 			s.cf()
 		}

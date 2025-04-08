@@ -66,7 +66,7 @@ func GetBlockByHash(blockHash string) (Result, error) {
 	}
 
 	if resp.StatusCode != 200 {
-		return Result{}, fmt.Errorf(string(body))
+		return Result{}, fmt.Errorf("HTTP error: %s", string(body))
 	}
 
 	var httpResp HTTPResponse

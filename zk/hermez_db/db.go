@@ -1071,7 +1071,7 @@ func (db *HermezDbReader) GetLowestBatchByFork(forkId uint64) (uint64, error) {
 
 func (db *HermezDbReader) GetForkIdBlock(forkId uint64) (uint64, bool, error) {
 	blkNum, err := db.tx.GetOne(FORKID_BLOCK, Uint64ToBytes(forkId))
-	if err == nil {
+	if err == nil && blkNum != nil {
 		return BytesToUint64(blkNum), true, nil
 	}
 

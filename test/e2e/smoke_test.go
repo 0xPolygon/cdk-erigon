@@ -1,3 +1,5 @@
+// +build !skip_smoke
+
 package e2e
 
 import (

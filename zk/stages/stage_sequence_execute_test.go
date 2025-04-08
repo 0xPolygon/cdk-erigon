@@ -38,7 +38,10 @@ import (
 
 func TestSpawnSequencingStage(t *testing.T) {
 	// Arrange
-	ctx, db1, dbsmt, txPoolDb := context.Background(), memdb.NewTestDB(t), memdb.NewTestDB(t), memdb.NewTestDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db1, dbsmt, txPoolDb := memdb.NewTestDB(t), memdb.NewTestDB(t), memdb.NewTestDB(t)
 	tx := memdb.BeginRw(t, db1)
 	err := hermez_db.CreateHermezBuckets(tx)
 	require.NoError(t, err)
