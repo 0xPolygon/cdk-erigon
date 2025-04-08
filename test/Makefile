@@ -60,6 +60,7 @@ build-docker: ## Build cdk-erigoin for sequencer and rpc
 .PHONY: run
 run: build-docker ## Runs a full node
 	# base services
+	$(RUN_DOCKER_STATELESS_EXECUTOR)
 	$(RUN_DOCKER_L1_NETWORK)
 	$(RUN_DOCKER_DATA_AVAILABILITY_DB)
 	$(RUN_DOCKER_POOL_DB)
@@ -67,7 +68,6 @@ run: build-docker ## Runs a full node
 	sleep 3
 	$(RUN_DOCKER_DATA_AVAILABILITY)
 	$(RUN_DOCKER_APPROVE)
-	$(RUN_DOCKER_STATELESS_EXECUTOR)
 
 	# app services
 	sleep 3
@@ -88,6 +88,7 @@ run: build-docker ## Runs a full node
 .PHONY: all
 all: build-docker ## Runs a full node
 	# base services
+	$(RUN_DOCKER_STATELESS_EXECUTOR)
 	$(RUN_DOCKER_L1_NETWORK)
 	$(RUN_DOCKER_DATA_AVAILABILITY_DB)
 	$(RUN_DOCKER_POOL_DB)
@@ -99,7 +100,6 @@ all: build-docker ## Runs a full node
 	sleep 3
 	$(RUN_DOCKER_DATA_AVAILABILITY)
 	$(RUN_DOCKER_APPROVE)
-	$(RUN_DOCKER_STATELESS_EXECUTOR)
 
 	# app services
 	sleep 3
@@ -145,6 +145,12 @@ test-1: stop all ## Runs group 1 e2e tests checking race conditions
 	sleep 3
 	docker ps -a
 	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/...
+
+.PHONY: test-2
+test-2: stop run ## Runs group 2 to check if the true executor is working
+	sleep 30 # wait for the executor to be ready
+	docker ps -a
+	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/... -run "^TestEthTransfer$$"
 
 mainnet: build-docker
 	# base services

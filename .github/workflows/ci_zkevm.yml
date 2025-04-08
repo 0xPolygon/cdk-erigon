@@ -231,3 +231,22 @@ jobs:
       - name: Test
         run: make test-${{ matrix.e2e-group }}
         working-directory: test
+
+  test-executor:
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build Docker
+        run: make build-docker
+
+      - name: Update E2E Test Configurations
+        run: |
+          bash ./.github/scripts/update_config.sh
+
+      - name: Test
+        run: make test-2
+        working-directory: test
