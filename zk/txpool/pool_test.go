@@ -453,6 +453,7 @@ type addLocalTxsTest struct {
 	expectReasons   []DiscardReason
 	discardIndex    []int
 	goodTxsIndex    []uint8
+	dupIndex        []uint8
 }
 
 func TestAddLocalTxsInParallel(t *testing.T) {
@@ -548,6 +549,47 @@ func TestAddLocalTxsInParallel(t *testing.T) {
 			expectReasons: []DiscardReason{Success, Success, Success},
 			goodTxsIndex:  []uint8{0x0, 0x1, 0x2},
 		},
+		// Case5:
+		{
+			newTransactions: types.TxSlots{
+				Txs: []*types.TxSlot{
+					{
+						Tip:    *uint256.NewInt(3_000_000),
+						FeeCap: *uint256.NewInt(1_000_000_000),
+						Gas:    100000,
+						Nonce:  10,
+					},
+					{
+						Tip:    *uint256.NewInt(3_000_000),
+						FeeCap: *uint256.NewInt(1_000_000_000),
+						Gas:    100000,
+						Nonce:  11,
+					},
+					{
+						Tip:    *uint256.NewInt(3_000_000),
+						FeeCap: *uint256.NewInt(1_000_000_000),
+						Gas:    100000,
+						Nonce:  12,
+					},
+					{
+						Tip:    *uint256.NewInt(3_000_000),
+						FeeCap: *uint256.NewInt(1_000_000_000),
+						Gas:    100000,
+						Nonce:  1,
+					},
+					{
+						Tip:    *uint256.NewInt(3_000_000),
+						FeeCap: *uint256.NewInt(1_000_000_000),
+						Gas:    100000,
+						Nonce:  14,
+					},
+				},
+			},
+			expectReasons: []DiscardReason{DuplicateHash, Expired, Success, NonceTooLow, Success},
+			goodTxsIndex:  []uint8{0x2, 0x4},
+			discardIndex:  []int{1},
+			dupIndex:      []uint8{0x0},
+		},
 	}
 	kv.InitStandaloneSMT(false)
 
@@ -606,7 +648,11 @@ func TestAddLocalTxsInParallel(t *testing.T) {
 	err = pool.OnNewBlock(ctx, change, types.TxSlots{}, types.TxSlots{}, tx)
 	assert.NoError(err)
 
-	var txCount = 0
+	dupIDHash := [32]byte{}
+	dupIDHash[0] = 1
+	pool.byHash[string(dupIDHash[:])] = &metaTx{}
+
+	var txCount = 2
 	for _, test := range tests {
 		var txSlots types.TxSlots
 		for i, tx := range test.newTransactions.Txs {
@@ -616,6 +662,10 @@ func TestAddLocalTxsInParallel(t *testing.T) {
 
 		for _, index := range test.discardIndex {
 			pool.discardReasonsLRU.Add(string(test.newTransactions.Txs[index].IDHash[:]), Expired)
+		}
+
+		for _, index := range test.dupIndex {
+			txSlots.Txs[index].IDHash[0] = 1
 		}
 
 		var tx kv.Tx
