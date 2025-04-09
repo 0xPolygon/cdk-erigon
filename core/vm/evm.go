@@ -121,7 +121,7 @@ func NewEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, state evmt
 	}
 
 	// [zkevm] change
-	if evm.ChainRules().IsNormalcy {
+	if evm.ChainRules().IsNormalcy || chainConfig.UsingEthereumHardfork {
 		evm.interpreter = NewEVMInterpreter(evm, vmConfig)
 	} else {
 		evm.interpreter = NewZKEVMInterpreter(evm, NewZkConfig(vmConfig, nil))
@@ -310,7 +310,10 @@ func (evm *EVM) call(typ OpCode, caller ContractRef, addr libcommon.Address, inp
 // the necessary steps to create accounts and reverses the state in case of an
 // execution error or failed value transfer.
 func (evm *EVM) Call(caller ContractRef, addr libcommon.Address, input []byte, gas uint64, value *uint256.Int, bailout bool, intrinsicGas uint64) (ret []byte, leftOverGas uint64, err error) {
-	return evm.call_zkevm(CALL, caller, addr, input, gas, value, bailout, intrinsicGas, 0)
+	if evm.zkConfig != nil {
+		return evm.call_zkevm(CALL, caller, addr, input, gas, value, bailout, intrinsicGas, 0)
+	}
+	return evm.call(CALL, caller, addr, input, gas, value, bailout, intrinsicGas)
 }
 
 // CallCode executes the contract associated with the addr with the given input
@@ -321,7 +324,10 @@ func (evm *EVM) Call(caller ContractRef, addr libcommon.Address, input []byte, g
 // CallCode differs from Call in the sense that it executes the given address'
 // code with the caller as context.
 func (evm *EVM) CallCode(caller ContractRef, addr libcommon.Address, input []byte, gas uint64, value *uint256.Int) (ret []byte, leftOverGas uint64, err error) {
-	return evm.call_zkevm(CALLCODE, caller, addr, input, gas, value, false, 0 /* intrinsicGas is zero here */, 0)
+	if evm.zkConfig != nil {
+		return evm.call_zkevm(CALLCODE, caller, addr, input, gas, value, false, 0 /* intrinsicGas is zero here */, 0)
+	}
+	return evm.call(CALLCODE, caller, addr, input, gas, value, false, 0 /* intrinsicGas is zero here */)
 }
 
 // DelegateCall executes the contract associated with the addr with the given input
@@ -330,7 +336,10 @@ func (evm *EVM) CallCode(caller ContractRef, addr libcommon.Address, input []byt
 // DelegateCall differs from CallCode in the sense that it executes the given address'
 // code with the caller as context and the caller is set to the caller of the caller.
 func (evm *EVM) DelegateCall(caller ContractRef, addr libcommon.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
-	return evm.call_zkevm(DELEGATECALL, caller, addr, input, gas, nil, false, 0 /* intrinsicGas is zero here */, 0)
+	if evm.zkConfig != nil {
+		return evm.call_zkevm(DELEGATECALL, caller, addr, input, gas, nil, false, 0 /* intrinsicGas is zero here */, 0)
+	}
+	return evm.call(DELEGATECALL, caller, addr, input, gas, nil, false, 0 /* intrinsicGas is zero here */)
 }
 
 // StaticCall executes the contract associated with the addr with the given input
@@ -338,7 +347,10 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr libcommon.Address, input [
 // Opcodes that attempt to perform such modifications will result in exceptions
 // instead of performing the modifications.
 func (evm *EVM) StaticCall(caller ContractRef, addr libcommon.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
-	return evm.call_zkevm(STATICCALL, caller, addr, input, gas, new(uint256.Int), false, 0 /* intrinsicGas is zero here */, 0)
+	if evm.zkConfig != nil {
+		return evm.call_zkevm(STATICCALL, caller, addr, input, gas, nil, false, 0 /* intrinsicGas is zero here */, 0)
+	}
+	return evm.call(STATICCALL, caller, addr, input, gas, new(uint256.Int), false, 0 /* intrinsicGas is zero here */)
 }
 
 type codeAndHash struct {

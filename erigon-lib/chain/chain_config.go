@@ -121,6 +121,7 @@ type Config struct {
 
 	AllowFreeTransactions bool   `json:"allowFreeTransactions,omitempty"`
 	ZkDefaultGasPrice     uint64 `json:"zkDefaultGasFee,omitempty"`
+	UsingEthereumHardfork bool   `json:"usingEthereumHardfork,omitempty"`
 }
 
 type BlobConfig struct {

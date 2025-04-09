@@ -52,22 +52,20 @@ func (evm *EVM) precompile_zkevm(addr libcommon.Address, retSize int) (Precompil
 // NewEVM returns a new EVM. The returned EVM is not thread safe and should
 // only ever be used *once*.
 func NewZkEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, state evmtypes.IntraBlockState, chainConfig *chain.Config, zkVmConfig ZkConfig) *EVM {
-	if chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Time).IsNormalcy {
+	if chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Time).IsNormalcy || chainConfig.UsingEthereumHardfork {
 		return NewEVM(blockCtx, txCtx, state, chainConfig, zkVmConfig.Config)
 	}
 
-	evm :=
-		&EVM{
-			Context:         blockCtx,
-			TxContext:       txCtx,
-			intraBlockState: state,
-			config:          zkVmConfig.Config,
-			chainConfig:     chainConfig,
-			chainRules:      chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Time),
-			zkConfig:        &zkVmConfig,
-		}
+	evm := &EVM{
+		Context:         blockCtx,
+		TxContext:       txCtx,
+		intraBlockState: state,
+		config:          zkVmConfig.Config,
+		chainConfig:     chainConfig,
+		chainRules:      chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Time),
+		zkConfig:        &zkVmConfig,
+	}
 
-	// [zkevm] change
 	evm.interpreter = NewZKEVMInterpreter(evm, zkVmConfig)
 
 	return evm

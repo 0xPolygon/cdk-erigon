@@ -136,21 +136,6 @@ Loop:
 		writeReceipts := nextStagesExpectData || blockNum > cfg.prune.Receipts.PruneTo(to)
 		writeCallTraces := nextStagesExpectData || blockNum > cfg.prune.CallTraces.PruneTo(to)
 
-		//execRs, err := executeBlockZk(block, &prevBlockRoot, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb)
-		//if err != nil {
-		//	if !errors.Is(err, context.Canceled) {
-		//		log.Warn(fmt.Sprintf("[%s] Execution failed", s.LogPrefix()), "block", blockNum, "hash", datastreamBlockHash.Hex(), "err", err)
-		//		if cfg.hd != nil {
-		//			cfg.hd.ReportBadHeaderPoS(datastreamBlockHash, block.ParentHash())
-		//		}
-		//		if cfg.badBlockHalt {
-		//			return fmt.Errorf("executeBlockZk: %w", err)
-		//		}
-		//	}
-		//	u.UnwindTo(blockNum-1, UnwindReason{Block: &datastreamBlockHash})
-		//	break Loop
-		//}
-
 		execRs, err := executeBlockZk(block, &prevBlockRoot, tx, batch, cfg, *cfg.vmConfig, writeChangeSets, writeReceipts, writeCallTraces, initialCycle, stateStream, hermezDb)
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
