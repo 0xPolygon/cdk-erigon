@@ -586,7 +586,7 @@ var (
 // ChaindataTables - list of all buckets. App will panic if some bucket is not in this list.
 // This list will be sorted in `init` method.
 // ChaindataTablesCfg - can be used to find index in sorted version of ChaindataTables list by name
-var ChaindataTables = []string{
+var ChaindataTablesInitial = []string{
 	E2AccountsHistory,
 	E2StorageHistory,
 	Code,
@@ -787,6 +787,8 @@ var ChaindataTables = []string{
 	BAD_TX_HASHES,
 }
 
+var ChaindataTables []string
+
 const (
 	RecentLocalTransaction = "RecentLocalTransaction" // sequence_u64 -> tx_hash
 	PoolTransaction        = "PoolTransaction"        // txHash -> sender+tx_rlp
@@ -827,10 +829,12 @@ var TablesSmt = []string{
 }
 
 // ChaindataDeprecatedTables - list of buckets which can be programmatically deleted - for example after migration
-var ChaindataDeprecatedTables = []string{
+var ChaindataDeprecatedTablesInitial = []string{
 	Clique,
 	TransitionBlockKey,
 }
+
+var ChaindataDeprecatedTables []string
 
 var DiagnosticsTables = []string{
 	DiagSystemInfo,
@@ -1026,9 +1030,11 @@ func reinit() {
 func InitStandaloneSMT(standalone bool) {
 	fmt.Printf("[erigon-lib/kv/tables.go] InitStandaloneSMT(%v) called\n", standalone)
 	if standalone {
-		ChaindataDeprecatedTables = append(ChaindataDeprecatedTables, TablesSmt...)
+		ChaindataTables = ChaindataTablesInitial
+		ChaindataDeprecatedTables = append(ChaindataDeprecatedTablesInitial, TablesSmt...)
 	} else {
-		ChaindataTables = append(ChaindataTables, TablesSmt...)
+		ChaindataTables = append(ChaindataTablesInitial, TablesSmt...)
+		ChaindataDeprecatedTables = ChaindataDeprecatedTablesInitial
 	}
 	reinit()
 }

@@ -5,6 +5,7 @@ if [ -z "$ID" ]; then
 	echo "No seq docker container found!"
 	exit 1
 fi
-docker logs $ID > logs.txt 2>&1
-cat logs.txt | grep "err"
-cat logs.txt | grep "EROR"
+LNAME="seq-logs.txt"
+docker logs $ID > $LNAME 2>&1
+cat $LNAME | grep "err"
+cat $LNAME | grep "EROR"

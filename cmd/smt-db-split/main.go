@@ -13,8 +13,6 @@ import (
 )
 
 func openDBWithOpts(optsFilePath string, dbPath string, log logv3.Logger, isSMT bool) (kv.RwDB, error) {
-	kv.InitStandaloneSMT(true)
-
 	ctx := context.Background()
 
 	jsonData, err := os.ReadFile(optsFilePath)
@@ -52,6 +50,8 @@ func main() {
 		log.Error("Usage: smt-db-split <db_path>")
 		return
 	}
+
+	kv.InitStandaloneSMT(true)
 
 	optsMainDBPath := args[0] + "/chaindata/opts_chaindb.json"
 	optsSMTDBPath := args[0] + "/smt/opts_smt.json"
