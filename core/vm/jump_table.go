@@ -113,7 +113,8 @@ func newNapoliInstructionSet() JumpTable {
 	instructionSet := newShanghaiInstructionSet()
 	enable1153(&instructionSet) // Transient storage opcodes
 	enable5656(&instructionSet) // MCOPY opcode
-	enable6780(&instructionSet) // SELFDESTRUCT only in same transaction
+	// Disable SELFDESTRUCT opcode for L2
+	//enable6780(&instructionSet) // SELFDESTRUCT only in same transaction
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
 }

@@ -67,7 +67,6 @@ type SequenceBlockCfg struct {
 	chainConfig   *chain.Config
 	engine        consensus.Engine
 	zkVmConfig    *vm.ZkConfig
-	vmConfig      *vm.Config
 	badBlockHalt  bool
 	stateStream   bool
 	accumulator   *shards.Accumulator
@@ -102,7 +101,6 @@ func StageSequenceBlocksCfg(
 	chainConfig *chain.Config,
 	engine consensus.Engine,
 	zkVmConfig *vm.ZkConfig,
-	vmConfig *vm.Config,
 	accumulator *shards.Accumulator,
 	stateStream bool,
 	badBlockHalt bool,
@@ -135,7 +133,6 @@ func StageSequenceBlocksCfg(
 		chainConfig:      chainConfig,
 		engine:           engine,
 		zkVmConfig:       zkVmConfig,
-		vmConfig:         vmConfig,
 		dirs:             dirs,
 		accumulator:      accumulator,
 		stateStream:      stateStream,

@@ -173,7 +173,7 @@ func (c Commitment) ValidCommitments() []Commitment {
 var DefaultZkConfig = &Zk{}
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
-	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && !c.HasExecutors())
+	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && !c.HasExecutors()) || c.UsingHermezHardfork()
 }
 
 func (c *Zk) HasExecutors() bool {
