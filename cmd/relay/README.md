@@ -6,7 +6,7 @@ A lightweight service that connects to a data stream server, receives data, and 
 
 The datastream relay acts as a client towards the main data stream server and as a server towards connected clients. This architecture allows scaling the number of connected clients by distributing the load across multiple relay instances.
 
-This implementation directly uses the `datastreamer.NewRelay` function from the [0xPolygonHermez/zkevm-data-streamer](https://github.com/0xPolygonHermez/zkevm-data-streamer) package.
+This implementation directly uses the `datastreamer.NewRelay` function from the [gateway-fm/zkevm-data-streamer](https://github.com/gateway-fm/zkevm-data-streamer) package.
 
 ## Features
 

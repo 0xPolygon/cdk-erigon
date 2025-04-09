@@ -8,9 +8,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
-	"github.com/0xPolygonHermez/zkevm-data-streamer/log"
 	"github.com/erigontech/erigon/common/paths"
+	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
+	"github.com/gateway-fm/zkevm-data-streamer/log"
 )
 
 const (
@@ -44,7 +44,7 @@ func main() {
 	log.Infof(">> Relay server starting: port[%d] file[%s] server[%s] log[%s]",
 		*port, *dataFile, *serverAddr, *logLevel)
 
-	// Create relay server - directly use the implementation from 0xPolygonHermez/zkevm-data-streamer
+	// Create relay server - directly use the implementation from gateway-fm/zkevm-data-streamer
 	relay, err := datastreamer.NewRelay(
 		*serverAddr,         // Server address
 		uint16(*port),       // Port
