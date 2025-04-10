@@ -116,3 +116,5 @@ vendor
 
 datadir
 zk/tests/unwinds/datastream/hermez-dynamic-integration8-datastream
+
+.direnv
