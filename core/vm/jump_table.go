@@ -113,7 +113,7 @@ func newNapoliInstructionSet() JumpTable {
 	instructionSet := newShanghaiInstructionSet()
 	enable1153(&instructionSet) // Transient storage opcodes
 	enable5656(&instructionSet) // MCOPY opcode
-	// Disable SELFDESTRUCT opcode for L2
+	// Disable opSelfdestruct6780 for L2
 	//enable6780(&instructionSet) // SELFDESTRUCT only in same transaction
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
@@ -1203,9 +1203,16 @@ func newFrontierInstructionSet() JumpTable {
 			numPush:    0,
 			memorySize: memoryReturn,
 		},
+		//SELFDESTRUCT: {
+		//	execute:    opSelfdestruct,
+		//	dynamicGas: gasSelfdestruct,
+		//	numPop:     1,
+		//	numPush:    0,
+		//},
+		// SELFDESTRUCT is replaced by SENDALL [zkevm change]
 		SELFDESTRUCT: {
-			execute:    opSelfdestruct,
-			dynamicGas: gasSelfdestruct,
+			execute:    opSendAll_zkevm,
+			dynamicGas: gasSelfdestruct_zkevm,
 			numPop:     1,
 			numPush:    0,
 		},
