@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
-
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"math/big"
 
@@ -31,16 +32,15 @@ type IL1Syncer interface {
 	GetLastCheckedL1Block() uint64
 
 	// Channels
-	GetLogsChan() chan []ethTypes.Log
-	GetProgressMessageChan() chan string
+	//GetLogsChan() chan []ethTypes.Log
+	// GetProgressMessageChan() chan string
 
 	L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Header, error)
 	GetBlock(number uint64) (*ethTypes.Block, error)
 	GetHeader(number uint64) (*ethTypes.Header, error)
-	RunQueryBlocks(lastCheckedBlock uint64)
-	StopQueryBlocks()
-	ConsumeQueryBlocks()
-	WaitQueryBlocksToFinish()
+	RunQueryBlocks(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error)
+	RunQueryBlocksOnce(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error)
+	StopSyncer()
 	CheckL1BlockFinalized(blockNo uint64) (bool, uint64, error)
 }
 
@@ -64,6 +64,29 @@ func StageL1SyncerCfg(db kv.RwDB, syncer IL1Syncer, zkCfg *ethconfig.Zk) L1Synce
 	}
 }
 
+type BatchLogType byte
+
+const (
+	logUnknown          BatchLogType = 0
+	logSequence         BatchLogType = 1
+	logSequenceEtrog    BatchLogType = 2
+	logVerify           BatchLogType = 3
+	logVerifyEtrog      BatchLogType = 4
+	logL1InfoTreeUpdate BatchLogType = 5
+	logRollbackBatches  BatchLogType = 6
+
+	logIncompatible BatchLogType = 100
+)
+
+type logsVerificationResult struct {
+	muInfo                      sync.Mutex
+	newVerificationsCount       atomic.Uint64
+	newSequencesCount           atomic.Uint64
+	highestWrittenL1BlockNumber atomic.Uint64
+	highestVerification         *types.L1BatchInfo
+	errChan                     chan error
+}
+
 func SpawnStageL1Syncer(
 	s *stagedsync.StageState,
 	u stagedsync.Unwinder,
@@ -71,7 +94,8 @@ func SpawnStageL1Syncer(
 	tx kv.RwTx,
 	cfg L1SyncerCfg,
 	quiet bool,
-) (funcErr error) {
+) error {
+	start := time.Now()
 	///// DEBUG BISECT /////
 	if cfg.zkCfg.DebugLimit > 0 {
 		return nil
@@ -108,104 +132,46 @@ func SpawnStageL1Syncer(
 	}
 
 	// start syncer if not started
-	if !cfg.syncer.IsSyncStarted() {
-		if l1BlockProgress == 0 {
-			l1BlockProgress = cfg.zkCfg.L1FirstBlock - 1
-		}
-
-		// start the syncer
-		cfg.syncer.RunQueryBlocks(l1BlockProgress)
-		defer func() {
-			if funcErr != nil {
-				cfg.syncer.StopQueryBlocks()
-				cfg.syncer.ConsumeQueryBlocks()
-				cfg.syncer.WaitQueryBlocksToFinish()
-			}
-		}()
+	if cfg.syncer.IsSyncStarted() {
+		panic("L1 syncer should already started")
 	}
 
-	logsChan := cfg.syncer.GetLogsChan()
-	progressMessageChan := cfg.syncer.GetProgressMessageChan()
-	highestVerification := types.L1BatchInfo{}
+	if l1BlockProgress == 0 {
+		l1BlockProgress = cfg.zkCfg.L1FirstBlock - 1
+	}
 
-	newVerificationsCount := 0
-	newSequencesCount := 0
-	highestWrittenL1BlockNo := uint64(0)
-Loop:
-	for {
-		select {
-		case logs := <-logsChan:
-			for _, l := range logs {
-				l := l
-				info, batchLogType := parseLogType(cfg.zkCfg.L1RollupId, &l)
-				switch batchLogType {
-				case logSequence:
-					fallthrough
-				case logSequenceEtrog:
-					// prevent storing pre-etrog sequences for etrog rollups
-					if batchLogType == logSequence && cfg.zkCfg.L1RollupId > 1 {
-						continue
-					}
-					if err := hermezDb.WriteSequence(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot, info.L1InfoRoot); err != nil {
-						return fmt.Errorf("WriteSequence: %w", err)
-					}
-					if info.L1BlockNo > highestWrittenL1BlockNo {
-						highestWrittenL1BlockNo = info.L1BlockNo
-					}
-					newSequencesCount++
-				case logRollbackBatches:
-					if err := hermezDb.RollbackSequences(info.BatchNo); err != nil {
-						return fmt.Errorf("RollbackSequences: %w", err)
-					}
-					if info.L1BlockNo > highestWrittenL1BlockNo {
-						highestWrittenL1BlockNo = info.L1BlockNo
-					}
-				case logVerify:
-					fallthrough
-				case logVerifyEtrog:
-					// prevent storing pre-etrog verifications for etrog rollups
-					if batchLogType == logVerify && cfg.zkCfg.L1RollupId > 1 {
-						continue
-					}
-					if info.BatchNo > highestVerification.BatchNo {
-						highestVerification = info
-					}
-					if err := hermezDb.WriteVerification(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot); err != nil {
-						return fmt.Errorf("WriteVerification for block %d: %w", info.L1BlockNo, funcErr)
-					}
-					if info.L1BlockNo > highestWrittenL1BlockNo {
-						highestWrittenL1BlockNo = info.L1BlockNo
-					}
-					newVerificationsCount++
-				case logIncompatible:
-					continue
-				default:
-					log.Warn("L1 Syncer unknown topic", "topic", l.Topics[0])
-				}
-			}
-		case progressMessage := <-progressMessageChan:
-			log.Info(fmt.Sprintf("[%s] %s", logPrefix, progressMessage))
-		default:
-			if !cfg.syncer.IsDownloading() {
-				break Loop
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
+	// start the syncer
+	// the buffered channel to prevent I/O blocking on the reader.
+	logsCh := make(chan []ethTypes.Log, 10000)
+	errCh := make(chan error)
+	go cfg.syncer.RunQueryBlocksOnce(logPrefix, l1BlockProgress, logsCh, errCh)
+
+	result, err := logsReader(logPrefix, cfg.zkCfg.L1RollupId, hermezDb, logsCh, errCh)
+	if err != nil {
+		return fmt.Errorf("logsReader: %w", err)
 	}
 
 	latestCheckedBlock := cfg.syncer.GetLastCheckedL1Block()
 
 	lastCheckedL1BlockCounter.Set(float64(latestCheckedBlock))
 
-	if highestWrittenL1BlockNo > l1BlockProgress {
-		log.Info(fmt.Sprintf("[%s] Saving L1 syncer progress", logPrefix), "latestCheckedBlock", latestCheckedBlock, "newVerificationsCount", newVerificationsCount, "newSequencesCount", newSequencesCount, "highestWrittenL1BlockNo", highestWrittenL1BlockNo)
+	if result.HighestWrittenL1BlockNumber() > l1BlockProgress {
+		log.Info(fmt.Sprintf(
+			"[%s] Saving L1 syncer progress. latestCheckedBlock: %d, newVerificationsCount: %d, newSequencesCount: %d, highestWrittenL1BlockNo: %d",
+			logPrefix,
+			latestCheckedBlock,
+			result.VerificationCount(),
+			result.SequenceCount(),
+			result.HighestWrittenL1BlockNumber(),
+		),
+		)
 
-		if err := stages.SaveStageProgress(tx, stages.L1Syncer, highestWrittenL1BlockNo); err != nil {
+		if err = stages.SaveStageProgress(tx, stages.L1Syncer, result.HighestWrittenL1BlockNumber()); err != nil {
 			return fmt.Errorf("SaveStageProgress: %w", err)
 		}
-		if highestVerification.BatchNo > 0 {
-			log.Info(fmt.Sprintf("[%s]", logPrefix), "highestVerificationBatchNo", highestVerification.BatchNo)
-			if err := stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, highestVerification.BatchNo); err != nil {
+		if result.HighestVerification().BatchNo > 0 {
+			log.Info(fmt.Sprintf("[%s] highestVerificationBatchNo: %d", logPrefix, result.HighestVerification().BatchNo))
+			if err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, result.HighestVerification().BatchNo); err != nil {
 				return fmt.Errorf("SaveStageProgress: %w", err)
 			}
 		}
@@ -223,27 +189,162 @@ Loop:
 
 	if internalTxOpened {
 		log.Debug("l1 sync: first cycle, committing tx")
-		if err := tx.Commit(); err != nil {
+		if err = tx.Commit(); err != nil {
 			return fmt.Errorf("tx.Commit: %w", err)
 		}
 	}
 
+	elapsed := time.Since(start)
+	log.Info(fmt.Sprintf("[%s] SpawnStageL1Syncer sync finished in %s\n", logPrefix, elapsed))
+
+	return nil
+}
+func logsReader(logPrefix string, rollupId uint64, hermezDb *hermez_db.HermezDb, logsCh <-chan []ethTypes.Log, errCh <-chan error) (*logsVerificationResult, error) {
+	result := newLogsVerificationResult()
+	for {
+		select {
+		case logs, ok := <-logsCh:
+			if !ok {
+				log.Info(fmt.Sprintf("[%s] L1 syncer RunQueryBlocksOnce logs channel closed", logPrefix))
+				return result, nil
+			}
+			err := processLogs(logs, rollupId, hermezDb, result)
+			if err != nil {
+				return nil, fmt.Errorf("processLogs: %w", err)
+			}
+		case errVal := <-errCh:
+			if errVal != nil {
+				log.Info(fmt.Sprintf("[%s] L1 syncer RunQueryBlocksOnce error: %s", logPrefix, errVal))
+			}
+		}
+	}
+}
+
+// processLogs processes EVM log entries (not sequenced with previous, from multiple writers)
+func processLogs(
+	logEntries []ethTypes.Log,
+	rollupId uint64,
+	hermezDb *hermez_db.HermezDb,
+	logsVerificationResult *logsVerificationResult,
+) error {
+	for logEntryIndex := range logEntries {
+		log.Debug(fmt.Sprintf("L1 syncer processing log entry %d", logEntries[logEntryIndex].BlockNumber))
+		// loopvar issue fixed in go1.22, will use direct slice iteration
+		info, batchLogType := parseLogType(rollupId, &logEntries[logEntryIndex])
+		switch batchLogType {
+		case logSequence:
+			fallthrough
+		case logSequenceEtrog:
+			// prevent storing pre-etrog sequences for etrog rollups
+			if batchLogType == logSequence && rollupId > 1 {
+				continue
+			}
+			// Does hemezDb supports checking sequence?
+			if err := hermezDb.WriteSequence(
+				info.L1BlockNo,
+				info.BatchNo,
+				info.L1TxHash,
+				info.StateRoot,
+				info.L1InfoRoot,
+			); err != nil {
+				return fmt.Errorf("WriteSequence: %w", err)
+			}
+
+			logsVerificationResult.UpdateHigherBlock(info.L1BlockNo)
+			logsVerificationResult.SequenceCountInc()
+
+		case logRollbackBatches:
+			if err := hermezDb.RollbackSequences(info.BatchNo); err != nil {
+				return fmt.Errorf("RollbackSequences: %w", err)
+			}
+			logsVerificationResult.UpdateHigherBlock(info.L1BlockNo)
+
+		case logVerify:
+			fallthrough
+		case logVerifyEtrog:
+			// prevent storing pre-etrog verifications for etrog rollups
+			if batchLogType == logVerify && rollupId > 1 {
+				continue
+			}
+
+			logsVerificationResult.UpdateHighestVerification(&info)
+
+			if err := hermezDb.WriteVerification(info.L1BlockNo, info.BatchNo, info.L1TxHash, info.StateRoot); err != nil {
+				return fmt.Errorf("WriteVerification for block %d: %w", info.L1BlockNo, err)
+			}
+
+			logsVerificationResult.UpdateHigherBlock(info.L1BlockNo)
+			logsVerificationResult.VerificationCountInc()
+		case logIncompatible:
+			continue
+		default:
+			log.Warn("L1 Syncer unknown topic", "topic", logEntries[logEntryIndex].Topics[0])
+		}
+	}
 	return nil
 }
 
-type BatchLogType byte
+func newLogsVerificationResult() *logsVerificationResult {
+	return &logsVerificationResult{
+		highestVerification: &types.L1BatchInfo{},
+		errChan:             make(chan error)}
+}
 
-var (
-	logUnknown          BatchLogType = 0
-	logSequence         BatchLogType = 1
-	logSequenceEtrog    BatchLogType = 2
-	logVerify           BatchLogType = 3
-	logVerifyEtrog      BatchLogType = 4
-	logL1InfoTreeUpdate BatchLogType = 5
-	logRollbackBatches  BatchLogType = 6
+// SequenceCountInc atomically increments the count of new sequences by 1.
+func (l *logsVerificationResult) SequenceCountInc() {
+	l.newSequencesCount.Add(1)
+}
 
-	logIncompatible BatchLogType = 100
-)
+func (l *logsVerificationResult) SequenceCount() uint64 {
+	return l.newSequencesCount.Load()
+}
+
+// VerificationCountInc atomically increments the count of new verifications by 1.
+func (l *logsVerificationResult) VerificationCountInc() {
+	l.newVerificationsCount.Add(1)
+}
+
+func (l *logsVerificationResult) VerificationCount() uint64 {
+	return l.newVerificationsCount.Load()
+}
+
+// UpdateHigherBlock updates the highest written block number if blockNumber is higher than the stored one
+// with atomic CAS operation strategy
+func (l *logsVerificationResult) UpdateHigherBlock(blockNumber uint64) {
+	for {
+		currentHighestBlockNumber := l.highestWrittenL1BlockNumber.Load()
+
+		if blockNumber <= currentHighestBlockNumber {
+			break
+		}
+		if l.highestWrittenL1BlockNumber.CompareAndSwap(currentHighestBlockNumber, blockNumber) {
+			break
+		}
+	}
+}
+
+// HighestWrittenL1BlockNumber returns the current highest L1 block number that has been written
+func (l *logsVerificationResult) HighestWrittenL1BlockNumber() uint64 {
+	return l.highestWrittenL1BlockNumber.Load()
+}
+
+// UpdateHighestVerification updates the highestVerification field if the provided batch info has a higher BatchNo.
+func (l *logsVerificationResult) UpdateHighestVerification(info *types.L1BatchInfo) {
+	l.muInfo.Lock()
+	defer l.muInfo.Unlock()
+
+	if info.BatchNo > l.highestVerification.BatchNo {
+		l.highestVerification = info
+	}
+}
+
+func (l *logsVerificationResult) HighestVerification() *types.L1BatchInfo {
+	return l.highestVerification
+}
+
+func (l *logsVerificationResult) ErrChan() chan error {
+	return l.errChan
+}
 
 func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1BatchInfo, batchLogType BatchLogType) {
 	var (

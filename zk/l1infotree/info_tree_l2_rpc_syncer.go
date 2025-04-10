@@ -55,11 +55,11 @@ func (s *InfoTreeL2RpcSyncer) ConsumeInfoTree() {
 		case <-s.ctx.Done():
 			return
 		case <-s.infoTreeChan:
-		default:
+			// Data may be lost
+		case <-time.After(time.Second):
 			if !s.isSyncStarted.Load() {
 				return
 			}
-			time.Sleep(time.Second)
 		}
 	}
 }

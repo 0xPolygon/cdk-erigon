@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync"
@@ -19,8 +20,11 @@ import (
 	"github.com/erigontech/erigon/rpc"
 )
 
-var (
-	batchWorkers = 2
+const (
+	progressMessageDuration = 10 * time.Second
+	batchWorkers            = 2
+	statusCodeNoError       = uint8(0)
+	statusCodeHasError      = uint8(0)
 )
 
 var errorShortResponseLT32 = fmt.Errorf("response too short to contain hash data")
@@ -53,9 +57,8 @@ type fetchJob struct {
 }
 
 type jobResult struct {
-	Size  uint64
-	Error error
-	Logs  []ethTypes.Log
+	Size uint64
+	Logs []ethTypes.Log
 }
 
 type L1Syncer struct {
@@ -66,7 +69,7 @@ type L1Syncer struct {
 	l1ContractAddresses []common.Address
 	topics              [][]common.Hash
 	blockRange          uint64
-	queryDelay          uint64
+	queryDelay          uint64 // milliseconds
 
 	latestL1Block uint64
 
@@ -78,8 +81,8 @@ type L1Syncer struct {
 	flagStop           atomic.Bool
 
 	// Channels
-	logsChan         chan []ethTypes.Log
-	logsChanProgress chan string
+	//logsChan chan []ethTypes.Log
+	// logsChanProgress chan string
 
 	highestBlockType string // finalized, latest, safe
 }
@@ -94,8 +97,6 @@ func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses
 		topics:              topics,
 		blockRange:          blockRange,
 		queryDelay:          queryDelay,
-		logsChan:            make(chan []ethTypes.Log),
-		logsChanProgress:    make(chan string),
 		highestBlockType:    highestBlockType,
 	}
 }
@@ -115,91 +116,142 @@ func (s *L1Syncer) IsSyncStarted() bool {
 	return s.isSyncStarted.Load()
 }
 
+func (s *L1Syncer) StartSync() {
+	s.isSyncStarted.Store(true)
+}
+
+func (s *L1Syncer) StopSync() {
+	s.isSyncStarted.Store(false)
+}
+
 func (s *L1Syncer) IsDownloading() bool {
 	return s.isDownloading.Load()
+}
+
+func (s *L1Syncer) StartDownloading() {
+	s.isDownloading.Store(true)
+}
+
+func (s *L1Syncer) StopDownloading() {
+	s.isDownloading.Store(false)
 }
 
 func (s *L1Syncer) GetLastCheckedL1Block() uint64 {
 	return s.lastCheckedL1Block.Load()
 }
 
-func (s *L1Syncer) StopQueryBlocks() {
+func (s *L1Syncer) StopSyncer() {
 	s.flagStop.Store(true)
 }
 
-func (s *L1Syncer) ConsumeQueryBlocks() {
-	for {
-		select {
-		case <-s.logsChan:
-		case <-s.logsChanProgress:
-		default:
-			if !s.isSyncStarted.Load() {
-				return
-			}
-			time.Sleep(time.Second)
-		}
-	}
-}
+// RunQueryBlocksOnce performs a one-time query of blockchain logs between the last checked block and the latest block.
+func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error) {
+	s.StartSync()
 
-func (s *L1Syncer) WaitQueryBlocksToFinish() {
-	s.wgRunLoopDone.Wait()
-}
+	s.lastCheckedL1Block.Store(lastCheckedBlock)
 
-// Channels
-func (s *L1Syncer) GetLogsChan() chan []ethTypes.Log {
-	return s.logsChan
-}
+	defer func() {
+		log.Info(fmt.Sprintf("[%s] Stopping L1 RunQueryBlocksOnce syncer", logPrefix))
 
-func (s *L1Syncer) GetProgressMessageChan() chan string {
-	return s.logsChanProgress
-}
+		close(logsCh)
+		close(errCh)
+		s.StopSync()
+		s.StopDownloading()
+	}()
 
-func (s *L1Syncer) RunQueryBlocks(lastCheckedBlock uint64) {
-	//if already started, don't start another thread
-	if s.isSyncStarted.Load() {
+	log.Info(fmt.Sprintf("[%s] Starting L1 syncer thread RunQueryBlocksOnce", logPrefix))
+
+	latestL1Block, err := s.getLatestL1Block()
+	if err != nil {
+		log.Error(fmt.Sprintf("[%s] Error getting latest L1 block: %s", logPrefix, err))
 		return
 	}
 
-	s.isSyncStarted.Store(true)
+	log.Info(fmt.Sprintf("[%s] RunQueryBlocksOnce from %d -> %d", logPrefix, s.lastCheckedL1Block.Load(), latestL1Block))
 
-	// set it to true to catch the first cycle run case where the check can pass before the latest block is checked
-	s.isDownloading.Store(true)
+	if latestL1Block <= s.lastCheckedL1Block.Load() {
+		return
+	}
+
+	s.StartDownloading()
+
+	status := make(chan uint8)
+
+	go s.queryBlocks(logPrefix, lastCheckedBlock, latestL1Block, logsCh, errCh, status)
+
+	statusCode := <-status
+
+	if statusCode == statusCodeNoError {
+		s.lastCheckedL1Block.Store(latestL1Block)
+	}
+
+	log.Info(fmt.Sprintf("[%s] Returning L1 syncer thread RunQueryBlocksOnce", logPrefix))
+
+	close(status)
+	s.StopDownloading()
+
+	return
+}
+
+// RunQueryBlocks
+// It prevents multiple simultaneous executions and manages synchronization states across the process lifecycle.
+func (s *L1Syncer) RunQueryBlocks(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error) {
+	//if already started, don't start another thread
+	if s.IsSyncStarted() {
+		return
+	}
+
+	s.StartSync()
+
 	s.lastCheckedL1Block.Store(lastCheckedBlock)
 
-	s.wgRunLoopDone.Add(1)
-	s.flagStop.Store(false)
-
-	//start a thread to cheack for new l1 block in interval
+	//start a thread to check for new l1 block with interval
 	go func() {
-		defer s.isSyncStarted.Store(false)
-		defer s.wgRunLoopDone.Done()
+		// Never called
+		defer func() {
+			log.Info(fmt.Sprintf("[%s] Stopping L1 syncer RunQueryBlocks thread", logPrefix))
+			close(logsCh)
+			close(errCh)
+			s.StopSync()
+			s.StopDownloading()
+		}()
 
-		log.Info("Starting L1 syncer thread")
-		defer log.Info("Stopping L1 syncer thread")
+		log.Info(fmt.Sprintf("[%s] Starting L1 syncer RunQueryBlocks thread", logPrefix))
 
 		for {
-			if s.flagStop.Load() {
-				return
-			}
+
+			log.Info(fmt.Sprintf("[%s] Starting L1 syncer RunQueryBlocks loop iteration", logPrefix))
 
 			latestL1Block, err := s.getLatestL1Block()
 			if err != nil {
-				log.Error("Error getting latest L1 block", "err", err)
-			} else {
-				if latestL1Block > s.lastCheckedL1Block.Load() {
-					s.isDownloading.Store(true)
-					if err := s.queryBlocks(); err != nil {
-						log.Error("Error querying blocks", "err", err)
-					} else {
-						s.lastCheckedL1Block.Store(latestL1Block)
-					}
-				}
+				log.Error(fmt.Sprintf("[%s] RunQueryBlocks Error getting latest L1 block: %s", logPrefix, err))
+				continue
 			}
 
-			s.isDownloading.Store(false)
+			if latestL1Block > s.lastCheckedL1Block.Load() {
+				log.Info(fmt.Sprintf("[%s] RunQueryBlocks %d -> %d", logPrefix, s.lastCheckedL1Block.Load(), latestL1Block))
+				s.StartDownloading()
+
+				status := make(chan uint8)
+
+				go s.queryBlocks(logPrefix, lastCheckedBlock, latestL1Block, logsCh, errCh, status)
+
+				statusCode := <-status
+
+				if statusCode == statusCodeNoError {
+					s.lastCheckedL1Block.Store(latestL1Block)
+					lastCheckedBlock = latestL1Block
+				}
+
+				close(status)
+				s.StopDownloading()
+			}
+
+			log.Info(fmt.Sprintf("[%s] L1 syncer RunQueryBlocks timeout instance", logPrefix))
 			time.Sleep(time.Duration(s.queryDelay) * time.Millisecond)
 		}
 	}()
+	return
 }
 
 func (s *L1Syncer) GetHeader(number uint64) (*ethTypes.Header, error) {
@@ -268,6 +320,7 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 	headersQueue := make(chan *ethTypes.Header, logsSize)
 
 	process := func(em IEtherman) {
+		// TODO: Use calls with timeout
 		ctx := context.Background()
 		for {
 			l, ok := <-logQueue
@@ -275,6 +328,7 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 				break
 			}
 			header, err := em.HeaderByNumber(ctx, new(big.Int).SetUint64(l.BlockNumber))
+
 			if err != nil {
 				log.Error("Error getting block", "err", err)
 				// assume a transient error and try again
@@ -305,6 +359,8 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 	return headersMap, nil
 }
 
+// Called a lot
+// TODO: Check multiple calls with prefix "Waiting for txs from the pool... "
 func (s *L1Syncer) getLatestL1Block() (uint64, error) {
 	em := s.getNextEtherman()
 
@@ -317,6 +373,8 @@ func (s *L1Syncer) getLatestL1Block() (uint64, error) {
 		blockNumber = big.NewInt(rpc.SafeBlockNumber.Int64())
 	case "latest":
 		blockNumber = nil
+	default:
+		return 0, errors.New("highestBlockType is not valid")
 	}
 
 	latestBlock, err := em.BlockByNumber(context.Background(), blockNumber)
@@ -327,111 +385,140 @@ func (s *L1Syncer) getLatestL1Block() (uint64, error) {
 	latest := latestBlock.NumberU64()
 	s.latestL1Block = latest
 
+	log.Info(fmt.Sprintf("Received latest L1 block with option \"%s\": %d", s.highestBlockType, latest))
+
 	return latest, nil
 }
 
-func (s *L1Syncer) queryBlocks() error {
+// queryBlocks returns error, if logs from L1 blocks sequence not loaded
+// Partial loading not supported yet
+func (s *L1Syncer) queryBlocks(logPrefix string, startBlock, lastBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error, status chan<- uint8) {
 	// Fixed receiving duplicate log events.
 	// lastCheckedL1Block means that it has already been checked in the previous cycle.
 	// It should not be checked again in the new cycle, so +1 is added here.
-	startBlock := s.lastCheckedL1Block.Load() + 1
+	startBlock += 1
 
 	log.Debug("GetHighestSequence", "startBlock", startBlock)
 
 	// define the blocks we're going to fetch up front
-	fetches := make([]fetchJob, 0)
-	low := startBlock
-	for {
-		high := low + s.blockRange
-		if high > s.latestL1Block {
-			// at the end of our search
-			high = s.latestL1Block
-		}
+	fetches := makeFetchJobs(startBlock, lastBlock, s.blockRange)
 
-		fetches = append(fetches, fetchJob{
-			From: low,
-			To:   high,
-		})
+	log.Info(fmt.Sprintf("[%s] queryBlocks from %d to %d with range %d", logPrefix, startBlock, lastBlock, s.blockRange))
 
-		if high == s.latestL1Block {
-			break
-		}
-		low += s.blockRange + 1
-	}
-
-	wg := sync.WaitGroup{}
-	stop := make(chan bool)
+	// wg used for a graceful closing channel for multiple writers with defer()
+	// wg := sync.WaitGroup{}
 	jobs := make(chan fetchJob, len(fetches))
 	results := make(chan jobResult, len(fetches))
-	defer close(results)
 
-	wg.Add(batchWorkers)
+	// wg.Add(batchWorkers)
 	for i := 0; i < batchWorkers; i++ {
-		go s.getSequencedLogs(jobs, results, stop, &wg)
+		go s.getFilteredLogs(logPrefix, jobs, results)
 	}
+
+	defer func() {
+		close(results)
+	}()
 
 	for _, fetch := range fetches {
 		jobs <- fetch
 	}
+	// No more writing, may close
 	close(jobs)
 
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	progress := atomic.Uint64{}
 
-	var err error
-	var progress uint64 = 0
-
-	aimingFor := s.latestL1Block - startBlock
+	aimingFor := lastBlock - startBlock - uint64(len(fetches)) + 1
 	complete := 0
-loop:
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go queryBlocksProcessingStatus(ctx, logPrefix, &progress, aimingFor)
+
 	for {
 		select {
 		case <-s.ctx.Done():
-			break loop
+			errCh <- errors.New("queryBlocks stopped by context")
+			status <- statusCodeHasError
+			return
 		case res := <-results:
-			if s.flagStop.Load() {
-				break loop
-			}
-
 			complete++
-			if res.Error != nil {
-				err = res.Error
-				break loop
-			}
-			progress += res.Size
+
+			progress.Add(res.Size)
+
 			if len(res.Logs) > 0 {
-				s.logsChan <- res.Logs
+				logsCh <- res.Logs
 			}
 
 			if complete == len(fetches) {
+				// TODO: close here
 				// we've got all the results we need
-				break loop
+				status <- statusCodeNoError
+				return
 			}
-		case <-ticker.C:
-			if aimingFor == 0 {
-				continue
-			}
-			s.logsChanProgress <- fmt.Sprintf("L1 Blocks processed progress (amounts): %d/%d (%d%%)", progress, aimingFor, (progress*100)/aimingFor)
 		}
 	}
-
-	close(stop)
-	wg.Wait()
-
-	return err
 }
 
-func (s *L1Syncer) getSequencedLogs(jobs <-chan fetchJob, results chan jobResult, stop chan bool, wg *sync.WaitGroup) {
-	defer wg.Done()
+// makeFetchJobs generates ranges pairs slice [from,to] without overlap, supported get_Logs filter,
+// where blockFrom >= from, and blockTo <= to
+func makeFetchJobs(src, dst, blockRange uint64) []fetchJob {
+	fetches := make([]fetchJob, 0)
+
+	for start := src; start <= dst; {
+		end := start + blockRange - 1
+		if end > dst {
+			end = dst
+		}
+		fetches = append(fetches, fetchJob{From: start, To: end})
+		start = end + 1
+	}
+
+	return fetches
+}
+
+// queryBlocksProcessingStatus shown status
+func queryBlocksProcessingStatus(ctx context.Context, logPrefix string, processed *atomic.Uint64, totalCount uint64) {
+	if totalCount == 0 {
+		log.Info(fmt.Sprintf("[%s] L1 Blocks processed progress (amounts): no blocks", logPrefix))
+		return
+	}
+
+	ticker := time.NewTicker(progressMessageDuration)
+	defer ticker.Stop()
+
+	printStatus := func() {
+		log.Info(fmt.Sprintf(
+			"[%s] L1 Blocks processed progress (amounts): %d/%d (%d%%)",
+			logPrefix,
+			processed.Load(),
+			totalCount,
+			(processed.Load()*100)/totalCount,
+		),
+		)
+	}
 
 	for {
 		select {
-		case <-stop:
+		case <-ticker.C:
+			printStatus()
+		case <-ctx.Done():
+			printStatus()
+			return
+		}
+	}
+}
+
+func (s *L1Syncer) getFilteredLogs(logPrefix string, jobs <-chan fetchJob, results chan jobResult) {
+	for {
+		select {
+		case <-s.ctx.Done():
 			return
 		case j, ok := <-jobs:
 			if !ok {
 				return
 			}
+
 			query := ethereum.FilterQuery{
 				FromBlock: new(big.Int).SetUint64(j.From),
 				ToBlock:   new(big.Int).SetUint64(j.To),
@@ -441,28 +528,28 @@ func (s *L1Syncer) getSequencedLogs(jobs <-chan fetchJob, results chan jobResult
 
 			var logs []ethTypes.Log
 			var err error
-			retry := 0
-			for {
+
+			for attempt := 0; attempt < 20; attempt++ {
 				em := s.getNextEtherman()
 				logs, err = em.FilterLogs(context.Background(), query)
-				if err != nil {
-					log.Debug("getSequencedLogs retry error", "err", err)
-					retry++
-					if retry > 5 {
-						log.Error("L1 syncer (getSequencedLogs) exceeded 5 retries", "retry", retry, "err", err)
+				if err == nil {
+					results <- jobResult{
+						Size: j.To - j.From,
+						Logs: logs,
 					}
-					if retry > 20 {
-						panic("L1 syncer (getSequencedLogs) exceeded 20 retries")
+					break
+				} else {
+					if attempt > 5 {
+						log.Error(fmt.Sprintf("[%s] L1 syncer (getFilteredLogs) exceeded %d retries. Error: %s", logPrefix, attempt, err))
+
+						if attempt == 20 {
+							panic("L1 syncer (getFilteredLogs) exceeded 20 retries")
+						}
+
+						time.Sleep(time.Duration(attempt*2) * time.Second)
 					}
-					time.Sleep(time.Duration(retry*2) * time.Second)
-					continue
 				}
-				break
-			}
-			results <- jobResult{
-				Size:  j.To - j.From,
-				Error: nil,
-				Logs:  logs,
+
 			}
 		}
 	}
