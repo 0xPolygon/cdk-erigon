@@ -5,11 +5,13 @@ on:
       - zkevm
       - zkevm-2.60
       - stable/**
+      - project/**
   pull_request:
     branches:
       - zkevm
       - zkevm-2.60
       - stable/**
+      - project/**
     types:
       - opened
       - reopened
