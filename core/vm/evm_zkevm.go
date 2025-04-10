@@ -72,7 +72,7 @@ func NewZkEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, state ev
 }
 
 func (evm *EVM) Deploy(caller ContractRef, code []byte, gas uint64, endowment *uint256.Int, intrinsicGas uint64) (ret []byte, contractAddr libcommon.Address, leftOverGas uint64, err error) {
-	if evm.ChainRules().IsNormalcy {
+	if evm.ChainRules().IsNormalcy || evm.chainConfig.UsingEthereumHardfork {
 		return evm.Create(caller, code, gas, endowment, false /* bailout */, intrinsicGas)
 	}
 
