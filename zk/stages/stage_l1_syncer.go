@@ -200,8 +200,6 @@ func SpawnStageL1Syncer(
 	return nil
 }
 func logsReader(logPrefix string, rollupId uint64, hermezDb *hermez_db.HermezDb, logsCh <-chan []ethTypes.Log, errCh <-chan error) (*logsVerificationResult, error) {
-	defer log.Info(fmt.Sprintf("[%s] FINISHING logsReader ", logPrefix))
-
 	result := newLogsVerificationResult()
 	for {
 		select {
