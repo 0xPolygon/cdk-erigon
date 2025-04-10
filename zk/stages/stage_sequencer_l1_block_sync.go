@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"encoding/binary"
@@ -11,6 +12,7 @@ import (
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/types"
+	ethTypes "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/eth/stagedsync"
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
@@ -43,7 +45,7 @@ func SpawnSequencerL1BlockSyncStage(
 	tx kv.RwTx,
 	cfg SequencerL1BlockSyncCfg,
 	logger log.Logger,
-) (funcErr error) {
+) error {
 	logPrefix := s.LogPrefix()
 	log.Info(fmt.Sprintf("[%s] Starting L1 block sync stage", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Finished L1 block sync stage", logPrefix))
@@ -112,128 +114,169 @@ func SpawnSequencerL1BlockSyncStage(
 		l1BlockHeight = cfg.zkCfg.L1SyncStartBlock
 	}
 
-	if !cfg.syncer.IsSyncStarted() {
-		cfg.syncer.RunQueryBlocks(l1BlockHeight)
-		defer func() {
-			if funcErr != nil {
-				cfg.syncer.StopSyncer()
-			}
-		}()
+	// the buffered channel to prevent I/O blocking on the reader.
+	logsCh := make(chan []ethTypes.Log, 10000)
+	errCh := make(chan error)
+	go cfg.syncer.RunQueryBlocksOnce(logPrefix, l1BlockHeight, logsCh, errCh)
+
+	var latestBatch atomic.Uint64
+
+	err = sequencerBlocksSyncLogsReader(
+		logPrefix,
+		cfg.syncer,
+		cfg.zkCfg.DAUrl,
+		cfg.zkCfg.L1SyncStopBatch,
+		highestBatch,
+		hermezDb,
+		logsCh,
+		errCh,
+		&latestBatch,
+	)
+
+	if err != nil {
+		return fmt.Errorf("sequencerBlocksSyncLogsReader: %w", err)
 	}
 
-	logChan := cfg.syncer.GetLogsChan()
-	progressChan := cfg.syncer.GetProgressMessageChan()
-
-	logTicker := time.NewTicker(10 * time.Second)
-	defer logTicker.Stop()
-	var latestBatch uint64
-	stopBlockMap := make(map[uint64]struct{})
-
-LOOP:
-	for {
-		select {
-		case logs := <-logChan:
-			for _, l := range logs {
-				// for some reason some endpoints seem to not have certain transactions available to
-				// them even they are perfectly valid and other RPC nodes return them fine.  So, leaning
-				// on the internals of the syncer which will round-robin through available RPC nodes, we
-				// can attempt a few times to get the transaction before giving up and returning an error
-				var transaction types.Transaction
-				attempts := 0
-				for {
-					transaction, _, funcErr = cfg.syncer.GetTransaction(l.TxHash)
-					if funcErr == nil {
-						break
-					} else {
-						log.Warn("Error getting transaction, attempting again", "hash", l.TxHash.String(), "err", err)
-						attempts++
-						if attempts > 50 {
-							return funcErr
-						}
-						time.Sleep(500 * time.Millisecond)
-					}
-				}
-
-				lastBatchSequenced := l.Topics[1].Big().Uint64()
-				latestBatch = lastBatchSequenced
-
-				l1InfoRoot := l.Data
-				if len(l1InfoRoot) != 32 {
-					log.Error(fmt.Sprintf("[%s] L1 info root is not 32 bytes", logPrefix), "tx-hash", l.TxHash.String())
-					funcErr = errors.New("l1 info root is not 32 bytes")
-					return funcErr
-				}
-
-				batches, coinbase, limitTimestamp, err := l1_data.DecodeL1BatchData(transaction.GetData(), cfg.zkCfg.DAUrl)
-				if err != nil {
-					funcErr = err
-					return funcErr
-				}
-
-				limitTimestampBytes := make([]byte, 8)
-				binary.BigEndian.PutUint64(limitTimestampBytes, limitTimestamp)
-
-				// here we find the first batch number that was sequenced by working backwards
-				// from the latest batch in the original event
-				initBatch := lastBatchSequenced - uint64(len(batches)-1)
-
-				log.Debug(fmt.Sprintf("[%s] Processing L1 sequence transaction", logPrefix),
-					"hash", transaction.Hash().String(),
-					"initBatch", initBatch,
-					"batches", len(batches),
-				)
-
-				// iterate over the batches in reverse order to ensure that the batches are written in the correct order
-				// this is important because the batches are written in reverse order
-				for idx, batch := range batches {
-					b := initBatch + uint64(idx)
-					data := make([]byte, 20+32+8+len(batch))
-					copy(data, coinbase.Bytes())
-					copy(data[20:], l1InfoRoot)
-					copy(data[52:], limitTimestampBytes)
-					copy(data[60:], batch)
-
-					if funcErr = hermezDb.WriteL1BatchData(b, data); funcErr != nil {
-						return funcErr
-					}
-
-					// check if we need to stop here based on config
-					if cfg.zkCfg.L1SyncStopBatch > 0 {
-						stopBlockMap[b] = struct{}{}
-						if checkStopBlockMap(highestBatch, cfg.zkCfg.L1SyncStopBatch, stopBlockMap) {
-							log.Info("Stopping L1 sync based on stop batch config")
-							break LOOP
-						}
-					}
-				}
-
-			}
-		case msg := <-progressChan:
-			log.Info(fmt.Sprintf("[%s] %s", logPrefix, msg))
-		case <-logTicker.C:
-			log.Info(fmt.Sprintf("[%s] Syncing L1 blocks", logPrefix), "latest-batch", latestBatch)
-		default:
-			if !cfg.syncer.IsDownloading() {
-				break LOOP
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	log.Info(fmt.Sprintf("[%s] Syncing L1 blocks. Latest batch: %d", logPrefix, latestBatch.Load()))
 
 	lastCheckedBlock := cfg.syncer.GetLastCheckedL1Block()
 	if lastCheckedBlock > l1BlockHeight {
 		log.Info(fmt.Sprintf("[%s] Saving L1 block sync progress", logPrefix), "lastChecked", lastCheckedBlock)
-		if funcErr = stages.SaveStageProgress(tx, stages.L1BlockSync, lastCheckedBlock); funcErr != nil {
-			return funcErr
+		if err = stages.SaveStageProgress(tx, stages.L1BlockSync, lastCheckedBlock); err != nil {
+			return err
 		}
 	}
 
 	if freshTx {
-		if funcErr = tx.Commit(); funcErr != nil {
-			return funcErr
+		if err = tx.Commit(); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+func sequencerBlocksSyncLogsReader(
+	logPrefix string,
+	syncer *syncer.L1Syncer,
+	dAUrl string,
+	l1SyncStopBatch uint64,
+	highestBatch uint64,
+	hermezDb *hermez_db.HermezDb,
+	logsCh <-chan []ethTypes.Log, errCh <-chan error,
+	latestBatch *atomic.Uint64,
+) error {
+	// for concurrency processSequencerBlocksSyncLogs calling, mutex required
+	stopBlockMap := make(map[uint64]struct{})
+	for {
+		select {
+		case logs, ok := <-logsCh:
+			if !ok {
+				log.Info(fmt.Sprintf("[%s] SpawnSequencerL1BlockSyncStage RunQueryBlocksOnce logs channel closed", logPrefix))
+				return nil
+			}
+			err := processSequencerBlocksSyncLogs(logPrefix, syncer, dAUrl, l1SyncStopBatch, highestBatch, stopBlockMap, logs, hermezDb, latestBatch)
+			if err != nil {
+				return fmt.Errorf("processSequencerLogs: %w", err)
+			}
+		case errVal := <-errCh:
+			if errVal != nil {
+				log.Info(fmt.Sprintf("[%s] L1 syncer RunQueryBlocksOnce error: %s", logPrefix, errVal))
+			}
+		}
+	}
+}
+
+func processSequencerBlocksSyncLogs(
+	logPrefix string,
+	syncer *syncer.L1Syncer,
+	dAUrl string,
+	l1SyncStopBatch uint64,
+	highestBatch uint64,
+	stopBlockMap map[uint64]struct{},
+	logEntries []ethTypes.Log,
+	hermezDb *hermez_db.HermezDb,
+	latestBatch *atomic.Uint64,
+) error {
+	for logEntryIndex := range logEntries {
+		// for some reason some endpoints seem to not have certain transactions available to
+		// them even they are perfectly valid and other RPC nodes return them fine. So, leaning
+		// on the internals of the syncer which will round-robin through available RPC nodes, we
+		// can attempt a few times to get the transaction before giving up and returning an error
+		var (
+			transaction types.Transaction
+			err         error
+		)
+		// TODO: Optimize with workers
+		for attempt := 0; attempt < 50; attempt++ {
+			transaction, _, err = syncer.GetTransaction(logEntries[logEntryIndex].TxHash)
+			if err == nil {
+				break
+			} else {
+				log.Warn(fmt.Sprintf("[%s] Error getting transaction, attempting again. Error: %s", logPrefix, err), "hash", logEntries[logEntryIndex].TxHash.String())
+				time.Sleep(500 * time.Millisecond)
+			}
+		}
+		if err != nil {
+			return err
+		}
+
+		if transaction == nil {
+			return errors.New("transaction is nil")
+		}
+
+		lastBatchSequenced := logEntries[logEntryIndex].Topics[1].Big().Uint64()
+		latestBatch.Store(lastBatchSequenced)
+
+		l1InfoRoot := logEntries[logEntryIndex].Data
+		if len(l1InfoRoot) != 32 {
+			log.Error(fmt.Sprintf("[%s] L1 info root is not 32 bytes", logPrefix), "tx-hash", logEntries[logEntryIndex].TxHash.String())
+			return errors.New("l1 info root is not 32 bytes")
+		}
+
+		batches, coinbase, limitTimestamp, err := l1_data.DecodeL1BatchData(transaction.GetData(), dAUrl)
+		if err != nil {
+			return err
+		}
+
+		limitTimestampBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(limitTimestampBytes, limitTimestamp)
+
+		// here we find the first batch number that was sequenced by working backwards
+		// from the latest batch in the original event
+		initBatch := lastBatchSequenced - uint64(len(batches)-1)
+
+		log.Debug(fmt.Sprintf("[%s] Processing L1 sequence transaction", logPrefix),
+			"hash", transaction.Hash().String(),
+			"initBatch", initBatch,
+			"batches", len(batches),
+		)
+
+		// iterate over the batches in reverse order to ensure that the batches are written in the correct order
+		// this is important because the batches are written in reverse order
+		for idx, batch := range batches {
+			b := initBatch + uint64(idx)
+			data := make([]byte, 20+32+8+len(batch))
+			copy(data, coinbase.Bytes())
+			copy(data[20:], l1InfoRoot)
+			copy(data[52:], limitTimestampBytes)
+			copy(data[60:], batch)
+
+			if err = hermezDb.WriteL1BatchData(b, data); err != nil {
+				return err
+			}
+
+			// check if we need to stop here based on config
+			if l1SyncStopBatch > 0 {
+				stopBlockMap[b] = struct{}{}
+				if checkStopBlockMap(highestBatch, l1SyncStopBatch, stopBlockMap) {
+					log.Info(fmt.Sprintf("[%s] Stopping L1 sync based on stop batch config", logPrefix))
+					return nil
+				}
+			}
+		}
+
+	}
 	return nil
 }
 

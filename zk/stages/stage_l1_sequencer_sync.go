@@ -18,6 +18,14 @@ import (
 	"github.com/erigontech/erigon/zk/types"
 )
 
+const (
+	injectedBatchLogTransactionStartByte = 128
+	injectedBatchLastGerStartByte        = 32
+	injectedBatchLastGerEndByte          = 64
+	injectedBatchSequencerStartByte      = 76
+	injectedBatchSequencerEndByte        = 96
+)
+
 type L1SequencerSyncCfg struct {
 	db     kv.RwDB
 	zkCfg  *ethconfig.Zk
@@ -81,95 +89,16 @@ func SpawnL1SequencerSyncStage(
 
 	hermezDb := hermez_db.NewHermezDb(tx)
 
-	if !cfg.syncer.IsSyncStarted() {
-		cfg.syncer.RunQueryBlocks(progress)
-		defer func() {
-			if funcErr != nil {
-				cfg.syncer.StopSyncer()
-			}
-		}()
-	}
+	// start the syncer
+	// the buffered channel to prevent I/O blocking on the reader.
+	logsCh := make(chan []ethTypes.Log, 1000)
+	errCh := make(chan error)
+	go cfg.syncer.RunQueryBlocksOnce(logPrefix, progress, logsCh, errCh)
 
-	logChan := cfg.syncer.GetLogsChan()
-	progressChan := cfg.syncer.GetProgressMessageChan()
+	err = sequencerLogsReader(logPrefix, cfg.syncer, cfg.zkCfg.L1RollupId, hermezDb, logsCh, errCh)
 
-Loop:
-	for {
-		select {
-		case logs := <-logChan:
-			headersMap, err := cfg.syncer.L1QueryHeaders(logs)
-			if err != nil {
-				funcErr = err
-				return funcErr
-			}
-
-			for _, l := range logs {
-				header := headersMap[l.BlockNumber]
-				switch l.Topics[0] {
-				case contracts.InitialSequenceBatchesTopic:
-					if funcErr = HandleInitialSequenceBatches(cfg.syncer, hermezDb, l, header); funcErr != nil {
-						return funcErr
-					}
-				case contracts.AddNewRollupTypeTopic:
-					fallthrough
-				case contracts.AddNewRollupTypeTopicBanana:
-					rollupType := l.Topics[1].Big().Uint64()
-					forkIdBytes := l.Data[64:96] // 3rd positioned item in the log data
-					forkId := new(big.Int).SetBytes(forkIdBytes).Uint64()
-					if funcErr = hermezDb.WriteRollupType(rollupType, forkId); funcErr != nil {
-						return funcErr
-					}
-				case contracts.CreateNewRollupTopic:
-					rollupId := l.Topics[1].Big().Uint64()
-					if rollupId != cfg.zkCfg.L1RollupId {
-						continue
-					}
-					rollupTypeBytes := l.Data[0:32]
-					rollupType := new(big.Int).SetBytes(rollupTypeBytes).Uint64()
-					fork, err := hermezDb.GetForkFromRollupType(rollupType)
-					if err != nil {
-						funcErr = err
-						return funcErr
-					}
-					if fork == 0 {
-						log.Error("received CreateNewRollupTopic for unknown rollup type", "rollupType", rollupType)
-					}
-					if funcErr = hermezDb.WriteNewForkHistory(fork, 0); funcErr != nil {
-						return funcErr
-					}
-				case contracts.UpdateRollupTopic:
-					rollupId := l.Topics[1].Big().Uint64()
-					if rollupId != cfg.zkCfg.L1RollupId {
-						continue
-					}
-					newRollupBytes := l.Data[0:32]
-					newRollup := new(big.Int).SetBytes(newRollupBytes).Uint64()
-					fork, err := hermezDb.GetForkFromRollupType(newRollup)
-					if err != nil {
-						funcErr = err
-						return funcErr
-					}
-					if fork == 0 {
-						funcErr = fmt.Errorf("received UpdateRollupTopic for unknown rollup type: %v", newRollup)
-						return funcErr
-					}
-					latestVerifiedBytes := l.Data[32:64]
-					latestVerified := new(big.Int).SetBytes(latestVerifiedBytes).Uint64()
-					if funcErr = hermezDb.WriteNewForkHistory(fork, latestVerified); funcErr != nil {
-						return funcErr
-					}
-				default:
-					log.Warn("received unexpected topic from l1 sequencer sync stage", "topic", l.Topics[0])
-				}
-			}
-		case progMsg := <-progressChan:
-			log.Info(fmt.Sprintf("[%s] %s", logPrefix, progMsg))
-		default:
-			if !cfg.syncer.IsDownloading() {
-				break Loop
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
+	if err != nil {
+		return fmt.Errorf("sequencerLogsReader: %w", err)
 	}
 
 	progress = cfg.syncer.GetLastCheckedL1Block()
@@ -190,28 +119,115 @@ Loop:
 
 	return nil
 }
+func sequencerLogsReader(
+	logPrefix string,
+	syncer IL1Syncer,
+	rollupId uint64,
+	hermezDb *hermez_db.HermezDb,
+	logsCh <-chan []ethTypes.Log, errCh <-chan error,
+) error {
 
-const (
-	injectedBatchLogTransactionStartByte = 128
-	injectedBatchLastGerStartByte        = 32
-	injectedBatchLastGerEndByte          = 64
-	injectedBatchSequencerStartByte      = 76
-	injectedBatchSequencerEndByte        = 96
-)
+	for {
+		select {
+		case logs, ok := <-logsCh:
+			if !ok {
+				log.Info(fmt.Sprintf("[%s] SpawnL1SequencerSyncStage RunQueryBlocksOnce logs channel closed", logPrefix))
+				return nil
+			}
+			// optimize slow operation
+			headersMap, err := syncer.L1QueryHeaders(logs)
+			if err != nil {
+				return err
+			}
+
+			err = processSequencerLogs(logs, rollupId, hermezDb, headersMap)
+			if err != nil {
+				return fmt.Errorf("processSequencerLogs: %w", err)
+			}
+		case errVal := <-errCh:
+			if errVal != nil {
+				log.Info(fmt.Sprintf("[%s] L1 syncer RunQueryBlocksOnce error: %s", logPrefix, errVal))
+			}
+		}
+	}
+}
+
+func processSequencerLogs(
+	logEntries []ethTypes.Log,
+	rollupId uint64,
+	hermezDb *hermez_db.HermezDb,
+	headersMap map[uint64]*ethTypes.Header,
+) error {
+	for logEntryIndex := range logEntries {
+
+		switch logEntries[logEntryIndex].Topics[0] {
+		case contracts.InitialSequenceBatchesTopic:
+			// Called once, optimize
+			header := headersMap[logEntries[logEntryIndex].BlockNumber]
+			if err := HandleInitialSequenceBatches(hermezDb, logEntries[logEntryIndex], header); err != nil {
+				return err
+			}
+		case contracts.AddNewRollupTypeTopic:
+			fallthrough
+		case contracts.AddNewRollupTypeTopicBanana:
+			rollupType := logEntries[logEntryIndex].Topics[1].Big().Uint64()
+			forkIdBytes := logEntries[logEntryIndex].Data[64:96] // 3rd positioned item in the log data
+			forkId := new(big.Int).SetBytes(forkIdBytes).Uint64()
+			if err := hermezDb.WriteRollupType(rollupType, forkId); err != nil {
+				return err
+			}
+		case contracts.CreateNewRollupTopic:
+			logRollupId := logEntries[logEntryIndex].Topics[1].Big().Uint64()
+			if logRollupId != rollupId {
+				continue
+			}
+			rollupTypeBytes := logEntries[logEntryIndex].Data[0:32]
+			rollupType := new(big.Int).SetBytes(rollupTypeBytes).Uint64()
+			fork, err := hermezDb.GetForkFromRollupType(rollupType)
+			if err != nil {
+				return err
+			}
+			if fork == 0 {
+				log.Error("received CreateNewRollupTopic for unknown rollup type", "rollupType", rollupType)
+			}
+			if err = hermezDb.WriteNewForkHistory(fork, 0); err != nil {
+				return err
+			}
+		case contracts.UpdateRollupTopic:
+			logRollupId := logEntries[logEntryIndex].Topics[1].Big().Uint64()
+			if logRollupId != rollupId {
+				continue
+			}
+			newRollupBytes := logEntries[logEntryIndex].Data[0:32]
+			newRollup := new(big.Int).SetBytes(newRollupBytes).Uint64()
+			fork, err := hermezDb.GetForkFromRollupType(newRollup)
+			if err != nil {
+				return err
+			}
+			if fork == 0 {
+				err = fmt.Errorf("received UpdateRollupTopic for unknown rollup type: %v", newRollup)
+				return err
+			}
+			latestVerifiedBytes := logEntries[logEntryIndex].Data[32:64]
+			latestVerified := new(big.Int).SetBytes(latestVerifiedBytes).Uint64()
+			if err = hermezDb.WriteNewForkHistory(fork, latestVerified); err != nil {
+				return err
+			}
+		default:
+			log.Warn("received unexpected topic from l1 sequencer sync stage", "topic", logEntries[logEntryIndex].Topics[0])
+		}
+	}
+	return nil
+}
 
 func HandleInitialSequenceBatches(
-	syncer IL1Syncer,
 	db *hermez_db.HermezDb,
 	l ethTypes.Log,
 	header *ethTypes.Header,
 ) error {
-	var err error
 
 	if header == nil {
-		header, err = syncer.GetHeader(l.BlockNumber)
-		if err != nil {
-			return err
-		}
+		return fmt.Errorf("header is nil")
 	}
 
 	// the log appears to have some trailing some bytes of all 0s in it.  Not sure why but we can't handle the

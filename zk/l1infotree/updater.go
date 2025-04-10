@@ -12,6 +12,7 @@ import (
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/types"
+	ethTypes "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/zk/contracts"
@@ -22,9 +23,9 @@ import (
 
 type Syncer interface {
 	IsSyncStarted() bool
-	RunQueryBlocks(lastCheckedBlock uint64)
-	GetLogsChan() chan []types.Log
-	GetProgressMessageChan() chan string
+	RunQueryBlocks(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error)
+	//GetLogsChan() chan []types.Log
+	// GetProgressMessageChan() chan string
 	IsDownloading() bool
 	GetHeader(blockNumber uint64) (*types.Header, error)
 	L1QueryHeaders(logs []types.Log) (map[uint64]*types.Header, error)
@@ -47,6 +48,8 @@ type L2Syncer interface {
 type Updater struct {
 	cfg          *ethconfig.Zk
 	syncer       Syncer
+	logsL1Ch     chan []ethTypes.Log
+	errL1Ch      chan error
 	progress     uint64
 	latestUpdate *zkTypes.L1InfoTreeUpdate
 	l2Syncer     L2Syncer
@@ -54,7 +57,10 @@ type Updater struct {
 
 func NewUpdater(cfg *ethconfig.Zk, syncer Syncer, l2Syncer L2Syncer) *Updater {
 	return &Updater{
-		cfg:      cfg,
+		cfg: cfg,
+		//	updater collects and sorting logs, buffering isn't required
+		logsL1Ch: make(chan []ethTypes.Log),
+		errL1Ch:  make(chan error),
 		syncer:   syncer,
 		l2Syncer: l2Syncer,
 	}
@@ -95,7 +101,7 @@ func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
 	u.latestUpdate = latestUpdate
 
 	if !u.syncer.IsSyncStarted() {
-		u.syncer.RunQueryBlocks(u.progress)
+		go u.syncer.RunQueryBlocks("Updater WarmUp", u.progress, u.logsL1Ch, u.errL1Ch)
 	}
 
 	return nil
@@ -108,21 +114,27 @@ func (u *Updater) CheckForInfoTreeUpdates(logPrefix string, tx kv.RwTx) (logsCou
 		}
 	}()
 
+	log.Info(fmt.Sprintf("[%s] Starting L1 Info Tree CheckForInfoTreeUpdates", logPrefix))
+
 	var allLogs = make([]types.Log, 0)
 
 	hermezDb := hermez_db.NewHermezDb(tx)
-	logChan := u.syncer.GetLogsChan()
-	progressChan := u.syncer.GetProgressMessageChan()
 
 	logsTicker := time.NewTicker(10 * time.Millisecond)
 
 LOOP:
 	for {
 		select {
-		case logs := <-logChan:
+		case logs, ok := <-u.logsL1Ch:
+			if !ok {
+				log.Info(fmt.Sprintf("[%s]  CheckForInfoTreeUpdates logs channel closed", logPrefix))
+				break LOOP
+			}
 			allLogs = append(allLogs, logs...)
-		case msg := <-progressChan:
-			log.Info(fmt.Sprintf("[%s] %s", logPrefix, msg))
+		case errVal := <-u.errL1Ch:
+			if errVal != nil {
+				log.Info(fmt.Sprintf("[%s] CheckForInfoTreeUpdates syncer error: %s", logPrefix, errVal))
+			}
 		case <-logsTicker.C:
 			if !u.syncer.IsDownloading() {
 				break LOOP
@@ -220,7 +232,7 @@ func (u *Updater) processChunks(tree *L1InfoTree, db *hermez_db.HermezDb, chunk 
 
 		leafHash := HashLeafData(tmpUpdate.GER, tmpUpdate.ParentHash, tmpUpdate.Timestamp)
 		if tree.LeafExists(leafHash) {
-			log.Warn("Skipping log as L1 Info Tree leaf already exists", "hash", leafHash)
+			log.Warn(fmt.Sprintf("Skipping log as L1 Info Tree leaf already exists: hash=%s block=%d", leafHash, logEntry.BlockNumber))
 			continue
 		}
 
@@ -233,6 +245,7 @@ func (u *Updater) processChunks(tree *L1InfoTree, db *hermez_db.HermezDb, chunk 
 		if err != nil {
 			return fmt.Errorf("tree.AddLeaf: %w", err)
 		}
+
 		log.Debug("New L1 Index",
 			"index", u.latestUpdate.Index,
 			"root", newRoot.String(),
