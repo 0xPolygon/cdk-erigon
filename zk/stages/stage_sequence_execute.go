@@ -98,9 +98,11 @@ func SpawnSequencingStage(
 		return nil
 	}
 
+	startWaitTime := time.Now()
 	if cfg.zk.XLayer.EnableAsyncCommit {
 		s.FlushSmtCacheWait()
 	}
+	metrics.GetLogStatistics().CumulativeTiming(metrics.FlushSmtCacheWait, time.Since(startWaitTime))
 
 	if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil); err == nil {
 		if !cfg.zk.XLayer.EnableAsyncCommit {
@@ -833,7 +835,9 @@ func sequencingBatchStep(
 			if err := batchContext.sdb.eridb.CommitBatch(); err != nil {
 				return err
 			}
+			setTime := time.Now()
 			s.SetSmtCache(blockNumber, blockCache)
+			metrics.GetLogStatistics().CumulativeTiming(metrics.SetSmtCacheTiming, time.Since(setTime))
 		} else {
 			quit := batchContext.ctx.Done()
 			batchContext.sdb.eridb.OpenBatch(quit)

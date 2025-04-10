@@ -53,6 +53,9 @@ const (
 	Put    LogTag = "Put"
 
 	FinalizeBlockNumber LogTag = "FinalizeBlockNumber"
+
+	FlushSmtCacheWait LogTag = "FlushSmtCacheWait"
+	SetSmtCacheTiming LogTag = "SetSmtCacheTiming"
 )
 
 type Statistics interface {
