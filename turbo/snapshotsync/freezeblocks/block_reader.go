@@ -1159,6 +1159,7 @@ func (r *BlockReader) ReadAncestor(db kv.Getter, hash common.Hash, number, ances
 		return common.Hash{}, 0
 	}
 	if ancestor == 1 {
+		panic("EXPECTED TO NOT BE CALLED")
 		header, err := r.Header(context.Background(), db, hash, number)
 		if err != nil {
 			panic(err)

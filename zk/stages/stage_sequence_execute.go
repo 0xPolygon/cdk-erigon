@@ -97,6 +97,7 @@ func sequencingBatchStep(
 		return err
 	}
 
+	fmt.Printf("+++++++++++++++++++++++ zkInterhashesCfg.db: %p, cfg.db: %p\n", zkInterHashesCfg.db, cfg.db)
 	// sdb, err := newStageDb(ctx, cfg.db)
 	var sdb *stageDb
 	if type1Rollup {
@@ -149,20 +150,33 @@ func sequencingBatchStep(
 	blockDataSizeChecker := NewBlockDataChecker(shouldCountersBeInfinite)
 	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState)
 
+	// panic("executionAt is 0")
 	// injected batch
 	if executionAt == 0 {
-		if err := processInjectedInitialBatch(batchContext, batchState); err != nil {
-			return err
+		// if executionAt <= 1 {
+		// panic("executionAt is 0")
+		zkInterHashesCfg.checkRoot = false
+		zkInterHashesCfg.tmpDir = ""
+		trieCfg := trieConfig(zkInterHashesCfg)
+		logger := log.New(logPrefix, "trie", log.LvlTrace)
+		hash, err := stagedsync.RegenerateIntermediateHashes(logPrefix, sdb.tx, trieCfg, common.Hash{}, ctx, logger)
+		log.Info(fmt.Sprintf("[%s] Regenerated intermediate hashes", logPrefix), "hash", hash)
+		fmt.Printf("+++++++++++++++++++++++ sdb.tx: %p\n", sdb.tx)
+		if err != nil {
+			panic("failed to regenerate intermediate hashes")
 		}
+		// 	if err := processInjectedInitialBatch(batchContext, batchState); err != nil {
+		// 		return err
+		// 	}
 
-		if err := cfg.dataStreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
-			return err
-		}
-		if err := stages.SaveStageProgress(sdb.tx, stages.DataStream, 1); err != nil {
-			return err
-		}
+		// 	if err := cfg.dataStreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
+		// 		return err
+		// 	}
+		// 	if err := stages.SaveStageProgress(sdb.tx, stages.DataStream, 1); err != nil {
+		// 		return err
+		// 	}
 
-		return sdb.tx.Commit()
+		// 	return sdb.tx.Commit()
 	}
 
 	if shouldCheckForExecutionAndDataStreamAlignment {

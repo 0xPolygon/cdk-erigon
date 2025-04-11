@@ -678,6 +678,8 @@ func (c *AuRa) Initialize(config *chain.Config, chain consensus.ChainHeaderReade
 	}
 	c.certifierLock.Unlock()
 
+	panic("MUSt not be here")
+
 	if blockNum == 1 {
 		proof, err := c.GenesisEpochData(header, syscall)
 		if err != nil {

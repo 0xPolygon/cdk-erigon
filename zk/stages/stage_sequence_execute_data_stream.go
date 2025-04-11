@@ -81,7 +81,7 @@ func (sbc *SequencerBatchStreamWriter) writeBlockDetailsToDatastream(verifiedBun
 			if len(request.BlockNumbers) == 1 {
 				var found bool
 				previousBlockBatchNumber, found, err = sbc.sdb.hermezDb.HermezDbReader.CheckBatchNoByL2Block(previousBlock.NumberU64())
-				if !found || err != nil {
+				if (!found && previousBlock.NumberU64() != 0) || err != nil {
 					return checkedVerifierBundles, err
 				}
 			}

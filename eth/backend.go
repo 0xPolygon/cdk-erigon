@@ -322,6 +322,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 	var chainConfig *chain.Config
 	var genesis *types.Block
+
+	fmt.Printf("+++++++ GENESIS DB: %p\n", backend.chainDB)
 	if err := backend.chainDB.Update(context.Background(), func(tx kv.RwTx) error {
 		h, err := rawdb.ReadCanonicalHash(tx, 0)
 		if err != nil {
@@ -332,6 +334,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			genesisSpec = nil
 		}
 		var genesisErr error
+		fmt.Printf("+++++++ WRITE GENESIS BLOCK: %p\n", tx)
 		chainConfig, genesis, genesisErr = core.WriteGenesisBlock(tx, genesisSpec, config.OverridePragueTime, tmpdir, logger)
 		if _, ok := genesisErr.(*chain.ConfigCompatError); genesisErr != nil && !ok {
 			return genesisErr
@@ -1193,6 +1196,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				cfg.L1HighestBlockType,
 			)
 
+			blockWriter := blockio.NewBlockWriter(cfg.HistoryV3)
 			backend.syncStages = stages2.NewSequencerZkStages(
 				backend.sentryCtx,
 				backend.chainDB,
@@ -1213,6 +1217,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				verifier,
 				l1InfoTreeUpdater,
 				hook,
+				stagedsync.StageBlockHashesCfg(backend.chainDB, dirs.Tmp, backend.sentriesClient.ChainConfig, blockWriter),
 			)
 
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder

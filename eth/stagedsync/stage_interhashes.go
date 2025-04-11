@@ -163,7 +163,7 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 }
 
 func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, expectedRootHash libcommon.Hash, ctx context.Context, logger log.Logger) (libcommon.Hash, error) {
-	logger.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix))
+	logger.Info(fmt.Sprintf("[%s] Regeneration trie hashes started at %s", logPrefix, cfg.tmpDir))
 	defer logger.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
 	_ = db.ClearBucket(kv.TrieOfAccounts)
 	_ = db.ClearBucket(kv.TrieOfStorage)

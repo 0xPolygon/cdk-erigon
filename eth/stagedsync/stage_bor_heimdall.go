@@ -297,6 +297,9 @@ func BorHeimdallForward(
 			// initialization process - this is to avoid memory growth due to recusrion
 			// in persistValidatorSets
 			if snap == nil && (blockNum == 1 || blockNum-lastPersistedBlockNum > (snapshotPersistInterval*5)) {
+				if blockNum == 1 {
+					panic("EXPECTED TO NOT BE CALLED")
+				}
 				snap, err = initValidatorSets(
 					ctx,
 					tx,

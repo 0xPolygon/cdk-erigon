@@ -351,6 +351,8 @@ func createFullBlockStreamEntriesProto(
 
 	entries.Add(newL2BlockEndProto(blockNum))
 
+	log.Info("DS created block entries", "block", blockNum, "txs", len(filteredTransactions), "ger", ger.Hex(), "l1BlockHash", l1BlockHash.Hex(), "l1InfoIndex", l1InfoIndex, "blockInfoRoot", blockInfoRoot.Hex())
+
 	return entries, nil
 }
 

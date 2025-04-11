@@ -33,6 +33,7 @@ func SequencerZkStages(
 	txLookup stages.TxLookupCfg,
 	finish stages.FinishCfg,
 	test bool,
+	blockHashCfg stages.BlockHashesCfg,
 ) []*stages.Stage {
 	return []*stages.Stage{
 		{
@@ -90,6 +91,19 @@ func SequencerZkStages(
 				return PruneSequencerL1BlockSyncStage(p, tx, sequencerL1BlockSyncCfg, ctx, logger)
 			},
 		},
+		// {
+		// 	ID:          stages2.BlockHashes,
+		// 	Description: "Write block hashes",
+		// 	Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
+		// 		return stages.SpawnBlockHashStage(s, txc.Tx, blockHashCfg, ctx, logger)
+		// 	},
+		// 	Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
+		// 		return stages.UnwindBlockHashStage(u, txc.Tx, blockHashCfg, ctx)
+		// 	},
+		// 	Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
+		// 		return stages.PruneBlockHashStage(p, tx, blockHashCfg, ctx)
+		// 	},
+		// },
 		{
 			ID:          stages2.Execution,
 			Description: "Sequence transactions",

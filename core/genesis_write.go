@@ -601,6 +601,7 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 		defer wg.Done()
 
 		genesisTmpDB := mdbx.NewMDBX(logger).InMem(tmpDir).MapSize(2 * datasize.GB).GrowthStep(1 * datasize.MB).MustOpen()
+		// genesisTmpDB := mdbx.NewMDBX(logger).Path("/Volumes/WD_1TB_DATA/work/gateway/chain-data/dynamic-integration8-type-1/chaindata").MapSize(2 * datasize.GB).GrowthStep(1 * datasize.MB).MustOpen()
 		defer genesisTmpDB.Close()
 		var tx kv.RwTx
 		if tx, err = genesisTmpDB.BeginRw(context.Background()); err != nil {
@@ -667,6 +668,7 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 
 		if type1Rollup {
 			if root, err = trie.CalcRoot("genesis", tx); err != nil {
+				// if root, err = trie.CalcRoot1("genesis", tx, genesisTmpDB, "", context.Background()); err != nil {
 				return
 			}
 		} else {

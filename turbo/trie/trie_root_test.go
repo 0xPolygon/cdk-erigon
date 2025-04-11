@@ -29,7 +29,7 @@ import (
 // into the TrieOfAccounts and TrieOfStorage tables
 func initialFlatDBTrieBuild(t *testing.T, db kv.RwDB) libcommon.Hash {
 	t.Helper()
-	//startTime := time.Now()
+	startTime := time.Now()
 	tx, err := db.BeginRw(context.Background())
 	require.NoError(t, err)
 	defer tx.Rollback()
@@ -37,7 +37,7 @@ func initialFlatDBTrieBuild(t *testing.T, db kv.RwDB) libcommon.Hash {
 	hash, err := stagedsync.RegenerateIntermediateHashes("test", tx, stageTrieCfg, libcommon.Hash{}, context.Background(), log.New())
 	require.NoError(t, err)
 	tx.Commit()
-	//t.Logf("Initial hash is %s and took %v", hash, time.Since(startTime))
+	t.Logf("Initial hash is %s and took %v", hash, time.Since(startTime))
 	return hash
 }
 
@@ -48,7 +48,7 @@ func seedInitialAccounts(t *testing.T, db kv.RwDB, hashes []libcommon.Hash) {
 	require.NoError(t, err)
 	defer tx.Rollback()
 	for _, hash := range hashes {
-		//t.Logf("Seeding initial account with hash %s", hash)
+		t.Logf("Seeding initial account with hash %s", hash)
 		err = tx.Put(kv.HashedAccounts, hash[:], simpleAccountValBytes)
 		require.NoError(t, err)
 
@@ -67,7 +67,7 @@ func seedModifiedAccounts(t *testing.T, db kv.RwDB, hashes []libcommon.Hash) [][
 	require.NoError(t, err)
 	defer tx.Rollback()
 	for _, hash := range hashes {
-		//t.Logf("Seeding modified account with hash %s", hash)
+		t.Logf("Seeding modified account with hash %s", hash)
 		err = tx.Put(kv.HashedAccounts, hash[:], simpleModifiedAccountValBytes)
 		require.NoError(t, err)
 		toRetain = append(toRetain, append([]byte{}, hash[:]...))
@@ -94,7 +94,7 @@ func seedInitialStorage(t *testing.T, db kv.RwDB, hashes []libcommon.Hash) [][]b
 	for _, hash := range hashes {
 		copy(storageKey[:32], storageAccountHash[:])
 		copy(storageKey[40:], hash[:])
-		//t.Logf("Seeding storage with key 0x%x", storageKey)
+		t.Logf("Seeding storage with key 0x%x", storageKey)
 		err = tx.Put(kv.HashedStorage, storageKey[:], storageInitialValue[:])
 		require.NoError(t, err)
 		keys = append(keys, append([]byte{}, storageKey[:]...))
@@ -120,7 +120,7 @@ func seedModifiedStorage(t *testing.T, db kv.RwDB, hashes []libcommon.Hash) [][]
 	for _, hash := range hashes {
 		copy(storageKey[:32], storageAccountHash[:])
 		copy(storageKey[40:], hash[:])
-		//t.Logf("Seeding storage with modified hash 0x%x", storageKey)
+		t.Logf("Seeding storage with modified hash 0x%x", storageKey)
 		err = tx.Put(kv.HashedStorage, storageKey[:], storageModifiedValue[:])
 		require.NoError(t, err)
 		toRetain = append(toRetain, append([]byte{}, storageKey[:]...))
@@ -137,7 +137,7 @@ func seedModifiedStorage(t *testing.T, db kv.RwDB, hashes []libcommon.Hash) [][]
 // retain list or the root is simply returned.
 func rebuildFlatDBTrieHash(t *testing.T, rl *trie.RetainList, db kv.RoDB) libcommon.Hash {
 	t.Helper()
-	//startTime := time.Now()
+	startTime := time.Now()
 	loader := trie.NewFlatDBTrieLoader("test", rl, nil, nil, false)
 	tx, err := db.BeginRo(context.Background())
 	defer tx.Rollback()
@@ -145,7 +145,7 @@ func rebuildFlatDBTrieHash(t *testing.T, rl *trie.RetainList, db kv.RoDB) libcom
 	hash, err := loader.CalcTrieRoot(tx, nil)
 	tx.Rollback()
 	require.NoError(t, err)
-	//t.Logf("Rebuilt hash is %s and took %v", hash, time.Since(startTime))
+	t.Logf("Rebuilt hash is %s and took %v", hash, time.Since(startTime))
 	return hash
 }
 
@@ -174,7 +174,7 @@ func proveFlatDB(t *testing.T, db kv.RoDB, accountMissing bool, retainKeys, proo
 	hash, err := loader.CalcTrieRoot(tx, nil)
 	tx.Rollback()
 	require.NoError(t, err)
-	//t.Logf("Proof root hash is %s and took %v", hash, time.Since(startTime))
+	// t.Logf("Proof root hash is %s and took %v", hash, time.Since(startTime))
 	res, err := pr.ProofResult()
 	require.NoError(t, err)
 	return hash, res
@@ -411,7 +411,7 @@ func FuzzTrieRootStorage(f *testing.F) {
 
 		storageKeys := seedInitialStorage(t, db, initialKeys)
 		initialHash := initialFlatDBTrieBuild(t, db)
-		//logTrieTables(t, db)
+		logTrieTables(t, db)
 		retainKeys := seedModifiedStorage(t, db, modifiedKeys)
 
 		rl := trie.NewRetainList(0)
@@ -454,7 +454,7 @@ func FuzzTrieRootAccounts(f *testing.F) {
 
 		seedInitialAccounts(t, db, initialKeys)
 		initialHash := initialFlatDBTrieBuild(t, db)
-		//logTrieTables(t, db)
+		logTrieTables(t, db)
 		retainKeys := seedModifiedAccounts(t, db, modifiedKeys)
 
 		rl := trie.NewRetainList(0)

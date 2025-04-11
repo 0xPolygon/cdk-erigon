@@ -256,7 +256,8 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 	}
 
 	var dbParentBlockHash common.Hash
-	if blockEntry.L2BlockNumber > 1 {
+	// if blockEntry.L2BlockNumber > 1 {
+	if blockEntry.L2BlockNumber > 0 {
 		dbParentBlockHash, err = p.eriDb.ReadCanonicalHash(p.lastBlockHeight)
 		if err != nil {
 			return false, fmt.Errorf("failed to retrieve parent block hash for datastream block %d: %w",

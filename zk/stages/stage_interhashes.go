@@ -153,7 +153,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		}
 	}
 
-	log.Info(fmt.Sprintf("[%s] Trie root", logPrefix), "hash", root.Hex())
+	log.Info(fmt.Sprintf("[%s] Trie root %s", logPrefix, root.Hex()))
 
 	if cfg.checkRoot {
 		var syncHeadHeader *types.Header

@@ -2,16 +2,21 @@ package trie
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/bits"
+	"sync/atomic"
 	"time"
 
+	"github.com/erigontech/erigon-lib/etl"
 	"github.com/erigontech/erigon-lib/log/v3"
 
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/hexutil"
+	"github.com/erigontech/erigon-lib/common/length"
 	length2 "github.com/erigontech/erigon-lib/common/length"
 	"github.com/erigontech/erigon-lib/kv"
 	dbutils2 "github.com/erigontech/erigon-lib/kv/dbutils"
@@ -1485,6 +1490,87 @@ func CastTrieNodeValue(hashes, rootHash []byte) []libcommon.Hash {
 		i++
 	}
 	return to
+}
+
+func assertSubset(a, b uint16) {
+	if (a & b) != a { // a & b == a - checks whether a is subset of b
+		panic(fmt.Errorf("invariant 'is subset' failed: %b, %b", a, b))
+	}
+}
+func accountTrieCollector(collector *etl.Collector) HashCollector2 {
+	newV := make([]byte, 0, 1024)
+	return func(keyHex []byte, hasState, hasTree, hasHash uint16, hashes, _ []byte) error {
+		if len(keyHex) == 0 {
+			return nil
+		}
+		if hasState == 0 {
+			return collector.Collect(keyHex, nil)
+		}
+		if bits.OnesCount16(hasHash) != len(hashes)/length.Hash {
+			panic(fmt.Errorf("invariant bits.OnesCount16(hasHash) == len(hashes) failed: %d, %d", bits.OnesCount16(hasHash), len(hashes)/length.Hash))
+		}
+		assertSubset(hasTree, hasState)
+		assertSubset(hasHash, hasState)
+		newV = MarshalTrieNode(hasState, hasTree, hasHash, hashes, nil, newV)
+		return collector.Collect(keyHex, newV)
+	}
+}
+
+func storageTrieCollector(collector *etl.Collector) StorageHashCollector2 {
+	newK := make([]byte, 0, 128)
+	newV := make([]byte, 0, 1024)
+	return func(accWithInc []byte, keyHex []byte, hasState, hasTree, hasHash uint16, hashes, rootHash []byte) error {
+		newK = append(append(newK[:0], accWithInc...), keyHex...)
+		if hasState == 0 {
+			return collector.Collect(newK, nil)
+		}
+		if len(keyHex) > 0 && hasHash == 0 && hasTree == 0 {
+			return nil
+		}
+		if bits.OnesCount16(hasHash) != len(hashes)/length.Hash {
+			panic(fmt.Errorf("invariant bits.OnesCount16(hasHash) == len(hashes) failed: %d, %d", bits.OnesCount16(hasHash), len(hashes)/length.Hash))
+		}
+		assertSubset(hasTree, hasState)
+		assertSubset(hasHash, hasState)
+		newV = MarshalTrieNode(hasState, hasTree, hasHash, hashes, rootHash, newV)
+		return collector.Collect(newK, newV)
+	}
+}
+
+func CalcRoot1(logPrefix string, tx kv.RwTx, db kv.RoDB, tmpDir string, ctx context.Context) (libcommon.Hash, error) {
+	// logger.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix))
+	// defer logger.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
+	_ = tx.ClearBucket(kv.TrieOfAccounts)
+	_ = tx.ClearBucket(kv.TrieOfStorage)
+	clean := kv.ReadAhead(ctx, db, &atomic.Bool{}, kv.HashedAccounts, nil, math.MaxUint32)
+	defer clean()
+	clean2 := kv.ReadAhead(ctx, db, &atomic.Bool{}, kv.HashedStorage, nil, math.MaxUint32)
+	defer clean2()
+	logger := log.New(logPrefix)
+
+	accTrieCollector := etl.NewCollector(logPrefix, tmpDir, etl.NewSortableBuffer(etl.BufferOptimalSize), logger)
+	defer accTrieCollector.Close()
+	accTrieCollectorFunc := accountTrieCollector(accTrieCollector)
+
+	stTrieCollector := etl.NewCollector(logPrefix, tmpDir, etl.NewSortableBuffer(etl.BufferOptimalSize), logger)
+	defer stTrieCollector.Close()
+	stTrieCollectorFunc := storageTrieCollector(stTrieCollector)
+
+	loader := NewFlatDBTrieLoader(logPrefix, NewRetainList(0), accTrieCollectorFunc, stTrieCollectorFunc, true)
+	hash, err := loader.CalcTrieRoot(tx, ctx.Done())
+	if err != nil {
+		return EmptyRoot, err
+	}
+
+	logger.Info(fmt.Sprintf("[%s] CalcRoot1 Trie root at %s", logPrefix, tmpDir), "hash", hash.Hex())
+
+	if err := accTrieCollector.Load(tx, kv.TrieOfAccounts, etl.IdentityLoadFunc, etl.TransformArgs{Quit: ctx.Done()}); err != nil {
+		return EmptyRoot, err
+	}
+	if err := stTrieCollector.Load(tx, kv.TrieOfStorage, etl.IdentityLoadFunc, etl.TransformArgs{Quit: ctx.Done()}); err != nil {
+		return EmptyRoot, err
+	}
+	return hash, nil
 }
 
 // CalcRoot is a combination of `ResolveStateTrie` and `UpdateStateTrie`
