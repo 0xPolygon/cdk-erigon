@@ -5,6 +5,7 @@ on:
       - zkevm
       - zkevm-2.60
       - stable/**
+      - gateway
   workflow_dispatch:
 
 jobs:
