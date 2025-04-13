@@ -65,3 +65,4 @@ metrics.port: 9095
 
 yieldsize: 35
 zkevm.seal-batch-immediately-on-overflow: true
+zkevm.standalone-smt-db: true
