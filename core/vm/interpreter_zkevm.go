@@ -10,23 +10,26 @@ import (
 type ZkConfig struct {
 	Config Config
 
-	TracerCollector  bool
-	CounterCollector *CounterCollector
+	TracerCollector       bool
+	CounterCollector      *CounterCollector
+	UsingEthereumHardfork bool
 }
 
-func NewZkConfig(config Config, counterCollector *CounterCollector) ZkConfig {
+func NewZkConfig(config Config, counterCollector *CounterCollector, usingEthereumHardfork bool) ZkConfig {
 	return ZkConfig{
-		Config:           config,
-		TracerCollector:  false,
-		CounterCollector: counterCollector,
+		Config:                config,
+		TracerCollector:       false,
+		CounterCollector:      counterCollector,
+		UsingEthereumHardfork: usingEthereumHardfork,
 	}
 }
 
-func NewTracerZkConfig(config Config, counterCollector *CounterCollector) ZkConfig {
+func NewTracerZkConfig(config Config, counterCollector *CounterCollector, usingEthereumHardfork bool) ZkConfig {
 	return ZkConfig{
-		Config:           config,
-		TracerCollector:  true,
-		CounterCollector: counterCollector,
+		Config:                config,
+		TracerCollector:       true,
+		CounterCollector:      counterCollector,
+		UsingEthereumHardfork: usingEthereumHardfork,
 	}
 }
 

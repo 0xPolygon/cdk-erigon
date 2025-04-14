@@ -51,7 +51,7 @@ type operation struct {
 }
 
 var (
-	frontierInstructionSet         = newFrontierInstructionSet()
+	frontierInstructionSet         = newFrontierInstructionSetZk()
 	homesteadInstructionSet        = newHomesteadInstructionSet()
 	tangerineWhistleInstructionSet = newTangerineWhistleInstructionSet()
 	spuriousDragonInstructionSet   = newSpuriousDragonInstructionSet()
@@ -61,7 +61,7 @@ var (
 	berlinInstructionSet           = newBerlinInstructionSet()
 	londonInstructionSet           = newLondonInstructionSet()
 	shanghaiInstructionSet         = newShanghaiInstructionSet()
-	napoliInstructionSet           = newNapoliInstructionSet()
+	napoliInstructionSet           = newNapoliInstructionSetZk()
 	cancunInstructionSet           = newCancunInstructionSet()
 	pragueInstructionSet           = newPragueInstructionSet()
 )
@@ -101,7 +101,7 @@ func newPragueInstructionSet() JumpTable {
 // constantinople, istanbul, petersburg, berlin, london, paris, shanghai,
 // and cancun instructions.
 func newCancunInstructionSet() JumpTable {
-	instructionSet := newNapoliInstructionSet()
+	instructionSet := newNapoliInstructionSetZk()
 	// Disable BLOBHASH and BLOBBASEFEE opcodes for L2
 	// enable4844(&instructionSet) // BLOBHASH opcode
 	// enable7516(&instructionSet) // BLOBBASEFEE opcode
@@ -113,8 +113,7 @@ func newNapoliInstructionSet() JumpTable {
 	instructionSet := newShanghaiInstructionSet()
 	enable1153(&instructionSet) // Transient storage opcodes
 	enable5656(&instructionSet) // MCOPY opcode
-	// Disable opSelfdestruct6780 for L2
-	//enable6780(&instructionSet) // SELFDESTRUCT only in same transaction
+	enable6780(&instructionSet) // SELFDESTRUCT only in same transaction
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
 }
@@ -264,7 +263,7 @@ func newTangerineWhistleInstructionSet() JumpTable {
 // newHomesteadInstructionSet returns the frontier and homestead
 // instructions that can be executed during the homestead phase.
 func newHomesteadInstructionSet() JumpTable {
-	instructionSet := newFrontierInstructionSet()
+	instructionSet := newFrontierInstructionSetZk()
 	instructionSet[DELEGATECALL] = &operation{
 		execute:     opDelegateCall,
 		dynamicGas:  gasDelegateCall,
@@ -1203,16 +1202,9 @@ func newFrontierInstructionSet() JumpTable {
 			numPush:    0,
 			memorySize: memoryReturn,
 		},
-		//SELFDESTRUCT: {
-		//	execute:    opSelfdestruct,
-		//	dynamicGas: gasSelfdestruct,
-		//	numPop:     1,
-		//	numPush:    0,
-		//},
-		// SELFDESTRUCT is replaced by SENDALL [zkevm change]
 		SELFDESTRUCT: {
-			execute:    opSendAll_zkevm,
-			dynamicGas: gasSelfdestruct_zkevm,
+			execute:    opSelfdestruct,
+			dynamicGas: gasSelfdestruct,
 			numPop:     1,
 			numPush:    0,
 		},

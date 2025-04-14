@@ -26,14 +26,6 @@ func (api *BaseAPI) SetGasless(gasless bool) {
 	api.gasless = gasless
 }
 
-func (api *BaseAPI) SetUsingEthHardforkMode(usingEthHardfork bool) {
-	api.usingEthHardfork = usingEthHardfork
-}
-
-func (api *BaseAPI) IsUsingEthHardforkMode() bool {
-	return api.usingEthHardfork
-}
-
 // newRPCTransaction returns a transaction that will serialize to the RPC
 // representation, with the given location metadata set (if available).
 func newRPCTransaction_zkevm(tx types.Transaction, blockHash common.Hash, blockNumber uint64, index uint64, baseFee *big.Int, includeL2TxHash bool) *ethapi.RPCTransaction {

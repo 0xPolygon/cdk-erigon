@@ -419,6 +419,7 @@ func applyTransactionsToDecodedBlocks(
 			gasPool := new(core.GasPool).AddGas(transactionGasLimit)
 
 			vmCfg.CounterCollector = txCounters.ExecutionCounters()
+			vmCfg.UsingEthereumHardfork = chainCfg.UsingEthereumHardfork
 
 			evm := vm.NewZkEVM(blockContext, evmtypes.TxContext{}, ibs, chainCfg, vmCfg)
 

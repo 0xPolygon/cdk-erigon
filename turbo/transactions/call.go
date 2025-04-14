@@ -86,7 +86,7 @@ func DoCall(
 	blockCtx := NewEVMBlockContext(engine, header, blockNrOrHash.RequireCanonical, tx, headerReader, chainConfig)
 	txCtx := core.NewEVMTxContext(msg)
 
-	evm := vm.NewZkEVM(blockCtx, txCtx, state, chainConfig, vm.ZkConfig{Config: vm.Config{NoBaseFee: true}})
+	evm := vm.NewEVM(blockCtx, txCtx, state, chainConfig, vm.Config{NoBaseFee: true})
 
 	// Wait for the context to be done and cancel the evm. Even if the
 	// EVM has finished, cancelling may be done (repeatedly)
@@ -263,7 +263,7 @@ func NewReusableCaller(
 		counterCollector = txCounters.ExecutionCounters()
 	}
 
-	zkVmConfig := vm.ZkConfig{Config: vm.Config{NoBaseFee: true}, CounterCollector: counterCollector}
+	zkVmConfig := vm.NewZkConfig(vm.Config{NoBaseFee: true}, counterCollector, chainConfig.UsingEthereumHardfork)
 	evm := vm.NewZkEVM(blockCtx, txCtx, ibs, chainConfig, zkVmConfig)
 
 	return &ReusableCaller{
