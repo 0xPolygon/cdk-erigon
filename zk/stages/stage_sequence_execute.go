@@ -85,6 +85,7 @@ func SpawnSequencingStage(
 
 	// For X Layer, for auto recovery
 	if lastBatch < highestBatchInDs && shouldCheckForExecutionAndSMTAlignment == SMTAlignmentPendingResequence {
+		log.Warn(fmt.Sprintf("[%s] Start to resequence for SMT alignment, lastBatch:%v, highestBatchInDs:%v", s.LogPrefix(), lastBatch, highestBatchInDs))
 		return resequenceFromSMTAlignment(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs)
 	}
 
@@ -123,7 +124,6 @@ func SpawnSequencingStage(
 		s.FlushSmtCacheSignalInc()
 		go func() {
 			defer s.FlushSmtCacheDone()
-
 			s.ResetCurrentBatchCache(s.BlockNumber)
 		}()
 	}
@@ -231,19 +231,12 @@ func sequencingBatchStep(
 				return err
 			}
 			if smtMaxBlockNumber != 0 && smtMaxBlockNumber < executionAt {
-				batchNo, err := sdb.hermezDb.GetBatchNoByL2Block(smtMaxBlockNumber)
-				if err != nil || batchNo == 0 {
-					log.Error(fmt.Sprintf("[%s] Failed to get smt max block number, or batchNo is 0", logPrefix), "error", err, "smtMaxBlockNumber", smtMaxBlockNumber, "batchNo", batchNo)
-					return err
-				}
-				highestBlockInBatch, _, err := sdb.hermezDb.GetHighestBlockInBatch(batchNo)
+				targetBlock, err := getTargetBlockForSMTAlignment(sdb, logPrefix, executionAt, smtMaxBlockNumber)
 				if err != nil {
-					log.Error(fmt.Sprintf("[%s] Failed to get highest block in batch", logPrefix), "error", err, "batchNo", batchNo, "highestBlockInBatch", highestBlockInBatch)
 					return err
 				}
-				log.Info(fmt.Sprintf("[%s] Checking for SMT alignment", logPrefix), "executionAt", executionAt, "smtMaxBlockNumber", smtMaxBlockNumber, "highestBlockInBatch", highestBlockInBatch)
 
-				isUnwinding, err := unwindExecutionToSMT(batchContext, executionAt, highestBlockInBatch, u)
+				isUnwinding, err := unwindExecutionToSMT(batchContext, executionAt, targetBlock, u)
 				if err != nil {
 					return err
 				}
@@ -254,7 +247,7 @@ func sequencingBatchStep(
 					}
 					// set to pending resequence state
 					shouldCheckForExecutionAndSMTAlignment = SMTAlignmentPendingResequence
-					log.Info(fmt.Sprintf("[%s] SMT alignment check triggered resequence", logPrefix))
+					log.Warn(fmt.Sprintf("[%s] SMT alignment check triggered resequence", logPrefix))
 					return nil
 				}
 			}

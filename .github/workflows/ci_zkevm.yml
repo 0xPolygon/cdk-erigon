@@ -218,8 +218,6 @@ jobs:
   test-e2e:
     strategy:
       fail-fast: false
-      matrix:
-        e2e-group: [ 1 ]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -229,7 +227,21 @@ jobs:
         run: make build-docker
 
       - name: Test
-        run: make test-${{ matrix.e2e-group }}
+        run: sudo -E make test-e2e
+        working-directory: test
+
+  test-data-loss:
+    strategy:
+      matrix:
+        case: [1, 2, 3, 4, 5, 6]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Test
+        run: sudo -E make data-loss-${{ matrix.case }}
         working-directory: test
 
   test-executor:
@@ -248,7 +260,7 @@ jobs:
           bash ./.github/scripts/update_config.sh
 
       - name: Test
-        run: make test-2
+        run: make test-executor
         working-directory: test
         
   check-chinese-chars:

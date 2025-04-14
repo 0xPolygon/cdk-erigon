@@ -1,3 +1,4 @@
+//go:build !skip_smoke
 // +build !skip_smoke
 
 package e2e

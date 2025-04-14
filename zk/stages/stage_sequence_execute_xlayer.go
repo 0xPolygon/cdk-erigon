@@ -71,28 +71,19 @@ func createExternalDataStreamServer(cfg SequenceBlockCfg) (server.DataStreamServ
 	return dataStreamServer, nil
 }
 
-func unwindExecutionToSMT(batchContext *BatchContext, lastExecutedBlock, smtMaxBlockNumber uint64, u stagedsync.Unwinder) (bool, error) {
-
-	if lastExecutedBlock > smtMaxBlockNumber {
-
-		block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, smtMaxBlockNumber)
-
+func unwindExecutionToSMT(batchContext *BatchContext, lastExecutedBlock, targetBlock uint64, u stagedsync.Unwinder) (bool, error) {
+	if lastExecutedBlock > targetBlock {
+		block, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, targetBlock)
 		if err != nil {
-
 			return false, err
-
 		}
 
-		log.Warn(fmt.Sprintf("[%s] Unwinding due to SMT gap", batchContext.s.LogPrefix()), "smtHeight", smtMaxBlockNumber, "sequencerHeight", lastExecutedBlock)
-
-		u.UnwindTo(smtMaxBlockNumber, stagedsync.BadBlock(block.Hash(), fmt.Errorf("received bad block")))
-
+		log.Warn(fmt.Sprintf("[%s] Unwinding due to SMT gap", batchContext.s.LogPrefix()), "smtHeight", targetBlock, "sequencerHeight", lastExecutedBlock)
+		u.UnwindTo(targetBlock, stagedsync.BadBlock(block.Hash(), fmt.Errorf("received bad block")))
 		return true, nil
-
 	}
 
 	return false, nil
-
 }
 
 func resequenceFromSMTAlignment(
@@ -103,7 +94,6 @@ func resequenceFromSMTAlignment(
 	historyCfg stagedsync.HistoryCfg,
 	lastBatch, highestBatchInDs uint64,
 ) (err error) {
-
 	log.Info(fmt.Sprintf("[%s] ResequenceFromSMTAlignment, last batch %d is lower than highest batch in datastream %d, resequencing...", s.LogPrefix(), lastBatch, highestBatchInDs))
 	batches, err := cfg.dataStreamServer.ReadBatches(lastBatch+1, highestBatchInDs)
 	if err != nil {
@@ -131,4 +121,20 @@ func resequenceFromSMTAlignment(
 	}
 	shouldCheckForExecutionAndSMTAlignment = SMTAlignmentTerminated
 	return nil
+}
+
+func getTargetBlockForSMTAlignment(sdb *stageDb, logPrefix string, executionAt uint64, smtMaxBlockNumber uint64) (targetBlock uint64, err error) {
+	smtBatchNo, err := sdb.hermezDb.GetBatchNoByL2Block(smtMaxBlockNumber)
+	if err != nil || smtBatchNo == 0 {
+		log.Error(fmt.Sprintf("[%s] Failed to get smt max block number, or batchNo is 0", logPrefix), "error", err, "smtMaxBlockNumber", smtMaxBlockNumber, "batchNo", smtBatchNo)
+		return 0, err
+	}
+	smtBatchNo = smtBatchNo - 1
+	targetBlock, _, err = sdb.hermezDb.GetHighestBlockInBatch(smtBatchNo)
+	if err != nil {
+		log.Error(fmt.Sprintf("[%s] Failed to get highest block in batch", logPrefix), "error", err, "batchNo", smtBatchNo, "targetBlock", targetBlock)
+		return 0, err
+	}
+	log.Warn(fmt.Sprintf("[%s] Target block for SMT alignment", logPrefix), "targetBlock", targetBlock, "executionAt", executionAt, "smtMaxBlockNumber", smtMaxBlockNumber, "smtBatchNo", smtBatchNo)
+	return targetBlock, nil
 }

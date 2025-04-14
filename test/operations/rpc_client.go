@@ -134,6 +134,23 @@ func GetBlockByHash(hash common.Hash) (*types.Block, error) {
 	return &result, nil
 }
 
+func GetBlockHashByNumber(block uint64) (string, error) {
+	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "eth_getBlockByNumber", hex.EncodeBig(big.NewInt(int64(block))), true)
+	if err != nil {
+		return "", err
+	}
+	if response.Error != nil {
+		return "", fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
+	}
+	result := types.Block{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return "", err
+	}
+
+	return result.Hash.String(), nil
+}
+
 func GetInternalTransactions(hash common.Hash) ([]zktypes.InnerTx, error) {
 	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "eth_getInternalTransactions", hash)
 	if err != nil {

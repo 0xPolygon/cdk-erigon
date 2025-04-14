@@ -55,6 +55,9 @@ RUN_DOCKER_DS := $(DOCKER_COMPOSE) up -d $(DOCKER_DS)
 RUN_DOCKER_PROMETHEUS := $(DOCKER_COMPOSE) up -d $(DOCKER_PROMETHEUS)
 RUN_DOCKER_GRAFANA := $(DOCKER_COMPOSE) up -d $(DOCKER_GRAFANA)
 
+
+STOP_DOCKER_SEQ := $(DOCKER_COMPOSE) stop $(DOCKER_SEQ)
+STOP_DOCKER_RPC := $(DOCKER_COMPOSE) stop $(DOCKER_RPC)
 STOP := $(DOCKER_COMPOSE) down --remove-orphans; sleep 3; rm -rf data
 
 .PHONY: build-docker
@@ -140,18 +143,203 @@ min-run: build-docker ## Runs a minimal node
 	$(RUN_DOCKER_GRAFANA)
 
 .PHONY: test
-test: test-1 ## Runs all e2e tests
+test: test-e2e ## Runs all e2e tests
 	echo "Tests passed"
 	sleep 3
 
-.PHONY: test-1
-test-1: stop all ## Runs group 1 e2e tests checking race conditions
+.PHONY: test-e2e
+test-e2e: stop all ## Runs group xlayer feature e2e tests checking race conditions
 	sleep 3
 	docker ps -a
 	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/...
 
-.PHONY: test-2
-test-2: stop run ## Runs group 2 to check if the true executor is working
+# Target to add data loss testing logic
+.PHONY: test-data-loss
+test-data-loss: data-loss-1 data-loss-2 data-loss-3 data-loss-4 data-loss-5
+
+# interrupt before doFinishBlockAndUpdateState (before RemoveMinedTransactions)
+# txs are still in txpool, data is lost in chaindata and not written to datastream yet
+data-loss-1:
+	make stop
+	make run
+	sleep 10
+	$(STOP_DOCKER_SEQ)
+	echo "data-loss-1-step-1"
+	go test -count=1 -failfast -race -v -p 1 -timeout 10s -run TestModifyCodeCase1 ./e2e/data_loss_test.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 20
+	echo "data-loss-1-step-2"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestStressAndStopSeq ./e2e/data_loss_test.go
+	docker wait $(DOCKER_SEQ) > /dev/null
+	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
+
+	git checkout -- ../zk/stages/stage_sequence_execute.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 60
+	echo "data-loss-1-step-3"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestCheckVerify ./e2e/data_loss_test.go
+	docker logs $(DOCKER_SEQ) > data/seq_2.log 2>&1
+	echo "data-loss-1-step-4"
+	make data-recovery
+
+# interrupt before 1st CommitAndStart (before RemoveMinedTransactions)
+# txs are still in txpool, data is lost in chaindata and not written to datastream yet
+data-loss-2:
+	make stop
+	make run
+	sleep 10
+	$(STOP_DOCKER_SEQ)
+	echo "data-loss-2-step-1"
+	go test -count=1 -failfast -race -v -p 1 -timeout 10s -run TestModifyCodeCase2 ./e2e/data_loss_test.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 20
+	echo "data-loss-2-step-2"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestStressAndStopSeq ./e2e/data_loss_test.go
+	docker wait $(DOCKER_SEQ) > /dev/null
+	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
+
+	git checkout -- ../zk/stages/stage_sequence_execute.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 60
+	echo "data-loss-2-step-3"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestCheckVerify ./e2e/data_loss_test.go
+	docker logs $(DOCKER_SEQ) > data/seq_2.log 2>&1
+	echo "data-loss-2-step-4"
+	make data-recovery
+
+# before 2nd CommitAndStart (after RemoveMinedTransactions and updateStreamAndCheckRollback)
+# txs are removed from txpool, data is lost in chaindata
+# assuming current block having been written to ds
+data-loss-3:
+	make stop
+	make run
+	sleep 10
+	$(STOP_DOCKER_SEQ)
+	echo "data-loss-3-step-1"
+	go test -count=1 -failfast -race -v -p 1 -timeout 10s -run TestModifyCodeCase3 ./e2e/data_loss_test.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 20
+	echo "data-loss-3-step-2"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestStressAndStopSeq ./e2e/data_loss_test.go
+	docker wait $(DOCKER_SEQ) > /dev/null
+	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
+
+	git checkout -- ../zk/stages/stage_sequence_execute.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 60
+	echo "data-loss-3-step-3"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestCheckVerify ./e2e/data_loss_test.go
+	docker logs $(DOCKER_SEQ) > data/seq_2.log 2>&1
+	echo "data-loss-3-step-4"
+	make data-recovery
+
+# before the last sdb.tx.Commit (after RemoveMinedTransactions and updateStreamAndCheckRollback)
+# txs are removed from txpool, data is lost in chaindata
+# assuming current block having been written to ds
+data-loss-4:
+	make stop
+	make run
+	sleep 10
+	$(STOP_DOCKER_SEQ)
+	echo "data-loss-4-step-1"
+	go test -count=1 -failfast -race -v -p 1 -timeout 10s -run TestModifyCodeCase4 ./e2e/data_loss_test.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 20
+	echo "data-loss-4-step-2"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestStressAndStopSeq ./e2e/data_loss_test.go
+	docker wait $(DOCKER_SEQ) > /dev/null
+	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
+
+	git checkout -- ../zk/stages/stage_sequence_execute.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 60
+	echo "data-loss-4-step-3"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestCheckVerify ./e2e/data_loss_test.go
+	docker logs $(DOCKER_SEQ) > data/seq_2.log 2>&1
+	echo "data-loss-4-step-4"
+	make data-recovery
+
+# between RemoveMinedTransactions and updateStreamAndCheckRollback
+# txs are removed from txpool, data is not written to datastream yet
+data-loss-5:
+	make stop
+	make run
+	sleep 10
+	$(STOP_DOCKER_SEQ)
+	echo "data-loss-5-step-1"
+	go test -count=1 -failfast -race -v -p 1 -timeout 10s -run TestModifyCodeCase5 ./e2e/data_loss_test.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 20
+	echo "data-loss-5-step-2"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestStressAndStopSeq ./e2e/data_loss_test.go
+	docker wait $(DOCKER_SEQ) > /dev/null
+	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
+
+	git checkout -- ../zk/stages/stage_sequence_execute.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 60
+	echo "data-loss-5-step-3"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestCheckVerify ./e2e/data_loss_test.go
+	docker logs $(DOCKER_SEQ) > data/seq_2.log 2>&1
+	echo "data-loss-5-step-4"
+	make data-recovery
+
+# comment handleShutdown, disable the graceful shutdown
+# txs are removed from txpool, data is in chaindata
+# recover block form chaindata
+data-loss-6:
+	make stop
+	make run
+	sleep 10
+	$(STOP_DOCKER_SEQ)
+	echo "data-loss-6-step-1"
+	go test -count=1 -failfast -race -v -p 1 -timeout 10s -run TestModifyCodeCase6 ./e2e/data_loss_test.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 20
+	echo "data-loss-6-step-2"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestStressAndStopSeq ./e2e/data_loss_test.go
+	sleep 3
+	$(STOP_DOCKER_SEQ)
+	docker wait $(DOCKER_SEQ) > /dev/null
+	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
+
+	git checkout -- ../turbo/stages/stageloop.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 60
+	echo "data-loss-6-step-3"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestCheckVerify ./e2e/data_loss_test.go
+	docker logs $(DOCKER_SEQ) > data/seq_2.log 2>&1
+	echo "data-loss-6-step-4"
+	make data-recovery
+
+# replace seq data from rpc
+data-recovery:
+	$(STOP_DOCKER_SEQ)
+	sleep 10
+	$(STOP_DOCKER_RPC)
+	sleep 10
+	rm -rf data/seq/*; cp -r data/rpc/* data/seq/
+	$(RUN_DOCKER_SEQ)
+	sleep 10
+	$(RUN_DOCKER_RPC)
+	sleep 3
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestCheckVerify ./e2e/data_loss_test.go
+
+
+.PHONY: test-executor
+test-executor: stop run ## Runs group 2 to check if the true executor is working
 	sleep 30 # wait for the executor to be ready
 	docker ps -a
 	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/... -run "^TestEthTransfer$$"
@@ -164,8 +352,8 @@ mainnet: build-docker
 	$(RUN_DOCKER_GRAFANA)
 
 mainnet-executor: 
-	chmod +x ./script/mainnet-executor.sh
-	./script/mainnet-executor.sh 
+	chmod +x ./scripts/mainnet-executor.sh
+	./scripts/mainnet-executor.sh 
 	$(RUN_DOCKER_STATELESS_EXECUTOR)
 	$(RUN_DOCKER_STATELESS_EXECUTOR_2)
 	$(RUN_DOCKER_STATELESS_EXECUTOR_3)
