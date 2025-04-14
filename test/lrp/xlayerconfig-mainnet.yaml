@@ -65,4 +65,8 @@ metrics.port: 9095
 
 yieldsize: 35
 zkevm.seal-batch-immediately-on-overflow: true
+zkevm.block-info-concurrent: true
 zkevm.standalone-smt-db: true
+zkevm.enable-async-commit: true
+
+db.size.limit: 100GB
