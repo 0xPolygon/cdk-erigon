@@ -337,6 +337,10 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			return genesisErr
 		}
 
+		if chainConfig.UsingEthereumHardfork != config.UsingEthereumHardfork() {
+			panic(fmt.Sprintf("Genesis block hardfork is incompatible with the zkevm.hardfork flag set. Genesis UsingEthereumHardfork: %v, Flag UsingEthereumHardfork: %v. Please change flag zkevm.hardfork.", chainConfig.UsingEthereumHardfork, config.UsingEthereumHardfork()))
+		}
+
 		return nil
 	}); err != nil {
 		panic(err)
@@ -1023,7 +1027,6 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		backend.chainConfig.AllowFreeTransactions = cfg.AllowFreeTransactions
 		backend.chainConfig.ZkDefaultGasPrice = cfg.DefaultGasPrice
-		backend.chainConfig.UsingEthereumHardfork = cfg.UsingEthereumHardfork()
 		l1Urls := strings.Split(cfg.L1RpcUrl, ",")
 
 		if cfg.Zk.L1CacheEnabled {

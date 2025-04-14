@@ -68,7 +68,7 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 	api.SenderLocks.AddLock(sender)
 	defer api.SenderLocks.ReleaseLock(sender)
 
-	if txn.Type() != types.LegacyTxType && !api.UsingEthereumHardfork {
+	if txn.Type() != types.LegacyTxType {
 		latestBlock, err := api.blockByNumber(ctx, rpc.LatestBlockNumber, tx)
 
 		if err != nil {
@@ -113,16 +113,14 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 
 	hash := txn.Hash()
 
-	if !api.UsingEthereumHardfork {
-		// [zkevm] - check if the transaction is a bad one
-		hermezDb := hermez_db.NewHermezDbReader(tx)
-		badTxHashCounter, err := hermezDb.GetBadTxHashCounter(hash)
-		if err != nil {
-			return common.Hash{}, err
-		}
-		if badTxHashCounter >= api.BadTxAllowance {
-			return common.Hash{}, errors.New("transaction uses too many counters to fit into a batch")
-		}
+	// [zkevm] - check if the transaction is a bad one
+	hermezDb := hermez_db.NewHermezDbReader(tx)
+	badTxHashCounter, err := hermezDb.GetBadTxHashCounter(hash)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	if badTxHashCounter >= api.BadTxAllowance {
+		return common.Hash{}, errors.New("transaction uses too many counters to fit into a batch")
 	}
 
 	res, err := api.txPool.Add(ctx, &txPoolProto.AddRequest{RlpTxs: [][]byte{encodedTx}})

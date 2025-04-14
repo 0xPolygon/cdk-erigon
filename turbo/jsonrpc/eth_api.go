@@ -125,12 +125,11 @@ type BaseAPI struct {
 	_agg         *libstate.Aggregator
 	_engine      consensus.EngineReader
 
-	evmCallTimeout   time.Duration
-	dirs             datadir.Dirs
-	l2RpcUrl         string
-	gasless          bool
-	logLevel         log.Lvl
-	usingEthHardfork bool
+	evmCallTimeout time.Duration
+	dirs           datadir.Dirs
+	l2RpcUrl       string
+	gasless        bool
+	logLevel       log.Lvl
 }
 
 func NewBaseApi(f *rpchelper.Filters, stateCache kvcache.Cache, blockReader services.FullBlockReader, agg *libstate.Aggregator, singleNodeMode bool, evmCallTimeout time.Duration, engine consensus.EngineReader, dirs datadir.Dirs) *BaseAPI {
@@ -174,8 +173,6 @@ func (api *BaseAPI) chainConfig(ctx context.Context, tx kv.Tx) (*chain.Config, e
 	if err := utils.UpdateZkEVMBlockCfg(cfg, hermezDb, "", api.logLevel == log.LvlTrace); err != nil {
 		return cfg, err
 	}
-
-	cfg.UsingEthereumHardfork = api.usingEthHardfork
 
 	return cfg, err
 }
@@ -386,7 +383,6 @@ type APIImpl struct {
 	LogsMaxRange                  uint64
 	DisableStateRootCheck         bool
 	DisableVirtualCounters        bool
-	UsingEthereumHardfork         bool
 }
 
 // NewEthAPI returns APIImpl instance
@@ -429,7 +425,6 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		LogsMaxRange:                  LogsMaxRange,
 		DisableStateRootCheck:         disableStateRootCheck,
 		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
-		UsingEthereumHardfork:         ethCfg.UsingEthereumHardfork(),
 	}
 }
 

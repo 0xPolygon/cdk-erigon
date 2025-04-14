@@ -301,6 +301,10 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 
 	utils2.EnableTimer(cfg.DebugTimers)
 
+	// Set UsingEthereumHardfork to genesis config to bake it into the genesis block
+	cfg.Genesis.Config.UsingEthereumHardfork = cfg.UsingEthereumHardfork()
+
+	// check if the flags are set
 	checkFlag(utils.L2ChainIdFlag.Name, cfg.L2ChainId)
 	if !sequencer.IsSequencer() {
 		checkFlag(utils.L2RpcUrlFlag.Name, cfg.Zk.L2RpcUrl)
@@ -330,9 +334,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 			panic("You cannot disable virtual counters when running with executors")
 		}
 	}
-
 	checkFlag(utils.AddressZkevmFlag.Name, cfg.AddressZkevm)
-
 	checkFlag(utils.L1ChainIdFlag.Name, cfg.L1ChainId)
 	checkFlag(utils.L1RpcUrlFlag.Name, cfg.L1RpcUrl)
 	checkFlag(utils.L1MaticContractAddressFlag.Name, cfg.L1MaticContractAddress.Hex())
@@ -344,6 +346,5 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.TxPoolRejectSmartContractDeployments.Name, cfg.TxPoolRejectSmartContractDeployments)
 	checkFlag(utils.L1ContractAddressCheckFlag.Name, cfg.L1ContractAddressCheck)
 	checkFlag(utils.L1ContractAddressRetrieveFlag.Name, cfg.L1ContractAddressCheck)
-
 	verifyAddressFlag(utils.L2DataStreamerUrlFlag.Name, cfg.L2DataStreamerUrl)
 }
