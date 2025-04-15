@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"sync"
 	"time"
@@ -47,6 +48,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/silkworm"
 	"github.com/ledgerwatch/erigon/turbo/stages/headerdownload"
 	"github.com/ledgerwatch/erigon/zk/smt"
+	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 )
 
 func AsyncFlushSmtData(ctx context.Context,
@@ -54,6 +56,7 @@ func AsyncFlushSmtData(ctx context.Context,
 	s *stagedsync.Sync,
 	config ethconfig.XLayerConfig,
 	logger log.Logger,
+	smtFlushDoneCh chan struct{},
 ) {
 	if !sequencer.IsSequencer() || !config.EnableAsyncCommit {
 		logger.Info("AsyncFlushSmtData skipped",
@@ -77,7 +80,21 @@ func AsyncFlushSmtData(ctx context.Context,
 		logger.Info("Waiting for all flush operations to complete...")
 		wg.Wait()
 		logger.Info("All flush operations completed, exiting AsyncFlushSmtData")
+		smtFlushDoneCh <- struct{}{}
 	}()
+
+	if config.SequencerReplay {
+		replayDone, _ := zkStages.WaitResequenceBatchDone()
+		go func() {
+			<-replayDone
+			logger.Info("AsyncFlushSmtData received replay done signal")
+			handleShutdown(s, config, &wg, workerPool, db, cache, logger)
+			logger.Info("Waiting for all flush operations to complete...")
+			wg.Wait()
+			logger.Info("All flush operations completed, exiting AsyncFlushSmtData")
+			os.Exit(0)
+		}()
+	}
 
 	for {
 		select {
@@ -86,11 +103,11 @@ func AsyncFlushSmtData(ctx context.Context,
 				logger.Info("SmtCacheCh closed, stopping AsyncFlushSmtData")
 				return
 			}
-			dispatchFlushTask(ctx, &wg, workerPool, db, cache, saveData, logger)
+			dispatchFlushTask(context.Background(), &wg, workerPool, db, cache, saveData, logger)
 
 		case <-ctx.Done():
 			logger.Info("AsyncFlushSmtData received stop signal", "reason", ctx.Err())
-			handleShutdown(ctx, s, config, &wg, workerPool, db, cache, logger)
+			handleShutdown(s, config, &wg, workerPool, db, cache, logger)
 			return
 		}
 	}
@@ -114,11 +131,11 @@ func dispatchFlushTask(ctx context.Context, wg *sync.WaitGroup, workerPool chan 
 	}
 }
 
-func handleShutdown(ctx context.Context, s *stagedsync.Sync, config ethconfig.XLayerConfig,
+func handleShutdown(s *stagedsync.Sync, config ethconfig.XLayerConfig,
 	wg *sync.WaitGroup, workerPool chan struct{}, db *mdbx.MdbxKV, cache *smt.SmtCache, logger log.Logger) {
 	s.FlushSmtCache(config.StandaloneSMTDatabase, true)
 
-	for len(cache.SmtCacheDataCh) > 0 {
+	for {
 		select {
 		case saveData, ok := <-cache.SmtCacheDataCh:
 			if !ok {

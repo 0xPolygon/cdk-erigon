@@ -155,7 +155,7 @@ test-e2e: stop all ## Runs group xlayer feature e2e tests checking race conditio
 
 # Target to add data loss testing logic
 .PHONY: test-data-loss
-test-data-loss: data-loss-1 data-loss-2 data-loss-3 data-loss-4 data-loss-5
+test-data-loss: data-loss-1 data-loss-2 data-loss-3 data-loss-4 data-loss-5 data-loss-6 data-loss-7 data-loss-8
 
 # interrupt before doFinishBlockAndUpdateState (before RemoveMinedTransactions)
 # txs are still in txpool, data is lost in chaindata and not written to datastream yet
@@ -294,9 +294,36 @@ data-loss-5:
 	echo "data-loss-5-step-4"
 	make data-recovery
 
+# between doFinishBlockAndUpdateState and SetSmtCache
+# stage.Execution is updated, blockCache hasn't been set, data is not written to datastream yet
+data-loss-8:
+	make stop
+	make run
+	sleep 10
+	$(STOP_DOCKER_SEQ)
+	echo "data-loss-8-step-1"
+	go test -count=1 -failfast -race -v -p 1 -timeout 10s -run TestModifyCodeCase8 ./e2e/data_loss_test.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 20
+	echo "data-loss-8-step-2"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestStressAndStopSeq ./e2e/data_loss_test.go
+	docker wait $(DOCKER_SEQ) > /dev/null
+	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
+
+	git checkout -- ../zk/stages/stage_sequence_execute.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 60
+	echo "data-loss-8-step-3"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestCheckVerify ./e2e/data_loss_test.go
+	docker logs $(DOCKER_SEQ) > data/seq_2.log 2>&1
+	echo "data-loss-8-step-4"
+	make data-recovery
+
 # comment handleShutdown, disable the graceful shutdown
-# txs are removed from txpool, data is in chaindata
-# recover block form chaindata
+# shutdown manually
+# align chaindata to smt
 data-loss-6:
 	make stop
 	make run
@@ -322,6 +349,36 @@ data-loss-6:
 	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestCheckVerify ./e2e/data_loss_test.go
 	docker logs $(DOCKER_SEQ) > data/seq_2.log 2>&1
 	echo "data-loss-6-step-4"
+	make data-recovery
+
+# comment smt alignment, disable the auto recovery
+# shutdown manually
+# recover from graceful exit
+data-loss-7:
+	make stop
+	make run
+	sleep 10
+	$(STOP_DOCKER_SEQ)
+	echo "data-loss-7-step-1"
+	go test -count=1 -failfast -race -v -p 1 -timeout 10s -run TestModifyCodeCase7 ./e2e/data_loss_test.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 20
+	echo "data-loss-7-step-2"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestStressAndStopSeq ./e2e/data_loss_test.go
+	sleep 3
+	$(STOP_DOCKER_SEQ)
+	docker wait $(DOCKER_SEQ) > /dev/null
+	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
+
+	git checkout -- ../zk/stages/stage_sequence_execute.go
+	make build-docker
+	$(RUN_DOCKER_SEQ)
+	sleep 60
+	echo "data-loss-7-step-3"
+	go test -count=1 -failfast -race -v -p 1 -timeout 300s -run TestCheckVerify ./e2e/data_loss_test.go
+	docker logs $(DOCKER_SEQ) > data/seq_2.log 2>&1
+	echo "data-loss-7-step-4"
 	make data-recovery
 
 # replace seq data from rpc

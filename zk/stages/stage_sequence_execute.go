@@ -230,7 +230,7 @@ func sequencingBatchStep(
 				log.Error(fmt.Sprintf("[%s] Failed to get smt max block number", logPrefix), "error", err, "smtMaxBlockNumber", smtMaxBlockNumber)
 				return err
 			}
-			if smtMaxBlockNumber != 0 && smtMaxBlockNumber < executionAt {
+			if smtMaxBlockNumber != 0 && smtMaxBlockNumber+1 < executionAt {
 				targetBlock, err := getTargetBlockForSMTAlignment(sdb, logPrefix, executionAt, smtMaxBlockNumber)
 				if err != nil {
 					return err

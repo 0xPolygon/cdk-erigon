@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"sync"
-	"time"
 
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
@@ -114,24 +113,27 @@ func replay(
 		batchJob := NewResequenceBatchJob(batch)
 		subBatchCount := 0
 		for batchJob.HasMoreBlockToProcess() {
+			if cfg.zk.XLayer.EnableAsyncCommit {
+				s.FlushSmtCacheWait()
+			}
 			if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, batchJob); err == nil {
-				s.FlushSmtCacheSignalInc()
-				go func() {
-					defer s.FlushSmtCacheDone()
-					// enable split smt db
-					_ = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, false)
-				}()
-			} else {
-				if !cfg.zk.XLayer.EnableAsyncCommit {
-					return err
+				if cfg.zk.XLayer.EnableAsyncCommit {
+					s.FlushSmtCacheSignalInc()
+					go func() {
+						defer s.FlushSmtCacheDone()
+						// enable split smt db
+						_ = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, false)
+					}()
 				}
+			} else {
+				if cfg.zk.XLayer.EnableAsyncCommit {
+					s.FlushSmtCacheSignalInc()
+					go func() {
+						defer s.FlushSmtCacheDone()
 
-				s.FlushSmtCacheSignalInc()
-				go func() {
-					defer s.FlushSmtCacheDone()
-
-					s.ResetCurrentBatchCache(s.BlockNumber)
-				}()
+						s.ResetCurrentBatchCache(s.BlockNumber)
+					}()
+				}
 				return err
 			}
 			subBatchCount += 1
@@ -151,8 +153,11 @@ func replay(
 		}
 	}
 	log.Info(fmt.Sprintf("[%s] Replay completed.", s.LogPrefix()))
-	time.Sleep(3 * time.Second)
-	os.Exit(0)
+	if cfg.zk.XLayer.EnableAsyncCommit {
+		doneChan <- struct{}{}
+	} else {
+		os.Exit(0)
+	}
 	return nil
 }
 

@@ -209,7 +209,7 @@ lrp-mainnet-replay: lrp-config-apply lrp-build-docker
 lrp-mainnet-replay-pause:
 	@EXTERNAL_DS=$$(awk '/^useExternalDatastream:/ {print $$2}' lrp.config.yaml); \
 	if [ "$$EXTERNAL_DS" = "true" ]; then \
-		docker stop $(DOCKER_MAINNET_REPLAY_CONTAINER) --time 600; \
+		docker stop $(DOCKER_MAINNET_REPLAY_CONTAINER) --timeout 600; \
 	else \
 		echo "Warning: useExternalDatastream is set to false, batches data will be lost"; \
 	fi

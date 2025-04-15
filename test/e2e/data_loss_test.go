@@ -308,6 +308,59 @@ log.Info(fmt.Sprintf("updateStreamAndCheckRollback:%v,%v", batchState.batchNumbe
 	}
 }
 
+// between doFinishBlockAndUpdateState and SetSmtCache
+// stage.Execution is updated, blockCache hasn't been set, data is not written to datastream yet
+func TestModifyCodeCase8(t *testing.T) {
+	// File to modify
+	filePath := "../../zk/stages/stage_sequence_execute.go"
+
+	// Read the file contents
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatal("Error reading file:", err)
+	}
+
+	// Convert data to string for easier manipulation
+	content := string(data)
+
+	// Check if 'os' import is already present, if not add it
+	if !strings.Contains(content, "\"os\"") {
+		importIndex := strings.Index(content, "import (")
+		if importIndex != -1 {
+			content = content[:importIndex+8] + "\n\t\"os\"" + content[importIndex+8:]
+		}
+	}
+
+	// Insert lose data logic before SetSmtCache
+	blockToInsert := `
+// For data loss
+if batchState.batchNumber == 11 {
+	log.Warn(fmt.Sprintf("Stop before SetSmtCache:%v,%v", batchState.batchNumber, block.Number))
+	time.Sleep(10 * time.Second)
+	os.Exit(1)
+}
+log.Info(fmt.Sprintf("SetSmtCache:%v,%v", batchState.batchNumber, block.Number))`
+
+	lines := strings.Split(content, "\n")
+	inserted := false
+	for i, line := range lines {
+		if strings.Contains(line, "s.SetSmtCache(blockNumber, blockCache)") {
+			lines = append(lines[:i], append([]string{blockToInsert}, lines[i:]...)...)
+			inserted = true
+			break
+		}
+	}
+	require.True(t, inserted, "Expected the block to be inserted before SetSmtCache")
+
+	content = strings.Join(lines, "\n")
+
+	// Write the modified content back to the file
+	err = os.WriteFile(filePath, []byte(content), 0644)
+	if err != nil {
+		t.Fatal("Error writing file:", err)
+	}
+}
+
 // comment handleShutdown, disable the graceful shutdown
 func TestModifyCodeCase6(t *testing.T) {
 	// File to modify
@@ -336,6 +389,44 @@ func TestModifyCodeCase6(t *testing.T) {
 		}
 	}
 	require.True(t, replaced, "Expected to find and replace the handleShutdown line")
+
+	content = strings.Join(lines, "\n")
+
+	// Write the modified content back to the file
+	err = os.WriteFile(filePath, []byte(content), 0644)
+	if err != nil {
+		t.Fatal("Error writing file:", err)
+	}
+}
+
+// comment smt alignment, disable the auto recovery
+func TestModifyCodeCase7(t *testing.T) {
+	// File to modify
+	filePath := "../../zk/stages/stage_sequence_execute.go"
+
+	// Read the file contents
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatal("Error reading file:", err)
+	}
+
+	// Convert data to string for easier manipulation
+	content := string(data)
+
+	blockToReplace := `
+// For data loss
+var shouldCheckForExecutionAndSMTAlignment = SMTAlignmentTerminated`
+
+	lines := strings.Split(content, "\n")
+	replaced := false
+	for i, line := range lines {
+		if strings.Contains(line, "var shouldCheckForExecutionAndSMTAlignment = SMTAlignmentInit") {
+			lines[i] = blockToReplace
+			replaced = true
+			break
+		}
+	}
+	require.True(t, replaced, "Expected to find and replace the shouldCheckForExecutionAndSMTAlignment line")
 
 	content = strings.Join(lines, "\n")
 
