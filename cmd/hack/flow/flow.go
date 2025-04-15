@@ -162,7 +162,7 @@ func batchServer() {
 			continue
 		}
 		row := strings.Split(line, ",")
-		txcnt, perr := strconv.ParseInt(row[0], 10, 64)
+		txcnt, perr := strconv.ParseInt(row[0], 10, 32)
 		tool.Check(perr)
 
 		code, _ := hex.DecodeString(row[1][2:])

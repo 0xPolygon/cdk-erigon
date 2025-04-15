@@ -33,7 +33,7 @@ func (r *queryResolver) Block(ctx context.Context, number *string, hash *string)
 			// Positive integer, go ahead
 			blockNumber = rpc.BlockNumber(bNum)
 		} else {
-			bNum, err := hexutil.DecodeUint64(*number)
+			bNum, err := hexutil.DecodeInt64(*number)
 			if err == nil {
 				// Hexadecimal, 0x prefixed
 				blockNumber = rpc.BlockNumber(bNum)

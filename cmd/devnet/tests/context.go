@@ -57,7 +57,7 @@ func ContextStart(t *testing.T, chainName string) (devnet.Context, error) {
 		envProducerCount = "1"
 	}
 
-	producerCount, _ := strconv.ParseUint(envProducerCount, 10, 64)
+	producerCount, _ := strconv.ParseInt(envProducerCount, 10, 32)
 
 	// TODO get log levels from env
 	var dirLogLevel log.Lvl = log.LvlTrace

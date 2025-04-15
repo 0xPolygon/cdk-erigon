@@ -44,7 +44,7 @@ func writeBlockBodyDownload(w io.Writer, r *http.Request) {
 	var tick int64
 	if sinceTickStr != "" {
 		var err error
-		if tick, err = strconv.ParseInt(sinceTickStr, 10, 64); err != nil {
+		if tick, err = strconv.ParseInt(sinceTickStr, 10, 32); err != nil {
 			fmt.Fprintf(w, "ERROR: parsing sincemilli: %v\n", err)
 		}
 	}

@@ -245,7 +245,7 @@ func (i *Int) UnmarshalJSON(data []byte) error {
 		unquotedData = unquotedData[2:]
 	}
 
-	value, err := strconv.ParseInt(unquotedData, 16, 64)
+	value, err := strconv.ParseInt(unquotedData, 16, 32)
 	if err != nil {
 		return err
 	}

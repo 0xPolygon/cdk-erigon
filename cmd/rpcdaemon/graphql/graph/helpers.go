@@ -67,14 +67,14 @@ func convertDataToIntP(abstractMap map[string]interface{}, field string) *int {
 
 	switch v := abstractMap[field].(type) {
 	case hexutil2.Uint64:
-		resultUint, err := hexutil2.DecodeUint64(v.String())
+		resultUint, err := hexutil2.DecodeInt32(v.String())
 		if err != nil {
 			result = 0
 		} else {
 			result = int(resultUint)
 		}
 	case hexutil2.Uint:
-		resultUint, err := hexutil2.DecodeUint64(v.String())
+		resultUint, err := hexutil2.DecodeInt32(v.String())
 		if err != nil {
 			result = 0
 		} else {
