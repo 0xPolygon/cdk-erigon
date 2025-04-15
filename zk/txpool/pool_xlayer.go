@@ -46,7 +46,7 @@ type XLayerConfig struct {
 	FreeGasLimit uint64
 	// EnableFreeGasList enable the specific free gas project
 	EnableFreeGasList  bool
-	FreeGasFromNameMap map[string]string                 // map[from]projectName
+	FreeGasFromNameMap map[common.Address]string         // map[from]projectName
 	FreeGasList        map[string]*ethconfig.FreeGasInfo // map[projectName]FreeGasInfo
 	// EnableTimsort is the switch to use timsort on the best slice of txpool
 	EnableTimsort bool
@@ -61,9 +61,9 @@ type GPCache interface {
 	SetLatestRawGP(rgp *big.Int)
 }
 
-func contains(addresses []string, addr common.Address) bool {
+func contains(addresses []common.Address, addr common.Address) bool {
 	for _, item := range addresses {
-		if common.HexToAddress(item) == addr {
+		if item == addr {
 			return true
 		}
 	}
@@ -147,7 +147,7 @@ func (p *TxPool) checkFreeGasTxXLayer(addr common.Address, tx *types.TxSlot) (fr
 
 	if p.apolloCfg != nil && p.apolloCfg.GetEnableFreeGasList(p.xlayerCfg.EnableFreeGasList) {
 		fromToName, freeGpList := p.xlayerCfg.FreeGasFromNameMap, p.xlayerCfg.FreeGasList
-		info := freeGpList[fromToName[strings.ToLower(addr.String())]]
+		info := freeGpList[fromToName[addr]]
 		if info != nil &&
 			contains(info.ToList, tx.To) &&
 			containsMethod(ecommon.Bytes2Hex(tx.Rlp), info.MethodSigs) {
@@ -187,11 +187,11 @@ func (p *TxPool) isFreeGasXLayer(senderID uint64, tx *types.TxSlot) bool {
 }
 
 func (p *TxPool) setFreeGasList(freeGasList []ethconfig.FreeGasInfo) {
-	p.xlayerCfg.FreeGasFromNameMap = make(map[string]string)
+	p.xlayerCfg.FreeGasFromNameMap = make(map[common.Address]string)
 	p.xlayerCfg.FreeGasList = make(map[string]*ethconfig.FreeGasInfo, len(freeGasList))
 	for _, info := range freeGasList {
 		for _, from := range info.FromList {
-			p.xlayerCfg.FreeGasFromNameMap[strings.ToLower(from)] = info.Name
+			p.xlayerCfg.FreeGasFromNameMap[from] = info.Name
 		}
 		infoCopy := info
 		p.xlayerCfg.FreeGasList[info.Name] = &infoCopy

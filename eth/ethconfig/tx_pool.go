@@ -73,11 +73,11 @@ type DeprecatedTxPoolConfig struct {
 
 // FreeGasInfo contains the details for what tx should be free
 type FreeGasInfo struct {
-	Name             string   `json:"name"`
-	FromList         []string `json:"from_list"`
-	ToList           []string `json:"to_list"`
-	MethodSigs       []string `json:"method_sigs"`
-	GasPriceMultiple uint64   `json:"gas_price_multiple"`
+	Name             string           `json:"name"`
+	FromList         []common.Address `json:"from_list"`
+	ToList           []common.Address `json:"to_list"`
+	MethodSigs       []string         `json:"method_sigs"`
+	GasPriceMultiple uint64           `json:"gas_price_multiple"`
 }
 
 // DeprecatedDefaultTxPoolConfig contains the default configurations for the transaction
