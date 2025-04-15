@@ -155,6 +155,10 @@ func (opts MdbxOpts) toMap() map[string]interface{} {
 func (opts MdbxOpts) GetLabel() kv.Label  { return opts.label }
 func (opts MdbxOpts) GetInMem() bool      { return opts.inMem }
 func (opts MdbxOpts) GetPageSize() uint64 { return opts.pageSize }
+func (opts MdbxOpts) GetMapSize() datasize.ByteSize {
+	return opts.mapSize
+}
+func (opts MdbxOpts) GetFlags() uint { return opts.flags }
 
 func (opts MdbxOpts) Label(label kv.Label) MdbxOpts {
 	opts.label = label
@@ -428,7 +432,7 @@ func (opts MdbxOpts) Open(ctx context.Context) (kv.RwDB, error) {
 
 	opts.pageSize = uint64(in.PageSize)
 	opts.mapSize = datasize.ByteSize(in.MapSize)
-	if opts.label == kv.ChainDB {
+	if opts.label == kv.ChainDB || opts.label == kv.SmtDB {
 		opts.log.Info("[db] open", "label", opts.label, "sizeLimit", opts.mapSize, "pageSize", opts.pageSize)
 	} else {
 		opts.log.Debug("[db] open", "label", opts.label, "sizeLimit", opts.mapSize, "pageSize", opts.pageSize)

@@ -60,7 +60,6 @@ COPY --from=tools-builder /app/build/bin/mdbx_copy /usr/local/bin/mdbx_copy
 COPY --from=builder /app/build/bin/cdk-erigon /usr/local/bin/cdk-erigon
 COPY --from=builder /app/build/bin/smt-db-split /usr/local/bin/smt-db-split
 COPY --from=builder /app/cmd/smt-db-split/prepare-db-split.sh /usr/local/bin/prepare-db-split.sh
-COPY --from=builder /app/cmd/smt-db-split/mdbx_opts /mdbx_opts
 
 EXPOSE 8545 \
        8551 \

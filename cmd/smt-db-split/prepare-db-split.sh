@@ -56,8 +56,6 @@ echo "Copy to folder: $DST"
 
 mkdir -p $TMP/seq/chaindata/
 mkdir -p $TMP/seq/smt/
-cp mdbx_opts/opts_chaindb.json $TMP/seq/chaindata/
-cp mdbx_opts/opts_smt.json $TMP/seq/smt/
 
 mkdir -p $DST/seq/chaindata/
 mkdir -p $DST/seq/smt/
@@ -70,9 +68,15 @@ if [ $# -gt 2 ]; then
 	fi
 fi
 
+# By default, we copy using mdbx_copy to perform compaction. If this step is too slow
+# or it fails with "it opened in read-only mode", replace "$DBCPY -c" with "cp".
 $DBCPY -c $SRC/seq/chaindata/mdbx.dat $TMP/seq/chaindata/mdbx.dat
 cp $TMP/seq/chaindata/mdbx.dat $TMP/seq/smt/mdbx.dat
 $DBSPLIT $TMP/seq
+if [ $? -ne 0 ]; then
+	echo "Error: smt-db-split failed."
+	exit 1
+fi
 $DBCPY -c $TMP/seq/chaindata/mdbx.dat $DST/seq/chaindata/mdbx.dat
 $DBCPY -c $TMP/seq/smt/mdbx.dat $DST/seq/smt/mdbx.dat
 

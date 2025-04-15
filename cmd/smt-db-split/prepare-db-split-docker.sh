@@ -33,8 +33,6 @@ echo "Copy to folder: $DST"
 
 mkdir -p $TMP/seq/chaindata/
 mkdir -p $TMP/seq/smt/
-cp cmd/smt-db-split/mdbx_opts/opts_chaindb.json $TMP/seq/chaindata/
-cp cmd/smt-db-split/mdbx_opts/opts_smt.json $TMP/seq/smt/
 
 mkdir -p $DST/seq/chaindata/
 mkdir -p $DST/seq/smt/
