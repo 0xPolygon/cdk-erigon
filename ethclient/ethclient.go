@@ -233,7 +233,7 @@ func (bi *BigInt) ToInt() *uint256.Int {
 	return newInt
 }
 
-type Int int
+type Int int64
 
 func (i *Int) UnmarshalJSON(data []byte) error {
 	unquotedData, err := strconv.Unquote(string(data))
@@ -245,7 +245,7 @@ func (i *Int) UnmarshalJSON(data []byte) error {
 		unquotedData = unquotedData[2:]
 	}
 
-	value, err := strconv.ParseInt(unquotedData, 16, 32)
+	value, err := strconv.ParseInt(unquotedData, 16, 64)
 	if err != nil {
 		return err
 	}

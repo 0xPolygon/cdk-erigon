@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"runtime"
@@ -162,8 +163,12 @@ func batchServer() {
 			continue
 		}
 		row := strings.Split(line, ",")
-		txcnt, perr := strconv.ParseInt(row[0], 10, 32)
+		txcnt, perr := strconv.ParseInt(row[0], 10, 64)
 		tool.Check(perr)
+
+		if txcnt > math.MaxInt {
+			log.Fatalf("txcnt %d is too large", txcnt)
+		}
 
 		code, _ := hex.DecodeString(row[1][2:])
 		jobList = append(jobList, &cfgJob{int(txcnt), code})

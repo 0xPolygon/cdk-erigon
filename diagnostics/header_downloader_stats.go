@@ -19,6 +19,7 @@ package diagnostics
 import (
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 
@@ -44,8 +45,14 @@ func writeHeaderDownload(w io.Writer, r *http.Request) {
 	var tick int64
 	if sinceTickStr != "" {
 		var err error
-		if tick, err = strconv.ParseInt(sinceTickStr, 10, 32); err != nil {
+		if tick, err = strconv.ParseInt(sinceTickStr, 10, 64); err != nil {
 			fmt.Fprintf(w, "ERROR: parsing sincemilli: %v\n", err)
+			return
+		}
+
+		if tick < math.MinInt || tick > math.MaxInt {
+			fmt.Fprintf(w, "ERROR: parsing sincemilli: value out of range %d\n", tick)
+			return
 		}
 	}
 	fmt.Fprintf(w, "SUCCESS\n")

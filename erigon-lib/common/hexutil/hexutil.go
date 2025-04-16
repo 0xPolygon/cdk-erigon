@@ -66,7 +66,7 @@ func DecodeInt32(input string) (int32, error) {
 	return int32(dec), nil
 }
 
-// DecodeUint64 decodes a hex string with 0x prefix as a quantity.
+// DecodeInt64 decodes a hex string with 0x prefix as a quantity.
 func DecodeInt64(input string) (int64, error) {
 	raw, err := checkNumber(input)
 	if err != nil {
