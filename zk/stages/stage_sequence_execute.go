@@ -136,7 +136,7 @@ func sequencingBatchStep(
 	runLoopBlocks := true
 	batchContext := newBatchContext(ctx, &cfg, &historyCfg, s, sdb)
 	batchState := newBatchState(forkId, batchNumberForStateInitialization, executionAt+1, cfg.zk.UseExecutors(), cfg.zk.IsL1Recovery(), cfg.txPool, resequenceBatchJob)
-	shouldCountersBeInfinite := cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery())
+	shouldCountersBeInfinite := cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()) || cfg.chainConfig.IsEthereumHardfork(executionAt)
 	blockDataSizeChecker := NewBlockDataChecker(shouldCountersBeInfinite)
 	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState)
 

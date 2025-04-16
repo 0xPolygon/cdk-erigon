@@ -195,7 +195,7 @@ func (zkapi *ZkEvmAPIImpl) EstimateCounters(ctx context.Context, rpcTx *zkevmRPC
 		return nil, err
 	}
 
-	zkConfig := vm.NewZkConfig(vm.Config{NoBaseFee: true}, txCounters.ExecutionCounters(), zkapi.config.UsingEthereumHardfork())
+	zkConfig := vm.NewZkConfig(vm.Config{NoBaseFee: true}, txCounters.ExecutionCounters())
 	evm := vm.NewZkEVM(blockCtx, txCtx, ibs, chainConfig, zkConfig)
 
 	gp := new(core.GasPool).AddGas(msg.Gas())
@@ -499,7 +499,7 @@ func (api *ZkEvmAPIImpl) execTransaction(
 	if msg, err = tx.AsMessage(*signer, header.BaseFee, rules); err != nil {
 		return 0, err
 	}
-	zkConfig := vm.NewZkConfig(vm.Config{NoBaseFee: true}, txCounters.ExecutionCounters(), api.config.UsingEthereumHardfork())
+	zkConfig := vm.NewZkConfig(vm.Config{NoBaseFee: true}, txCounters.ExecutionCounters())
 	evm := vm.NewZkEVM(blockCtx, core.NewEVMTxContext(msg), ibs, chainConfig, zkConfig)
 	gp := new(core.GasPool).AddGas(msg.Gas())
 	ibs.Init(tx.Hash(), header.Hash(), 0)

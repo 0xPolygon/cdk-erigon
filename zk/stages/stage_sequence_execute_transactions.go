@@ -175,7 +175,6 @@ func attemptAddTransaction(
 
 	// set the counter collector on the config so that we can gather info during the execution
 	cfg.zkVmConfig.CounterCollector = txCounters.ExecutionCounters()
-	cfg.zkVmConfig.UsingEthereumHardfork = cfg.chainConfig.UsingEthereumHardfork
 
 	// TODO: possibly inject zero tracer here!
 

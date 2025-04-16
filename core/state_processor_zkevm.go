@@ -136,7 +136,7 @@ func PrepareForTxExecution(
 	txhash *common.Hash,
 	idx int,
 ) (*vm.EVM, uint8, error) {
-	zkConfig := vm.NewZkConfig(*vmConfig, nil, cfg.UsingEthereumHardfork)
+	zkConfig := vm.NewZkConfig(*vmConfig, nil)
 	// Add addresses to access list if applicable
 	// about the transaction and calling mechanisms.
 	zkConfig.Config.SkipAnalysis = SkipAnalysis(cfg, block.NumberU64())

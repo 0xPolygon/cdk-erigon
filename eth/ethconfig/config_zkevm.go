@@ -127,28 +127,8 @@ type Zk struct {
 	L2InfoTreeUpdatesBatchSize     uint64
 	L2InfoTreeUpdatesEnabled       bool
 
-	Hardfork   Hardfork
 	Commitment Commitment
 	InjectGers bool
-}
-
-type Hardfork string
-
-const (
-	HardforkTypeHermez   Hardfork = "hermez"
-	HardforkTypeEthereum Hardfork = "ethereum"
-)
-
-func (h Hardfork) IsValid() bool {
-	switch Hardfork(strings.ToLower(string(h))) {
-	case HardforkTypeHermez, HardforkTypeEthereum:
-		return true
-	}
-	return false
-}
-
-func (h Hardfork) ValidHardforks() []Hardfork {
-	return []Hardfork{HardforkTypeHermez, HardforkTypeEthereum}
 }
 
 type Commitment string
@@ -173,7 +153,7 @@ func (c Commitment) ValidCommitments() []Commitment {
 var DefaultZkConfig = &Zk{}
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
-	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && !c.HasExecutors()) || c.UsingHermezHardfork()
+	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && !c.HasExecutors())
 }
 
 func (c *Zk) HasExecutors() bool {
@@ -199,14 +179,6 @@ func (c *Zk) UsingSMT() bool {
 
 func (c *Zk) UsingPMT() bool {
 	return c.Commitment == CommitmentPMT
-}
-
-func (c *Zk) UsingHermezHardfork() bool {
-	return c.Hardfork == HardforkTypeHermez
-}
-
-func (c *Zk) UsingEthereumHardfork() bool {
-	return c.Hardfork == HardforkTypeEthereum
 }
 
 type L1InfoTreeOffset struct {

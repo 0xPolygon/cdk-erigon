@@ -210,7 +210,7 @@ func TraceTx(
 		streaming = true
 	}
 
-	zkConfig := vm.NewZkConfig(vm.Config{Debug: true, Tracer: tracer}, executionCounters, chainConfig.UsingEthereumHardfork)
+	zkConfig := vm.NewZkConfig(vm.Config{Debug: true, Tracer: tracer}, executionCounters)
 
 	// Run the transaction with tracing enabled.
 	vmenv := vm.NewZkEVM(blockCtx, txCtx, ibs, chainConfig, zkConfig)
