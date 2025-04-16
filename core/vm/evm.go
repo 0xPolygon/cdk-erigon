@@ -121,10 +121,10 @@ func NewEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, state evmt
 	}
 
 	// [zkevm] change
-	if evm.ChainRules().IsNormalcy || chainConfig.UsingEthereumHardfork {
+	if evm.ChainRules().IsNormalcy || evm.ChainRules().IsEthereumHardfork {
 		evm.interpreter = NewEVMInterpreter(evm, vmConfig)
 	} else {
-		evm.interpreter = NewZKEVMInterpreter(evm, NewZkConfig(vmConfig, nil, chainConfig.UsingEthereumHardfork))
+		evm.interpreter = NewZKEVMInterpreter(evm, NewZkConfig(vmConfig, nil))
 	}
 
 	return evm
@@ -140,7 +140,7 @@ func (evm *EVM) Reset(txCtx evmtypes.TxContext, ibs evmtypes.IntraBlockState) {
 	atomic.StoreInt32(&evm.abort, 0)
 }
 
-func (evm *EVM) ResetBetweenBlocks(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, ibs evmtypes.IntraBlockState, vmConfig Config, chainRules *chain.Rules, chainConfig *chain.Config) {
+func (evm *EVM) ResetBetweenBlocks(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, ibs evmtypes.IntraBlockState, vmConfig Config, chainRules *chain.Rules) {
 	evm.Context = blockCtx
 	evm.TxContext = txCtx
 	evm.intraBlockState = ibs
@@ -148,7 +148,7 @@ func (evm *EVM) ResetBetweenBlocks(blockCtx evmtypes.BlockContext, txCtx evmtype
 	evm.chainRules = chainRules
 
 	// [zkevm] change
-	evm.interpreter = NewZKEVMInterpreter(evm, NewZkConfig(vmConfig, nil, chainConfig.UsingEthereumHardfork))
+	evm.interpreter = NewZKEVMInterpreter(evm, NewZkConfig(vmConfig, nil))
 
 	// ensure the evm is reset to be used again
 	atomic.StoreInt32(&evm.abort, 0)
@@ -310,7 +310,7 @@ func (evm *EVM) call(typ OpCode, caller ContractRef, addr libcommon.Address, inp
 // the necessary steps to create accounts and reverses the state in case of an
 // execution error or failed value transfer.
 func (evm *EVM) Call(caller ContractRef, addr libcommon.Address, input []byte, gas uint64, value *uint256.Int, bailout bool, intrinsicGas uint64) (ret []byte, leftOverGas uint64, err error) {
-	if evm.zkConfig != nil && evm.zkConfig.UsingEthereumHardfork {
+	if evm.ChainRules().IsEthereumHardfork {
 		return evm.call(CALL, caller, addr, input, gas, value, bailout, intrinsicGas)
 	}
 	return evm.call_zkevm(CALL, caller, addr, input, gas, value, bailout, intrinsicGas, 0)
@@ -324,7 +324,7 @@ func (evm *EVM) Call(caller ContractRef, addr libcommon.Address, input []byte, g
 // CallCode differs from Call in the sense that it executes the given address'
 // code with the caller as context.
 func (evm *EVM) CallCode(caller ContractRef, addr libcommon.Address, input []byte, gas uint64, value *uint256.Int) (ret []byte, leftOverGas uint64, err error) {
-	if evm.zkConfig != nil && evm.zkConfig.UsingEthereumHardfork {
+	if evm.ChainRules().IsEthereumHardfork {
 		return evm.call(CALLCODE, caller, addr, input, gas, value, false, 0 /* intrinsicGas is zero here */)
 	}
 	return evm.call_zkevm(CALLCODE, caller, addr, input, gas, value, false, 0 /* intrinsicGas is zero here */, 0)
@@ -336,7 +336,7 @@ func (evm *EVM) CallCode(caller ContractRef, addr libcommon.Address, input []byt
 // DelegateCall differs from CallCode in the sense that it executes the given address'
 // code with the caller as context and the caller is set to the caller of the caller.
 func (evm *EVM) DelegateCall(caller ContractRef, addr libcommon.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
-	if evm.zkConfig != nil && evm.zkConfig.UsingEthereumHardfork {
+	if evm.ChainRules().IsEthereumHardfork {
 		return evm.call(DELEGATECALL, caller, addr, input, gas, nil, false, 0 /* intrinsicGas is zero here */)
 	}
 	return evm.call_zkevm(DELEGATECALL, caller, addr, input, gas, nil, false, 0 /* intrinsicGas is zero here */, 0)
@@ -347,7 +347,7 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr libcommon.Address, input [
 // Opcodes that attempt to perform such modifications will result in exceptions
 // instead of performing the modifications.
 func (evm *EVM) StaticCall(caller ContractRef, addr libcommon.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
-	if evm.zkConfig != nil && evm.zkConfig.UsingEthereumHardfork {
+	if evm.ChainRules().IsEthereumHardfork {
 		return evm.call(STATICCALL, caller, addr, input, gas, new(uint256.Int), false, 0 /* intrinsicGas is zero here */)
 	}
 	return evm.call_zkevm(STATICCALL, caller, addr, input, gas, nil, false, 0 /* intrinsicGas is zero here */, 0)
@@ -375,7 +375,7 @@ func (evm *EVM) OverlayCreate(caller ContractRef, codeAndHash *codeAndHash, gas 
 
 // create creates a new contract using code as deployment code.
 func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gasRemaining uint64, value *uint256.Int, address libcommon.Address, typ OpCode, incrementNonce bool, bailout bool, intrinsicGas uint64) ([]byte, libcommon.Address, uint64, error) {
-	if !evm.ChainRules().IsNormalcy && !evm.chainConfig.UsingEthereumHardfork {
+	if !evm.ChainRules().IsNormalcy && !evm.ChainRules().IsEthereumHardfork {
 		return evm.createZkEvm(caller, codeAndHash, gasRemaining, value, address, typ, incrementNonce, intrinsicGas)
 	}
 

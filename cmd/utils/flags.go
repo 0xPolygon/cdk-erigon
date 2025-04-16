@@ -908,11 +908,6 @@ var (
 		Usage: "Exclude zkevm flags from startup logging on zkevm flags.",
 		Value: cli.NewStringSlice("zkevm.l1-rpc-url"),
 	}
-	Hardfork = cli.StringFlag{
-		Name:  "zkevm.hardfork",
-		Usage: "Values { hermez | ethereum }. Default, hermez.",
-		Value: "hermez",
-	}
 	Commitment = cli.StringFlag{
 		Name:  "zkevm.commitment",
 		Usage: "Values { smt | pmt }. Default, smt.",

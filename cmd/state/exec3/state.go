@@ -197,7 +197,7 @@ func (rw *Worker) RunTxTaskNoLock(txTask *exec22.TxTask) {
 			getHashFn := core.GetHashFn(header, rw.getHeader)
 			blockContext = core.NewEVMBlockContext(header, getHashFn, rw.engine, nil /* author */, rw.chainConfig)
 		}
-		rw.evm.ResetBetweenBlocks(blockContext, core.NewEVMTxContext(msg), ibs, vmConfig, rules, rw.chainConfig)
+		rw.evm.ResetBetweenBlocks(blockContext, core.NewEVMTxContext(msg), ibs, vmConfig, rules)
 
 		// MA applytx
 		vmenv := rw.evm

@@ -337,10 +337,6 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			return genesisErr
 		}
 
-		if chainConfig.UsingEthereumHardfork != config.UsingEthereumHardfork() {
-			panic(fmt.Sprintf("Genesis block hardfork is incompatible with the zkevm.hardfork flag set. Genesis UsingEthereumHardfork: %v, Flag UsingEthereumHardfork: %v. Please change flag zkevm.hardfork.", chainConfig.UsingEthereumHardfork, config.UsingEthereumHardfork()))
-		}
-
 		return nil
 	}); err != nil {
 		panic(err)
@@ -1020,7 +1016,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		}
 
 		backend.preStartTasks.PurgeWitnessCache = config.WitnessCachePurge
-		backend.preStartTasks.PurgeBadTxs = config.BadTxPurge || config.UsingEthereumHardfork()
+		backend.preStartTasks.PurgeBadTxs = config.BadTxPurge
 
 		// entering ZK territory!
 		cfg := backend.config
@@ -1459,10 +1455,6 @@ func (s *Ethereum) PreStart() error {
 	}
 
 	if s.preStartTasks.PurgeBadTxs {
-		if s.config.Hardfork == ethconfig.HardforkTypeEthereum {
-			log.Warn("[PreStart] Node running in ethereum hardfork. Counters turned off. Purging any bad tx hash counters.", "zkevm.hardfork", s.config.Hardfork)
-		}
-
 		if s.config.BadTxPurge {
 			log.Warn("[PreStart] Purge bad transactions cache enabled, purging...", "zkevm.bad-tx-purge", s.config.BadTxPurge)
 		}

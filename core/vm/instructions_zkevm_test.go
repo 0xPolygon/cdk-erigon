@@ -25,7 +25,7 @@ func TestBlockhashV2(t *testing.T) {
 	var (
 		env            = NewEVM(evmtypes.BlockContext{GetHash: gethashFn}, evmtypes.TxContext{}, TestIntraBlockState{}, params.TestChainConfig, Config{})
 		stack          = stack.New()
-		evmInterpreter = NewZKEVMInterpreter(env, NewZkConfig(env.Config(), nil, false))
+		evmInterpreter = NewZKEVMInterpreter(env, NewZkConfig(env.Config(), nil))
 		pc             = uint64(0)
 	)
 
