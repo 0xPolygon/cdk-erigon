@@ -165,7 +165,7 @@ func generateCacheKey(chainID string, body []byte) (string, error) {
 	return fmt.Sprintf("%s_%s", chainID, modifiedBody), nil
 }
 
-func handleRequest(db kv.RwDB, hostsWhiteList []string) http.HandlerFunc {
+func handleRequest(db kv.RwDB, hostsWhitelist []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		endpoint := r.URL.Query().Get("endpoint")
 		chainID := r.URL.Query().Get("chainid")
@@ -174,7 +174,7 @@ func handleRequest(db kv.RwDB, hostsWhiteList []string) http.HandlerFunc {
 			return
 		}
 
-		l1Endpoint, err := verifyEndpoint(endpoint, hostsWhiteList)
+		l1Endpoint, err := verifyEndpoint(endpoint, hostsWhitelist)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
