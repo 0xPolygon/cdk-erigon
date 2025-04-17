@@ -28,6 +28,7 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 
@@ -97,7 +98,7 @@ func writeLogsList(w http.ResponseWriter, dirPath string) {
 func writeLogsRead(w http.ResponseWriter, r *http.Request, dirPath string) {
 	file := path.Base(r.URL.Path)
 
-	if file == "/" || file == "." {
+	if file == "." || strings.Contains(file, "/") || strings.Contains(file, "\\") || strings.Contains(file, "..") {
 		http.Error(w, "file is required - specify the name of log file to read", http.StatusBadRequest)
 		return
 	}
@@ -181,6 +182,16 @@ func limitValue(values url.Values, def int64) (int64, error) {
 
 	if err != nil {
 		return 0, fmt.Errorf("limit %s is not a int64 number: %v", limitStr, err)
+	}
+
+	const MaxLimit = 1000000
+
+	if limit < 0 {
+		return 0, fmt.Errorf("limit %d must be non-negative", limit)
+	}
+
+	if limit > MaxLimit {
+		limit = MaxLimit
 	}
 
 	return limit, nil
