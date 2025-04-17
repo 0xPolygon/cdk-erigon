@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.2
-FROM docker.io/library/golang:1.22-alpine3.19 AS builder
+FROM docker.io/library/golang:1.23-alpine3.20 AS builder
 
 RUN apk --no-cache add build-base linux-headers git bash ca-certificates libstdc++
 
@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/root/.cache \
     make BUILD_TAGS=nosqlite,noboltdb,nosilkworm all
 
 
-FROM docker.io/library/golang:1.22-alpine3.19 AS tools-builder
+FROM docker.io/library/golang:1.23-alpine3.20 AS tools-builder
 RUN apk --no-cache add build-base linux-headers git bash ca-certificates libstdc++
 WORKDIR /app
 
@@ -36,7 +36,7 @@ RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
     make db-tools
 
-FROM docker.io/library/alpine:3.19
+FROM docker.io/library/alpine:3.20
 
 # install required runtime libs, along with some helpers for debugging
 RUN apk add --no-cache ca-certificates libstdc++ tzdata
@@ -85,6 +85,7 @@ COPY --from=builder /app/build/bin/state /usr/local/bin/state
 COPY --from=builder /app/build/bin/txpool /usr/local/bin/txpool
 COPY --from=builder /app/build/bin/verkle /usr/local/bin/verkle
 COPY --from=builder /app/build/bin/acl /usr/local/bin/acl
+COPY --from=builder /app/build/bin/relay /usr/local/bin/relay
 
 EXPOSE 8545 \
        8551 \
@@ -95,7 +96,8 @@ EXPOSE 8545 \
        42069/udp \
        8080 \
        9090 \
-       6060
+       6060 \
+       7900
 
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md
 ARG BUILD_DATE
