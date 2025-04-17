@@ -51,7 +51,7 @@ type operation struct {
 }
 
 var (
-	frontierInstructionSet         = newFrontierInstructionSet()
+	frontierInstructionSet         = newFrontierInstructionSetZk()
 	homesteadInstructionSet        = newHomesteadInstructionSet()
 	tangerineWhistleInstructionSet = newTangerineWhistleInstructionSet()
 	spuriousDragonInstructionSet   = newSpuriousDragonInstructionSet()
@@ -61,7 +61,7 @@ var (
 	berlinInstructionSet           = newBerlinInstructionSet()
 	londonInstructionSet           = newLondonInstructionSet()
 	shanghaiInstructionSet         = newShanghaiInstructionSet()
-	napoliInstructionSet           = newNapoliInstructionSet()
+	napoliInstructionSet           = newNapoliInstructionSetZk()
 	cancunInstructionSet           = newCancunInstructionSet()
 	pragueInstructionSet           = newPragueInstructionSet()
 )
@@ -101,7 +101,7 @@ func newPragueInstructionSet() JumpTable {
 // constantinople, istanbul, petersburg, berlin, london, paris, shanghai,
 // and cancun instructions.
 func newCancunInstructionSet() JumpTable {
-	instructionSet := newNapoliInstructionSet()
+	instructionSet := newNapoliInstructionSetZk()
 	// Disable BLOBHASH and BLOBBASEFEE opcodes for L2
 	// enable4844(&instructionSet) // BLOBHASH opcode
 	// enable7516(&instructionSet) // BLOBBASEFEE opcode
@@ -263,7 +263,7 @@ func newTangerineWhistleInstructionSet() JumpTable {
 // newHomesteadInstructionSet returns the frontier and homestead
 // instructions that can be executed during the homestead phase.
 func newHomesteadInstructionSet() JumpTable {
-	instructionSet := newFrontierInstructionSet()
+	instructionSet := newFrontierInstructionSetZk()
 	instructionSet[DELEGATECALL] = &operation{
 		execute:     opDelegateCall,
 		dynamicGas:  gasDelegateCall,

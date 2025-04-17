@@ -177,11 +177,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		}
 	}
 
-	hardfork := ethconfig.Hardfork(ctx.String(utils.Hardfork.Name))
-	if !hardfork.IsValid() {
-		panic(fmt.Sprintf("Invalid hardfork: %s. Must be one of: %s", ctx.String(utils.Hardfork.Name), hardfork.ValidHardforks()))
-	}
-
 	commitment := ethconfig.Commitment(ctx.String(utils.Commitment.Name))
 	if !commitment.IsValid() {
 		panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(utils.Commitment.Name), commitment.ValidCommitments()))
@@ -294,13 +289,13 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		BadTxPurge:                             ctx.Bool(utils.BadTxPurge.Name),
 		L2InfoTreeUpdatesBatchSize:             ctx.Uint64(utils.L2InfoTreeUpdatesBatchSize.Name),
 		L2InfoTreeUpdatesEnabled:               ctx.Bool(utils.L2InfoTreeUpdatesEnabled.Name),
-		Hardfork:                               hardfork,
 		Commitment:                             commitment,
 		InjectGers:                             ctx.Bool(utils.InjectGers.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)
 
+	// check if the flags are set
 	checkFlag(utils.L2ChainIdFlag.Name, cfg.L2ChainId)
 	if !sequencer.IsSequencer() {
 		checkFlag(utils.L2RpcUrlFlag.Name, cfg.Zk.L2RpcUrl)
@@ -330,9 +325,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 			panic("You cannot disable virtual counters when running with executors")
 		}
 	}
-
 	checkFlag(utils.AddressZkevmFlag.Name, cfg.AddressZkevm)
-
 	checkFlag(utils.L1ChainIdFlag.Name, cfg.L1ChainId)
 	checkFlag(utils.L1RpcUrlFlag.Name, cfg.L1RpcUrl)
 	checkFlag(utils.L1MaticContractAddressFlag.Name, cfg.L1MaticContractAddress.Hex())
@@ -344,6 +337,5 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.TxPoolRejectSmartContractDeployments.Name, cfg.TxPoolRejectSmartContractDeployments)
 	checkFlag(utils.L1ContractAddressCheckFlag.Name, cfg.L1ContractAddressCheck)
 	checkFlag(utils.L1ContractAddressRetrieveFlag.Name, cfg.L1ContractAddressCheck)
-
 	verifyAddressFlag(utils.L2DataStreamerUrlFlag.Name, cfg.L2DataStreamerUrl)
 }

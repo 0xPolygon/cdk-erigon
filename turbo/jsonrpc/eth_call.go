@@ -250,7 +250,10 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	}
 	header := block.HeaderNoCopy()
 
-	useCounters := !api.DisableVirtualCounters
+	useCounters := true
+	if api.DisableVirtualCounters || chainConfig.IsEthereumHardfork(header.Number.Uint64()) {
+		useCounters = false
+	}
 	caller, err := transactions.NewReusableCaller(engine, stateReader, overrides, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters)
 	if err != nil {
 		return 0, err

@@ -96,3 +96,25 @@ func overrideJumpTableForLastOpcodeForkId12(jt *JumpTable) {
 	jt[SLOAD].execute = opSload_lastOpCode
 	jt[SSTORE].execute = opSstore_lastOpCode
 }
+
+func newNapoliInstructionSetZk() JumpTable {
+	instructionSet := newShanghaiInstructionSet()
+	enable1153(&instructionSet) // Transient storage opcodes
+	enable5656(&instructionSet) // MCOPY opcode
+	// Disable opSelfdestruct6780. SELFDESTRUCT replaced by SENDALL [zkevm change]
+	//enable6780(&instructionSet) // SELFDESTRUCT only in same transaction
+	validateAndFillMaxStack(&instructionSet)
+	return instructionSet
+}
+
+func newFrontierInstructionSetZk() JumpTable {
+	is := newFrontierInstructionSet()
+	// SELFDESTRUCT is replaced by SENDALL [zkevm change]
+	is[SELFDESTRUCT] = &operation{
+		execute:    opSendAll_zkevm,
+		dynamicGas: gasSelfdestruct_zkevm,
+		numPop:     1,
+		numPush:    0,
+	}
+	return is
+}

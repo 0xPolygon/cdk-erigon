@@ -118,6 +118,7 @@ type Config struct {
 	ForkID12BananaBlock     *big.Int `json:"forkID12BananaBlock,omitempty"`
 	ForkId13Durian          *big.Int `json:"forkID13Durian,omitempty"`
 	NormalcyBlock           *big.Int `json:"normalcyBlock,omitempty"`
+	EthereumHardforkBlock   *big.Int `json:"ethereumHardforkBlock,omitempty"`
 
 	AllowFreeTransactions bool   `json:"allowFreeTransactions,omitempty"`
 	ZkDefaultGasPrice     uint64 `json:"zkDefaultGasFee,omitempty"`
@@ -401,6 +402,10 @@ func (c *Config) GetBlobGasPriceUpdateFraction(t uint64) uint64 {
 
 func (c *Config) IsNormalcy(num uint64) bool {
 	return isForked(c.NormalcyBlock, num)
+}
+
+func (c *Config) IsEthereumHardfork(num uint64) bool {
+	return isForked(c.EthereumHardforkBlock, num)
 }
 
 func (c *Config) IsForkID4(num uint64) bool {
@@ -696,6 +701,7 @@ type Rules struct {
 	IsPrague, isOsaka                                                                                                                                    bool
 	IsAura                                                                                                                                               bool
 	IsNormalcy                                                                                                                                           bool
+	IsEthereumHardfork                                                                                                                                   bool
 	IsForkID4, IsForkID5Dragonfruit, IsForkID6IncaBerry, IsForkID7Etrog, IsForkID8Elderberry, IsForkId10, IsForkId11, IsForkID12Banana, IsForkID13Durian bool
 }
 
@@ -723,6 +729,7 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsPrague:             c.IsPrague(time),
 		isOsaka:              c.IsOsaka(time),
 		IsNormalcy:           c.IsNormalcy(num),
+		IsEthereumHardfork:   c.IsEthereumHardfork(num),
 		IsAura:               c.Aura != nil,
 		IsForkID4:            c.IsForkID4(num),
 		IsForkID5Dragonfruit: c.IsForkID5Dragonfruit(num),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/erigontech/erigon/zk/hermez_db"
 	"math/big"
 
 	"github.com/erigontech/erigon-lib/common"
@@ -14,7 +15,6 @@ import (
 	"github.com/erigontech/erigon/params"
 	"github.com/erigontech/erigon/rpc"
 	"github.com/erigontech/erigon/turbo/rpchelper"
-	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/utils"
 )
 
