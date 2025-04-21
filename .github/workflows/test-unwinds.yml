@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        ac-split: ["default", "ac-split"]
+        split-db: ["default", "split-db"]
 
     steps:
       - name: Checkout cdk-erigon
@@ -52,6 +52,6 @@ jobs:
         run: |
           cd ./cdk-erigon
           chmod +x ./zk/tests/unwinds/unwind.sh
-          ./zk/tests/unwinds/unwind.sh "${{ matrix.ac-split }}"
+          ./zk/tests/unwinds/unwind.sh "${{ matrix.split-db }}"
 
   

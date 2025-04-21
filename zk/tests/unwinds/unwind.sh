@@ -13,7 +13,7 @@ unwindBatch=70
 datastreamPort=6900
 logFile="script.log"
 
-AC_SPLIT=${1:-false}
+SPLIT_DB=${1:-false}
 
 # Redirect stdout to log file and keep stderr to console
 exec > >(tee -i "$logFile")  # Redirect stdout to log file
@@ -73,7 +73,7 @@ dump_data() {
     local stop=$1
     local label=$2
     echo "[$(date)] Dumping data - $label ($stop)"
-    if [ "$AC_SPLIT" = "ac-split" ]; then
+    if [ "$SPLIT_DB" = "split-db" ]; then
         go run ./cmd/hack --action=dumpAll --standalone-smt-db=true --smt-db-path="$dataPath/rpc-datadir/smt" --chaindata="$dataPath/rpc-datadir/chaindata" --output="$dataPath/$stop" || { echo "Failed to dump data for $label"; exit 1; }
     else
         go run ./cmd/hack --action=dumpAll --chaindata="$dataPath/rpc-datadir/chaindata" --output="$dataPath/$stop" || { echo "Failed to dump data for $label"; exit 1; }
@@ -83,16 +83,14 @@ dump_data() {
 CONFIG_FILE="temp-dynamic-integration8.yaml"
 cp zk/tests/unwinds/config/dynamic-integration8.yaml $CONFIG_FILE
 
-if [ "$AC_SPLIT" = "ac-split" ]; then
-    echo "Will use ac-split"
+if [ "$SPLIT_DB" = "split-db" ]; then
+    echo "Will use split-db"
     printf "\n" >> "$CONFIG_FILE"
     echo "zkevm.standalone-smt-db: true" >> "$CONFIG_FILE"
-    echo "zkevm.enable-async-commit: true" >> "$CONFIG_FILE"
 else
-    echo "Will not use ac-split"
+    echo "Will not use split-db"
     printf "\n" >> "$CONFIG_FILE"
     echo "zkevm.standalone-smt-db: false" >> "$CONFIG_FILE"
-    echo "zkevm.enable-async-commit: false" >> "$CONFIG_FILE"
 fi
 
 # Run Erigon to first stop
@@ -115,7 +113,7 @@ dump_data "$secondStop" "sync to second stop"
 
 # Unwind to first stop
 echo "[$(date)] Unwinding to batch: $unwindBatch"
-if [ "$AC_SPLIT" = "ac-split" ]; then
+if [ "$SPLIT_DB" = "split-db" ]; then
     go run ./cmd/integration state_stages_zkevm \
         --datadir="$dataPath/rpc-datadir" \
         --config="$CONFIG_FILE" \
