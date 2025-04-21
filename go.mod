@@ -1,6 +1,6 @@
 module github.com/erigontech/erigon
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/erigontech/mdbx-go v0.27.24
