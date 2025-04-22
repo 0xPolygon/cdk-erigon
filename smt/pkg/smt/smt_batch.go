@@ -48,7 +48,7 @@ func (s *SMT) InsertBatch(cfg InsertBatchConfig, nodeKeys []*utils.NodeKey, node
 		maxInsertingNodePathLevel = 0
 		size                      = len(nodeKeys)
 		smtBatchNodeRoot          *smtBatchNode
-		nodeHashesForDelete       = make(map[uint64]map[uint64]map[uint64]map[uint64]*utils.NodeKey)
+		nodeHashesForDelete       = make(map[utils.NodeKey]struct{})
 	)
 
 	//BE CAREFUL: modifies the arrays
@@ -253,24 +253,18 @@ func (s *SMT) preprocessBatchedNodeValues(
 
 func (s *SMT) deleteBatchedNodeValues(
 	logPrefix string,
-	nodeHashesForDelete map[uint64]map[uint64]map[uint64]map[uint64]*utils.NodeKey,
+	nodeHashesForDelete map[utils.NodeKey]struct{},
 ) error {
 	progressChanDel, stopProgressPrinterDel := getProgressPrinterPre(logPrefix, "deletes", uint64(len(nodeHashesForDelete)), false)
 	defer stopProgressPrinterDel()
 
-	for _, mapLevel0 := range nodeHashesForDelete {
+	for nodeHash, _ := range nodeHashesForDelete {
 		*progressChanDel <- uint64(1)
-		for _, mapLevel1 := range mapLevel0 {
-			for _, mapLevel2 := range mapLevel1 {
-				for _, nodeHash := range mapLevel2 {
-					if err := s.Db.DeleteByNodeKey(*nodeHash); err != nil {
-						return fmt.Errorf("DeleteByNodeKey: %w", err)
-					}
-					if err := s.Db.DeleteHashKey(*nodeHash); err != nil {
-						return fmt.Errorf("DeleteHashKey: %w", err)
-					}
-				}
-			}
+		if err := s.Db.DeleteByNodeKey(nodeHash); err != nil {
+			return fmt.Errorf("DeleteByNodeKey: %w", err)
+		}
+		if err := s.Db.DeleteHashKey(nodeHash); err != nil {
+			return fmt.Errorf("DeleteHashKey: %w", err)
 		}
 	}
 	stopProgressPrinterDel()
@@ -505,7 +499,7 @@ func (s *SMT) findInsertingPoint(
 }
 
 func updateNodeHashesForDelete(
-	nodeHashesForDelete map[uint64]map[uint64]map[uint64]map[uint64]*utils.NodeKey,
+	nodeHashesForDelete map[utils.NodeKey]struct{},
 	visitedNodeHashes []*utils.NodeKey,
 ) {
 	for _, visitedNodeHash := range visitedNodeHashes {
@@ -513,7 +507,7 @@ func updateNodeHashesForDelete(
 			continue
 		}
 
-		setNodeKeyMapValue(nodeHashesForDelete, visitedNodeHash, visitedNodeHash)
+		nodeHashesForDelete[*visitedNodeHash] = struct{}{}
 	}
 }
 
