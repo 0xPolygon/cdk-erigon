@@ -531,8 +531,9 @@ func (evm *EVM) Create2(caller ContractRef, code []byte, gasRemaining uint64, en
 func (evm *EVM) SysCreate(caller ContractRef, code []byte, gas uint64, endowment *uint256.Int, contractAddr libcommon.Address) (ret []byte, leftOverGas uint64, err error) {
 	if evm.ChainRules().IsNormalcy || evm.ChainRules().IsEthereumHardfork {
 		ret, _, leftOverGas, err = evm.create(caller, &codeAndHash{code: code}, gas, endowment, contractAddr, CREATE, false /* incrementNonce */, false, 0 /* intrinsicGas is zero here*/)
+	} else {
+		ret, _, leftOverGas, err = evm.createZkEvm(caller, &codeAndHash{code: code}, gas, endowment, contractAddr, CREATE, false /* incrementNonce */, 0 /* intrinsicGas is zero here*/)
 	}
-	ret, _, leftOverGas, err = evm.createZkEvm(caller, &codeAndHash{code: code}, gas, endowment, contractAddr, CREATE, false /* incrementNonce */, 0 /* intrinsicGas is zero here*/)
 	return
 }
 
