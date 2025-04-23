@@ -26,7 +26,8 @@ import (
 )
 
 func New(tmpDir string) kv.RwDB {
-	return mdbx.NewMDBX(log.New()).InMem(tmpDir).MustOpen()
+	// return mdbx.NewMDBX(log.New()).InMem(tmpDir).MustOpen()
+	return mdbx.NewMDBX(log.New()).Path(tmpDir).MustOpen()
 }
 
 func NewPoolDB(tmpDir string) kv.RwDB {

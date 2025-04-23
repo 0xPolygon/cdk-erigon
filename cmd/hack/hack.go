@@ -45,6 +45,7 @@ import (
 	"github.com/erigontech/erigon/cmd/hack/flow"
 	"github.com/erigontech/erigon/cmd/hack/tool"
 	"github.com/erigontech/erigon/common"
+
 	// "github.com/erigontech/erigon/common/paths"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
@@ -381,7 +382,9 @@ func dumpAll(chaindata, output string) error {
 }
 
 func printBucket(chaindata, bucket string) {
-	db := mdbx.MustOpen(chaindata)
+	// db := mdbx.MustOpen(chaindata)
+	logger := log.New()
+	db := mdbx.NewMDBX(logger).Path(chaindata).Readonly().MustOpen()
 	defer db.Close()
 	f, err := os.Create(fmt.Sprintf("bucket-%s.txt", bucket))
 	tool.Check(err)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
 
 	"github.com/erigontech/erigon/core"
@@ -164,6 +165,13 @@ func sequencingBatchStep(
 		fmt.Printf("+++++++++++++++++++++++ sdb.tx: %p\n", sdb.tx)
 		if err != nil {
 			panic("failed to regenerate intermediate hashes")
+		}
+		err = sdb.tx.ForEach(kv.TrieOfAccounts, nil, func(k, v []byte) error {
+			fmt.Printf("TrieOfAccounts key: %x, value: %x\n", k, v)
+			return nil
+		})
+		if err != nil {
+			panic("failed to iterate over TrieOfAccounts")
 		}
 		// 	if err := processInjectedInitialBatch(batchContext, batchState); err != nil {
 		// 		return err

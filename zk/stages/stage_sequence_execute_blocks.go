@@ -244,6 +244,13 @@ func finaliseBlock(
 		if err != nil {
 			panic("failed to regenerate intermediate hashes")
 		}
+		err = batchContext.sdb.tx.ForEach(kv.TrieOfAccounts, nil, func(k, v []byte) error {
+			fmt.Printf("TrieOfAccounts key: %x, value: %x\n", k, v)
+			return nil
+		})
+		if err != nil {
+			panic("failed to iterate over TrieOfAccounts")
+		}
 		// newRoot, err = stagedsync.IncrementIntermediateHashes(batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, thisBlockNumber, trieCfg, expectedRootHash, quit, logger)
 		// log.Info(fmt.Sprintf("[%s] IncrementIntermediateHashes newRoot: %s", batchContext.s.LogPrefix(), newRoot.String()))
 	}

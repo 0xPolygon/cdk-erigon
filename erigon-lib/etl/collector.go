@@ -100,9 +100,9 @@ func (c *Collector) SortAndFlushInBackground(v bool) { c.sortAndFlushInBackgroun
 
 func (c *Collector) extractNextFunc(originalK, k []byte, v []byte) error {
 	c.buf.Put(k, v)
-	if !c.buf.CheckFlushSize() {
-		return nil
-	}
+	// if !c.buf.CheckFlushSize() {
+	// 	return nil
+	// }
 	return c.flushBuffer(false)
 }
 

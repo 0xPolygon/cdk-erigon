@@ -1,6 +1,3 @@
-//go:build notzkevm
-// +build notzkevm
-
 package core_test
 
 import (
@@ -33,6 +30,7 @@ func TestGenesisBlockHashes(t *testing.T) {
 	logger := log.New()
 	_, db, _ := temporaltest.NewTestDB(t, datadir.New(t.TempDir()))
 	check := func(network string) {
+		logger.Warn("checking genesis block", "network", network)
 		genesis := core.GenesisBlockByChainName(network)
 		tx, err := db.BeginRw(context.Background())
 		if err != nil {

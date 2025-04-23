@@ -548,6 +548,8 @@ func FuzzTrieRootAccountProofs(f *testing.F) {
 			require.Equal(t, flatProof, naiveProof, "for key %s", hash)
 		}
 	})
+
+	f.Fatal("FuzzTrieRootAccountProofs failed")
 }
 
 // FuzzTrieRootStorageProofs seeds the database with an initial account and set
