@@ -350,7 +350,7 @@ func (evm *EVM) StaticCall(caller ContractRef, addr libcommon.Address, input []b
 	if evm.ChainRules().IsEthereumHardfork {
 		return evm.call(STATICCALL, caller, addr, input, gas, new(uint256.Int), false, 0 /* intrinsicGas is zero here */)
 	}
-	return evm.call_zkevm(STATICCALL, caller, addr, input, gas, nil, false, 0 /* intrinsicGas is zero here */, 0)
+	return evm.call_zkevm(STATICCALL, caller, addr, input, gas, new(uint256.Int), false, 0 /* intrinsicGas is zero here */, 0)
 }
 
 type codeAndHash struct {
@@ -370,15 +370,14 @@ func (c *codeAndHash) Hash() libcommon.Hash {
 }
 
 func (evm *EVM) OverlayCreate(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *uint256.Int, address libcommon.Address, typ OpCode, incrementNonce bool) ([]byte, libcommon.Address, uint64, error) {
-	return evm.create(caller, codeAndHash, gas, value, address, typ, incrementNonce, false, 0)
+	if evm.ChainRules().IsNormalcy || evm.ChainRules().IsEthereumHardfork {
+		return evm.create(caller, codeAndHash, gas, value, address, typ, incrementNonce, false, 0)
+	}
+	return evm.createZkEvm(caller, codeAndHash, gas, value, address, typ, incrementNonce, 0)
 }
 
 // create creates a new contract using code as deployment code.
 func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gasRemaining uint64, value *uint256.Int, address libcommon.Address, typ OpCode, incrementNonce bool, bailout bool, intrinsicGas uint64) ([]byte, libcommon.Address, uint64, error) {
-	if !evm.ChainRules().IsNormalcy && !evm.ChainRules().IsEthereumHardfork {
-		return evm.createZkEvm(caller, codeAndHash, gasRemaining, value, address, typ, incrementNonce, intrinsicGas)
-	}
-
 	var ret []byte
 	var err error
 	var gasConsumption uint64
@@ -507,7 +506,10 @@ func (evm *EVM) maxCodeSize() int {
 // DESCRIBED: docs/programmers_guide/guide.md#nonce
 func (evm *EVM) Create(caller ContractRef, code []byte, gasRemaining uint64, endowment *uint256.Int, bailout bool, intrinsicGas uint64) (ret []byte, contractAddr libcommon.Address, leftOverGas uint64, err error) {
 	contractAddr = crypto.CreateAddress(caller.Address(), evm.intraBlockState.GetNonce(caller.Address()))
-	return evm.create(caller, &codeAndHash{code: code}, gasRemaining, endowment, contractAddr, CREATE, true /* incrementNonce */, bailout, intrinsicGas)
+	if evm.ChainRules().IsNormalcy || evm.ChainRules().IsEthereumHardfork {
+		return evm.create(caller, &codeAndHash{code: code}, gasRemaining, endowment, contractAddr, CREATE, true /* incrementNonce */, bailout, intrinsicGas)
+	}
+	return evm.createZkEvm(caller, &codeAndHash{code: code}, gasRemaining, endowment, contractAddr, CREATE, true /* incrementNonce */, intrinsicGas)
 }
 
 // Create2 creates a new contract using code as deployment code.
@@ -518,13 +520,19 @@ func (evm *EVM) Create(caller ContractRef, code []byte, gasRemaining uint64, end
 func (evm *EVM) Create2(caller ContractRef, code []byte, gasRemaining uint64, endowment *uint256.Int, salt *uint256.Int, bailout bool, intrinsicGas uint64) (ret []byte, contractAddr libcommon.Address, leftOverGas uint64, err error) {
 	codeAndHash := &codeAndHash{code: code}
 	contractAddr = crypto.CreateAddress2(caller.Address(), salt.Bytes32(), codeAndHash.Hash().Bytes())
-	return evm.create(caller, codeAndHash, gasRemaining, endowment, contractAddr, CREATE2, true /* incrementNonce */, bailout, 0 /* intrinsicGas is zero here*/)
+	if evm.ChainRules().IsNormalcy || evm.ChainRules().IsEthereumHardfork {
+		return evm.create(caller, codeAndHash, gasRemaining, endowment, contractAddr, CREATE2, true /* incrementNonce */, bailout, 0 /* intrinsicGas is zero here*/)
+	}
+	return evm.createZkEvm(caller, codeAndHash, gasRemaining, endowment, contractAddr, CREATE2, true /* incrementNonce */, 0 /* intrinsicGas is zero here*/)
 }
 
 // SysCreate is a special (system) contract creation methods for genesis constructors.
 // Unlike the normal Create & Create2, it doesn't increment caller's nonce.
 func (evm *EVM) SysCreate(caller ContractRef, code []byte, gas uint64, endowment *uint256.Int, contractAddr libcommon.Address) (ret []byte, leftOverGas uint64, err error) {
-	ret, _, leftOverGas, err = evm.create(caller, &codeAndHash{code: code}, gas, endowment, contractAddr, CREATE, false /* incrementNonce */, false, 0 /* intrinsicGas is zero here*/)
+	if evm.ChainRules().IsNormalcy || evm.ChainRules().IsEthereumHardfork {
+		ret, _, leftOverGas, err = evm.create(caller, &codeAndHash{code: code}, gas, endowment, contractAddr, CREATE, false /* incrementNonce */, false, 0 /* intrinsicGas is zero here*/)
+	}
+	ret, _, leftOverGas, err = evm.createZkEvm(caller, &codeAndHash{code: code}, gas, endowment, contractAddr, CREATE, false /* incrementNonce */, 0 /* intrinsicGas is zero here*/)
 	return
 }
 
