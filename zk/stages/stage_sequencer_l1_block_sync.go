@@ -8,15 +8,15 @@ import (
 
 	"encoding/binary"
 
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/erigon/zk/l1_data"
-	"github.com/ledgerwatch/erigon/zk/syncer"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/eth/ethconfig"
+	"github.com/erigontech/erigon/eth/stagedsync"
+	"github.com/erigontech/erigon/eth/stagedsync/stages"
+	"github.com/erigontech/erigon/zk/hermez_db"
+	"github.com/erigontech/erigon/zk/l1_data"
+	"github.com/erigontech/erigon/zk/syncer"
 )
 
 type SequencerL1BlockSyncCfg struct {
@@ -189,7 +189,15 @@ LOOP:
 				// this is important because the batches are written in reverse order
 				for idx, batch := range batches {
 					b := initBatch + uint64(idx)
-					data := make([]byte, 20+32+8+len(batch))
+
+					size := 20 + 32 + 8 + len(batch)
+					if size > LIMIT_120_KB {
+						log.Error(fmt.Sprintf("[%s] L1 batch data is too large", logPrefix), "size", size)
+						funcErr = fmt.Errorf("L1 batch data is too large: %d", size)
+						return funcErr
+					}
+
+					data := make([]byte, size)
 					copy(data, coinbase.Bytes())
 					copy(data[20:], l1InfoRoot)
 					copy(data[52:], limitTimestampBytes)

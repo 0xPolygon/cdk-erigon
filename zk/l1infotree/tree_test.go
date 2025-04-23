@@ -6,10 +6,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/zk/l1infotree"
-	l1infotree2 "github.com/ledgerwatch/erigon/zk/tests/vectors/l1infotree"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/zk/l1infotree"
+	l1infotree2 "github.com/erigontech/erigon/zk/tests/vectors/l1infotree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -98,7 +98,7 @@ func TestAddLeaf(t *testing.T) {
 		_, err := mt.AddLeaf(count, leaf)
 		require.NoError(t, err)
 	}
-	log.Debugf("%d leaves added successfully", len(testVector.Leaves))
+	log.Debug("Leaves added successfully: ", len(testVector.Leaves))
 	root, _, _ := mt.GetCurrentRootCountAndSiblings()
 	require.Equal(t, testVector.Root, root)
 	log.Debug("Final root: ", root)
@@ -144,7 +144,7 @@ func TestLeafExists(t *testing.T) {
 		_, err := mt.AddLeaf(count, leaf)
 		require.NoError(t, err)
 	}
-	log.Debugf("%d leaves added successfully", len(testVector.Leaves))
+	log.Debug("Leaves added successfully: ", len(testVector.Leaves))
 	root, _, _ := mt.GetCurrentRootCountAndSiblings()
 	require.Equal(t, testVector.Root, root)
 	log.Debug("Final root: ", root)

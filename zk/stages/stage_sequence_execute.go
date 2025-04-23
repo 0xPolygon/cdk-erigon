@@ -6,19 +6,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/log/v3"
 
-	"github.com/ledgerwatch/erigon/core"
-	"github.com/ledgerwatch/erigon/core/rawdb"
-	"github.com/ledgerwatch/erigon/core/state"
-	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/zk"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	zktx "github.com/ledgerwatch/erigon/zk/tx"
-	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/erigontech/erigon/core"
+	"github.com/erigontech/erigon/core/rawdb"
+	"github.com/erigontech/erigon/core/state"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/eth/stagedsync"
+	"github.com/erigontech/erigon/eth/stagedsync/stages"
+	"github.com/erigontech/erigon/zk"
+	"github.com/erigontech/erigon/zk/hermez_db"
+	zktx "github.com/erigontech/erigon/zk/tx"
+	"github.com/erigontech/erigon/zk/utils"
 )
 
 var shouldCheckForExecutionAndDataStreamAlignment = true
@@ -327,7 +327,7 @@ func sequencingBatchStep(
 		ibs := state.New(sdb.stateReader)
 		getHashFn := core.GetHashFn(header, func(hash common.Hash, number uint64) *types.Header { return rawdb.ReadHeader(sdb.tx, hash, number) })
 		coinbase := batchState.getCoinbase(&cfg)
-		blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &coinbase)
+		blockContext := core.NewEVMBlockContext(header, getHashFn, cfg.engine, &coinbase, cfg.chainConfig)
 		batchState.blockState.builtBlockElements.resetBlockBuildingArrays()
 
 		parentRoot := parentBlock.Root()
@@ -424,8 +424,10 @@ func sequencingBatchStep(
 			}
 
 			if len(batchState.blockState.transactionsForInclusion) == 0 {
-				log.Trace(fmt.Sprintf("[%s] Sleep on SequencerTimeoutOnEmptyTxPool", logPrefix), "time in ms", batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool.Milliseconds())
-				time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
+				if !batchState.isAnyRecovery() {
+					log.Trace(fmt.Sprintf("[%s] Sleep on SequencerTimeoutOnEmptyTxPool", logPrefix), "time in ms", batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool.Milliseconds())
+					time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
+				}
 			} else {
 				log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 			}
@@ -698,12 +700,6 @@ func sequencingBatchStep(
 				return errCommitAndStart
 			}
 			defer sdb.tx.Rollback()
-		}
-
-		// remove mined transactions from the pool
-		toRemove := append(batchState.blockState.builtBlockElements.txSlots, batchState.blockState.transactionsToDiscard...)
-		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, toRemove); err != nil {
-			return err
 		}
 
 		// remove the decoded transactions from the cache

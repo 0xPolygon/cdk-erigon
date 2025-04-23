@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
-	"github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
+	"github.com/erigontech/erigon/zk/datastream/types"
 	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
 )
@@ -401,7 +401,7 @@ func TestStreamClientGetL2BlockByNumber(t *testing.T) {
 
 	c := NewClient(context.Background(), "", false, 500*time.Millisecond, 0, DefaultEntryChannelSize)
 	c.header = &types.HeaderEntry{
-		TotalEntries: 4,
+		TotalEntries: 5,
 	}
 	c.conn = clientConn
 	c.allowStops = false

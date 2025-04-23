@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/log/v3"
 
-	"github.com/ledgerwatch/erigon/eth/stagedsync"
+	"github.com/erigontech/erigon/eth/stagedsync"
 )
 
 func resequence(
@@ -23,7 +23,7 @@ func resequence(
 
 	log.Info(fmt.Sprintf("[%s] Last batch %d is lower than highest batch in datastream %d, resequencing...", s.LogPrefix(), lastBatch, highestBatchInDs))
 
-	batches, err := cfg.dataStreamServer.ReadBatches(lastBatch+1, highestBatchInDs)
+	batches, err := cfg.dataStreamServer.ReadBatchesWithConcurrency(lastBatch+1, highestBatchInDs)
 	if err != nil {
 		return err
 	}

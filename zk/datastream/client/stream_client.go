@@ -13,9 +13,9 @@ import (
 
 	"sync"
 
-	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
-	"github.com/ledgerwatch/erigon/zk/datastream/types"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
+	"github.com/erigontech/erigon/zk/datastream/types"
 )
 
 type StreamType uint64
@@ -33,9 +33,9 @@ const (
 
 var (
 	// ErrFileEntryNotFound denotes error that is returned when the certain file entry is not found in the datastream
-	ErrFileEntryNotFound = errors.New("file entry not found")
-
-	minimumCheckTimeout = 500 * time.Millisecond
+	ErrFileEntryNotFound       = errors.New("file entry not found")
+	ErrReachedEntryNumberLimit = errors.New("reached entry number limit")
+	minimumCheckTimeout        = 500 * time.Millisecond
 )
 
 type StreamClient struct {
@@ -93,7 +93,7 @@ func NewClient(ctx context.Context, server string, useTLS bool, checkTimeout tim
 		checkTimeout:     checkTimeout,
 		server:           server,
 		streamType:       StSequencer,
-		entryChan:        make(chan interface{}, 100000),
+		entryChan:        make(chan interface{}, DefaultEntryChannelSize),
 		maxEntryChanSize: maxEntryChanSize,
 		currentFork:      uint64(latestDownloadedForkId),
 		mtxStreaming:     &sync.Mutex{},
@@ -406,7 +406,12 @@ func (c *StreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function fu
 
 func (c *StreamClient) clearEntryCHannel() {
 	defer func() {
-		for range c.entryChan {
+		for {
+			select {
+			case <-c.entryChan:
+			default:
+				return
+			}
 		}
 	}()
 	defer func() {
@@ -414,21 +419,26 @@ func (c *StreamClient) clearEntryCHannel() {
 			log.Warn("[datastream_client] Channel is already closed")
 		}
 	}()
-
-	close(c.entryChan)
 }
 
-// close old entry chan and read all elements before opening a new one
+// Drain all elements from channel and reuse same channel if the last size didn't change.
+// If the last size was bigger, we scale back down.
 func (c *StreamClient) RenewEntryChannel() {
 	c.clearEntryCHannel()
-	c.entryChan = make(chan interface{}, DefaultEntryChannelSize)
+	if cap(c.entryChan) > DefaultEntryChannelSize {
+		close(c.entryChan)
+		c.entryChan = make(chan interface{}, DefaultEntryChannelSize)
+	}
 }
 
-// close old entry chan and read all elements before opening a new one
+// close old entry chan and read all elements before opening a new one (if size didn't change).
 func (c *StreamClient) RenewMaxEntryChannel() {
 	c.clearEntryCHannel()
-	log.Warn(fmt.Sprintf("[datastream_client] Renewing max entry channel:%v", c.maxEntryChanSize))
-	c.entryChan = make(chan interface{}, c.maxEntryChanSize)
+	if cap(c.entryChan) < int(c.maxEntryChanSize) {
+		close(c.entryChan)
+		log.Warn(fmt.Sprintf("[datastream_client] Renewing max entry channel:%v", c.maxEntryChanSize))
+		c.entryChan = make(chan interface{}, c.maxEntryChanSize)
+	}
 }
 
 func (c *StreamClient) ReadAllEntriesToChannel() (err error) {
@@ -536,6 +546,9 @@ LOOP:
 
 		if readNewProto {
 			if parsedProto, entryNum, err = ReadParsedProto(c); err != nil {
+				if err == ErrReachedEntryNumberLimit {
+					return c.trySendStopSignal()
+				}
 				return err
 			}
 			readNewProto = false
@@ -566,26 +579,31 @@ LOOP:
 		if c.header.TotalEntries == entryNum+1 {
 			log.Trace("[Datastream client] reached the current end of the stream", "header_totalEntries", c.header.TotalEntries, "entryNum", entryNum)
 
-			retries := 0
-		INTERNAL_LOOP:
-			for {
-				select {
-				case c.entryChan <- nil:
-					break INTERNAL_LOOP
-				default:
-					if retries > 5 {
-						return errors.New("[Datastream client] failed to write final entry to channel after 5 retries")
-					}
-					retries++
-					log.Warn("[Datastream client] Channel is full, waiting to write nil and end stream client read")
-					time.Sleep(1 * time.Second)
-				}
+			if err := c.trySendStopSignal(); err != nil {
+				return err
 			}
 			break LOOP
 		}
 	}
 
 	return nil
+}
+
+func (c *StreamClient) trySendStopSignal() error {
+	retries := 0
+	for {
+		select {
+		case c.entryChan <- nil:
+			return nil
+		default:
+			if retries > 5 {
+				return errors.New("[Datastream client] failed to write final entry to channel after 5 retries")
+			}
+			retries++
+			log.Warn("[Datastream client] Channel is full, waiting to write nil and end stream client read")
+			time.Sleep(1 * time.Second)
+		}
+	}
 }
 
 func (c *StreamClient) HandleStart() error {
@@ -721,7 +739,8 @@ func ReadParsedProto(iterator FileEntryIterator) (
 				return
 			}
 			if entryNum == iterator.GetEntryNumberLimit() {
-				break LOOP
+				err = ErrReachedEntryNumberLimit
+				return
 			}
 		}
 

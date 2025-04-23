@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/kv"
+	db2 "github.com/erigontech/erigon/smt/pkg/db"
 
-	"github.com/ledgerwatch/erigon-lib/kv/membatchwithdb"
+	"github.com/erigontech/erigon-lib/kv/membatchwithdb"
+	"github.com/erigontech/erigon-lib/log/v3"
 
-	"github.com/ledgerwatch/erigon/smt/pkg/smt"
-	"github.com/ledgerwatch/erigon/turbo/trie"
-	"github.com/ledgerwatch/erigon/zk"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/erigontech/erigon/smt/pkg/smt"
+	"github.com/erigontech/erigon/turbo/trie"
+	"github.com/erigontech/erigon/zk"
 )
 
 func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.RwTx, checkRoot bool, expectedRootHash *common.Hash, quiet bool) (common.Hash, error) {
@@ -75,8 +75,9 @@ func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.R
 
 	hash := common.BigToHash(lr)
 	if checkRoot && hash != *expectedRootHash {
-		log.Error("failed to verify hash")
-		return trie.EmptyRoot, fmt.Errorf("wrong trie root: %x, expected (from header): %x", hash, expectedRootHash)
+		err := fmt.Errorf("wrong trie root: %x, expected (from header): %x", hash, expectedRootHash)
+		log.Error(fmt.Sprintf("[%s] Error", logPrefix), "failed to verify hash", err)
+		return trie.EmptyRoot, err
 	}
 
 	if !quiet {

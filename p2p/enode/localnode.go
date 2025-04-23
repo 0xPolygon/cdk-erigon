@@ -26,9 +26,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ledgerwatch/erigon/p2p/enr"
-	"github.com/ledgerwatch/erigon/p2p/netutil"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/p2p/enr"
+	"github.com/erigontech/erigon/p2p/netutil"
 )
 
 const (
@@ -256,8 +256,8 @@ func predictAddr(t *netutil.IPTracker) (net.IP, int) {
 	}
 	ipString, portString, _ := net.SplitHostPort(ep)
 	ip := net.ParseIP(ipString)
-	port, _ := strconv.Atoi(portString)
-	return ip, port
+	port, _ := strconv.ParseUint(portString, 10, 16)
+	return ip, int(port)
 }
 
 func (ln *LocalNode) invalidate() {

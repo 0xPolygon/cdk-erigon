@@ -24,13 +24,13 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/ledgerwatch/erigon/crypto"
-	"github.com/ledgerwatch/erigon/node"
-	"github.com/ledgerwatch/erigon/p2p"
-	"github.com/ledgerwatch/erigon/p2p/enode"
-	"github.com/ledgerwatch/erigon/p2p/enr"
-	"github.com/ledgerwatch/erigon/rpc"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/crypto"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/node"
+	"github.com/erigontech/erigon/p2p"
+	"github.com/erigontech/erigon/p2p/enode"
+	"github.com/erigontech/erigon/p2p/enr"
+	"github.com/erigontech/erigon/rpc"
 
 	"github.com/gorilla/websocket"
 )
@@ -237,7 +237,7 @@ func assignTCPPort() (uint16, error) {
 	if err != nil {
 		return 0, err
 	}
-	p, err := strconv.ParseInt(port, 10, 32)
+	p, err := strconv.ParseUint(port, 10, 16)
 	if err != nil {
 		return 0, err
 	}

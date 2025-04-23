@@ -1,15 +1,11 @@
-module github.com/ledgerwatch/erigon-lib
+module github.com/erigontech/erigon-lib
 
 go 1.23.0
-
 toolchain go1.24.1
 
 require (
 	github.com/erigontech/mdbx-go v0.27.24
-	github.com/ledgerwatch/erigon-snapshot v1.3.1-0.20240619030755-1e16b374e6cb
-	github.com/ledgerwatch/interfaces v0.0.0-20240320062914-b57f05746087
-	github.com/ledgerwatch/log/v3 v3.9.0
-	github.com/ledgerwatch/secp256k1 v1.0.0
+	github.com/erigontech/secp256k1 v1.1.0
 	github.com/rs/dnscache v0.0.0-20211102005908-e0241e321417
 )
 
@@ -21,11 +17,14 @@ require (
 	github.com/anacrolix/go-libutp v1.3.1
 	github.com/anacrolix/log v0.15.2
 	github.com/anacrolix/torrent v1.52.6-0.20231201115409-7ea994b6bbd8
+	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/c2h5oh/datasize v0.0.0-20231215233829-aa82cc1e6500
 	github.com/containerd/cgroups/v3 v3.0.3
 	github.com/crate-crypto/go-kzg-4844 v0.7.0
 	github.com/deckarep/golang-set/v2 v2.3.1
 	github.com/edsrzf/mmap-go v1.1.0
+	github.com/erigontech/erigon-snapshot v1.3.0
+	github.com/erigontech/interfaces v0.0.0-20241211040849-58b88a185510
 	github.com/go-stack/stack v1.8.1
 	github.com/gofrs/flock v0.8.1
 	github.com/google/btree v1.1.2
@@ -37,7 +36,7 @@ require (
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/client_model v0.6.1
 	github.com/quasilyte/go-ruleguard/dsl v0.3.22
-	github.com/shirou/gopsutil/v3 v3.24.3
+	github.com/shirou/gopsutil/v4 v4.24.7
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.9.0
 	github.com/tidwall/btree v1.6.0
@@ -46,7 +45,7 @@ require (
 	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b
 	golang.org/x/sync v0.11.0
 	golang.org/x/sys v0.30.0
-	golang.org/x/time v0.5.0
+	golang.org/x/time v0.8.0
 	google.golang.org/grpc v1.63.2
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 	google.golang.org/protobuf v1.33.0
@@ -54,13 +53,14 @@ require (
 
 require (
 	github.com/cespare/xxhash v1.1.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/opencontainers/runtime-spec v1.2.0 // indirect
 	github.com/pion/udp v0.1.4 // indirect
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
-	modernc.org/libc v1.50.4 // indirect
+	modernc.org/libc v1.55.3 // indirect
 	modernc.org/memory v1.8.0 // indirect
-	modernc.org/sqlite v1.29.8 // indirect
+	modernc.org/sqlite v1.33.1 // indirect
 )
 
 require (
@@ -92,6 +92,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/erigontech/speedtest v0.0.2
 	github.com/go-llsqlite/adapter v0.0.0-20230927005056-7f5ce7f0c916 // indirect
 	github.com/go-llsqlite/crawshaw v0.4.0 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
@@ -102,8 +103,8 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-colorable v0.1.13
+	github.com/mattn/go-isatty v0.0.20
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
@@ -131,7 +132,6 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
-	github.com/showwin/speedtest-go v1.7.7
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/tklauser/go-sysconf v0.3.14 // indirect
 	github.com/tklauser/numcpus v0.8.0 // indirect
@@ -149,3 +149,7 @@ require (
 )
 
 replace github.com/anacrolix/torrent => github.com/erigontech/torrent v1.54.2-alpha-8
+
+replace github.com/erigontech/erigon-snapshot => github.com/ledgerwatch/erigon-snapshot v1.3.1-0.20240805114253-42da880260bb
+
+replace github.com/erigontech/interfaces => github.com/ledgerwatch/interfaces v0.0.0-20241024161200-024ffe1cabff

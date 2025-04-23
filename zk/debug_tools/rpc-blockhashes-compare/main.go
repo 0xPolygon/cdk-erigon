@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/log/v3"
 
-	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/ethclient"
-	"github.com/ledgerwatch/erigon/zk/debug_tools"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/ethclient"
+	"github.com/erigontech/erigon/zk/debug_tools"
 )
 
 // compare block hashes and binary search the first block where they mismatch
@@ -75,7 +75,7 @@ func main() {
 	}
 
 	// get blocks
-	blockRemote, blockLocal, err = getBlocks(ctx, rpcClientLocal, rpcClientRemote, checkBlockNumber)
+	blockLocal, blockRemote, err = getBlocks(ctx, rpcClientLocal, rpcClientRemote, checkBlockNumber)
 	if err != nil {
 		log.Error(fmt.Sprintf("blockNum: %d, error getBlocks: %s", checkBlockNumber, err))
 		return

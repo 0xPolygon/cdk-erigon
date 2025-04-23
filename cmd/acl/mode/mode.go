@@ -3,9 +3,9 @@ package mode
 import (
 	"errors"
 
-	"github.com/ledgerwatch/erigon/cmd/utils"
-	"github.com/ledgerwatch/erigon/zk/txpool"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/cmd/utils"
+	"github.com/erigontech/erigon/zk/txpool"
 	"github.com/urfave/cli/v2"
 )
 

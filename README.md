@@ -79,6 +79,9 @@ but can be controlled via the following flags:
 To transplant the cache between datadirs, the `l1cache` dir can be copied. To use an upstream cdk-erigon node's L1 cache, the zkevm.l1-cache-enabled can be set to false, and the node provided the endpoint of the cache,
 instead of a regular L1 URL. e.g. `zkevm.l1-rpc-url=http://myerigonnode:6969?endpoint=http%3A%2F%2Fsepolia-rpc.com&chainid=2440`. NB: this node must be syncing the same network for any benefit!
 
+### Witness Cache
+The node can cache witnesses for batches to speed up the RPC endpoint `zkevm_getBatchWitness`. To read more on how to enable this feature, see the [Witness Cache Flags](docs/witness-cache.md) section.
+
 ## Sequencer
 
 Enable Sequencer: `CDK_ERIGON_SEQUENCER=1 ./build/bin/cdk-erigon <flags>`
@@ -203,6 +206,9 @@ For a full explanation of the config options, see below:
 - `zkevm.data-stream-port`: Port for the data stream.  This needs to be set to enable the datastream server
 - `zkevm.data-stream-host`: The host for the data stream i.e. `localhost`.  This must be set to enable the datastream server
 - `http.api`: List of enabled HTTP API modules.
+- `zkevm.hardfork`: `[hermez | ethereum]` `hermez` is the default behavior. `ethereum` enables the Ethereum traditional hardfork system.
+- `zkevm.commitment`: `[smt | pmt]` Choose what type of commitment to use in `stage_interhashes.go`. `smt` is the default behavior. `pmt` uses the standard Ethereum PMT.
+- `zkevm.inject-gers`: `[true | false]` Should or should not inject L1 information into the scalable contract and GER manager. Default is `true`.
 
 Sequencer specific config:
 - `zkevm.executor-urls`: A csv list of the executor URLs.  These will be used in a round robbin fashion by the sequencer

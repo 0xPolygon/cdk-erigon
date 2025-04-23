@@ -2,19 +2,20 @@ package tests
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"runtime"
 	"strconv"
 	"testing"
 
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/log/v3"
 
-	"github.com/ledgerwatch/erigon-lib/chain/networkname"
-	"github.com/ledgerwatch/erigon/cmd/devnet/devnet"
-	"github.com/ledgerwatch/erigon/cmd/devnet/networks"
-	"github.com/ledgerwatch/erigon/cmd/devnet/services"
-	"github.com/ledgerwatch/erigon/cmd/devnet/services/polygon"
-	"github.com/ledgerwatch/erigon/turbo/debug"
+	"github.com/erigontech/erigon-lib/chain/networkname"
+	"github.com/erigontech/erigon/cmd/devnet/devnet"
+	"github.com/erigontech/erigon/cmd/devnet/networks"
+	"github.com/erigontech/erigon/cmd/devnet/services"
+	"github.com/erigontech/erigon/cmd/devnet/services/polygon"
+	"github.com/erigontech/erigon/turbo/debug"
 )
 
 func initDevnet(chainName string, dataDir string, producerCount int, gasLimit uint64, logger log.Logger, consoleLogLevel log.Lvl, dirLogLevel log.Lvl) (devnet.Devnet, error) {
@@ -57,14 +58,21 @@ func ContextStart(t *testing.T, chainName string) (devnet.Context, error) {
 		envProducerCount = "1"
 	}
 
-	producerCount, _ := strconv.ParseUint(envProducerCount, 10, 64)
+	producerCount, err := strconv.ParseUint(envProducerCount, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse producer count: %w", err)
+	}
+
+	if producerCount > math.MaxInt {
+		return nil, fmt.Errorf("producer count %d is too large", producerCount)
+	}
 
 	// TODO get log levels from env
 	var dirLogLevel log.Lvl = log.LvlTrace
 	var consoleLogLevel log.Lvl = log.LvlCrit
 
 	var network devnet.Devnet
-	network, err := initDevnet(chainName, dataDir, int(producerCount), 0, logger, consoleLogLevel, dirLogLevel)
+	network, err = initDevnet(chainName, dataDir, int(producerCount), 0, logger, consoleLogLevel, dirLogLevel)
 	if err != nil {
 		return nil, fmt.Errorf("ContextStart initDevnet failed: %w", err)
 	}

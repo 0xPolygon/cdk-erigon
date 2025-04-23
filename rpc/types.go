@@ -18,16 +18,16 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"math/big"
 	"strconv"
 	"strings"
 
-	"github.com/ledgerwatch/erigon-lib/common/hexutil"
+	"github.com/erigontech/erigon-lib/common/hexutil"
 
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	libcommon "github.com/erigontech/erigon-lib/common"
+	"github.com/goccy/go-json"
 )
 
 // API describes the set of methods offered over the RPC interface

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"runtime"
@@ -14,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ledgerwatch/erigon-lib/common/dbg"
+	"github.com/erigontech/erigon-lib/common/dbg"
 
-	"github.com/ledgerwatch/erigon/cmd/hack/tool"
-	"github.com/ledgerwatch/erigon/common/debug"
-	"github.com/ledgerwatch/erigon/core/vm"
+	"github.com/erigontech/erigon/cmd/hack/tool"
+	"github.com/erigontech/erigon/common/debug"
+	"github.com/erigontech/erigon/core/vm"
 )
 
 const (
@@ -164,6 +165,10 @@ func batchServer() {
 		row := strings.Split(line, ",")
 		txcnt, perr := strconv.ParseInt(row[0], 10, 64)
 		tool.Check(perr)
+
+		if txcnt > math.MaxInt {
+			log.Fatalf("txcnt %d is too large", txcnt)
+		}
 
 		code, _ := hex.DecodeString(row[1][2:])
 		jobList = append(jobList, &cfgJob{int(txcnt), code})

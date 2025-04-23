@@ -6,14 +6,13 @@ import (
 	"reflect"
 	"strconv"
 
-	hexutil2 "github.com/ledgerwatch/erigon-lib/common/hexutil"
-
+	hexutil2 "github.com/erigontech/erigon-lib/common/hexutil"
 	"github.com/holiman/uint256"
 
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
+	libcommon "github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/common/hexutility"
 
-	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/erigontech/erigon/core/types"
 )
 
 func convertDataToStringP(abstractMap map[string]interface{}, field string) *string {
@@ -66,21 +65,22 @@ func convertDataToStringP(abstractMap map[string]interface{}, field string) *str
 func convertDataToIntP(abstractMap map[string]interface{}, field string) *int {
 	var result int
 
+	strToInt := func(str string) int {
+		resultUint, err := hexutil2.DecodeInt64(str)
+		if err != nil {
+			result = 0
+		} else {
+			result = int(resultUint)
+		}
+
+		return result
+	}
+
 	switch v := abstractMap[field].(type) {
 	case hexutil2.Uint64:
-		resultUint, err := hexutil2.DecodeUint64(v.String())
-		if err != nil {
-			result = 0
-		} else {
-			result = int(resultUint)
-		}
+		result = strToInt(v.String())
 	case hexutil2.Uint:
-		resultUint, err := hexutil2.DecodeUint64(v.String())
-		if err != nil {
-			result = 0
-		} else {
-			result = int(resultUint)
-		}
+		result = strToInt(v.String())
 	case int:
 		result = v
 	default:

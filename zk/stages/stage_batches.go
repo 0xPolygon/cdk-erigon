@@ -10,24 +10,24 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ledgerwatch/erigon-lib/chain"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/chain"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/kv"
 
-	"github.com/ledgerwatch/erigon/core/rawdb"
-	"github.com/ledgerwatch/erigon/core/state"
-	ethTypes "github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/params"
-	"github.com/ledgerwatch/erigon/zk"
-	"github.com/ledgerwatch/erigon/zk/datastream/client"
-	"github.com/ledgerwatch/erigon/zk/datastream/types"
-	"github.com/ledgerwatch/erigon/zk/erigon_db"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/erigon/zk/sequencer"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/core/rawdb"
+	"github.com/erigontech/erigon/core/state"
+	ethTypes "github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/eth/ethconfig"
+	"github.com/erigontech/erigon/eth/stagedsync"
+	"github.com/erigontech/erigon/eth/stagedsync/stages"
+	"github.com/erigontech/erigon/params"
+	"github.com/erigontech/erigon/zk"
+	"github.com/erigontech/erigon/zk/datastream/client"
+	"github.com/erigontech/erigon/zk/datastream/types"
+	"github.com/erigontech/erigon/zk/erigon_db"
+	"github.com/erigontech/erigon/zk/hermez_db"
+	"github.com/erigontech/erigon/zk/sequencer"
 )
 
 const (
@@ -70,11 +70,6 @@ type DatastreamClient interface {
 	Start() error
 	Stop() error
 	HandleStart() error
-}
-
-type DatastreamReadRunner interface {
-	StartRead()
-	StopRead()
 }
 
 type dsClientCreatorHandler func(context.Context, *ethconfig.Zk, uint64) (DatastreamClient, error)
@@ -309,6 +304,7 @@ func SpawnStageBatches(
 
 	prevAmountBlocksWritten := uint64(0)
 	endLoop := false
+	receivedError := false
 
 	for {
 		// get batch start and use to update forkid
@@ -318,8 +314,8 @@ func SpawnStageBatches(
 		// if both download routine stopped and channel empty - stop loop
 		select {
 		case <-errorChan:
-			log.Warn("Error in datastream client, stopping consumption")
-			endLoop = true
+			log.Warn("Error in datastream client, stopping after all entries in entryChan are processed")
+			receivedError = true
 		case entry := <-*entryChan:
 			// DEBUG LIMIT - don't write more than we need to
 			if cfg.zkCfg.DebugLimit > 0 && batchProcessor.LastBlockHeight() >= cfg.zkCfg.DebugLimit {
@@ -343,7 +339,12 @@ func SpawnStageBatches(
 			log.Warn(fmt.Sprintf("[%s] Context done", logPrefix))
 			endLoop = true
 		default:
-			time.Sleep(10 * time.Millisecond)
+			// Only break if we've received an error and the channel is empty
+			if receivedError && len(*entryChan) == 0 {
+				endLoop = true
+			} else {
+				time.Sleep(10 * time.Millisecond)
+			}
 		}
 
 		if endLoop {

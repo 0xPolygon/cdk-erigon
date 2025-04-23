@@ -23,20 +23,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/ledgerwatch/erigon/event"
-	"github.com/ledgerwatch/erigon/p2p"
-	"github.com/ledgerwatch/erigon/p2p/enode"
-	"github.com/ledgerwatch/erigon/p2p/simulations/adapters"
-	"github.com/ledgerwatch/erigon/rpc"
+	"github.com/erigontech/erigon/event"
+	"github.com/erigontech/erigon/p2p"
+	"github.com/erigontech/erigon/p2p/enode"
+	"github.com/erigontech/erigon/p2p/simulations/adapters"
+	"github.com/erigontech/erigon/rpc"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/gorilla/websocket"
 	"github.com/julienschmidt/httprouter"
-	"github.com/ledgerwatch/log/v3"
 )
 
 // DefaultClient is the default simulation API client which expects the API
@@ -495,6 +496,9 @@ func NewMsgFilters(filterParam string) (MsgFilters, error) {
 			n, err := strconv.ParseUint(code, 10, 64)
 			if err != nil {
 				return nil, fmt.Errorf("invalid message code: %s", code)
+			}
+			if n > math.MaxInt64 {
+				return nil, fmt.Errorf("message code out of range: %s", code)
 			}
 			filters[MsgFilter{Proto: proto, Code: int64(n)}] = struct{}{}
 		}

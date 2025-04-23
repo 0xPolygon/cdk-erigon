@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/cmd/utils"
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/erigon/turbo/logging"
-	"github.com/ledgerwatch/erigon/zk/sequencer"
-	utils2 "github.com/ledgerwatch/erigon/zk/utils"
-	"github.com/ledgerwatch/log/v3"
+	libcommon "github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/cmd/utils"
+	"github.com/erigontech/erigon/eth/ethconfig"
+	"github.com/erigontech/erigon/turbo/logging"
+	"github.com/erigontech/erigon/zk/sequencer"
+	utils2 "github.com/erigontech/erigon/zk/utils"
 
 	"github.com/urfave/cli/v2"
 )
@@ -177,6 +177,16 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		}
 	}
 
+	hardfork := ethconfig.Hardfork(ctx.String(utils.Hardfork.Name))
+	if !hardfork.IsValid() {
+		panic(fmt.Sprintf("Invalid hardfork: %s. Must be one of: %s", ctx.String(utils.Hardfork.Name), hardfork.ValidHardforks()))
+	}
+
+	commitment := ethconfig.Commitment(ctx.String(utils.Commitment.Name))
+	if !commitment.IsValid() {
+		panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(utils.Commitment.Name), commitment.ValidCommitments()))
+	}
+
 	cfg.Zk = &ethconfig.Zk{
 		L2ChainId:                              ctx.Uint64(utils.L2ChainIdFlag.Name),
 		L2RpcUrl:                               ctx.String(utils.L2RpcUrlFlag.Name),
@@ -284,6 +294,9 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		BadTxPurge:                             ctx.Bool(utils.BadTxPurge.Name),
 		L2InfoTreeUpdatesBatchSize:             ctx.Uint64(utils.L2InfoTreeUpdatesBatchSize.Name),
 		L2InfoTreeUpdatesEnabled:               ctx.Bool(utils.L2InfoTreeUpdatesEnabled.Name),
+		Hardfork:                               hardfork,
+		Commitment:                             commitment,
+		InjectGers:                             ctx.Bool(utils.InjectGers.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

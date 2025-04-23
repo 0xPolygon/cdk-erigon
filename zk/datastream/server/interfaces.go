@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
-	dslog "github.com/0xPolygonHermez/zkevm-data-streamer/log"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	eritypes "github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/zk/datastream/types"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/kv"
+	eritypes "github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/zk/datastream/types"
+	"github.com/erigontech/erigon/zk/hermez_db"
+	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
+	dslog "github.com/gateway-fm/zkevm-data-streamer/log"
 )
 
 //go:generate mockgen -typed=true -destination=../mocks/stream_server_mock.go -package=mocks . StreamServer
@@ -44,6 +44,7 @@ type DataStreamServer interface {
 	UnwindToBlock(blockNumber uint64) error
 	UnwindToBatchStart(batchNumber uint64) error
 	ReadBatches(start uint64, end uint64) ([][]*types.FullL2Block, error)
+	ReadBatchesWithConcurrency(start uint64, end uint64) ([][]*types.FullL2Block, error)
 	WriteWholeBatchToStream(logPrefix string, tx kv.Tx, reader DbReader, prevBatchNum, batchNum uint64) error
 	WriteBlocksToStreamConsecutively(ctx context.Context, logPrefix string, tx kv.Tx, reader DbReader, from, to uint64) error
 	WriteBlockWithBatchStartToStream(logPrefix string, tx kv.Tx, reader DbReader, forkId, batchNum, prevBlockBatchNum uint64, prevBlock, block eritypes.Block) (err error)

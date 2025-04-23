@@ -6,16 +6,17 @@ import (
 	"fmt"
 
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/common/cmp"
+	"github.com/erigontech/erigon-lib/common/fixedgas"
+	"github.com/erigontech/erigon-lib/common/math"
+	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon-lib/txpool/txpoolcfg"
+	"github.com/erigontech/erigon-lib/types"
+	types2 "github.com/erigontech/erigon-lib/types"
+	"github.com/erigontech/erigon/zk/utils"
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/cmp"
-	"github.com/ledgerwatch/erigon-lib/common/fixedgas"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon-lib/types"
-	types2 "github.com/ledgerwatch/erigon-lib/types"
-	"github.com/ledgerwatch/erigon/common/math"
-	"github.com/ledgerwatch/erigon/zk/utils"
-	"github.com/ledgerwatch/log/v3"
 )
 
 /*
@@ -231,7 +232,11 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		// make sure we have enough gas in the caller to add this transaction.
 		// not an exact science using intrinsic gas but as close as we could hope for at
 		// this stage
-		intrinsicGas, _ := CalcIntrinsicGas(uint64(mt.Tx.DataLen), uint64(mt.Tx.DataNonZeroLen), nil, mt.Tx.Creation, true, true, isShanghai)
+		intrinsicGas, floorGas, _ := txpoolcfg.CalcIntrinsicGas(uint64(mt.Tx.DataLen), uint64(mt.Tx.DataNonZeroLen), uint64(len(mt.Tx.Authorizations)), uint64(mt.Tx.AlAddrCount), uint64(mt.Tx.AlStorCount), mt.Tx.Creation, true, true, isShanghai, p.isPrague())
+		if p.isPrague() && floorGas > intrinsicGas {
+			intrinsicGas = floorGas
+		}
+
 		if intrinsicGas > availableGas {
 			// we might find another TX with a low enough intrinsic gas to include so carry on
 			p.Trace("Skipping transaction due to insufficient gas", "txID", mt.Tx.IDHash, "intrinsicGas", intrinsicGas, "availableGas", availableGas)
@@ -284,60 +289,6 @@ func (p *TxPool) MarkForDiscardFromPendingBest(txHash common.Hash) {
 			break
 		}
 	}
-}
-
-func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGasLimit uint64, ids []common.Hash) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	cache := p.cache()
-
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	toDelete := make([]*metaTx, 0)
-
-	p.all.ascendAll(func(mt *metaTx) bool {
-		for _, id := range ids {
-			if bytes.Equal(mt.Tx.IDHash[:], id[:]) {
-				toDelete = append(toDelete, mt)
-				switch mt.currentSubPool {
-				case PendingSubPool:
-					p.pending.Remove(mt)
-				case BaseFeeSubPool:
-					p.baseFee.Remove(mt)
-				case QueuedSubPool:
-					p.queued.Remove(mt)
-				default:
-					//already removed
-				}
-			}
-		}
-		return true
-	})
-
-	sendersWithChangedState := make(map[uint64]struct{})
-	for _, mt := range toDelete {
-		p.discardLocked(mt, Mined)
-		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
-	}
-
-	baseFee := p.pendingBaseFee.Load()
-
-	cacheView, err := cache.View(ctx, tx)
-	if err != nil {
-		return err
-	}
-	for senderID := range sendersWithChangedState {
-		nonce, balance, err := p.senders.info(cacheView, senderID)
-		if err != nil {
-			return err
-		}
-		p.onSenderStateChange(senderID, nonce, balance, p.all,
-			baseFee, blockGasLimit, p.pending, p.baseFee, p.queued, p.discardLocked)
-
-	}
-	return nil
 }
 
 func (p *TxPool) TriggerSenderStateChanges(ctx context.Context, tx kv.Tx, blockGasLimit uint64, senders map[common.Address]struct{}) error {

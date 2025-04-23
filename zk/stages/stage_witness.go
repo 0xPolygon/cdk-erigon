@@ -3,20 +3,21 @@ package stages
 import (
 	"context"
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/chain"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/datadir"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	eristate "github.com/ledgerwatch/erigon-lib/state"
-	"github.com/ledgerwatch/erigon/consensus"
-	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/erigon/eth/stagedsync"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/turbo/services"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/erigon/zk/sequencer"
-	"github.com/ledgerwatch/erigon/zk/witness"
-	"github.com/ledgerwatch/log/v3"
+
+	"github.com/erigontech/erigon-lib/chain"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/common/datadir"
+	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
+	eristate "github.com/erigontech/erigon-lib/state"
+	"github.com/erigontech/erigon/consensus"
+	"github.com/erigontech/erigon/eth/ethconfig"
+	"github.com/erigontech/erigon/eth/stagedsync"
+	"github.com/erigontech/erigon/eth/stagedsync/stages"
+	"github.com/erigontech/erigon/turbo/services"
+	"github.com/erigontech/erigon/zk/hermez_db"
+	"github.com/erigontech/erigon/zk/sequencer"
+	"github.com/erigontech/erigon/zk/witness"
 )
 
 type WitnessDb interface {
@@ -121,9 +122,23 @@ func SpawnStageWitness(
 		return fmt.Errorf("GetStageProgress: %w", err)
 	}
 
+	latestBatchEndBlock, err := reader.GetLatestBatchEndBlock()
+	if err != nil {
+		return fmt.Errorf("GetLatestBatchEndBlock: %w", err)
+	}
+
+	if latestBlock > latestBatchEndBlock {
+		latestBlock = latestBatchEndBlock
+	}
+
 	latestExecutedBatchNo, err := reader.GetBatchNoByL2Block(latestBlock)
 	if err != nil {
 		return fmt.Errorf("GetBatchNoByL2Block: %w", err)
+	}
+
+	if latestExecutedBatchNo == 0 {
+		log.Warn(fmt.Sprintf("[%s] No executed batches found", logPrefix))
+		return nil
 	}
 
 	latestCachedWitnessBatchNo, err := reader.GetLatestCachedWitnessBatchNo()
