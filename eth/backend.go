@@ -2070,7 +2070,7 @@ func (s *Ethereum) Stop() error {
 		s.agg.Close()
 	}
 
-	if sequencer.IsSequencer() && s.config.Zk.XLayer.EnableAsyncCommit {
+	if sequencer.IsSequencer() {
 		s.logger.Info("Stopping SMT flush service...")
 		s.smtFlushCancel()
 		<-s.smtFlushDoneCh

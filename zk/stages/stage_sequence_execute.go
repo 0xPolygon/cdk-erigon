@@ -18,6 +18,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
+	"github.com/ledgerwatch/erigon/zk/apollo"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/metrics"
@@ -106,26 +107,53 @@ func SpawnSequencingStage(
 	metrics.GetLogStatistics().CumulativeTiming(metrics.FlushSmtCacheWait, time.Since(startWaitTime))
 
 	if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil); err == nil {
-		if !cfg.zk.XLayer.EnableAsyncCommit {
+		apolloEnableAC := apollo.GetEnableAsyncCommit(cfg.zk.XLayer.EnableAsyncCommit)
+		if !apolloEnableAC && !cfg.zk.XLayer.EnableAsyncCommit {
 			return err
 		}
 
-		s.FlushSmtCacheSignalInc()
-		go func() {
-			defer s.FlushSmtCacheDone()
-			// enable split smt db
-			_ = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, false)
-		}()
+		if !cfg.zk.XLayer.EnableAsyncCommit {
+			cfg.zk.XLayer.EnableAsyncCommit = true
+		} else {
+			s.FlushSmtCacheSignalInc()
+			go func() {
+				defer s.FlushSmtCacheDone()
+				// enable split smt db
+
+				if apolloEnableAC {
+					_ = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, false)
+				} else {
+					_ = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, true)
+
+					// notify AsyncFlushSmtData goroutine
+					doneChan := make(chan struct{})
+					enableAcChan := apollo.EnableAsyncCommitChannel()
+					enableAcChan <- doneChan
+					<-doneChan
+
+					cfg.zk.XLayer.EnableAsyncCommit = false
+					s.ResetSmtCache()
+				}
+			}()
+		}
 	} else {
-		if !cfg.zk.XLayer.EnableAsyncCommit {
+		apolloEnableAC := apollo.GetEnableAsyncCommit(cfg.zk.XLayer.EnableAsyncCommit)
+		if !apolloEnableAC && !cfg.zk.XLayer.EnableAsyncCommit {
 			return err
 		}
 
-		s.FlushSmtCacheSignalInc()
-		go func() {
-			defer s.FlushSmtCacheDone()
-			s.ResetCurrentBatchCache(s.BlockNumber)
-		}()
+		if !cfg.zk.XLayer.EnableAsyncCommit {
+			cfg.zk.XLayer.EnableAsyncCommit = true
+		} else {
+			s.FlushSmtCacheSignalInc()
+			go func() {
+				defer s.FlushSmtCacheDone()
+				s.ResetCurrentBatchCache(s.BlockNumber)
+
+				cfg.zk.XLayer.EnableAsyncCommit = false
+			}()
+		}
+
 	}
 
 	return err
