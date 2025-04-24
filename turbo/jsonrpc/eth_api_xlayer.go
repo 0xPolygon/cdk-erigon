@@ -1,6 +1,7 @@
 package jsonrpc
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"sync"
@@ -8,6 +9,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/eth/gasprice/gaspricecfg"
+	"github.com/ledgerwatch/erigon/zk/apollo"
 )
 
 func (apii *APIImpl) GetGPCache() *GasPriceCache {
@@ -19,6 +21,36 @@ func (apii *APIImpl) runL2GasPricerForXLayer() {
 	apii.gasCache.SetLatest(common.Hash{}, apii.L2GasPricer.GetConfig().Default)
 	apii.gasCache.SetLatestRawGP(apii.L2GasPricer.GetConfig().Default)
 	go apii.runL2GasPriceSuggester()
+}
+
+func (apii *APIImpl) listenApollo(ctx context.Context) {
+	stream := apollo.GetEthConfigStream()
+	fmt.Println("apii stream", stream)
+	ch, remove := stream.Sub()
+	defer remove()
+
+	for {
+		select {
+		case ethCfg := <-ch:
+			if ethCfg == nil {
+				continue
+			}
+			if apii.BulkAddTxs != ethCfg.XLayer.BulkAddTxs {
+				apii.BulkAddTxs = ethCfg.XLayer.BulkAddTxs
+			}
+			if apii.BulkAddTxsSize != ethCfg.XLayer.BulkAddTxsSize {
+				apii.BulkAddTxsSize = ethCfg.XLayer.BulkAddTxsSize
+			}
+			if apii.BulkAddTxsWaitTime != ethCfg.XLayer.BulkAddTxsWaitTime {
+				apii.BulkAddTxsWaitTime = ethCfg.XLayer.BulkAddTxsWaitTime
+			}
+			if apii.EnableNotify != ethCfg.XLayer.EnableAddTxNotify {
+				apii.EnableNotify = ethCfg.XLayer.EnableAddTxNotify
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 const (

@@ -464,9 +464,9 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBacken
 			}
 		}
 	})
-	if apii.BulkAddTxs {
-		go apii.worker()
-	}
+
+	go apii.worker()
+
 	return apii
 }
 
