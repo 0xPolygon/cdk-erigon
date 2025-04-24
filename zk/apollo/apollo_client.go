@@ -104,7 +104,11 @@ type CustomChangeListener struct {
 // OnChange is the change listener
 func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
 	for key, value := range changeEvent.Changes {
-		if value.ChangeType == storage.MODIFIED {
+		if value.ChangeType == storage.MODIFIED || value.ChangeType == storage.ADDED {
+			if value.ChangeType == storage.ADDED {
+				value.OldValue = ""
+			}
+
 			suffix, err := getNamespaceSuffix(changeEvent.Namespace)
 			if err != nil {
 				log.Warn(fmt.Sprintf("not processing change event: %v", err))
@@ -131,6 +135,12 @@ func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
 			case Pool:
 				c.firePool(key, value)
 			}
+
+			UnsafeGetApolloConfig().Lock()
+			defer UnsafeGetApolloConfig().Unlock()
+
+			ethCfgStream.Pub(&UnsafeGetApolloConfig().EthCfg)
+			nodeCfgStream.Pub(&UnsafeGetApolloConfig().NodeCfg)
 		}
 	}
 }

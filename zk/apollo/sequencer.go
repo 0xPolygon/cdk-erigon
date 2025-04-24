@@ -72,6 +72,18 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	if ctx.IsSet(utils.SequencerHaltOnBatchNumber.Name) {
 		ethCfg.Zk.SequencerHaltOnBatchNumber = ctx.Uint64(utils.SequencerHaltOnBatchNumber.Name)
 	}
+	if ctx.IsSet(utils.EnableAsyncCommit.Name) {
+		ethCfg.Zk.XLayer.EnableAsyncCommit = ctx.Bool(utils.EnableAsyncCommit.Name)
+	}
+	if ctx.IsSet(utils.BulkAddTxsFlag.Name) {
+		ethCfg.Zk.XLayer.BulkAddTxs = ctx.Bool(utils.BulkAddTxsFlag.Name)
+	}
+	if ctx.IsSet(utils.BulkAddTxsSizeFlag.Name) {
+		ethCfg.Zk.XLayer.BulkAddTxsSize = ctx.Int(utils.BulkAddTxsSizeFlag.Name)
+	}
+	if ctx.IsSet(utils.BulkAddTxsWaitTimeFlag.Name) {
+		ethCfg.Zk.XLayer.BulkAddTxsWaitTime = ctx.Duration(utils.BulkAddTxsWaitTimeFlag.Name)
+	}
 }
 
 // setSequencerFlag sets the dynamic sequencer apollo flag
@@ -97,4 +109,19 @@ func GetSequencerHalt(localHaltBatchNumber uint64) uint64 {
 		return UnsafeGetApolloConfig().EthCfg.Zk.SequencerHaltOnBatchNumber
 	}
 	return localHaltBatchNumber
+}
+
+func GetEnableAsyncCommit(localEnableAsyncCommit bool) bool {
+	if IsApolloConfigSequencerEnabled() {
+		UnsafeGetApolloConfig().RLock()
+		defer UnsafeGetApolloConfig().RUnlock()
+		return UnsafeGetApolloConfig().EthCfg.Zk.XLayer.EnableAsyncCommit
+	}
+	return localEnableAsyncCommit
+}
+
+var enableAsyncCommitChannel = make(chan chan struct{})
+
+func EnableAsyncCommitChannel() chan chan struct{} {
+	return enableAsyncCommitChannel
 }
