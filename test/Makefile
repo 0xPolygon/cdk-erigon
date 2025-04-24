@@ -496,8 +496,3 @@ vmtouch-evict:
 vmtouch-check:
 	docker exec -it xlayer-seq sh -c "vmtouch /home/erigon/data/chaindata/mdbx.dat"
 	docker exec -it xlayer-seq sh -c "vmtouch /home/erigon/data/smt/mdbx.dat"
-
-.PHONY: seq
-seq: build-docker ## Runs a full node
-	# base services
-	$(RUN_DOCKER_SEQ)
