@@ -1,0 +1,41 @@
+package server
+
+import (
+	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
+)
+
+// StreamStoreType identifies the underlying storage implementation
+type StreamStoreType string
+
+const (
+	// StreamStoreTypeFile represents the legacy file-based storage
+	StreamStoreTypeFile StreamStoreType = "file"
+
+	// StreamStoreTypeMDBX represents the MDBX-based storage
+	StreamStoreTypeMDBX StreamStoreType = "mdbx"
+)
+
+// StreamStoreConfig contains configuration for stream stores
+type StreamStoreConfig struct {
+	// Common config
+	SystemID   uint64
+	StreamType datastreamer.StreamType
+	FilePath   string
+
+	// Implementation selection
+	StoreType StreamStoreType
+
+	// MDBX specific options
+	MDBXMapSize int64
+	MDBXMaxDBS  int
+	MDBXFlags   uint
+
+	// File specific options
+	DatastreamVersion uint8
+}
+
+// StreamStoreFactory creates stream stores based on configuration
+type StreamStoreFactory interface {
+	// CreateStore creates a new stream store based on the provided configuration
+	CreateStore(config *StreamStoreConfig) (StreamStore, error)
+}

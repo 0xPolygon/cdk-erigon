@@ -100,6 +100,7 @@ type HttpCfg struct {
 	// zkevm
 	DataStreamPort                    int
 	DataStreamHost                    string
+	DataStreamStorageType             string
 	DataStreamWriteTimeout            time.Duration
 	DataStreamInactivityTimeout       time.Duration
 	DataStreamInactivityCheckInterval time.Duration

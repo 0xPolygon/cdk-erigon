@@ -553,6 +553,7 @@ func setEmbeddedRpcDaemon(ctx *cli.Context, cfg *nodecfg.Config, logger log.Logg
 
 		DataStreamPort:                    ctx.Int(utils.DataStreamPort.Name),
 		DataStreamHost:                    ctx.String(utils.DataStreamHost.Name),
+		DataStreamStorageType:             ctx.String(utils.DataStreamStorageType.Name),
 		DataStreamWriteTimeout:            ctx.Duration(utils.DataStreamWriteTimeout.Name),
 		DataStreamInactivityTimeout:       ctx.Duration(utils.DataStreamInactivityTimeout.Name),
 		DataStreamInactivityCheckInterval: ctx.Duration(utils.DataStreamInactivityCheckInterval.Name),
