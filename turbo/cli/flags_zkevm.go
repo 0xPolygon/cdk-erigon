@@ -327,6 +327,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L2InfoTreeUpdatesEnabled:               ctx.Bool(utils.L2InfoTreeUpdatesEnabled.Name),
 		Commitment:                             commitment,
 		InjectGers:                             ctx.Bool(utils.InjectGers.Name),
+		HonourChainspec:                        ctx.Bool(utils.HonourChainspec.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

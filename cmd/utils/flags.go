@@ -919,7 +919,7 @@ var (
 		Value: cli.NewStringSlice("zkevm.l1-rpc-url"),
 	}
 	Commitment = cli.StringFlag{
-		Name:  "zkevm.commitment",
+		Name:  "zkevm.initial-commitment",
 		Usage: "Values { smt | pmt }. Default, smt.",
 		Value: "smt",
 	}
@@ -927,6 +927,11 @@ var (
 		Name:  "zkevm.inject-gers",
 		Usage: "Inject L1 information into the scalable contract and ger manager. Default true.",
 		Value: true,
+	}
+	HonourChainspec = cli.BoolFlag{
+		Name:  "zkevm.honour-chainspec",
+		Usage: "Honour the actual chainspec values. This means that no chainspec values will get changed based on normalcy mode. Default false.",
+		Value: false,
 	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
