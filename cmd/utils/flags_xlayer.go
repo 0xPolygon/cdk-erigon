@@ -294,6 +294,11 @@ var (
 		Usage: "Enable async smt commit feature",
 		Value: false,
 	}
+	SequencerSkipEmptyBlocks = cli.BoolFlag{
+		Name:  "zkevm.sequencer-skip-empty-blocks",
+		Usage: "Skip empty blocks",
+		Value: false,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {

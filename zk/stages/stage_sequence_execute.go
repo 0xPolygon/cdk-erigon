@@ -812,8 +812,11 @@ func sequencingBatchStep(
 		// this could happen if there were lots of nonce issues from transaction in the pool due to a failed tx processing or similar and
 		// there wasn't much time left in the batch to mine any transactions
 		if len(batchState.blockState.transactionsForInclusion) > 0 && len(batchState.blockState.builtBlockElements.transactions) == 0 {
-			log.Info(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
-			break
+			if cfg.zk.XLayer.SequencerSkipEmptyBlocks {
+				log.Warn(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
+				break
+			}
+			log.Warn(fmt.Sprintf("[%s] Keeping empty block %d to keep liveness", logPrefix, blockNumber))
 		}
 
 		if batchContext.sdb.supportAC {

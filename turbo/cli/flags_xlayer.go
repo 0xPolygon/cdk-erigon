@@ -37,6 +37,7 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		BulkAddTxsSize:                    ctx.Int(utils.BulkAddTxsSizeFlag.Name),
 		BulkAddTxsWaitTime:                ctx.Duration(utils.BulkAddTxsWaitTimeFlag.Name),
 		EnableAddTxNotify:                 ctx.Bool(utils.EnableAddTxNotify.Name),
+		SequencerSkipEmptyBlocks:          ctx.Bool(utils.SequencerSkipEmptyBlocks.Name),
 	}
 	if cfg.XLayer.BlockInfoConcurrent {
 		blockinfo.InitUseBlockInfoTreeTrue()
