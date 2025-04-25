@@ -330,4 +330,5 @@ var DefaultFlags = []cli.Flag{
 
 	&utils.Commitment,
 	&utils.InjectGers,
+	&utils.HonourChainspec,
 }

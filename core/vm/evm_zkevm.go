@@ -51,7 +51,7 @@ func (evm *EVM) precompile_zkevm(addr libcommon.Address, retSize int) (Precompil
 
 // NewZkEVM returns a new ZkEVM. The returned ZkEVM is not thread safe and should only ever be used *once*.
 func NewZkEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, state evmtypes.IntraBlockState, chainConfig *chain.Config, zkVmConfig ZkConfig) *EVM {
-	if chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Time).IsNormalcy || chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Time).IsEthereumHardfork {
+	if chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Time).IsNormalcy {
 		return NewEVM(blockCtx, txCtx, state, chainConfig, zkVmConfig.Config)
 	}
 
@@ -71,16 +71,16 @@ func NewZkEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, state ev
 }
 
 func (evm *EVM) Deploy(caller ContractRef, code []byte, gas uint64, endowment *uint256.Int, intrinsicGas uint64) (ret []byte, contractAddr libcommon.Address, leftOverGas uint64, err error) {
-	if evm.ChainRules().IsNormalcy || evm.ChainRules().IsEthereumHardfork {
-		return evm.Create(caller, code, gas, endowment, false /* bailout */, intrinsicGas)
-	}
-
 	contractAddr = crypto.CreateAddress(caller.Address(), evm.intraBlockState.GetNonce(caller.Address()))
-	return evm.createZkEvm(caller, &codeAndHash{code: code}, gas, endowment, contractAddr, CREATE, true /* incrementNonce */, intrinsicGas)
+	return evm.createZkEvm(caller, &codeAndHash{code: code}, gas, endowment, contractAddr, CREATE, true, false, intrinsicGas)
 }
 
 // createZkEvm creates a new contract using code as deployment code.
-func (evm *EVM) createZkEvm(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *uint256.Int, address libcommon.Address, typ OpCode, incrementNonce bool, intrinsicGas uint64) ([]byte, libcommon.Address, uint64, error) {
+func (evm *EVM) createZkEvm(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *uint256.Int, address libcommon.Address, typ OpCode, incrementNonce bool, bailout bool, intrinsicGas uint64) ([]byte, libcommon.Address, uint64, error) {
+	if evm.ChainRules().IsNormalcy {
+		return evm.create(caller, codeAndHash, gas, value, address, typ, incrementNonce, bailout, intrinsicGas)
+	}
+
 	var ret []byte
 	var err error
 	var gasConsumption uint64
