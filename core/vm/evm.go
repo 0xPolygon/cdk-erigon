@@ -120,12 +120,7 @@ func NewEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, state evmt
 		chainRules:      chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Time),
 	}
 
-	// [zkevm] change
-	if evm.ChainRules().IsNormalcy || evm.ChainRules().IsEthereumHardfork {
-		evm.interpreter = NewEVMInterpreter(evm, vmConfig)
-	} else {
-		evm.interpreter = NewZKEVMInterpreter(evm, NewZkConfig(vmConfig, nil))
-	}
+	evm.interpreter = NewEVMInterpreter(evm, vmConfig)
 
 	return evm
 }
