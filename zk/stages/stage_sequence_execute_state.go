@@ -310,6 +310,7 @@ func (bbe *BuiltBlockElements) resetBlockBuildingArrays() {
 	bbe.receipts = types.Receipts{}
 	bbe.effectiveGases = []uint8{}
 	bbe.executionResults = []*evmtypes.ExecutionResult{}
+	bbe.txSlots = []common.Hash{}
 }
 
 func (bbe *BuiltBlockElements) onFinishAddingTransaction(transaction types.Transaction, receipt *types.Receipt, execResult *evmtypes.ExecutionResult, effectiveGas uint8, slotId common.Hash) {

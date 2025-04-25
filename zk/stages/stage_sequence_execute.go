@@ -502,6 +502,13 @@ func sequencingBatchStep(
 						continue
 					}
 
+					// if we have an error at this point something has gone wrong, either in the pool or otherwise
+					// to stop the pool growing and hampering further processing of good transactions here
+					// we mark it for being discarded
+					log.Warn(fmt.Sprintf("[%s] error adding transaction to batch, discarding from pool", logPrefix), "hash", txHash, "err", err)
+					badTxHashes = append(badTxHashes, txHash)
+					batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, batchState.blockState.transactionHashesToSlots[txHash])
+
 					if errors.Is(err, core.ErrNonceTooHigh) || errors.Is(err, core.ErrNonceTooLow) {
 						// here we have a case where some situation has caused a nonce issue to find its way into the pending pool
 						// we want to skip transactions for this sender in this batch for now and ask the pool to trigger a sender
@@ -512,13 +519,6 @@ func sequencingBatchStep(
 						sendersToTriggerStatechanges[txSender] = struct{}{}
 						continue
 					}
-
-					// if we have an error at this point something has gone wrong, either in the pool or otherwise
-					// to stop the pool growing and hampering further processing of good transactions here
-					// we mark it for being discarded
-					log.Warn(fmt.Sprintf("[%s] error adding transaction to batch, discarding from pool", logPrefix), "hash", txHash, "err", err)
-					badTxHashes = append(badTxHashes, txHash)
-					batchState.blockState.transactionsToDiscard = append(batchState.blockState.transactionsToDiscard, batchState.blockState.transactionHashesToSlots[txHash])
 				}
 
 				switch anyOverflow {
