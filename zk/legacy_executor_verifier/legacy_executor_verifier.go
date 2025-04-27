@@ -16,9 +16,11 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
+	"github.com/ledgerwatch/erigon/zk/smt"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 )
@@ -111,7 +113,7 @@ func (vb *VerifierBundle) isInternalError() bool {
 }
 
 type WitnessGenerator interface {
-	GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error)
+	GetWitnessByBlockRange(tx kv.Tx, txsmt kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool, cache map[string]map[string][]byte) ([]byte, error)
 }
 
 type LegacyExecutorVerifier struct {
@@ -126,12 +128,17 @@ type LegacyExecutorVerifier struct {
 
 	promises    []*Promise[*VerifierBundle]
 	mtxPromises *sync.Mutex
+
+	// For X Layer, split db and ac
+	dbsmt kv.RwDB
+	cache *smt.SmtCache
 }
 
 func NewLegacyExecutorVerifier(
 	cfg ethconfig.Zk,
 	executors []*Executor,
 	db kv.RwDB,
+	dbsmt kv.RwDB,
 	witnessGenerator WitnessGenerator,
 	streamServer server.DataStreamServer,
 ) *LegacyExecutorVerifier {
@@ -145,6 +152,8 @@ func NewLegacyExecutorVerifier(
 		WitnessGenerator:       witnessGenerator,
 		promises:               make([]*Promise[*VerifierBundle], 0),
 		mtxPromises:            &sync.Mutex{},
+		// For X Layer, split db and ac
+		dbsmt: dbsmt,
 	}
 }
 
@@ -166,6 +175,7 @@ func (v *LegacyExecutorVerifier) StartAsyncVerification(
 	if useRemoteExecutor {
 		promise = v.VerifyAsync(request)
 	} else if useMockExecutor {
+		// For X Layer, support mock executor
 		log.Warn(fmt.Sprintf("[%s] Only for testing use. Generate the witness and return the verifierBundle without actually sending payload to executor.", logPrefix))
 		promise = v.VerifyWithMockExecutor(request)
 	} else {
@@ -248,7 +258,27 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest) *Promise[
 			return verifierBundle, err
 		}
 
-		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
+		// For X Layer, split db and ac
+		var txsmt kv.Tx = nil
+		if v.dbsmt != nil {
+			txsmt, err = v.dbsmt.BeginRo(innerCtx)
+			if err != nil {
+				return verifierBundle, err
+			}
+			defer txsmt.Rollback()
+		}
+
+		latestBlock, err := stages.GetStageProgress(tx, stages.Execution)
+		if err != nil {
+			return nil, err
+		}
+
+		block := minUint64(latestBlock, blockNumbers[len(blockNumbers)-1])
+		cache := map[string]map[string][]byte{}
+		if v.cache != nil {
+			cache = v.cache.CascadeGetCurrentBatchSnapshotCache(block)
+		}
+		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, txsmt, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull, cache)
 		if err != nil {
 			return verifierBundle, err
 		}
@@ -320,82 +350,6 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest) *Promise[
 			Witness:          witness,
 			ExecutorResponse: executorResponse,
 			Error:            executorErr,
-		}
-		return verifierBundle, nil
-	})
-}
-
-func (v *LegacyExecutorVerifier) VerifyWithMockExecutor(request *VerifierRequest) *Promise[*VerifierBundle] {
-	// eager promise will do the work as soon as called in a goroutine, then we can retrieve the result later
-	// ProcessResultsSequentiallyUnsafe relies on the fact that this function returns ALWAYS non-verifierBundle and error. The only exception is the case when verifications has been canceled. Only then the verifierBundle can be nil
-	return NewPromise[*VerifierBundle](func() (*VerifierBundle, error) {
-		verifierBundle := NewVerifierBundle(request, nil, false)
-		blockNumbers := verifierBundle.Request.BlockNumbers
-
-		var err error
-		ctx := context.Background()
-		// mapmutation has some issue with us not having a quit channel on the context call to `Done` so
-		// here we're creating a cancelable context and just deferring the cancel
-		innerCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-
-		tx, err := v.db.BeginRo(innerCtx)
-		if err != nil {
-			return verifierBundle, err
-		}
-		defer tx.Rollback()
-
-		hermezDb := hermez_db.NewHermezDbReader(tx)
-
-		l1InfoTreeMinTimestamps := make(map[uint64]uint64)
-		streamBytes, err := v.GetWholeBatchStreamBytes(request.BatchNumber, tx, blockNumbers, hermezDb, l1InfoTreeMinTimestamps, nil)
-		if err != nil {
-			return verifierBundle, err
-		}
-
-		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull)
-		if err != nil {
-			return verifierBundle, err
-		}
-
-		log.Debug("witness generated", "data", hex.EncodeToString(witness))
-
-		// now we need to figure out the timestamp limit for this payload.  It must be:
-		// timestampLimit >= currentTimestamp (from batch pre-state) + deltaTimestamp
-		// so to ensure we have a good value we can take the timestamp of the last block in the batch
-		// and just add 5 minutes
-		lastBlock, err := rawdb.ReadBlockByNumber(tx, blockNumbers[len(blockNumbers)-1])
-		if err != nil {
-			return verifierBundle, err
-		}
-
-		// executor is perfectly happy with just an empty hash here
-		oldAccInputHash := common.HexToHash("0x0")
-		timestampLimit := lastBlock.Time()
-		_ = &Payload{
-			Witness:                 witness,
-			DataStream:              streamBytes,
-			Coinbase:                v.cfg.AddressSequencer.String(),
-			OldAccInputHash:         oldAccInputHash.Bytes(),
-			L1InfoRoot:              nil,
-			TimestampLimit:          timestampLimit,
-			ForcedBlockhashL1:       []byte{0},
-			ContextId:               strconv.FormatUint(request.BatchNumber, 10),
-			L1InfoTreeMinTimestamps: l1InfoTreeMinTimestamps,
-		}
-
-		_, err = rawdb.ReadBlockByNumber(tx, blockNumbers[0]-1)
-		if err != nil {
-			return verifierBundle, err
-		}
-
-		verifierBundle.markAsreadyForSendingRequest()
-		verifierBundle.Response = &VerifierResponse{
-			Valid:            true,
-			OriginalCounters: request.Counters,
-			Witness:          witness,
-			ExecutorResponse: nil,
-			Error:            nil,
 		}
 		return verifierBundle, nil
 	})

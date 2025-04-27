@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
+	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -386,12 +387,21 @@ type APIImpl struct {
 	DisableVirtualCounters        bool
 
 	// For X Layer
-	L2GasPricer   gasprice.L2GasPricer
-	EnableInnerTx bool
+	dbsmt              kv.RoDB
+	L2GasPricer        gasprice.L2GasPricer
+	EnableInnerTx      bool
+	PreRunList         map[common.Address]struct{}
+	preRunProcessor    *PreRunProcessor
+	BulkAddTxs         bool
+	BulkAddTxsSize     int
+	BulkAddTxsWaitTime time.Duration
+	txChan             chan txRequest
+	EnableNotify       bool
 }
 
+// For X Layer, split db and ac
 // NewEthAPI returns APIImpl instance
-func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, feecap float64, returnDataLimit int, ethCfg *ethconfig.Config, allowUnprotectedTxs bool, maxGetProofRewindBlockCount int, subscribeLogsChannelSize int, logger log.Logger, gasTracker RpcL1GasPriceTracker, LogsMaxRange uint64) *APIImpl {
+func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, mining txpool.MiningClient, gascap uint64, feecap float64, returnDataLimit int, ethCfg *ethconfig.Config, allowUnprotectedTxs bool, maxGetProofRewindBlockCount int, subscribeLogsChannelSize int, logger log.Logger, gasTracker RpcL1GasPriceTracker, LogsMaxRange uint64) *APIImpl {
 	if gascap == 0 {
 		gascap = uint64(math.MaxUint64 / 2)
 	}
@@ -429,8 +439,15 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
 
 		// For X Layer
-		L2GasPricer:   gasprice.NewL2GasPriceSuggester(context.Background(), ethCfg.GPO),
-		EnableInnerTx: ethCfg.XLayer.EnableInnerTx,
+		L2GasPricer:        gasprice.NewL2GasPriceSuggester(context.Background(), ethCfg.GPO),
+		EnableInnerTx:      ethCfg.XLayer.EnableInnerTx,
+		PreRunList:         ethCfg.XLayer.PreRunList,
+		BulkAddTxs:         ethCfg.XLayer.BulkAddTxs,
+		BulkAddTxsSize:     ethCfg.XLayer.BulkAddTxsSize,
+		BulkAddTxsWaitTime: ethCfg.XLayer.BulkAddTxsWaitTime,
+		EnableNotify:       ethCfg.XLayer.EnableAddTxNotify,
+		txChan:             make(chan txRequest, 1000),
+		dbsmt:              dbsmt,
 	}
 
 	// For X Layer
@@ -439,9 +456,18 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 	GasPricerOnce.Do(func() {
 		if sequencer.IsSequencer() {
 			apii.runL2GasPricerForXLayer()
+			if len(ethCfg.XLayer.PreRunList) > 0 {
+				vm.InitPrecompiledCache(ethCfg.XLayer.PreRunCacheSize, ethCfg.XLayer.PreRunCacheTTL)
+				apii.initPreRunWorkers(ethCfg.XLayer.PreRunChanNum, ethCfg.XLayer.PreRunTaskNum)
+				log.Info(fmt.Sprintf("prerun list:%v, cache size:%v, ttl:%v, chan:%v, task:%v",
+					apii.PreRunList, ethCfg.XLayer.PreRunCacheSize, ethCfg.XLayer.PreRunCacheTTL,
+					ethCfg.XLayer.PreRunChanNum, ethCfg.XLayer.PreRunTaskNum))
+			}
 		}
 	})
-
+	if apii.BulkAddTxs {
+		go apii.worker()
+	}
 	return apii
 }
 
@@ -600,31 +626,40 @@ func newRPCRawTransactionFromBlockIndex(b *types.Block, index uint64) (hexutilit
 }
 
 type GasPriceCache struct {
-	latestPrice *big.Int
+	latestPrice atomic.Pointer[big.Int]
 	latestHash  common.Hash
-	mtx         sync.Mutex
+	mtx         sync.RWMutex
 	rawGPCache  *RawGPCache
 }
 
 func NewGasPriceCache() *GasPriceCache {
-	return &GasPriceCache{
-		latestPrice: big.NewInt(0),
+	// For X Layer, optimize gas price cache
+	gpCache := &GasPriceCache{
+		latestPrice: atomic.Pointer[big.Int]{},
 		latestHash:  common.Hash{},
 		rawGPCache:  NewRawGPCache(),
 	}
+	gpCache.latestPrice.Store(big.NewInt(0))
+	return gpCache
 }
 
 func (c *GasPriceCache) GetLatest() (common.Hash, *big.Int) {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-	hash := c.latestHash
-	price := new(big.Int).Set(c.latestPrice) // deep copy
-	return hash, price
+	// For X Layer, optimize gas price cache
+	price := new(big.Int)
+	c.mtx.RLock()
+	defer c.mtx.RUnlock()
+	price.Set(c.latestPrice.Load()) // deep copy
+	return c.latestHash, price
+}
+
+func (c *GasPriceCache) GetLatestPriceReadOnly() *big.Int {
+	return c.latestPrice.Load()
 }
 
 func (c *GasPriceCache) SetLatest(hash common.Hash, price *big.Int) {
 	c.mtx.Lock()
-	c.latestPrice = price
+	// For X Layer, optimize gas price cache
+	c.latestPrice.Store(price)
 	c.latestHash = hash
 	c.mtx.Unlock()
 }

@@ -12,6 +12,7 @@ on:
       - zkevm
       - zkevm-2.60
       - stable/**
+      - feature/v0.6.0
     types:
       - opened
       - reopened
@@ -29,22 +30,23 @@ env:
 
 jobs:
   tests:
-    if: false
-    strategy:
-      max-parallel: 2
-      fail-fast: true
-      matrix:
-        os: [ ubuntu-22.04, macos-14-xlarge ] # list of os: https://github.com/actions/virtual-environments
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.os == 'macos-14-xlarge' && 40 || 30 }}
+    # strategy:
+      # max-parallel: 2
+      # fail-fast: true
+      # matrix:
+        # os: [ ubuntu-22.04, macos-14-xlarge ] # list of os: https://github.com/actions/virtual-environments
+    runs-on: ubuntu-latest
+    # timeout-minutes: ${{ matrix.os == 'macos-14-xlarge' && 40 || 30 }}
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.24'
       - name: Install dependencies on Linux
-        if: runner.os == 'Linux'
+        # if: runner.os == 'Linux'
+        if: true
         run: sudo apt update && sudo apt install build-essential
 
       - name: Build
@@ -67,21 +69,22 @@ jobs:
 #          version: v1.54
 
       - name: Test
-        run: make test
-      
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
-        if: ${{ matrix.os == 'ubuntu-20.04' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: make -B test
+
+      # - name: SonarCloud Scan
+      #   uses: SonarSource/sonarcloud-github-action@master
+      #   if: ${{ matrix.os == 'ubuntu-20.04' }}
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   kurtosis-cdk:
     if: true
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        da-mode: [ "rollup", "cdk-validium" ]
+        da-mode: [ "cdk-validium" ]
+        ac-split: ["default", "ac-split"]
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4
@@ -215,8 +218,6 @@ jobs:
   test-e2e:
     strategy:
       fail-fast: false
-      matrix:
-        e2e-group: [ 1 ]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -226,31 +227,52 @@ jobs:
         run: make build-docker
 
       - name: Test
-        run: make test-${{ matrix.e2e-group }}
+        run: sudo -E make test-e2e
         working-directory: test
 
+  # For X Layer, split db and ac
+  test-data-loss:
+    strategy:
+      matrix:
+        case: [1, 2, 3, 4, 5, 6, 7, 8]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Test
+        run: sudo -E make data-loss-${{ matrix.case }}
+        working-directory: test
+
+  # For X Layer, split db and ac
+  test-executor:
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build Docker
+        run: make build-docker
+
+      - name: Update E2E Test Configurations
+        run: |
+          bash ./.github/scripts/update_config.sh
+
+      - name: Test
+        run: make test-executor
+        working-directory: test
+        
+  # For X Layer
   check-chinese-chars:
     name: Check Chinese Characters
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Check for Chinese characters
         run: |
-          found_chinese=false
-          while IFS= read -r line; do
-            if [ -n "$line" ]; then
-              echo "Chinese chars found in $line"
-              found_chinese=true
-            fi
-          done < <(find . \( -name "*.go" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \
-                  -o -name "*.sol" -o -name "*.js" -o -name "*.jsx" -o -name "*.ts" \
-                  -o -name "*.tsx" -o -name "Makefile" -o -name "*.mk" \
-                  -o -name "Dockerfile" -o -name "*.md" \
-                  -o -name "*.yaml" -o -name "*.yml" \) \
-                  -type f -exec sh -c 'grep -H -n -P "[\x{4e00}-\x{9fa5}]" "$0"' {} \;)
-          if [ "$found_chinese" = true ]; then
-            echo "Error: Found Chinese characters in source files!"
-            exit 1
-          fi
+          bash ./.github/scripts/check_chinese_characters.sh

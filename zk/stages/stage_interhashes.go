@@ -40,6 +40,7 @@ import (
 
 type ZkInterHashesCfg struct {
 	db                kv.RwDB
+	dbsmt             kv.RwDB
 	checkRoot         bool
 	badBlockHalt      bool
 	tmpDir            string
@@ -54,6 +55,7 @@ type ZkInterHashesCfg struct {
 
 func StageZkInterHashesCfg(
 	db kv.RwDB,
+	dbsmt kv.RwDB,
 	checkRoot, saveNewHashesToDB, badBlockHalt bool,
 	tmpDir string,
 	blockReader services.FullBlockReader,
@@ -74,10 +76,11 @@ func StageZkInterHashesCfg(
 		historyV3: historyV3,
 		agg:       agg,
 		zk:        zk,
+		dbsmt:     dbsmt, // For X Layer, split db and ac
 	}
 }
 
-func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context) (root common.Hash, err error) {
+func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwinder, tx kv.RwTx, txsmt kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context) (root common.Hash, err error) {
 	logPrefix := s.LogPrefix()
 
 	quit := ctx.Done()
@@ -91,6 +94,20 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 			return trie.EmptyRoot, err
 		}
 		defer tx.Rollback()
+	}
+	// For X Layer, split db and ac
+	useExternalSmtTx := txsmt != nil
+	if !useExternalSmtTx {
+		if cfg.dbsmt != nil {
+			var err error
+			txsmt, err = cfg.dbsmt.BeginRw(ctx)
+			if err != nil {
+				return trie.EmptyRoot, err
+			}
+			defer txsmt.Rollback()
+		} else {
+			txsmt = nil
+		}
 	}
 
 	to, err := s.ExecutionAt(tx)
@@ -125,7 +142,11 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	shouldIncrementBecauseOfExecutionConditions := s.BlockNumber > 0 && !shouldRegenerate
 	shouldIncrement := shouldIncrementBecauseOfAFlag || shouldIncrementBecauseOfExecutionConditions
 
-	eridb := db2.NewEriDb(tx)
+	// For X Layer, split db and ac
+	eridb := db2.NewEriDb(txsmt, tx)
+	if txsmt == nil {
+		eridb = db2.NewEriDb(tx, tx)
+	}
 	smt := smt.NewSMT(eridb, false)
 
 	if shouldIncrement {
@@ -135,7 +156,8 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 
 		eridb.OpenBatch(quit)
 
-		if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
+		// For X Layer, split db and ac
+		if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, smt, s.BlockNumber, to); err != nil {
 			return trie.EmptyRoot, err
 		}
 	} else {
@@ -182,11 +204,17 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 			return trie.EmptyRoot, err
 		}
 	}
+	// For X Layer, split db and ac
+	if !useExternalSmtTx && txsmt != nil {
+		if err := txsmt.Commit(); err != nil {
+			return trie.EmptyRoot, err
+		}
+	}
 
 	return root, err
 }
 
-func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context, silent bool) (err error) {
+func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.StageState, tx kv.RwTx, txsmt kv.RwTx, cfg ZkInterHashesCfg, ctx context.Context, silent bool) (err error) {
 	useExternalTx := tx != nil
 	if !useExternalTx {
 		tx, err = cfg.db.BeginRw(ctx)
@@ -194,6 +222,19 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 			return err
 		}
 		defer tx.Rollback()
+	}
+	// For X Layer, split db and ac
+	useExternalSmtTx := txsmt != nil
+	if !useExternalSmtTx {
+		if cfg.dbsmt != nil {
+			txsmt, err = cfg.dbsmt.BeginRw(ctx)
+			if err != nil {
+				return err
+			}
+			defer txsmt.Rollback()
+		} else {
+			txsmt = nil
+		}
 	}
 	if !silent {
 		log.Debug(fmt.Sprintf("[%s] Unwinding intermediate hashes", s.LogPrefix()), "from", s.BlockNumber, "to", u.UnwindPoint)
@@ -210,7 +251,8 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 		expectedRootHash = syncHeadHeader.Root
 	}
 
-	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, cfg.checkRoot, &expectedRootHash, silent); err != nil {
+	// For X Layer, split db and ac
+	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, txsmt, cfg.checkRoot, &expectedRootHash, silent, s.GetSmtHistorySnapshotCache(s.BlockNumber)); err != nil {
 		return err
 	}
 	hermezDb := hermez_db.NewHermezDb(tx)
@@ -223,6 +265,12 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 	}
 	if !useExternalTx {
 		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	// For X Layer, split db and ac
+	if !useExternalSmtTx && txsmt != nil {
+		if err := txsmt.Commit(); err != nil {
 			return err
 		}
 	}
@@ -333,7 +381,7 @@ func regenerateIntermediateHashes(ctx context.Context, logPrefix string, db kv.R
 	return common.BigToHash(root), nil
 }
 
-func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *stagedsync.StageState, db kv.RwTx, eridb *db2.EriDb, dbSmt *smt.SMT, from, to uint64) (hash common.Hash, err error) {
+func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *stagedsync.StageState, db kv.RwTx, dbSmt *smt.SMT, from, to uint64) (hash common.Hash, err error) {
 	log.Info(fmt.Sprintf("[%s] Increment trie hashes started", logPrefix), "previousRootHeight", s.BlockNumber, "calculatingRootHeight", to)
 	defer log.Info(fmt.Sprintf("[%s] Increment ended", logPrefix))
 
@@ -424,6 +472,11 @@ func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *sta
 	}
 
 	if _, _, err := dbSmt.SetStorage(ctx, logPrefix, accChanges, codeChanges, storageChanges); err != nil {
+		return trie.EmptyRoot, err
+	}
+
+	// For X Layer, split db and ac
+	if err := dbSmt.SetLastHeight(to); err != nil {
 		return trie.EmptyRoot, err
 	}
 

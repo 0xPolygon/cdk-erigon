@@ -296,7 +296,7 @@ func (n *Node) DataDir() string {
 	return n.config.Dirs.DataDir
 }
 
-func OpenDatabase(ctx context.Context, config *nodecfg.Config, label kv.Label, name string, readonly bool, logger log.Logger) (kv.RwDB, error) {
+func OpenDatabase(ctx context.Context, config *nodecfg.Config, label kv.Label, name string, readonly bool, isStandaloneSMTDatabase bool, logger log.Logger) (kv.RwDB, error) {
 	switch label {
 	case kv.ChainDB:
 		name = "chaindata"
@@ -371,7 +371,8 @@ func OpenDatabase(ctx context.Context, config *nodecfg.Config, label kv.Label, n
 	if err != nil {
 		return nil, err
 	}
-	migrator := migrations.NewMigrator(label)
+	// For X Layer, split db and ac
+	migrator := migrations.NewMigrator(label, isStandaloneSMTDatabase)
 	if err := migrator.VerifyVersion(db); err != nil {
 		return nil, err
 	}

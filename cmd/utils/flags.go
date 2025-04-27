@@ -2304,6 +2304,8 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	setGPO(ctx, &cfg.GPO)
 
 	setTxPool(ctx, cfg)
+	// For X Layer, pre run
+	SetPreRunList(ctx, cfg)
 	cfg.TxPool = ethconfig.DefaultTxPool2Config(cfg)
 	cfg.TxPool.DBDir = nodeConfig.Dirs.TxPool
 	cfg.YieldSize = ctx.Uint64(YieldSizeFlag.Name)
@@ -2435,6 +2437,9 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	} else {
 		cfg.DisableTxPoolGossip = txpoolcfg.DefaultConfig.NoGossip
 	}
+
+	// For X Layer
+	SetBulkAddTxs(ctx, cfg)
 }
 
 // SetDNSDiscoveryDefaults configures DNS discovery with the given URL if

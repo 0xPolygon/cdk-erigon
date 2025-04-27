@@ -58,8 +58,8 @@ default: all
 
 ## go-version:                        print and verify go version
 go-version:
-	@if [ $(shell $(GO) version | cut -c 16-17) -lt 21 ]; then \
-		echo "minimum required Golang version is 1.21"; \
+	@if [ $(shell $(GO) version | cut -c 16-17) -lt 24 ]; then \
+		echo "minimum required Golang version is 1.24"; \
 		exit 1 ;\
 	fi
 
@@ -142,6 +142,9 @@ COMMANDS += evm
 COMMANDS += sentinel
 COMMANDS += acl
 
+# For X Layer, split db
+COMMANDS += smt-db-split
+
 # build each command using %.cmd rule
 $(COMMANDS): %: %.cmd
 
@@ -159,12 +162,33 @@ db-tools:
 	rm -rf vendor
 	@echo "Run \"$(GOBIN)/mdbx_stat -h\" to get info about mdbx db file."
 
-
 ## test-unwind:                       run the unwind tests
-test-unwind:
-	make cdk-erigon
-	./zk/tests/unwinds/unwind.sh
+test-unwind: test-unwind-default test-unwind-split-db
 
+test-unwind-default:
+	make clean
+	cp ./zk/tests/unwinds/config/dynamic-integration8.yaml .
+	cp ./zk/tests/unwinds/config/dynamic-integration-allocs.json .
+	cp ./zk/tests/unwinds/config/dynamic-integration-chainspec.json .
+	cp ./zk/tests/unwinds/config/dynamic-integration-conf.json .
+	cd ./zk/tests/unwinds/datastream && tar -xzf ./datastream-net8-upto-11318-101.zip
+	cd ../../../../
+	make cdk-erigon
+	# For X Layer, split-db
+	./zk/tests/unwinds/unwind.sh default
+	rm dynamic-integration8.yaml dynamic-integration-allocs.json dynamic-integration-chainspec.json dynamic-integration-conf.json
+
+test-unwind-split-db:
+	make clean
+	cp ./zk/tests/unwinds/config/dynamic-integration8.yaml .
+	cp ./zk/tests/unwinds/config/dynamic-integration-allocs.json .
+	cp ./zk/tests/unwinds/config/dynamic-integration-chainspec.json .
+	cp ./zk/tests/unwinds/config/dynamic-integration-conf.json .
+	cd ./zk/tests/unwinds/datastream && tar -xzf ./datastream-net8-upto-11318-101.zip
+	cd ../../../../
+	make cdk-erigon
+	./zk/tests/unwinds/unwind.sh split-db
+	rm dynamic-integration8.yaml dynamic-integration-allocs.json dynamic-integration-chainspec.json dynamic-integration-conf.json
 
 test-erigon-lib:
 	@cd erigon-lib && $(MAKE) test
@@ -173,9 +197,11 @@ test-erigon-ext:
 	@cd tests/erigon-ext-test && ./test.sh $(GIT_COMMIT)
 
 ## test:                              run unit tests with a 100s timeout
+.PHONY: test
 test:
-	$(GOTEST) --timeout 10m
+	$(GOTEST) --timeout 10m -tags=skip_smoke
 
+.PHONY: test3
 test3:
 	$(GOTEST) --timeout 200s -tags $(BUILD_TAGS),erigon3
 
@@ -293,7 +319,7 @@ install:
 	@ls -al "$(DIST)"
 
 PACKAGE_NAME          := github.com/0xPolygonHermez/cdk-erigon
-GOLANG_CROSS_VERSION  ?= v1.21.6
+GOLANG_CROSS_VERSION  ?= v1.24
 
 .PHONY: release-dry-run
 release-dry-run: git-submodules

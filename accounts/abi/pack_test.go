@@ -39,7 +39,8 @@ func TestPack(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			encb, err := hex.DecodeString(test.packed)
 			if err != nil {
-				t.Fatalf("invalid hex %s: %v", test.packed, err)
+				// For X Layer, ut
+				t.Fatalf("invalid hex: %s", test.packed)
 			}
 			inDef := fmt.Sprintf(`[{ "name" : "method", "type": "function", "inputs": %s}]`, test.def)
 			inAbi, err := JSON(strings.NewReader(inDef))

@@ -235,7 +235,8 @@ func TestLocalUnpackTests(t *testing.T) {
 			}
 			encb, err := hex.DecodeString(test.enc)
 			if err != nil {
-				t.Fatalf("invalid hex %s: %v", test.enc, err) //nolint:scopelint
+				// For X Layer, ut
+				t.Fatalf("invalid hex: %s", test.enc)
 			}
 			outptr := reflect.New(reflect.TypeOf(test.want))
 			err = abi.UnpackIntoInterface(outptr.Interface(), "method", encb)
@@ -928,7 +929,8 @@ func TestOOMMaliciousInput(t *testing.T) {
 		}
 		encb, err := hex.DecodeString(test.enc)
 		if err != nil {
-			t.Fatalf("invalid hex: %s" + test.enc)
+			// For X Layer, ut
+			t.Fatalf("invalid hex: %s", test.enc)
 		}
 		_, err = abi.Methods["method"].Outputs.UnpackValues(encb)
 		if err == nil {

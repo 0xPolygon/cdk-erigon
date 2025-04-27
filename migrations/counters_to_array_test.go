@@ -64,14 +64,14 @@ func TestCountersToArray(t *testing.T) {
 			},
 		},
 	}
-
+	kv.InitStandaloneSMT(false)
 	for _, tc := range testCases {
 		require, tmpDir, db := require.New(t), t.TempDir(), memdb.NewTestDB(t)
 
 		err := prepareDbCounters(db, tc.mapCounters, tc.arrayCounters)
 		require.NoError(err)
 
-		migrator := NewMigrator(kv.ChainDB)
+		migrator := NewMigrator(kv.ChainDB, false)
 
 		migrator.Migrations = []Migration{countersToArray}
 		err = migrator.Apply(db, tmpDir, log.New())

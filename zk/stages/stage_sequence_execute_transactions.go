@@ -3,6 +3,9 @@ package stages
 import (
 	"context"
 	"errors"
+	"fmt"
+	"runtime"
+	"sync"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -34,24 +37,27 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 	cfg.txPool.PreYield()
 	defer cfg.txPool.PostYield()
 
+	// For X Layer, optimize getTransactions
+	slots := types2.TxsRlp{}
 	if err := cfg.txPoolDb.View(ctx, func(poolTx kv.Tx) error {
-		slots := types2.TxsRlp{}
 		if allConditionsOk, _, err = cfg.txPool.YieldBest(cfg.yieldSize, &slots, poolTx, executionAt, gasLimit, 0, alreadyYielded); err != nil {
 			return err
 		}
-		yieldedTxs, yieldedIds, toRemove, err := extractTransactionsFromSlot(&slots, executionAt, cfg)
-		if err != nil {
-			return err
-		}
-		for _, txId := range toRemove {
-			cfg.txPool.MarkForDiscardFromPendingBest(txId)
-		}
-		transactions = append(transactions, yieldedTxs...)
-		ids = append(ids, yieldedIds...)
 		return nil
 	}); err != nil {
 		return nil, nil, allConditionsOk, err
 	}
+
+	// For X Layer, optimize getTransactions
+	yieldedTxs, yieldedIds, toRemove, err := extractTransactionsFromSlot(&slots, executionAt, cfg)
+	if err != nil {
+		return nil, nil, allConditionsOk, err
+	}
+	for _, txId := range toRemove {
+		cfg.txPool.MarkForDiscardFromPendingBest(txId)
+	}
+	transactions = append(transactions, yieldedTxs...)
+	ids = append(ids, yieldedIds...)
 
 	return transactions, ids, allConditionsOk, err
 }
@@ -83,29 +89,94 @@ func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *comm
 }
 
 func extractTransactionsFromSlot(slot *types2.TxsRlp, currentHeight uint64, cfg SequenceBlockCfg) ([]types.Transaction, []common.Hash, []common.Hash, error) {
-	ids := make([]common.Hash, 0, len(slot.TxIds))
-	transactions := make([]types.Transaction, 0, len(slot.Txs))
-	toRemove := make([]common.Hash, 0)
-
-	for idx, txBytes := range slot.Txs {
-		transaction, err := types.DecodeTransaction(txBytes)
-		if err == io.EOF {
-			continue
-		}
-		if err != nil {
-			// we have a transaction that cannot be decoded or a similar issue.  We don't want to handle
-			// this tx so just WARN about it and remove it from the pool and continue
-			log.Warn("[extractTransaction] Failed to decode transaction from pool, skipping and removing from pool",
-				"error", err,
-				"id", slot.TxIds[idx])
-			toRemove = append(toRemove, slot.TxIds[idx])
-			continue
-		}
-
-		// Recover sender later only for those transactions that are included in the block
-		transactions = append(transactions, transaction)
-		ids = append(ids, slot.TxIds[idx])
+	// For X Layer, optimize extractTransactionsFromSlot
+	if len(slot.Txs) != len(slot.TxIds) {
+		return nil, nil, nil, fmt.Errorf("mismatched lengths: Txs=%d, TxIds=%d", len(slot.Txs), len(slot.TxIds))
 	}
+
+	// Early exit if the transaction list is empty
+	if len(slot.Txs) == 0 {
+		return []types.Transaction{}, []common.Hash{}, []common.Hash{}, nil
+	}
+
+	numWorkers := runtime.NumCPU() / 2
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+
+	tasks := make(chan task, len(slot.Txs))
+	results := make(chan result, len(slot.Txs))
+
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	// For X Layer, optimize extractTransactionsFromSlot
+	// Start workers
+	for i := 0; i < numWorkers; i++ {
+		go func() {
+			defer wg.Done()
+			for t := range tasks {
+				tx, err := types.DecodeTransaction(t.txBytes)
+				res := result{idx: t.idx, id: t.id}
+				if err == io.EOF {
+					continue
+				}
+				if err != nil {
+					log.Warn("Failed to decode transaction from pool, skipping and removing",
+						"error", err, "id", t.id)
+					res.toRemove = true
+					results <- res
+					continue
+				}
+
+				if (t.sender != common.Address{}) {
+					tx.SetSender(t.sender)
+				}
+
+				tx.Hash() // Pre-calculate transaction hash
+				res.tx = tx
+				results <- res
+			}
+		}()
+	}
+
+	// Distribute tasks
+	for i, txBytes := range slot.Txs {
+		tasks <- task{idx: i, txBytes: txBytes, id: slot.TxIds[i], sender: slot.Senders.AddressAt(i)}
+	}
+	close(tasks)
+
+	// Wait for workers to finish
+	wg.Wait()
+	close(results)
+
+	// Collect results in order
+	txMap := make([]types.Transaction, len(slot.Txs))
+	idMap := make([]common.Hash, len(slot.Txs))
+	toRemove := make([]common.Hash, 0, len(slot.Txs)/10)
+	validCount := 0
+
+	for res := range results {
+		if res.toRemove {
+			toRemove = append(toRemove, res.id)
+		} else {
+			txMap[res.idx] = res.tx
+			idMap[res.idx] = res.id
+			validCount++
+		}
+	}
+
+	// For X Layer, optimize extractTransactionsFromSlot
+	// Build ordered results
+	transactions := make([]types.Transaction, 0, validCount)
+	ids := make([]common.Hash, 0, validCount)
+	for i := 0; i < len(slot.Txs); i++ {
+		if !contains(toRemove, slot.TxIds[i]) {
+			transactions = append(transactions, txMap[i])
+			ids = append(ids, idMap[i])
+		}
+	}
+
 	return transactions, ids, toRemove, nil
 }
 

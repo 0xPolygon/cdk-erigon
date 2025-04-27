@@ -91,6 +91,9 @@ type Limbo struct {
 	// used to denote some process has made the pool aware that an unwind is about to occur and to wait
 	// until the unwind has been processed before allowing yielding of transactions again
 	awaitingBlockHandling atomic.Bool
+
+	// For X Layer, optimize tx pool
+	uncheckedLimboBlocksExist atomic.Bool
 }
 
 func newLimbo() *Limbo {
@@ -100,6 +103,9 @@ func newLimbo() *Limbo {
 		uncheckedLimboBlocks:  make([]*LimboBlockDetails, 0),
 		invalidLimboBlocks:    make([]*LimboBlockDetails, 0),
 		awaitingBlockHandling: atomic.Bool{},
+
+		// For X Layer, optimize tx pool
+		uncheckedLimboBlocksExist: atomic.Bool{},
 	}
 }
 
@@ -112,6 +118,9 @@ func (_this *Limbo) resizeUncheckedBlocks(blockIndex, txIndex int) {
 	for i := len(_this.uncheckedLimboBlocks); i < size; i++ {
 		_this.uncheckedLimboBlocks = append(_this.uncheckedLimboBlocks, NewLimboBlockDetails())
 	}
+
+	// For X Layer, optimize tx pool
+	_this.uncheckedLimboBlocksExist.Store(true)
 
 	_this.uncheckedLimboBlocks[blockIndex].resizeTransactions(txIndex)
 }
@@ -203,8 +212,12 @@ func (_this *LimboBlockDetails) getTxDetailsByHash(txHash *common.Hash) (*LimboB
 }
 
 func (p *TxPool) GetLimboDetailsForRecovery(blockNumber uint64) (*LimboBlockDetails, *common.Hash) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	// For X Layer, optimize tx pool
+	if !p.limbo.uncheckedLimboBlocksExist.Load() {
+		return nil, nil
+	}
+	p.lock.RLock()
+	defer p.lock.RUnlock()
 
 	limboBlock, limboTx := p.limbo.getFirstTxWithoutRootByBlockNumber(blockNumber)
 	if limboBlock == nil {
@@ -214,8 +227,9 @@ func (p *TxPool) GetLimboDetailsForRecovery(blockNumber uint64) (*LimboBlockDeta
 }
 
 func (p *TxPool) GetLimboTxRplsByHash(tx kv.Tx, txHash *common.Hash) (*types.TxsRlp, error) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	// For X Layer, optimize tx pool
+	p.lock.RLock()
+	defer p.lock.RUnlock()
 
 	limboBlock, _, _, txIndex := p.limbo.getTxDetailsByHash(txHash)
 	if limboBlock == nil {
@@ -249,6 +263,8 @@ func (p *TxPool) ProcessUncheckedLimboBlockDetails(limboBlock *LimboBlockDetails
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	p.limbo.uncheckedLimboBlocks = append(p.limbo.uncheckedLimboBlocks, limboBlock)
+	// For X Layer, optimize tx pool
+	p.limbo.uncheckedLimboBlocksExist.Store(true)
 
 	/*
 		as we know we're about to enter an unwind we need to ensure that all the transactions have been
@@ -262,14 +278,16 @@ func (p *TxPool) ProcessUncheckedLimboBlockDetails(limboBlock *LimboBlockDetails
 }
 
 func (p *TxPool) GetInvalidLimboBlocksDetails() []*LimboBlockDetails {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	// For X Layer, optimize tx pool
+	p.lock.RLock()
+	defer p.lock.RUnlock()
 	return p.limbo.invalidLimboBlocks
 }
 
 func (p *TxPool) GetUncheckedLimboBlocksDetailsClonedWeak() []*LimboBlockDetails {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	// For X Layer, optimize tx pool
+	p.lock.RLock()
+	defer p.lock.RUnlock()
 
 	limboBlocksClone := make([]*LimboBlockDetails, len(p.limbo.uncheckedLimboBlocks))
 	copy(limboBlocksClone, p.limbo.uncheckedLimboBlocks)
@@ -288,6 +306,8 @@ func (p *TxPool) MarkProcessedLimboDetails(size int, invalidBatchesIndices []int
 		p.limbo.invalidLimboBlocks = append(p.limbo.invalidLimboBlocks, p.limbo.uncheckedLimboBlocks[invalidBatchesIndex])
 	}
 	p.limbo.uncheckedLimboBlocks = p.limbo.uncheckedLimboBlocks[size:]
+	// For X Layer, optimize tx pool
+	p.limbo.uncheckedLimboBlocksExist.Store(true)
 }
 
 // should be called from within a locked context from the pool

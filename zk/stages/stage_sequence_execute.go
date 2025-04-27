@@ -22,13 +22,11 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/metrics"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
+	"github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 var shouldCheckForExecutionAndDataStreamAlignment = true
-
-// For X Layer, for local replay feature
-var externalDataStreamServerCreated = false
 
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
@@ -79,6 +77,12 @@ func SpawnSequencingStage(
 		}
 	}
 
+	// For X Layer, for auto recovery
+	if lastBatch < highestBatchInDs && shouldCheckForExecutionAndSMTAlignment == SMTAlignmentPendingResequence {
+		log.Warn(fmt.Sprintf("[%s] Start to resequence for SMT alignment, lastBatch:%v, highestBatchInDs:%v", s.LogPrefix(), lastBatch, highestBatchInDs))
+		return resequenceFromSMTAlignment(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs)
+	}
+
 	if lastBatch < highestBatchInDs {
 		return resequence(s, u, ctx, cfg, historyCfg, lastBatch, highestBatchInDs)
 	}
@@ -89,7 +93,39 @@ func SpawnSequencingStage(
 		return nil
 	}
 
-	return sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil)
+	// For X Layer, split db and ac
+	startWaitTime := time.Now()
+	if cfg.zk.XLayer.EnableAsyncCommit {
+		s.FlushSmtCacheWait()
+	}
+	metrics.GetLogStatistics().CumulativeTiming(metrics.FlushSmtCacheWait, time.Since(startWaitTime))
+
+	if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, nil); err == nil {
+		// For X Layer, split db and ac
+		if !cfg.zk.XLayer.EnableAsyncCommit {
+			return err
+		}
+
+		s.FlushSmtCacheSignalInc()
+		go func() {
+			defer s.FlushSmtCacheDone()
+			// enable split smt db
+			_ = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, false)
+		}()
+	} else {
+		// For X Layer, split db and ac
+		if !cfg.zk.XLayer.EnableAsyncCommit {
+			return err
+		}
+
+		s.FlushSmtCacheSignalInc()
+		go func() {
+			defer s.FlushSmtCacheDone()
+			s.ResetCurrentBatchCache(s.BlockNumber)
+		}()
+	}
+
+	return err
 }
 
 func sequencingBatchStep(
@@ -109,21 +145,22 @@ func sequencingBatchStep(
 		metrics.GetLogStatistics().Summary()
 	}()
 
-	// For X Layer metrics
-	log.Info("[PoolTxCount] Starting Getting Pending Tx Count")
-	pending, basefee, queued := cfg.txPool.CountContent()
-	metrics.AddPoolTxCount(pending, basefee, queued)
-
 	// at this point of time the datastream could not be ahead of the executor
 	if err = validateIfDatastreamIsAheadOfExecution(s, ctx, cfg); err != nil {
 		return err
 	}
 
-	sdb, err := newStageDb(ctx, cfg.db)
+	// For X Layer, split db and ac
+	sdb, err := newStageDb(ctx, cfg.db, cfg.dbsmt, cfg.zk.XLayer.EnableAsyncCommit)
 	if err != nil {
 		return err
 	}
-	defer sdb.tx.Rollback()
+	defer sdb.Rollback()
+
+	if sdb.supportAC {
+		// For X Layer, split db and ac
+		sdb.eridb.SetCache(s.GetSmtCache())
+	}
 
 	if err = cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
 		return err
@@ -176,7 +213,44 @@ func sequencingBatchStep(
 			return err
 		}
 
-		return sdb.tx.Commit()
+		// For X Layer, split db and ac
+		return sdb.Commit(s, executionAt+1, true)
+	}
+
+	// For X Layer, for auto recovery
+	if shouldCheckForExecutionAndSMTAlignment == SMTAlignmentInit {
+		if !batchState.isAnyRecovery() {
+			smtMaxBlockNumber, err := sdb.eridb.GetLastHeight()
+			if err != nil {
+				log.Error(fmt.Sprintf("[%s] Failed to get smt max block number", logPrefix), "error", err, "smtMaxBlockNumber", smtMaxBlockNumber)
+				return err
+			}
+			if smtMaxBlockNumber != 0 && smtMaxBlockNumber+1 < executionAt {
+				targetBlock, err := getTargetBlockForSMTAlignment(sdb, logPrefix, executionAt, smtMaxBlockNumber)
+				if err != nil {
+					return err
+				}
+
+				isUnwinding, err := unwindExecutionToSMT(batchContext, executionAt, targetBlock, u)
+				if err != nil {
+					return err
+				}
+				if isUnwinding {
+					err = sdb.tx.Commit()
+					if err != nil {
+						return err
+					}
+					// set to pending resequence state
+					shouldCheckForExecutionAndSMTAlignment = SMTAlignmentPendingResequence
+					log.Warn(fmt.Sprintf("[%s] SMT alignment check triggered resequence", logPrefix))
+					return nil
+				}
+			}
+		}
+
+		// set to terminated state, indicating verification is completed
+		shouldCheckForExecutionAndSMTAlignment = SMTAlignmentTerminated
+		log.Info(fmt.Sprintf("[%s] SMT alignment check completed", logPrefix))
 	}
 
 	if shouldCheckForExecutionAndDataStreamAlignment {
@@ -193,7 +267,8 @@ func sequencingBatchStep(
 				return err
 			}
 			if isUnwinding {
-				err = sdb.tx.Commit()
+				// For X Layer, split db and ac
+				err := sdb.Commit(s, executionAt+1, true)
 				if err != nil {
 					// do not set shouldCheckForExecutionAndDataStreamAlighment=false because of the error
 					return err
@@ -205,14 +280,16 @@ func sequencingBatchStep(
 		shouldCheckForExecutionAndDataStreamAlignment = false
 	}
 
-	needsUnwind, exitStage, err := tryHaltSequencer(batchContext, batchState, streamWriter, u, executionAt)
+	// For X Layer, split db and ac
+	needsUnwind, exitStage, err := tryHaltSequencer(batchContext, batchState, streamWriter, u, executionAt, s)
 	if needsUnwind || err != nil {
 		return err
 	}
 	if exitStage {
 		log.Info(fmt.Sprintf("[%s] Exiting stage during halted sequencer", logPrefix))
+		// For X Layer, split db and ac
 		// commit the tx so any updates to the stream etc are persisted
-		return sdb.tx.Commit()
+		return sdb.Commit(s, executionAt+1, true)
 	}
 
 	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix); err != nil {
@@ -282,7 +359,9 @@ func sequencingBatchStep(
 	// until the next batch starts
 	sendersToSkip := make(map[common.Address]struct{})
 
-	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {
+	// For X Layer, split db and ac
+	blockNumber := uint64(0)
+	for blockNumber = executionAt + 1; runLoopBlocks; blockNumber++ {
 		if batchTimedOut {
 			log.Debug(fmt.Sprintf("[%s] Closing batch due to timeout", logPrefix))
 			break
@@ -431,9 +510,10 @@ func sequencingBatchStep(
 					return err
 				}
 
-				// For X Layer, local replay's feature of stateroot mismatch detection
-				if cfg.zk.XLayer.SequencerReplay {
+				// For X Layer, local replay and smt alignment's feature of stateroot mismatch detection
+				if cfg.zk.XLayer.SequencerReplay || shouldCheckForExecutionAndSMTAlignment == SMTAlignmentPendingResequence {
 					stateRootBeforeReplay = batchState.resequenceBatchJob.CurrentBlock().StateRoot
+					log.Info(fmt.Sprintf("[%s] State root before replay", logPrefix), "stateRoot", stateRootBeforeReplay)
 				}
 			} else if !batchState.isL1Recovery() {
 
@@ -465,6 +545,9 @@ func sequencingBatchStep(
 					log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
 				}
 			}
+
+			// For X Layer
+			txpool.ArquireTxPoolLock(false)
 
 			if len(batchState.blockState.transactionsForInclusion) == 0 {
 				if !batchState.isAnyRecovery() {
@@ -728,12 +811,39 @@ func sequencingBatchStep(
 		// this could happen if there were lots of nonce issues from transaction in the pool due to a failed tx processing or similar and
 		// there wasn't much time left in the batch to mine any transactions
 		if len(batchState.blockState.transactionsForInclusion) > 0 && len(batchState.blockState.builtBlockElements.transactions) == 0 {
-			log.Info(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
-			break
+			if cfg.zk.XLayer.SequencerSkipEmptyBlocks {
+				log.Warn(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
+				break
+			}
+			log.Warn(fmt.Sprintf("[%s] Keeping empty block %d to keep liveness", logPrefix, blockNumber))
 		}
 
-		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
-			return err
+		// For X Layer, split db and ac
+		if batchContext.sdb.supportAC {
+			quit := batchContext.ctx.Done()
+			batchContext.sdb.eridb.OpenBatch(quit)           // do nothing...
+			batchContext.sdb.eridb.SetCache(s.GetSmtCache()) // will deep copy in internal function
+			if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
+				batchContext.sdb.eridb.RollbackBatch()
+				return err
+			}
+			blockCache := batchContext.sdb.eridb.RetriveAndCleanCache()
+			if err := batchContext.sdb.eridb.CommitBatch(); err != nil {
+				return err
+			}
+			setTime := time.Now()
+			s.SetSmtCache(blockNumber, blockCache)
+			metrics.GetLogStatistics().CumulativeTiming(metrics.SetSmtCacheTiming, time.Since(setTime))
+		} else {
+			quit := batchContext.ctx.Done()
+			batchContext.sdb.eridb.OpenBatch(quit)
+			if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
+				batchContext.sdb.eridb.RollbackBatch()
+				return err
+			}
+			if err := batchContext.sdb.eridb.CommitBatch(); err != nil {
+				return err
+			}
 		}
 
 		// For X Layer
@@ -753,13 +863,17 @@ func sequencingBatchStep(
 			return fmt.Errorf("[%s] %w: %s = %s", s.LogPrefix(), zk.ErrLimboState, batchState.limboRecoveryData.limboTxHash.Hex(), stateRoot.Hex())
 		}
 
+		// For X Layer
+		txpool.ArquireTxPoolLock(true)
+
 		if !batchState.isL1Recovery() {
 			commitTime := time.Now()
 			// commit block data here so it is accessible in other threads
 			if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
 				return errCommitAndStart
 			}
-			defer sdb.tx.Rollback()
+			// For X Layer, split db and ac
+			defer sdb.Rollback()
 			metrics.GetLogStatistics().CumulativeTiming(metrics.BatchCommitDBTiming, time.Since(commitTime))
 		}
 
@@ -797,8 +911,8 @@ func sequencingBatchStep(
 		}
 		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.XLayer.ExecutorMock, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
 
-		// For X Layer, local replay's feature of stateroot mismatch detection
-		if cfg.zk.XLayer.SequencerReplay {
+		// For X Layer, local replay and smt alignment's feature of stateroot mismatch detection
+		if cfg.zk.XLayer.SequencerReplay || shouldCheckForExecutionAndSMTAlignment == SMTAlignmentPendingResequence {
 			if stateRootBeforeReplay != block.Root() {
 				err := fmt.Errorf("[%s] State root mismatch of block %d after resequencing, expected %s, got %s",
 					logPrefix,
@@ -812,7 +926,7 @@ func sequencingBatchStep(
 		}
 
 		// check for new responses from the verifier
-		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
+		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u, s)
 
 		// lets commit everything after updateStreamAndCheckRollback no matter of its result unless
 		// we're in L1 recovery where losing some blocks on restart doesn't matter
@@ -822,7 +936,8 @@ func sequencingBatchStep(
 			if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
 				return errCommitAndStart
 			}
-			defer sdb.tx.Rollback()
+			// For X Layer, split db and ac
+			defer sdb.Rollback()
 			metrics.GetLogStatistics().CumulativeTiming(metrics.BatchCommitDBTiming, time.Since(commitTime))
 		}
 
@@ -861,7 +976,8 @@ func sequencingBatchStep(
 	metrics.GetLogStatistics().SetTag(metrics.FinalizeBatchNumber, strconv.Itoa(int(batchState.batchNumber)))
 	tryToSleepSequencer(cfg.zk.XLayer.SequencerBatchSleepDuration, logPrefix)
 	startCommitTime := time.Now()
-	err = sdb.tx.Commit()
+	// For X Layer, split db and ac
+	err = sdb.Commit(s, blockNumber, false)
 	metrics.GetLogStatistics().CumulativeTiming(metrics.BatchCommitDBTiming, time.Since(startCommitTime))
 
 	batchTime := time.Since(batchStart)

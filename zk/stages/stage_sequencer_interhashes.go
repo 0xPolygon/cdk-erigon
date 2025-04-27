@@ -26,10 +26,12 @@ func UnwindSequencerInterhashsStage(
 	u *stagedsync.UnwindState,
 	s *stagedsync.StageState,
 	tx kv.RwTx,
+	txsmt kv.RwTx,
 	ctx context.Context,
 	cfg ZkInterHashesCfg,
 ) error {
-	return UnwindZkIntermediateHashesStage(u, s, tx, cfg, ctx, false)
+	// For X Layer, split db and ac
+	return UnwindZkIntermediateHashesStage(u, s, tx, txsmt, cfg, ctx, false)
 }
 
 func PruneSequencerInterhashesStage(

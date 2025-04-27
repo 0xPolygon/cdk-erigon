@@ -21,6 +21,7 @@ type MemDb struct {
 	DbCode      map[string][]byte
 	LastRoot    *big.Int
 	Depth       uint8
+	LastHeight  uint64 // For X Layer, split db and ac
 
 	lock sync.RWMutex
 }
@@ -34,6 +35,7 @@ func NewMemDb() *MemDb {
 		DbCode:      make(map[string][]byte),
 		LastRoot:    big.NewInt(0),
 		Depth:       0,
+		LastHeight:  0, // For X Layer, split db and ac
 	}
 }
 

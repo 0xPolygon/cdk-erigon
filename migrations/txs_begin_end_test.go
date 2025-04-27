@@ -23,6 +23,7 @@ import (
 )
 
 func TestTxsBeginEnd(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	require, tmpDir, db := require.New(t), t.TempDir(), memdb.NewTestDB(t)
 	txn := &types.DynamicFeeTransaction{Tip: u256.N1, FeeCap: u256.N1, ChainID: u256.N1, CommonTx: types.CommonTx{Value: u256.N1, Gas: 1, Nonce: 1}}
 	buf := bytes.NewBuffer(nil)
@@ -61,7 +62,7 @@ func TestTxsBeginEnd(t *testing.T) {
 	})
 	require.NoError(err)
 
-	migrator := migrations.NewMigrator(kv.ChainDB)
+	migrator := migrations.NewMigrator(kv.ChainDB, false)
 	migrator.Migrations = []migrations.Migration{migrations.TxsBeginEnd}
 	logger := log.New()
 	err = migrator.Apply(db, tmpDir, logger)

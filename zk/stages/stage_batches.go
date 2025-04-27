@@ -71,11 +71,6 @@ type DatastreamClient interface {
 	HandleStart() error
 }
 
-type DatastreamReadRunner interface {
-	StartRead()
-	StopRead()
-}
-
 type dsClientCreatorHandler func(context.Context, *ethconfig.Zk, uint64) (DatastreamClient, error)
 
 type BatchesCfg struct {
@@ -293,6 +288,7 @@ func SpawnStageBatches(
 
 	prevAmountBlocksWritten := uint64(0)
 	endLoop := false
+	receivedError := false
 
 	for {
 		// get batch start and use to update forkid
@@ -302,8 +298,9 @@ func SpawnStageBatches(
 		// if both download routine stopped and channel empty - stop loop
 		select {
 		case <-errorChan:
-			log.Warn("Error in datastream client, stopping consumption")
-			endLoop = true
+			// For X Layer, fix ds receive slow issue
+			log.Warn("Error in datastream client, stopping after all entries in entryChan are processed")
+			receivedError = true
 		case entry := <-*entryChan:
 			// DEBUG LIMIT - don't write more than we need to
 			if cfg.zkCfg.DebugLimit > 0 && batchProcessor.LastBlockHeight() >= cfg.zkCfg.DebugLimit {
@@ -322,7 +319,13 @@ func SpawnStageBatches(
 			log.Warn(fmt.Sprintf("[%s] Context done", logPrefix))
 			endLoop = true
 		default:
-			time.Sleep(10 * time.Millisecond)
+			// For X Layer, fix ds receive slow issue
+			// Only break if we've received an error and the channel is empty
+			if receivedError && len(*entryChan) == 0 {
+				endLoop = true
+			} else {
+				time.Sleep(10 * time.Millisecond)
+			}
 		}
 
 		if endLoop {

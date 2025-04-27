@@ -5,7 +5,7 @@ networks:
 services:
   xlayer-executor:
     container_name: xlayer-executor
-    image: hermeznetwork/zkevm-prover:v9.0.0-RC1-fork.13
+    image: hermeznetwork/zkevm-prover:v9.0.0-RC3-fork.13
     platform: linux/amd64
     environment:
       - EXPERIMENTAL_DOCKER_DESKTOP_FORCE_QEMU=1
@@ -17,9 +17,37 @@ services:
     command: >
       zkProver -c /usr/src/app/config.json
 
+  xlayer-executor-2:
+    container_name: xlayer-executor-2
+    image: hermeznetwork/zkevm-prover:v9.0.0-RC3-fork.13
+    platform: linux/amd64
+    environment:
+      - EXPERIMENTAL_DOCKER_DESKTOP_FORCE_QEMU=1
+    ports:
+      - 0.0.0.0:50062:50061 # MT
+      - 0.0.0.0:50072:50071 # Executor
+    volumes:
+      - ./config/test.stateless_executor.config.json:/usr/src/app/config.json
+    command: >
+      zkProver -c /usr/src/app/config.json
+
+  xlayer-executor-3:
+    container_name: xlayer-executor-3
+    image: hermeznetwork/zkevm-prover:v9.0.0-RC3-fork.13
+    platform: linux/amd64
+    environment:
+      - EXPERIMENTAL_DOCKER_DESKTOP_FORCE_QEMU=1
+    ports:
+      - 0.0.0.0:50063:50061 # MT
+      - 0.0.0.0:50073:50071 # Executor
+    volumes:
+      - ./config/test.stateless_executor.config.json:/usr/src/app/config.json
+    command: >
+      zkProver -c /usr/src/app/config.json
+
   xlayer-seqs:
     container_name: xlayer-seqs
-    image: zjg555543/cdk:v0.4.0-beta10
+    image: zjg555543/cdk:v0.5.4-rc1
     volumes:
       - ./data/seqs:/tmp/cdk
       - ./keystore/da.permit.keystore:/pk/da.permit.keystore
@@ -33,7 +61,7 @@ services:
 
   xlayer-agg:
     container_name: xlayer-agg
-    image: zjg555543/cdk:v0.4.0-beta10
+    image: zjg555543/cdk:v0.5.4-rc1
     ports:
       - 50081:50081
     volumes:
@@ -74,7 +102,7 @@ services:
 
   xlayer-prover:
     container_name: xlayer-prover
-    image: hermeznetwork/zkevm-prover:v9.0.0-RC1-fork.13
+    image: hermeznetwork/zkevm-prover:v9.0.0-RC3-fork.13
     platform: linux/amd64
     environment:
       - EXPERIMENTAL_DOCKER_DESKTOP_FORCE_QEMU=1
@@ -210,7 +238,7 @@ services:
 
   xlayer-pool-manager:
     container_name: xlayer-pool-manager
-    image: hermeznetwork/zkevm-pool-manager:v0.1.0-RC1
+    image: hermeznetwork/zkevm-pool-manager:v0.1.2
     deploy:
       resources:
         limits:
@@ -361,7 +389,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.51.2
-    command: 
+    command:
       - --log.level=warn
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus

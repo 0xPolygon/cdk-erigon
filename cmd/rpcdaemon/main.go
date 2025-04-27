@@ -25,7 +25,7 @@ func main() {
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		logger := debug.SetupCobra(cmd, "sentry")
-		db, backend, txPool, mining, stateCache, blockReader, engine, ff, agg, err := cli.RemoteServices(ctx, cfg, logger, rootCancel)
+		db, dbsmt, backend, txPool, mining, stateCache, blockReader, engine, ff, agg, err := cli.RemoteServices(ctx, cfg, logger, rootCancel)
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
 				logger.Error("Could not connect to DB", "err", err)
@@ -42,7 +42,7 @@ func main() {
 		gasTracker.Start()
 		defer gasTracker.Stop()
 
-		apiList, _ := jsonrpc.APIList(db, backend, txPool, nil, mining, ff, stateCache, blockReader, agg, cfg, engine, &ethConfig, nil, logger, nil, gasTracker)
+		apiList, _ := jsonrpc.APIList(db, dbsmt, backend, txPool, nil, mining, ff, stateCache, blockReader, agg, cfg, engine, &ethConfig, nil, logger, nil, gasTracker, nil)
 		rpc.PreAllocateRPCMetricLabels(apiList)
 		if err := cli.StartRpcServer(ctx, cfg, apiList, logger); err != nil {
 			logger.Error(err.Error())

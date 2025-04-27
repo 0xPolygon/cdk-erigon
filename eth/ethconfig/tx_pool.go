@@ -67,15 +67,17 @@ type DeprecatedTxPoolConfig struct {
 	EnableFreeGasList bool
 	// FreeGasList project name to FreeGasInfo
 	FreeGasList []FreeGasInfo
+	// EnableTimsort is the switch to use timsort on the best slice of txpool
+	EnableTimsort bool // For X Layer, optimize the txpool
 }
 
 // FreeGasInfo contains the details for what tx should be free
 type FreeGasInfo struct {
-	Name             string   `json:"name"`
-	FromList         []string `json:"from_list"`
-	ToList           []string `json:"to_list"`
-	MethodSigs       []string `json:"method_sigs"`
-	GasPriceMultiple uint64   `json:"gas_price_multiple"`
+	Name             string           `json:"name"`
+	FromList         []common.Address `json:"from_list"`
+	ToList           []common.Address `json:"to_list"`
+	MethodSigs       []string         `json:"method_sigs"`
+	GasPriceMultiple uint64           `json:"gas_price_multiple"`
 }
 
 // DeprecatedDefaultTxPoolConfig contains the default configurations for the transaction

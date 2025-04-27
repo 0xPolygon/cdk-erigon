@@ -14,6 +14,7 @@ import (
 )
 
 func TestApplyWithInit(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	require, db := require.New(t), memdb.NewTestDB(t)
 	m := []Migration{
 		{
@@ -48,7 +49,7 @@ func TestApplyWithInit(t *testing.T) {
 		},
 	}
 
-	migrator := NewMigrator(kv.ChainDB)
+	migrator := NewMigrator(kv.ChainDB, false)
 	migrator.Migrations = m
 	logger := log.New()
 	err := migrator.Apply(db, "", logger)
@@ -79,6 +80,7 @@ func TestApplyWithInit(t *testing.T) {
 }
 
 func TestApplyWithoutInit(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	require, db := require.New(t), memdb.NewTestDB(t)
 	m := []Migration{
 		{
@@ -109,7 +111,7 @@ func TestApplyWithoutInit(t *testing.T) {
 	})
 	require.NoError(err)
 
-	migrator := NewMigrator(kv.ChainDB)
+	migrator := NewMigrator(kv.ChainDB, false)
 	migrator.Migrations = m
 	logger := log.New()
 	err = migrator.Apply(db, "", logger)
@@ -144,6 +146,7 @@ func TestApplyWithoutInit(t *testing.T) {
 }
 
 func TestWhenNonFirstMigrationAlreadyApplied(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	require, db := require.New(t), memdb.NewTestDB(t)
 	m := []Migration{
 		{
@@ -174,7 +177,7 @@ func TestWhenNonFirstMigrationAlreadyApplied(t *testing.T) {
 	})
 	require.NoError(err)
 
-	migrator := NewMigrator(kv.ChainDB)
+	migrator := NewMigrator(kv.ChainDB, false)
 	migrator.Migrations = m
 	logger := log.New()
 	err = migrator.Apply(db, "", logger)
@@ -207,6 +210,7 @@ func TestWhenNonFirstMigrationAlreadyApplied(t *testing.T) {
 }
 
 func TestMarshalStages(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	require := require.New(t)
 	_, tx := memdb.NewTestTx(t)
 
@@ -226,6 +230,7 @@ func TestMarshalStages(t *testing.T) {
 }
 
 func TestValidation(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	require, db := require.New(t), memdb.NewTestDB(t)
 	m := []Migration{
 		{
@@ -259,7 +264,7 @@ func TestValidation(t *testing.T) {
 			},
 		},
 	}
-	migrator := NewMigrator(kv.ChainDB)
+	migrator := NewMigrator(kv.ChainDB, false)
 	migrator.Migrations = m
 	logger := log.New()
 	err := migrator.Apply(db, "", logger)
@@ -276,6 +281,7 @@ func TestValidation(t *testing.T) {
 }
 
 func TestCommitCallRequired(t *testing.T) {
+	kv.InitStandaloneSMT(false)
 	require, db := require.New(t), memdb.NewTestDB(t)
 	m := []Migration{
 		{
@@ -286,7 +292,7 @@ func TestCommitCallRequired(t *testing.T) {
 			},
 		},
 	}
-	migrator := NewMigrator(kv.ChainDB)
+	migrator := NewMigrator(kv.ChainDB, false)
 	migrator.Migrations = m
 	logger := log.New()
 	err := migrator.Apply(db, "", logger)

@@ -35,9 +35,9 @@ func replay(
 	if cfg.zk.XLayer.SequencerReplayHaltOnBatchNumber > 0 {
 		haltBatch = cfg.zk.XLayer.SequencerReplayHaltOnBatchNumber
 		if haltBatch <= lastBatch {
-			panic(fmt.Sprintf("[%s] The zkevm.sequencer-replay-halt-on-batch-number is set lower than the last batch number.", s.LogPrefix()))
+			panic(fmt.Sprintf("[%s] The zkevm.sequencer-replay-halt-on-batch-number (%d) is set lower than or equal to the last batch number (%d).", s.LogPrefix(), haltBatch, lastBatch))
 		} else if haltBatch > highestBatchInDs {
-			panic(fmt.Sprintf("[%s] The zkevm.sequencer-replay-halt-on-batch-number is set higher than the highest batch in datastream.", s.LogPrefix()))
+			panic(fmt.Sprintf("[%s] The zkevm.sequencer-replay-halt-on-batch-number (%d) is set higher than the highest batch in datastream (%d).", s.LogPrefix(), haltBatch, highestBatchInDs))
 		}
 	} else {
 		haltBatch = highestBatchInDs
@@ -113,7 +113,27 @@ func replay(
 		batchJob := NewResequenceBatchJob(batch)
 		subBatchCount := 0
 		for batchJob.HasMoreBlockToProcess() {
-			if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, batchJob); err != nil {
+			if cfg.zk.XLayer.EnableAsyncCommit {
+				s.FlushSmtCacheWait()
+			}
+			if err = sequencingBatchStep(s, u, ctx, cfg, historyCfg, batchJob); err == nil {
+				if cfg.zk.XLayer.EnableAsyncCommit {
+					s.FlushSmtCacheSignalInc()
+					go func() {
+						defer s.FlushSmtCacheDone()
+						// enable split smt db
+						_ = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, false)
+					}()
+				}
+			} else {
+				if cfg.zk.XLayer.EnableAsyncCommit {
+					s.FlushSmtCacheSignalInc()
+					go func() {
+						defer s.FlushSmtCacheDone()
+
+						s.ResetCurrentBatchCache(s.BlockNumber)
+					}()
+				}
 				return err
 			}
 			subBatchCount += 1
@@ -133,7 +153,11 @@ func replay(
 		}
 	}
 	log.Info(fmt.Sprintf("[%s] Replay completed.", s.LogPrefix()))
-	os.Exit(0)
+	if cfg.zk.XLayer.EnableAsyncCommit {
+		doneChan <- struct{}{}
+	} else {
+		os.Exit(0)
+	}
 	return nil
 }
 

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/ledgerwatch/erigon-lib/kv/membatchwithdb"
+
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
-
-	"github.com/ledgerwatch/erigon-lib/kv/membatchwithdb"
 
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/turbo/trie"
@@ -17,14 +17,20 @@ import (
 	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
-func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.RwTx, checkRoot bool, expectedRootHash *common.Hash, quiet bool) (common.Hash, error) {
+func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.RwTx, txsmt kv.RwTx, checkRoot bool, expectedRootHash *common.Hash, quiet bool, cache map[string]map[string][]byte) (common.Hash, error) {
 	if !quiet {
 		log.Info(fmt.Sprintf("[%s] Unwind trie hashes started", logPrefix))
 		defer log.Info(fmt.Sprintf("[%s] Unwind ended", logPrefix))
 	}
 
-	eridb := db2.NewEriDb(tx)
-	eridb.RollbackBatch()
+	// For X Layer, split db and ac
+	var eridb *db2.EriDb = nil
+	if txsmt != nil {
+		eridb = db2.NewEriDb(txsmt, tx)
+	} else {
+		eridb = db2.NewEriDb(tx, tx)
+	}
+	defer eridb.RollbackBatch()
 
 	dbSmt := smt.NewSMT(eridb, false)
 
@@ -32,10 +38,27 @@ func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.R
 		log.Info(fmt.Sprintf("[%s]", logPrefix), "last root", common.BigToHash(dbSmt.LastRoot()))
 	}
 
+	// For X Layer, split db and ac
 	// only open the batch if tx is not already one
-	if _, ok := tx.(*membatchwithdb.MemoryMutation); !ok {
-		quit := make(chan struct{})
-		eridb.OpenBatch(quit)
+	isBatchOpen := false
+	if txsmt != nil {
+		if _, ok := txsmt.(*membatchwithdb.MemoryMutationWithCache); !ok {
+			quit := make(chan struct{})
+			eridb.OpenBatch(quit)
+			if cache != nil {
+				eridb.SetCache(cache)
+			}
+			isBatchOpen = true
+		}
+	} else {
+		if _, ok := tx.(*membatchwithdb.MemoryMutation); !ok {
+			quit := make(chan struct{})
+			eridb.OpenBatch(quit)
+			if cache != nil {
+				eridb.SetCache(cache)
+			}
+			isBatchOpen = true
+		}
 	}
 
 	cg := NewChangesGetter(tx)
@@ -83,8 +106,11 @@ func UnwindZkSMT(ctx context.Context, logPrefix string, from, to uint64, tx kv.R
 		log.Info(fmt.Sprintf("[%s] Trie root matches", logPrefix), "hash", hash.Hex())
 	}
 
-	if err := eridb.CommitBatch(); err != nil {
-		return trie.EmptyRoot, err
+	// For X Layer, split db and ac
+	if isBatchOpen {
+		if err := eridb.CommitBatch(); err != nil {
+			return trie.EmptyRoot, err
+		}
 	}
 
 	return hash, nil

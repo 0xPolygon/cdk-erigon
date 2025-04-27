@@ -13,17 +13,22 @@ func PopulateMemoryMutationTables(batch kv.RwTx) error {
 		}
 	}
 
-	for _, table := range db.HermezSmtTables {
-		if err := batch.CreateBucket(table); err != nil {
-			return err
-		}
-	}
-
+	// For X Layer, optimize tx pool
 	for _, table := range kv.ChaindataTables {
 		if err := batch.CreateBucket(table); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// For X Layer, optimize tx pool
+func PopulateMemoryMutationTablesSmt(batch kv.RwTx) error {
+	for _, table := range db.HermezSmtTables {
+		if err := batch.CreateBucket(table); err != nil {
+			return err
+		}
+	}
 	return nil
 }

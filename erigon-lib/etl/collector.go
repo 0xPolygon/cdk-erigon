@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/c2h5oh/datasize"
-	"github.com/ledgerwatch/erigon/zk/metrics"
 	"github.com/ledgerwatch/log/v3"
 
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -224,18 +223,15 @@ func (c *Collector) Load(db kv.RwTx, toBucket string, loadFunc LoadFunc, args Tr
 			(c.bufType == SortableAppendBuffer && len(v) == 0) || //backward compatibility
 			(c.bufType == SortableOldestAppearedBuffer && len(v) == 0)
 		if isNil {
-			startTime := time.Now()
 			if canUseAppend {
 				return nil // nothing to delete after end of bucket
 			}
 			if err := cursor.Delete(k); err != nil {
 				return err
 			}
-			metrics.GetLogStatistics().CumulativeMicroTiming(metrics.Delete, time.Since(startTime))
 			return nil
 		}
 		if canUseAppend {
-			startTime := time.Now()
 			if isDupSort {
 				if err := cursor.(kv.RwCursorDupSort).AppendDup(k, v); err != nil {
 					return fmt.Errorf("%s: bucket: %s, appendDup: k=%x, %w", c.logPrefix, bucket, k, err)
@@ -245,14 +241,12 @@ func (c *Collector) Load(db kv.RwTx, toBucket string, loadFunc LoadFunc, args Tr
 					return fmt.Errorf("%s: bucket: %s, append: k=%x, v=%x, %w", c.logPrefix, bucket, k, v, err)
 				}
 			}
-			metrics.GetLogStatistics().CumulativeMicroTiming(metrics.Append, time.Since(startTime))
+
 			return nil
 		}
-		startTime := time.Now()
 		if err := cursor.Put(k, v); err != nil {
 			return fmt.Errorf("%s: put: k=%x, %w", c.logPrefix, k, err)
 		}
-		metrics.GetLogStatistics().CumulativeMicroTiming(metrics.Put, time.Since(startTime))
 		return nil
 	}
 

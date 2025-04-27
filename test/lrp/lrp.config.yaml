@@ -1,10 +1,10 @@
-user: 
-gitCommit: 
-portDiff: 
-fromBatchNumber: 
-toBatchNumber: 
+user:
+gitCommit:
+portDiff:
+fromBatchNumber:
+toBatchNumber:
 processCount: 1
-useExternalDatastream: 
+useExternalDatastream:
 srcMainnetDataPath: $HOME/Downloads/mainnet-compact-170700-9510470/seq
 externalDatastreamPath:
 gitRootPath:

@@ -75,7 +75,7 @@ func NewGenerator(
 	}
 }
 
-func (g *Generator) GetWitnessByBadBatch(tx kv.Tx, ctx context.Context, batchNum uint64, debug, witnessFull bool) (witness []byte, err error) {
+func (g *Generator) GetWitnessByBadBatch(tx kv.Tx, txsmt kv.Tx, ctx context.Context, batchNum uint64, debug, witnessFull bool) (witness []byte, err error) {
 	t := zkUtils.StartTimer("witness", "getwitnessbybadbatch")
 	defer t.LogTimer()
 
@@ -123,10 +123,11 @@ func (g *Generator) GetWitnessByBadBatch(tx kv.Tx, ctx context.Context, batchNum
 		blocks[i] = block
 	}
 
-	return g.generateWitness(tx, ctx, batchNum, blocks, debug, witnessFull)
+	// For X Layer, split db and ac
+	return g.generateWitness(tx, txsmt, ctx, batchNum, blocks, debug, witnessFull, nil)
 }
 
-func (g *Generator) GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool) ([]byte, error) {
+func (g *Generator) GetWitnessByBlockRange(tx kv.Tx, txsmt kv.Tx, ctx context.Context, startBlock, endBlock uint64, debug, witnessFull bool, cache map[string]map[string][]byte) ([]byte, error) {
 	t := zkUtils.StartTimer("witness", "getwitnessbyblockrange")
 	defer t.LogTimer()
 
@@ -155,10 +156,11 @@ func (g *Generator) GetWitnessByBlockRange(tx kv.Tx, ctx context.Context, startB
 		idx++
 	}
 
-	return g.generateWitness(tx, ctx, firstBatch, blocks, debug, witnessFull)
+	// For X Layer, split db and ac
+	return g.generateWitness(tx, txsmt, ctx, firstBatch, blocks, debug, witnessFull, cache)
 }
 
-func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, batchNum uint64, blocks []*eritypes.Block, debug, witnessFull bool) ([]byte, error) {
+func (g *Generator) generateWitness(tx kv.Tx, txsmt kv.Tx, ctx context.Context, batchNum uint64, blocks []*eritypes.Block, debug, witnessFull bool, cache map[string]map[string][]byte) ([]byte, error) {
 	now := time.Now()
 	defer func() {
 		diff := time.Since(now)
@@ -192,6 +194,21 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, batchNum uint
 		return nil, err
 	}
 
+	// For X Layer, split db and ac
+	var rwtxsmt kv.RwTx = nil
+	if txsmt != nil {
+		rwtxsmt = membatchwithdb.NewMemoryBatchWithSizeNoSequenceWithCache(txsmt, g.dirs.Tmp, g.zkConfig.WitnessMemdbSize, cache)
+		defer rwtxsmt.Rollback()
+		if err = zkUtils.PopulateMemoryMutationTablesSmt(rwtxsmt); err != nil {
+			return nil, err
+		}
+	} else {
+		// if there is no standalone smt db, we PopulateMemoryMutationTablesSmt on main db
+		if err = zkUtils.PopulateMemoryMutationTablesSmt(rwtx); err != nil {
+			return nil, err
+		}
+	}
+
 	sBlock := blocks[0]
 	if sBlock == nil {
 		return nil, nil
@@ -202,11 +219,14 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, batchNum uint
 			return nil, fmt.Errorf("requested block is too old, block must be within %d blocks of the head block number (currently %d)", g.witnessUnwindLimit, latestBlock)
 		}
 
-		if err := UnwindForWitness(ctx, rwtx, startBlock, latestBlock, g.dirs, g.historyV3, g.agg); err != nil {
+		// For X Layer, split db and ac
+		if err := UnwindForWitness(ctx, rwtx, rwtxsmt, startBlock, latestBlock, g.dirs, g.historyV3, g.agg, cache); err != nil {
 			return nil, fmt.Errorf("UnwindForWitness: %w", err)
 		}
 
 		tx = rwtx
+		// For X Layer, split db and ac
+		txsmt = rwtxsmt
 	}
 
 	prevHeader, err := g.blockReader.HeaderByNumber(ctx, tx, startBlock-1)
@@ -274,7 +294,8 @@ func (g *Generator) generateWitness(tx kv.Tx, ctx context.Context, batchNum uint
 		prevStateRoot = block.Root()
 	}
 
-	witness, err := BuildWitnessFromTrieDbState(ctx, rwtx, tds, reader, g.forcedContracts, forcedInfoTreeUpdates, witnessFull)
+	// For X Layer, split db and ac
+	witness, err := BuildWitnessFromTrieDbState(ctx, rwtx, rwtxsmt, tds, reader, g.forcedContracts, forcedInfoTreeUpdates, witnessFull)
 	if err != nil {
 		return nil, fmt.Errorf("BuildWitnessFromTrieDbState: %w", err)
 	}

@@ -2,15 +2,20 @@ package blockinfo
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"testing"
+	"time"
 
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	smtutils "github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/stretchr/testify/require"
 )
 
 /*
@@ -622,4 +627,515 @@ func TestSetTxLogs(t *testing.T) {
 	if actualRoot != expectedRoot {
 		t.Fatalf("expected root %s, got %s", expectedRoot, actualRoot)
 	}
+}
+
+func TestBuildBlockInfoTree(t *testing.T) {
+	// Prepare common parameters
+	coinbaseAddr := common.HexToAddress("0x617b3a3528F9cDd6630fd3301B9c8911F7Bf063D")
+	blockGasLimit := uint64(4294967295)
+	blockTime := uint64(1944498031)
+	blockGasUsed := uint64(0)
+	ger := common.Hash{}
+	l1BlockHash := common.Hash{}
+	previousStateRoot := common.Hash{}
+
+	t.Run("Basic concurrent processing", func(t *testing.T) {
+		txInfos := createTestTransactions(10)
+		blockNumber := uint64(1)
+
+		root, err := BuildBlockInfoTree(
+			&coinbaseAddr,
+			blockNumber,
+			blockTime,
+			blockGasLimit,
+			blockGasUsed,
+			ger,
+			l1BlockHash,
+			previousStateRoot,
+			&txInfos,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, root)
+	})
+
+	// Empty transaction list test
+	t.Run("Empty transaction list", func(t *testing.T) {
+		var txInfos []ExecutedTxInfo
+		blockNumber := uint64(1)
+
+		root, err := BuildBlockInfoTree(
+			&coinbaseAddr,
+			blockNumber,
+			blockTime,
+			blockGasLimit,
+			blockGasUsed,
+			ger,
+			l1BlockHash,
+			previousStateRoot,
+			&txInfos,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, root)
+	})
+
+	// Large number of transactions
+	t.Run("Large number of transactions", func(t *testing.T) {
+		txInfos := createTestTransactions(1000)
+		blockNumber := uint64(1)
+
+		start := time.Now()
+		root, err := BuildBlockInfoTree(
+			&coinbaseAddr,
+			blockNumber,
+			blockTime,
+			blockGasLimit,
+			blockGasUsed,
+			ger,
+			l1BlockHash,
+			previousStateRoot,
+			&txInfos,
+		)
+		duration := time.Since(start)
+
+		require.NoError(t, err)
+		require.NotNil(t, root)
+		require.Less(t, duration, 5*time.Second)
+	})
+
+	// Test concurrent correctness
+	t.Run("Concurrent correctness", func(t *testing.T) {
+		txInfos := createComplexTransactions(100)
+		blockNumber := uint64(1)
+		var results []*common.Hash
+
+		for i := 0; i < 5; i++ {
+			root, err := BuildBlockInfoTree(
+				&coinbaseAddr,
+				blockNumber,
+				blockTime,
+				blockGasLimit,
+				blockGasUsed,
+				ger,
+				l1BlockHash,
+				previousStateRoot,
+				&txInfos,
+			)
+			require.NoError(t, err)
+			results = append(results, root)
+		}
+
+		// Verify all results are consistent
+		for i := 1; i < len(results); i++ {
+			require.Equal(t, results[0], results[i])
+		}
+	})
+}
+
+// Helper function: create test transactions
+func createTestTransactions(numTxs int) []ExecutedTxInfo {
+	txInfos := make([]ExecutedTxInfo, numTxs)
+	for i := 0; i < numTxs; i++ {
+		to := common.HexToAddress("0x1275fbb540c8efc58b812ba83b0d0b8b9917ae98")
+		from := common.HexToAddress("0x4d5Cf5032B2a844602278b01199ED191A86c93ff")
+		value := uint256.NewInt(0)
+		gasPrice := uint256.NewInt(1000000000)
+		chainId := big.NewInt(1000)
+
+		legacyTx := &types.LegacyTx{
+			CommonTx: types.CommonTx{
+				ChainID: uint256.MustFromBig(chainId),
+				Nonce:   uint64(i),
+				Gas:     100000,
+				To:      &to,
+				Value:   value,
+				Data:    []byte{},
+			},
+			GasPrice: gasPrice,
+		}
+
+		var tx types.Transaction = legacyTx
+
+		receipt := &types.Receipt{
+			Status:            1,
+			CumulativeGasUsed: 21000,
+			Logs:              []*types.Log{},
+			TxHash:            tx.Hash(),
+			BlockNumber:       big.NewInt(int64(i + 1)),
+		}
+
+		txInfos[i] = ExecutedTxInfo{
+			Tx:                tx,
+			Receipt:           receipt,
+			Signer:            &from,
+			EffectiveGasPrice: 100,
+		}
+	}
+	return txInfos
+}
+
+// Create transactions with complex dependencies
+func createComplexTransactions(count int) []ExecutedTxInfo {
+	txInfos := createTestTransactions(count)
+	for i := 1; i < count; i++ {
+		txInfos[i].Receipt.Logs = append(txInfos[i].Receipt.Logs, &types.Log{
+			Address: *txInfos[i-1].Signer,
+			Topics:  []common.Hash{common.BytesToHash([]byte(fmt.Sprintf("topic-%d", i)))},
+		})
+	}
+	return txInfos
+}
+
+func TestBlockInfoTreeConsistency(t *testing.T) {
+	testCases := []struct {
+		name             string
+		transactionCount int
+		logsPerTx        []int // Number of logs per transaction
+	}{
+		{"Empty", 0, []int{}},
+		{"SingleTx_NoLogs", 1, []int{0}},
+		{"SingleTx_WithLogs", 1, []int{5}},
+		{"MultiTx_EvenLogs", 10, []int{2, 2, 2, 2, 2, 2, 2, 2, 2, 2}},
+		{"MultiTx_VaryingLogs", 5, []int{0, 10, 5, 3, 7}},
+		{"LargeTx_Count", 50, make([]int, 50)}, // 50 transactions, each with no logs
+		{"RealWorld_Scenario", 20, []int{3, 1, 0, 5, 2, 7, 0, 0, 4, 1, 2, 3, 0, 8, 1, 0, 2, 3, 1, 4}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Prepare test data
+			txInfos := generateTestTransactions(t, tc.transactionCount, tc.logsPerTx)
+
+			// Prepare block parameters
+			coinbase := common.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7")
+			blockNumber := uint64(12345)
+			blockTime := uint64(time.Now().Unix())
+			blockGasLimit := uint64(30000000)
+			blockGasUsed := uint64(5000000)
+			ger := common.HexToHash("0x9876543210abcdef9876543210abcdef9876543210abcdef9876543210abcdef")
+			l1BlockHash := common.HexToHash("0xfedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210")
+			previousStateRoot := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+
+			// Execute parallel version
+			startParallel := time.Now()
+			parallelRoot, err := BuildBlockInfoTree(
+				&coinbase,
+				blockNumber,
+				blockTime,
+				blockGasLimit,
+				blockGasUsed,
+				ger,
+				l1BlockHash,
+				previousStateRoot,
+				&txInfos,
+			)
+			parallelDuration := time.Since(startParallel)
+			require.NoError(t, err, "Parallel version execution failed")
+
+			// Execute serial version
+			startSerial := time.Now()
+			serialRoot, err := BuildBlockInfoTreeSerial(
+				&coinbase,
+				blockNumber,
+				blockTime,
+				blockGasLimit,
+				blockGasUsed,
+				ger,
+				l1BlockHash,
+				previousStateRoot,
+				&txInfos,
+			)
+			serialDuration := time.Since(startSerial)
+			require.NoError(t, err, "Serial version execution failed")
+
+			// Verify results are consistent
+			require.NotNil(t, parallelRoot, "Parallel version returned nil root hash")
+			require.NotNil(t, serialRoot, "Serial version returned nil root hash")
+			require.Equal(t, serialRoot.String(), parallelRoot.String(),
+				"Parallel and serial processing produced different root hashes")
+
+			// Output performance comparison
+			t.Logf("Performance comparison - Transactions: %d, Total logs: %d, Parallel: %v, Serial: %v, Speedup: %.2fx",
+				tc.transactionCount,
+				sumLogs(tc.logsPerTx),
+				parallelDuration,
+				serialDuration,
+				float64(serialDuration)/float64(parallelDuration),
+			)
+		})
+	}
+}
+
+// Test edge cases
+func TestBlockInfoTreeEdgeCases(t *testing.T) {
+	// Prepare basic parameters
+	coinbase := common.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7")
+	blockNumber := uint64(12345)
+	blockTime := uint64(time.Now().Unix())
+	blockGasLimit := uint64(30000000)
+	blockGasUsed := uint64(5000000)
+	ger := common.HexToHash("0x9876543210abcdef9876543210abcdef9876543210abcdef9876543210abcdef")
+	l1BlockHash := common.HexToHash("0xfedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210")
+	previousStateRoot := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+
+	// Test 1: Single transaction with many logs
+	t.Run("SingleTx_ManyLogs", func(t *testing.T) {
+		txInfos := generateTestTransactions(t, 1, []int{1000})
+
+		parallelRoot, err := BuildBlockInfoTree(
+			&coinbase, blockNumber, blockTime, blockGasLimit, blockGasUsed,
+			ger, l1BlockHash, previousStateRoot, &txInfos,
+		)
+		require.NoError(t, err)
+
+		serialRoot, err := BuildBlockInfoTreeSerial(
+			&coinbase, blockNumber, blockTime, blockGasLimit, blockGasUsed,
+			ger, l1BlockHash, previousStateRoot, &txInfos,
+		)
+		require.NoError(t, err)
+
+		require.Equal(t, serialRoot.String(), parallelRoot.String())
+	})
+
+	// Test 2: Special characters and large data logs
+	t.Run("SpecialLogs", func(t *testing.T) {
+		txInfos := generateTestTransactionsWithSpecialLogs(t)
+
+		parallelRoot, err := BuildBlockInfoTree(
+			&coinbase, blockNumber, blockTime, blockGasLimit, blockGasUsed,
+			ger, l1BlockHash, previousStateRoot, &txInfos,
+		)
+		require.NoError(t, err)
+
+		serialRoot, err := BuildBlockInfoTreeSerial(
+			&coinbase, blockNumber, blockTime, blockGasLimit, blockGasUsed,
+			ger, l1BlockHash, previousStateRoot, &txInfos,
+		)
+		require.NoError(t, err)
+
+		require.Equal(t, serialRoot.String(), parallelRoot.String())
+	})
+
+	// Test 3: Multiple runs with random data
+	t.Run("RandomData_MultipleRuns", func(t *testing.T) {
+		for i := 0; i < 5; i++ {
+			txInfos := generateRandomTestTransactions(t, 20)
+
+			parallelRoot, err := BuildBlockInfoTree(
+				&coinbase, blockNumber, blockTime, blockGasLimit, blockGasUsed,
+				ger, l1BlockHash, previousStateRoot, &txInfos,
+			)
+			require.NoError(t, err)
+
+			serialRoot, err := BuildBlockInfoTreeSerial(
+				&coinbase, blockNumber, blockTime, blockGasLimit, blockGasUsed,
+				ger, l1BlockHash, previousStateRoot, &txInfos,
+			)
+			require.NoError(t, err)
+
+			require.Equal(t, serialRoot.String(), parallelRoot.String(),
+				"Random data run %d produced different root hashes", i)
+		}
+	})
+}
+
+// Test concurrency stability
+func TestBlockInfoTreeConcurrencyStability(t *testing.T) {
+	// Prepare basic parameters
+	coinbase := common.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7")
+	blockNumber := uint64(12345)
+	blockTime := uint64(time.Now().Unix())
+	blockGasLimit := uint64(30000000)
+	blockGasUsed := uint64(5000000)
+	ger := common.HexToHash("0x9876543210abcdef9876543210abcdef9876543210abcdef9876543210abcdef")
+	l1BlockHash := common.HexToHash("0xfedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210")
+	previousStateRoot := common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+
+	// Generate test transactions
+	txInfos := generateTestTransactions(t, 30, []int{2, 3, 0, 1, 5, 0, 2, 3, 4, 1, 0, 3, 2, 1, 0, 4, 5, 2, 1, 3, 0, 2, 1, 3, 4, 0, 1, 2, 3, 0})
+
+	// Run parallel version multiple times to ensure consistent results
+	var firstRoot *common.Hash
+
+	for i := 0; i < 10; i++ {
+		root, err := BuildBlockInfoTree(
+			&coinbase, blockNumber, blockTime, blockGasLimit, blockGasUsed,
+			ger, l1BlockHash, previousStateRoot, &txInfos,
+		)
+		require.NoError(t, err)
+
+		if i == 0 {
+			firstRoot = root
+		} else {
+			require.Equal(t, firstRoot.String(), root.String(),
+				"Parallel version produced different root hashes across multiple runs")
+		}
+	}
+
+	// Verify consistency with serial version
+	serialRoot, err := BuildBlockInfoTreeSerial(
+		&coinbase, blockNumber, blockTime, blockGasLimit, blockGasUsed,
+		ger, l1BlockHash, previousStateRoot, &txInfos,
+	)
+	require.NoError(t, err)
+	require.Equal(t, serialRoot.String(), firstRoot.String())
+}
+
+// Helper function: Generate test transactions
+func generateTestTransactions(t *testing.T, count int, logsPerTx []int) []ExecutedTxInfo {
+	if count == 0 {
+		return []ExecutedTxInfo{}
+	}
+
+	require.Equal(t, count, len(logsPerTx), "Transaction count and logs array length don't match")
+
+	result := make([]ExecutedTxInfo, count)
+
+	for i := 0; i < count; i++ {
+		// Generate private key and address
+		privateKey, err := crypto.GenerateKey()
+		require.NoError(t, err)
+
+		signer := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+		// Create transaction
+		tx := ethTypes.NewTransaction(
+			uint64(i), // nonce
+			common.HexToAddress("0x8888f1f195afa192cfee860698584c030f4c9db1"), // to
+			uint256.NewInt(1000000),         // value
+			uint64(21000+i*1000),            // gas
+			uint256.NewInt(1000000000),      // gasPrice
+			[]byte("test transaction data"), // data
+		)
+
+		// Create receipt and logs
+		logs := make([]*ethTypes.Log, logsPerTx[i])
+		for j := 0; j < logsPerTx[i]; j++ {
+			topics := []common.Hash{
+				common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001"),
+			}
+			if j%2 == 0 {
+				topics = append(topics, common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000002"))
+			}
+
+			logs[j] = &ethTypes.Log{
+				Address:     common.HexToAddress("0x8888f1f195afa192cfee860698584c030f4c9db1"),
+				Topics:      topics,
+				Data:        []byte{byte(i), byte(j), 0x01, 0x02, 0x03},
+				BlockNumber: uint64(12345),
+				TxHash:      common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"),
+				TxIndex:     uint(i),
+				BlockHash:   common.HexToHash("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
+				Index:       uint(j),
+				Removed:     false,
+			}
+		}
+
+		receipt := &ethTypes.Receipt{
+			Status:            uint64(1),
+			CumulativeGasUsed: uint64(21000 * (i + 1)),
+			Logs:              logs,
+			TxHash:            tx.Hash(),
+			GasUsed:           uint64(21000 + i*1000),
+			BlockNumber:       big.NewInt(12345),
+			BlockHash:         common.HexToHash("0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
+		}
+
+		result[i] = ExecutedTxInfo{
+			Tx:                tx,
+			Receipt:           receipt,
+			EffectiveGasPrice: uint8(100),
+			Signer:            &signer,
+		}
+	}
+
+	return result
+}
+
+// Helper function: Generate transactions with special logs
+func generateTestTransactionsWithSpecialLogs(t *testing.T) []ExecutedTxInfo {
+	txInfos := make([]ExecutedTxInfo, 3)
+
+	// Generate private key and address
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	signer := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Transaction 1: Empty logs
+	tx1 := ethTypes.NewTransaction(0, common.HexToAddress("0x1111111111111111111111111111111111111111"), uint256.NewInt(1), 21000, uint256.NewInt(1), []byte{})
+	receipt1 := &ethTypes.Receipt{
+		Status:            1,
+		CumulativeGasUsed: 21000,
+		Logs:              []*ethTypes.Log{},
+		TxHash:            tx1.Hash(),
+		GasUsed:           21000,
+	}
+	txInfos[0] = ExecutedTxInfo{Tx: tx1, Receipt: receipt1, EffectiveGasPrice: 100, Signer: &signer}
+
+	// Transaction 2: Large data logs
+	tx2 := ethTypes.NewTransaction(1, common.HexToAddress("0x2222222222222222222222222222222222222222"), uint256.NewInt(2), 30000, uint256.NewInt(1), []byte{})
+	bigData := make([]byte, 1000)
+	for i := range bigData {
+		bigData[i] = byte(i % 256)
+	}
+	logs2 := []*ethTypes.Log{
+		{
+			Address: common.HexToAddress("0x2222222222222222222222222222222222222222"),
+			Topics:  []common.Hash{common.HexToHash("0xabcdef")},
+			Data:    bigData,
+			TxHash:  tx2.Hash(),
+		},
+	}
+	receipt2 := &ethTypes.Receipt{
+		Status:            1,
+		CumulativeGasUsed: 51000,
+		Logs:              logs2,
+		TxHash:            tx2.Hash(),
+		GasUsed:           30000,
+	}
+	txInfos[1] = ExecutedTxInfo{Tx: tx2, Receipt: receipt2, EffectiveGasPrice: 100, Signer: &signer}
+
+	// Transaction 3: Special character logs
+	tx3 := ethTypes.NewTransaction(2, common.HexToAddress("0x3333333333333333333333333333333333333333"), uint256.NewInt(3), 25000, uint256.NewInt(1), []byte{})
+	specialData := []byte{0xFF, 0x00, 0xAA, 0x55, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0}
+	logs3 := []*ethTypes.Log{
+		{
+			Address: common.HexToAddress("0x3333333333333333333333333333333333333333"),
+			Topics: []common.Hash{
+				common.HexToHash("0x1111111111111111111111111111111111111111111111111111111111111111"),
+				common.HexToHash("0x2222222222222222222222222222222222222222222222222222222222222222"),
+				common.HexToHash("0x3333333333333333333333333333333333333333333333333333333333333333"),
+				common.HexToHash("0x4444444444444444444444444444444444444444444444444444444444444444"),
+			},
+			Data:   specialData,
+			TxHash: tx3.Hash(),
+		},
+	}
+	receipt3 := &ethTypes.Receipt{
+		Status:            1,
+		CumulativeGasUsed: 76000,
+		Logs:              logs3,
+		TxHash:            tx3.Hash(),
+		GasUsed:           25000,
+	}
+	txInfos[2] = ExecutedTxInfo{Tx: tx3, Receipt: receipt3, EffectiveGasPrice: 100, Signer: &signer}
+
+	return txInfos
+}
+
+// Helper function: Generate random test transactions
+func generateRandomTestTransactions(t *testing.T, count int) []ExecutedTxInfo {
+	logsPerTx := make([]int, count)
+	for i := range logsPerTx {
+		logsPerTx[i] = i % 10 // 0-9 logs per transaction
+	}
+	return generateTestTransactions(t, count, logsPerTx)
+}
+
+// Helper function: Calculate total number of logs
+func sumLogs(logsPerTx []int) int {
+	sum := 0
+	for _, count := range logsPerTx {
+		sum += count
+	}
+	return sum
 }

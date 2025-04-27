@@ -72,6 +72,10 @@ var (
 	bucket     = flag.String("bucket", "", "bucket in the database")
 	hash       = flag.String("hash", "0x00", "image for preimage or state root for testBlockHashes action")
 	output     = flag.String("output", "", "output path")
+
+	// For X Layer, split db
+	pathSmtDb       = flag.String("smt-db-path", "smt", "path to the standalone SMT database file")
+	standaloneSmtDb = flag.Bool("standalone-smt-db", false, "specifies if the SMT DB is separate from the ChainDB")
 )
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
@@ -344,7 +348,8 @@ func dumpAll(chaindata, output string) error {
 		}
 	}
 
-	return db.View(context.Background(), func(tx kv.Tx) error {
+	// For X Layer, split db
+	fdumper := func(tx kv.Tx) error {
 		buckets, err := tx.ListBuckets()
 		if err != nil {
 			return err
@@ -371,9 +376,24 @@ func dumpAll(chaindata, output string) error {
 				return err
 			}
 		}
-
 		return nil
-	})
+	}
+
+	// For X Layer, split db
+	if *standaloneSmtDb {
+		err := db.View(context.Background(), fdumper)
+		if err != nil {
+			return err
+		}
+		dbsmt := mdbx.MustOpen(*pathSmtDb)
+		defer db.Close()
+		err = dbsmt.View(context.Background(), fdumper)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	return db.View(context.Background(), fdumper)
 }
 
 func printBucket(chaindata, bucket string) {
@@ -1419,6 +1439,9 @@ func dumpState(chaindata string) error {
 func main() {
 	debug.RaiseFdLimit()
 	flag.Parse()
+
+	// For X Layer, split db
+	kv.InitStandaloneSMT(*standaloneSmtDb)
 
 	logging.SetupLogger("hack")
 

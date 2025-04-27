@@ -366,7 +366,8 @@ func (opts MdbxOpts) Open(ctx context.Context) (kv.RwDB, error) {
 
 	opts.pageSize = uint64(in.PageSize)
 	opts.mapSize = datasize.ByteSize(in.MapSize)
-	if opts.label == kv.ChainDB {
+	// For X Layer, split db
+	if opts.label == kv.ChainDB || opts.label == kv.SmtDB {
 		opts.log.Info("[db] open", "label", opts.label, "sizeLimit", opts.mapSize, "pageSize", opts.pageSize)
 	} else {
 		opts.log.Debug("[db] open", "label", opts.label, "sizeLimit", opts.mapSize, "pageSize", opts.pageSize)
@@ -417,7 +418,18 @@ func (opts MdbxOpts) Open(ctx context.Context) (kv.RwDB, error) {
 		MaxBatchDelay: DefaultMaxBatchDelay,
 	}
 
-	customBuckets := opts.bucketsCfg(kv.ChaindataTablesCfg)
+	// For X Layer, SMT db has all chaindata tables deprecated
+	var customBuckets kv.TableCfg
+	if opts.label == kv.SmtDB {
+		customBuckets = kv.TableCfg{}
+		for name, cfg := range kv.ChaindataTablesCfg {
+			tmp := cfg
+			tmp.IsDeprecated = true
+			customBuckets[name] = tmp
+		}
+	} else {
+		customBuckets = opts.bucketsCfg(kv.ChaindataTablesCfg)
+	}
 	for name, cfg := range customBuckets { // copy map to avoid changing global variable
 		db.buckets[name] = cfg
 	}
@@ -463,7 +475,6 @@ func (opts MdbxOpts) Open(ctx context.Context) (kv.RwDB, error) {
 	}
 	db.path = opts.path
 	addToPathDbMap(opts.path, db)
-	opts.debug()
 	return db, nil
 }
 
@@ -515,7 +526,7 @@ type MdbxKV struct {
 // Default values if not set in a DB instance.
 const (
 	DefaultMaxBatchSize  int = 1000
-	DefaultMaxBatchDelay     = 10 * time.Millisecond
+	DefaultMaxBatchDelay     = 100 * time.Millisecond // For X Layer, split db
 )
 
 type batch struct {
@@ -720,6 +731,10 @@ func (db *MdbxKV) trackTxEnd() {
 
 func (db *MdbxKV) waitTxsAllDoneOnClose() {
 	for !db.hasTxsAllDoneAndClosed() {
+		// For X Layer, split db
+		db.txsAllDoneOnCloseCond.L.Lock()
+		defer db.txsAllDoneOnCloseCond.L.Unlock()
+
 		db.txsAllDoneOnCloseCond.Wait()
 	}
 }

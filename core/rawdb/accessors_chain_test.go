@@ -516,7 +516,7 @@ func TestBlockReceiptStorage(t *testing.T) {
 		t.Fatalf("no receipts returned")
 	} else {
 		if err := checkReceiptsRLP(rs, receipts); err != nil {
-			t.Fatalf(err.Error())
+			t.Fatalf("check receipts RLP failed: %v", err)
 		}
 	}
 	// Delete the body and ensure that the receipts are no longer returned (metadata can't be recomputed)

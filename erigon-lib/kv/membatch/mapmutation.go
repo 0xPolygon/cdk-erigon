@@ -13,7 +13,6 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/etl"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/zk/metrics"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -58,11 +57,11 @@ func NewHashBatch(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger log.Logg
 func (m *Mapmutation) getMem(table string, key []byte) ([]byte, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if _, ok := m.puts[table]; !ok {
-		return nil, false
-	}
-	if value, ok := m.puts[table][*(*string)(unsafe.Pointer(&key))]; ok {
-		return value, ok
+	// For X Layer, split db
+	if ptm, ok := m.puts[table]; ok {
+		if value, ok := ptm[*(*string)(unsafe.Pointer(&key))]; ok {
+			return value, ok
+		}
 	}
 
 	return nil, false
@@ -258,8 +257,6 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	count := 0
 	total := float64(m.count)
 	for table, bucket := range m.puts {
-		startTime := time.Now()
-		metrics.GetLogStatistics().CumulativeValue(metrics.LogTag(table), int64(len(bucket)))
 		collector := etl.NewCollector("", m.tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize/2), m.logger)
 		defer collector.Close()
 		collector.SortAndFlushInBackground(true)
@@ -280,7 +277,6 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 			return err
 		}
 		collector.Close()
-		metrics.GetLogStatistics().CumulativeTiming(metrics.LogTag(table)+"Timing", time.Since(startTime))
 	}
 
 	tx.CollectMetrics()
@@ -326,4 +322,12 @@ func (m *Mapmutation) panicOnEmptyDB() {
 	if m.db == nil {
 		panic("Not implemented")
 	}
+}
+
+// For X Layer, ac
+func (m *Mapmutation) SetCache(cache map[string]map[string][]byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.puts = cache
 }

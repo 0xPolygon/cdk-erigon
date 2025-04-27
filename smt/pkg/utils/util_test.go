@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"math/big"
+	"math/rand"
 	"reflect"
 	"strconv"
 	"strings"
@@ -42,11 +43,48 @@ func TestBinaryStringToInt64(t *testing.T) {
 	}
 }
 
+func ConvertBigIntToHexOld(n *big.Int) string {
+	return "0x" + n.Text(16)
+}
+
+func ConvertHexToBigIntOld(hex string) *big.Int {
+	hex = strings.TrimPrefix(hex, "0x")
+	n, _ := new(big.Int).SetString(hex, 16)
+	return n
+}
+
 func BenchmarkConvertBigIntToHex(b *testing.B) {
-	b.ReportAllocs()
-	for n := 0; n < b.N; n++ {
-		ConvertBigIntToHex(big.NewInt(int64(n)))
-	}
+	var s string
+	b.Run("Old", func(b *testing.B) {
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			s = ConvertBigIntToHexOld(big.NewInt(int64(n)))
+		}
+	})
+
+	b.Run("New", func(b *testing.B) {
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			s = ConvertBigIntToHex(big.NewInt(int64(n)))
+		}
+	})
+	_ = s
+}
+
+func BenchmarkConvertHexToBigInt(b *testing.B) {
+	b.Run("Old", func(b *testing.B) {
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			ConvertHexToBigIntOld("0x9257c9a31308a7cb046aba1a95679dd7e3ad695b6900e84a6470b401b1ea416e")
+
+		}
+	})
+	b.Run("New", func(b *testing.B) {
+		b.ReportAllocs()
+		for n := 0; n < b.N; n++ {
+			ConvertHexToBigInt("0x9257c9a31308a7cb046aba1a95679dd7e3ad695b6900e84a6470b401b1ea416e")
+		}
+	})
 }
 
 func BenchmarkHashContractBytecode(b *testing.B) {
@@ -84,6 +122,16 @@ func TestConvertBigIntToHex(t *testing.T) {
 			input:    big.NewInt(4096),
 			expected: "0x1000",
 		},
+		{
+			name:     "Case 4",
+			input:    big.NewInt(1),
+			expected: "0x1",
+		},
+		{
+			name:     "Case 5",
+			input:    big.NewInt(0x123),
+			expected: "0x123",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -94,6 +142,79 @@ func TestConvertBigIntToHex(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestArrayToHex(t *testing.T) {
+	testCases := []struct {
+		input []uint64
+	}{
+		{
+			input: nil,
+		},
+		{
+			input: []uint64{0x0, 0, 0, 0},
+		},
+		{
+			input: []uint64{0x12, 0x34, 0, 0},
+		},
+		{
+			input: []uint64{0xFF, 0x12, 0x56, 0x01},
+		},
+		{
+			input: []uint64{0x01},
+		},
+	}
+
+	testFunc := func(t *testing.T, input []uint64) {
+		keyConc := ArrayToScalar(input)
+		expect := ConvertBigIntToHex(keyConc)
+
+		result := ArrayToHex(input)
+		if result != expect {
+			t.Errorf("Expected %v, but got %v", expect, result)
+		}
+
+		keyConc.Mul(keyConc, keyConc)
+		expect = ConvertBigIntToHex(keyConc)
+		result = ArrayToHex(keyConc.Bits())
+		if result != expect {
+			t.Errorf("Expected %v, but got %v", expect, result)
+		}
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
+			testFunc(t, tc.input)
+		})
+	}
+
+	t.Run("random", func(t *testing.T) {
+		for i := 0; i < 4096; i++ {
+			input := [4]uint64{rand.Uint64(), rand.Uint64(), rand.Uint64(), rand.Uint64()}
+			testFunc(t, input[:])
+		}
+	})
+}
+
+func BenchmarkArrayToHex(b *testing.B) {
+	input := []uint64{0xFF, 0x12, 0x56, 0x01}
+
+	var result string
+
+	b.Run("original", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			keyConc := ArrayToScalar(input)
+			result = ConvertBigIntToHex(keyConc)
+		}
+	})
+	b.Run("new", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			result = ArrayToHex(input)
+		}
+	})
+	_ = result
 }
 
 func TestConvertHexToBigInt(t *testing.T) {
@@ -118,6 +239,16 @@ func TestConvertHexToBigInt(t *testing.T) {
 			name:     "zero case",
 			hexInput: "0x0",
 			expected: big.NewInt(0),
+		},
+		{
+			name:     "single case",
+			hexInput: "0xF",
+			expected: big.NewInt(0xF),
+		},
+		{
+			name:     "odd case",
+			hexInput: "0x1aF",
+			expected: big.NewInt(0x1aF),
 		},
 		{
 			name:     "large number",
@@ -192,6 +323,30 @@ func TestArrayToScalar(t *testing.T) {
 	}
 }
 
+func ArrayToScalarOld(array []uint64) *big.Int {
+	scalar := new(big.Int)
+	for i := len(array) - 1; i >= 0; i-- {
+		scalar.Lsh(scalar, 64)
+		scalar.Add(scalar, new(big.Int).SetUint64(array[i]))
+	}
+	return scalar
+}
+
+func BenchmarkArrayToScalar(b *testing.B) {
+	b.Run("Old", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			ArrayToScalarOld([]uint64{2, 3})
+		}
+	})
+	b.Run("New", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			ArrayToScalar([]uint64{2, 3})
+		}
+	})
+}
+
 func TestArrayToScalarBig(t *testing.T) {
 	array := []*big.Int{
 		new(big.Int),
@@ -209,6 +364,44 @@ func TestArrayToScalarBig(t *testing.T) {
 
 	if !reflect.DeepEqual(result, expected) {
 		t.Errorf("ArrayToScalarBig(%v) = %v, want %v", array, result, expected)
+	}
+
+	for _, v := range array {
+		v.Mul(v, v)
+	}
+
+	expect := arrayToScalarBigSlow(array)
+	result, ok := arrayToScalarBigFast(array)
+	if ok && expect.Cmp(result) != 0 {
+		t.Errorf("ArrayToScalarBigFast(%v) = %v, want %v", array, result, expect)
+	}
+
+	for _, v := range array {
+		v.Neg(big.NewInt(10))
+	}
+
+	expect = arrayToScalarBigSlow(array)
+	result, ok = arrayToScalarBigFast(array)
+	if ok && expect.Cmp(result) != 0 {
+		t.Errorf("ArrayToScalarBigFast(%v) = %v, want %v", array, result, expect)
+	}
+}
+
+func TestScalarToRoot(t *testing.T) {
+	for i := 0; i < 255; i++ {
+		seed := big.NewInt(rand.Int63())
+		seed.Mul(seed, seed)
+		seed.Mul(seed, seed)
+
+		inputs := []*big.Int{seed, big.NewInt(1).Neg(seed), big.NewInt(1).Mul(seed, seed), big.NewInt(1).MulRange(1, int64(i))}
+
+		for _, input := range inputs {
+			expect := scalarToRootSlow(input)
+			result := ScalarToRoot(input)
+			if expect != result {
+				t.Errorf("ScalarToRoot(%v) = %v, want %v", input, result, expect)
+			}
+		}
 	}
 }
 
@@ -646,6 +839,48 @@ func TestScalarToNodeValue(t *testing.T) {
 			t.Errorf("Element %d: expected %s, got %s", i, originalValues[i], result[i])
 		}
 	}
+
+	for i := 0; i < 255; i++ {
+		seed := big.NewInt(rand.Int63())
+		seed.Mul(seed, seed)
+		seed.Mul(seed, seed)
+
+		inputs := []*big.Int{seed, big.NewInt(1).Neg(seed), big.NewInt(1).Mul(seed, seed), big.NewInt(1).MulRange(1, int64(i))}
+
+		for _, input := range inputs {
+			expect := scalarToNodeValueSlow(input)
+			var result [12]*big.Int
+			ok := scalarToNodeValueFast(input, &result)
+			if ok {
+				for i := range expect {
+					if result[i].Cmp(expect[i]) != 0 {
+						t.Errorf("Element %d: expected %s, got %s", i, expect[i], result[i])
+					}
+				}
+			}
+		}
+	}
+}
+
+func BenchmarkScalarToNodeValue(b *testing.B) {
+	seed := big.NewInt(rand.Int63())
+	seed.Mul(seed, seed)
+	seed.Mul(seed, seed)
+	var values [12]*big.Int
+	b.Run("Fast", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var result [12]*big.Int
+			scalarToNodeValueFast(seed, &result)
+			values = result
+		}
+	})
+	b.Run("Slow", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			values = scalarToNodeValueSlow(seed)
+		}
+	})
+
+	_ = values
 }
 
 func TestScalarToNodeValue8(t *testing.T) {

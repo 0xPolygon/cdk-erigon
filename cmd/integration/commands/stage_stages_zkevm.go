@@ -28,6 +28,8 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx, _ := common2.RootContext()
 		logger := debug.SetupCobra(cmd, "integration")
+		// For X Layer, split db
+		kv.InitStandaloneSMT(standaloneSmtDb)
 		db, err := openDB(dbCfg(kv.ChainDB, chaindata), true, logger)
 		if err != nil {
 			logger.Error("Opening DB", "error", err)
@@ -35,7 +37,18 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 		}
 		defer db.Close()
 
-		if err := unwindZk(ctx, db); err != nil {
+		// For X Layer, split db
+		var dbsmt kv.RwDB = nil
+		if standaloneSmtDb {
+			dbsmt, err = openDB(dbCfg(kv.SmtDB, smtDbPath), false, logger)
+			if err != nil {
+				logger.Error("Opening SMT DB", "error", err)
+				return
+			}
+			defer dbsmt.Close()
+		}
+
+		if err := unwindZk(ctx, db, dbsmt); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Error(err.Error())
 			}
@@ -43,27 +56,36 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 		}
 
 		if len(datadirCompare) > 0 {
-			dbCompare, err := openDB(dbCfg(kv.ChainDB, filepath.Join(datadirCompare, "chaindata")), true, logger)
-			if err != nil {
-				logger.Error("Opening DB", "error", err)
-				return
-			}
-			defer dbCompare.Close()
-
-			diff, err := compareDbs(db, dbCompare)
-			if err != nil {
-				log.Error(err.Error())
-				return
-			}
-			if len(diff) > 0 {
-				log.Error("Databases are different")
-				for _, d := range diff {
-					log.Error(d)
-				}
-				return
+			// For X Layer, split db
+			compareDB(db, kv.ChainDB, "chaindata", logger)
+			if standaloneSmtDb {
+				compareDB(db, kv.SmtDB, "smt", logger)
 			}
 		}
 	},
+}
+
+// For X Layer, split db
+func compareDB(db kv.RwDB, label kv.Label, dbDirName string, logger log.Logger) {
+	dbCompare, err := openDB(dbCfg(label, filepath.Join(datadirCompare, dbDirName)), true, logger)
+	if err != nil {
+		logger.Error("Opening DB", "error", err)
+		return
+	}
+	defer dbCompare.Close()
+
+	diff, err := compareDbs(db, dbCompare, label)
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
+	if len(diff) > 0 {
+		log.Error("Databases are different")
+		for _, d := range diff {
+			log.Error(d)
+		}
+		return
+	}
 }
 
 func init() {
@@ -73,12 +95,14 @@ func init() {
 	withDataDirCompare(stateStagesZk)
 	withUnwind(stateStagesZk)
 	withUnwindBatchNo(stateStagesZk) // populates package global flag unwindBatchNo
+	// For X Layer, split db
+	withStandaloneSmtDb(stateStagesZk)
 	rootCmd.AddCommand(stateStagesZk)
 }
 
 // unwindZk unwinds to the batch number set in the unwindBatchNo flag (package global)
-func unwindZk(ctx context.Context, db kv.RwDB) error {
-	_, _, stateStages := newSyncZk(ctx, db)
+func unwindZk(ctx context.Context, db, dbsmt kv.RwDB) error {
+	_, _, stateStages := newSyncZk(ctx, db, dbsmt)
 
 	tx, err := db.BeginRw(ctx)
 	if err != nil {
@@ -86,11 +110,25 @@ func unwindZk(ctx context.Context, db kv.RwDB) error {
 	}
 	defer tx.Rollback()
 
-	if err := hermez_db.CreateHermezBuckets(tx); err != nil {
-		return err
+	// For X Layer, split db
+	var txsmt kv.RwTx = nil
+	if dbsmt != nil {
+		txsmt, err = dbsmt.BeginRw(ctx)
+		if err != nil {
+			return err
+		}
+		defer txsmt.Rollback()
+		if err := smtdb.CreateEriDbBuckets(txsmt); err != nil {
+			return err
+		}
+	} else {
+		if err := smtdb.CreateEriDbBuckets(tx); err != nil {
+			return err
+		}
 	}
 
-	if err := smtdb.CreateEriDbBuckets(tx); err != nil {
+	// For X Layer, split db
+	if err := hermez_db.CreateHermezBuckets(tx); err != nil {
 		return err
 	}
 
@@ -101,27 +139,49 @@ func unwindZk(ctx context.Context, db kv.RwDB) error {
 		return err
 	}
 
-	err = stateStages.RunUnwind(db, wrap.TxContainer{Tx: tx})
+	// For X Layer, split db
+	err = stateStages.RunUnwind(db, wrap.TxContainer{Tx: tx, TxSmt: txsmt})
 	if err != nil {
 		return err
 	}
 
 	if err := tx.Commit(); err != nil {
+		// For X Layer, split db
+		if txsmt != nil {
+			txsmt.Rollback()
+		}
 		return err
 	}
 
+	// For X Layer, split db
+	if txsmt != nil {
+		return txsmt.Commit()
+	}
 	return nil
 }
 
-func compareDbs(db1, db2 kv.RwDB) ([]string, error) {
+func compareDbs(db1, db2 kv.RwDB, label kv.Label) ([]string, error) {
 	var discrepancies []string
 
-	excludedTables := []string{
-		kv.Senders,
+	// For X Layer, split db
+	excludedTables := []string{}
+	if label == kv.ChainDB {
+		excludedTables = append(excludedTables, kv.Senders)
+	}
+
+	var tables []string
+	switch label {
+	case kv.ChainDB:
+		tables = kv.ChaindataTables
+	case kv.SmtDB:
+		tables = kv.TablesSmt
+	default:
+		return nil, fmt.Errorf("unsupported label %s", label)
 	}
 
 LOOP:
-	for _, table := range kv.ChaindataTables {
+	// For X Layer, split db
+	for _, table := range tables {
 		// if table is excluded, skip it
 		for _, excludedTable := range excludedTables {
 			if table == excludedTable {

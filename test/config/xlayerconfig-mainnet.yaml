@@ -8,8 +8,7 @@ zkevm.l2-datastreamer-url: stream.xlayer.tech:8800
 zkevm.l1-chain-id: 1
 # `zkevm.l1-rpc-url` must be changed before running.
 # using a wrong default value so it can report and error and remind you to change this value.
-zkevm.l1-rpc-url: https://rpc.ankr.com/eth/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-#zkevm.l1-rpc-url: https://rpc.ankr.com/eth
+zkevm.l1-rpc-url: https://rpc.ankr.com/eth
 #zkevm.increment-tree-always: true
 
 #debug.limit: 8554110
@@ -30,9 +29,10 @@ zkevm.gas-price-factor: 0.000001
 zkevm.allow-free-transactions: true
 
 txpool.packbatchspeciallist : ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534", "0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E"]
-txpool.globalslots: 100000
-txpool.globalbasefeeslots: 100000
-txpool.globalqueue: 100000
+txpool.globalslots: 1000000
+txpool.globalbasefeeslots: 1000000
+txpool.globalqueue: 1000000
+txpool.commit.every: "10m"
 
 zkevm.address-sequencer: "0xAF9d27ffe4d51eD54AC8eEc78f2785D7E11E5ab1"
 zkevm.address-zkevm: "0x2B0ee28D4D51bC9aDde5E58E295873F61F4a0507"
@@ -72,3 +72,12 @@ metrics.port: 9095
 yieldsize: 35
 zkevm.seal-batch-immediately-on-overflow: true
 zkevm.sequencer-timeout-on-empty-tx-pool: 1ms
+zkevm.pre-run-address-list: [""]
+zkevm.block-info-concurrent: true
+zkevm.standalone-smt-db: true
+zkevm.enable-async-commit: true
+
+# to reduce lock race in stress test
+txpool.enabletimsort: true
+zkevm.bulk-add-txs: true
+zkevm.enable-add-tx-notify: true

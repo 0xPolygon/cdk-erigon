@@ -540,11 +540,6 @@ const (
 	ERIGON_VERSIONS                   = "erigon_versions"                 // erigon version -> timestamp of startup
 	DISCARDED_TRANSACTIONS_BY_BLOCK   = "discarded_transactions_by_block" // mapping blockNum -> [txHash, ...]
 	DISCARDED_TRANSACTIONS_BY_HASH    = "discarded_transactions_by_hash"  // mapping txHash -> blockNum
-	TableSmt                          = "HermezSmt"
-	TableStats                        = "HermezSmtStats"
-	TableAccountValues                = "HermezSmtAccountValues"
-	TableMetadata                     = "HermezSmtMetadata"
-	TableHashKey                      = "HermezSmtHashKey"
 	TablePoolLimbo                    = "PoolLimbo"
 	BATCH_ENDS                        = "batch_ends"
 	WITNESS_CACHE                     = "witness_cache"
@@ -588,10 +583,11 @@ var (
 	StatesProcessingKey = []byte("StatesProcessing")
 )
 
+// For X Layer, split db
 // ChaindataTables - list of all buckets. App will panic if some bucket is not in this list.
 // This list will be sorted in `init` method.
 // ChaindataTablesCfg - can be used to find index in sorted version of ChaindataTables list by name
-var ChaindataTables = []string{
+var ChaindataTablesInitial = []string{
 	E2AccountsHistory,
 	E2StorageHistory,
 	Code,
@@ -786,11 +782,6 @@ var ChaindataTables = []string{
 	ERIGON_VERSIONS,
 	DISCARDED_TRANSACTIONS_BY_BLOCK,
 	DISCARDED_TRANSACTIONS_BY_HASH,
-	TableSmt,
-	TableStats,
-	TableAccountValues,
-	TableMetadata,
-	TableHashKey,
 	TablePoolLimbo,
 	BATCH_ENDS,
 	WITNESS_CACHE,
@@ -822,11 +813,30 @@ var ReconTables = []string{
 	PlainContractD,
 }
 
+// For X Layer, split db
+const tableSmt = "HermezSmt"
+const tableStats = "HermezSmtStats"
+const tableAccountValues = "HermezSmtAccountValues"
+const tableMetadata = "HermezSmtMetadata"
+const tableHashKey = "HermezSmtHashKey"
+
+var TablesSmt = []string{
+	tableSmt,
+	tableStats,
+	tableAccountValues,
+	tableMetadata,
+	tableHashKey,
+}
+
+// For X Layer, split db
 // ChaindataDeprecatedTables - list of buckets which can be programmatically deleted - for example after migration
-var ChaindataDeprecatedTables = []string{
+var ChaindataDeprecatedTablesInitial = []string{
 	Clique,
 	TransitionBlockKey,
 }
+
+// For X Layer, split db
+var ChaindataDeprecatedTables []string
 
 var DiagnosticsTables = []string{
 	DiagSystemInfo,
@@ -960,8 +970,8 @@ func sortBuckets() {
 }
 
 func init() {
-	fmt.Println("[cdk-erigon-lib] timestamp 2024-03-12:16:34")
-	reinit()
+	// For X Layer, split db
+	InitStandaloneSMT(false)
 }
 
 func reinit() {

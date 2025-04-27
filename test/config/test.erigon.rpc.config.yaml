@@ -83,3 +83,4 @@ pprof: true
 pprof.port: 6060
 pprof.addr: 0.0.0.0
 
+zkevm.standalone-smt-db: true  # true: enalbe split smt db, false: not split

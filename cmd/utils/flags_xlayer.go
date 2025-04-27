@@ -103,6 +103,11 @@ var (
 		Name:  "txpool.freegaslist",
 		Usage: "FreeGasList Project in JSON Format",
 	}
+	TxPoolEnableTimsort = cli.BoolFlag{
+		Name:  "txpool.enabletimsort",
+		Usage: "EnableTimsort enable timsort to instead of built-in sorting",
+		Value: false,
+	}
 	// Gas Pricer
 	GpoTypeFlag = cli.StringFlag{
 		Name:  "gpo.type",
@@ -204,6 +209,52 @@ var (
 		Usage: "Method rate limit in requests per second, format: {\"method\":[\"method1\",\"method2\"],\"count\":1,\"bucket\":1}, eg. {\"methods\":[\"eth_call\",\"eth_blockNumber\"],\"count\":10,\"bucket\":1}",
 		Value: "",
 	}
+	PreRunAddressList = cli.StringFlag{
+		Name:  "zkevm.pre-run-address-list",
+		Usage: "Pre run address list while receiving a transaction",
+		Value: "",
+	}
+	PreRunCacheSize = cli.IntFlag{
+		Name:  "zkevm.pre-run-cache-size",
+		Usage: "Size of pre-run cache",
+		Value: 10000,
+	}
+	PreRunCacheTTL = cli.DurationFlag{
+		Name:  "zkevm.pre-run-cache-ttl",
+		Usage: "pre-run cache entry TTL",
+		Value: time.Hour,
+	}
+	PreRunChanNum = cli.IntFlag{
+		Name:  "zkevm.pre-run-chan-num",
+		Usage: "pre-run chan num",
+		Value: 10000,
+	}
+	PreRunTaskNum = cli.IntFlag{
+		Name:  "zkevm.pre-run-task-num",
+		Usage: "pre-run task num",
+		Value: 8,
+	}
+	BulkAddTxsFlag = cli.BoolFlag{
+		Name:  "zkevm.bulk-add-txs",
+		Usage: "Whether to enable bulk transaction addition",
+		Value: false,
+	}
+	BulkAddTxsSizeFlag = cli.IntFlag{
+		Name:  "zkevm.bulk-add-txs-size",
+		Usage: "the size of the batched txs added to txpool",
+		Value: 30,
+	}
+	BulkAddTxsWaitTimeFlag = cli.DurationFlag{
+		Name:  "zkevm.bulk-add-txs-wait-time",
+		Usage: "maximum waiting time for bulk adding transactions",
+		Value: 5 * time.Millisecond,
+	}
+	EnableAddTxNotify = cli.BoolFlag{
+		Name:  "zkevm.enable-add-tx-notify",
+		Usage: "Enable notifications to limit added transactions",
+		Value: false,
+	}
+
 	// Local Replay
 	SequencerReplay = cli.BoolFlag{
 		Name:  "zkevm.sequencer-replay",
@@ -229,6 +280,27 @@ var (
 	ExecutorMock = cli.BoolFlag{
 		Name:  "zkevm.executor-mock",
 		Usage: "Only for testing use. Generate the witness and return the verifierBundle without actually sending payload to executor.",
+		Value: false,
+	}
+	// block info concurrent calculation
+	BlockInfoConcurrent = cli.BoolFlag{
+		Name:  "zkevm.block-info-concurrent",
+		Usage: "Enable concurrent block info calculation",
+		Value: false,
+	}
+	EnableAsyncCommit = cli.BoolFlag{
+		Name:  "zkevm.enable-async-commit",
+		Usage: "Enable async smt commit feature",
+		Value: false,
+	}
+	StandaloneSMTDatabase = cli.BoolFlag{
+		Name:  "zkevm.standalone-smt-db",
+		Usage: "Use standalone SMT database, not integrated with chaindb",
+		Value: false,
+	}
+	SequencerSkipEmptyBlocks = cli.BoolFlag{
+		Name:  "zkevm.sequencer-skip-empty-blocks",
+		Usage: "Skip empty blocks",
 		Value: false,
 	}
 )
@@ -354,6 +426,9 @@ func setTxPoolXLayer(ctx *cli.Context, cfg *ethconfig.DeprecatedTxPoolConfig) {
 			}
 		}
 	}
+	if ctx.IsSet(TxPoolEnableTimsort.Name) {
+		cfg.EnableTimsort = ctx.Bool(TxPoolEnableTimsort.Name)
+	}
 }
 
 // SetApolloGPOXLayer is a public wrapper function to internally call setGPO
@@ -364,4 +439,33 @@ func SetApolloGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {
 // SetApolloPoolXLayer is a public wrapper function to internally call setTxPool
 func SetApolloPoolXLayer(ctx *cli.Context, fullCfg *ethconfig.Config) {
 	setTxPool(ctx, fullCfg)
+}
+
+// CheckAddressExists check if the address exists in the address map
+func CheckAddressExists(addressMap map[libcommon.Address]struct{}, target libcommon.Address) bool {
+	_, exists := addressMap[target]
+	return exists
+}
+
+// SetPreRunList is set pre run list and cache size, ttl, chan num, task num
+func SetPreRunList(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(PreRunAddressList.Name) {
+		addrHexes := libcommon.CliString2Array(ctx.String(PreRunAddressList.Name))
+
+		cfg.XLayer.PreRunList = make(map[libcommon.Address]struct{}, len(addrHexes))
+		for _, addr := range addrHexes {
+			cfg.XLayer.PreRunList[libcommon.HexToAddress(addr)] = struct{}{}
+		}
+		cfg.XLayer.PreRunCacheSize = ctx.Int(PreRunCacheSize.Name)
+		cfg.XLayer.PreRunCacheTTL = ctx.Duration(PreRunCacheTTL.Name)
+		cfg.XLayer.PreRunChanNum = ctx.Int(PreRunChanNum.Name)
+		cfg.XLayer.PreRunTaskNum = ctx.Int(PreRunTaskNum.Name)
+	}
+}
+
+func SetBulkAddTxs(ctx *cli.Context, cfg *ethconfig.Config) {
+	cfg.XLayer.BulkAddTxs = ctx.Bool(BulkAddTxsFlag.Name)
+	cfg.XLayer.BulkAddTxsSize = ctx.Int(BulkAddTxsSizeFlag.Name)
+	cfg.XLayer.BulkAddTxsWaitTime = ctx.Duration(BulkAddTxsWaitTimeFlag.Name)
+	cfg.XLayer.EnableAddTxNotify = ctx.Bool(EnableAddTxNotify.Name)
 }

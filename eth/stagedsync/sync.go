@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/ledgerwatch/log/v3"
@@ -17,6 +18,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
+	"github.com/ledgerwatch/erigon/zk/smt"
 )
 
 type Sync struct {
@@ -34,6 +36,10 @@ type Sync struct {
 	logPrefixes   []string
 	logger        log.Logger
 	stagesIdsList []string
+
+	// For X Layer, split db and ac
+	flushWG sync.WaitGroup
+	cache   *smt.SmtCache
 }
 
 type Timing struct {
@@ -214,6 +220,8 @@ func New(cfg ethconfig.Sync, stagesList []*Stage, unwindOrder UnwindOrder, prune
 		logPrefixes:   logPrefixes,
 		logger:        logger,
 		stagesIdsList: stagesIdsList,
+		// For X Layer, split db and ac
+		cache: smt.CreateNewSmtCache(),
 	}
 }
 

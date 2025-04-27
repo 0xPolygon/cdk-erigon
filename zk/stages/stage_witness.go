@@ -3,6 +3,7 @@ package stages
 import (
 	"context"
 	"fmt"
+
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
@@ -24,6 +25,7 @@ type WitnessDb interface {
 
 type WitnessCfg struct {
 	db              kv.RwDB
+	dbsmt           kv.RwDB
 	zkCfg           *ethconfig.Zk
 	chainConfig     *chain.Config
 	engine          consensus.Engine
@@ -35,7 +37,7 @@ type WitnessCfg struct {
 	unwindLimit     uint64
 }
 
-func StageWitnessCfg(db kv.RwDB, zkCfg *ethconfig.Zk, chainConfig *chain.Config, engine consensus.Engine, blockReader services.FullBlockReader, agg *eristate.Aggregator, historyV3 bool, dirs datadir.Dirs, forcedContracts []common.Address, unwindLimit uint64) WitnessCfg {
+func StageWitnessCfg(db, dbsmt kv.RwDB, zkCfg *ethconfig.Zk, chainConfig *chain.Config, engine consensus.Engine, blockReader services.FullBlockReader, agg *eristate.Aggregator, historyV3 bool, dirs datadir.Dirs, forcedContracts []common.Address, unwindLimit uint64) WitnessCfg {
 	cfg := WitnessCfg{
 		db:              db,
 		zkCfg:           zkCfg,
@@ -47,6 +49,9 @@ func StageWitnessCfg(db kv.RwDB, zkCfg *ethconfig.Zk, chainConfig *chain.Config,
 		dirs:            dirs,
 		forcedContracts: forcedContracts,
 		unwindLimit:     unwindLimit,
+
+		// For X Layer, split db and ac
+		dbsmt: dbsmt,
 	}
 
 	return cfg
@@ -63,6 +68,7 @@ func SpawnStageWitness(
 	u stagedsync.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
+	txsmt kv.RwTx,
 	cfg WitnessCfg,
 ) error {
 	logPrefix := s.LogPrefix()
@@ -86,6 +92,21 @@ func SpawnStageWitness(
 			return fmt.Errorf("cfg.db.BeginRw, %w", err)
 		}
 		defer tx.Rollback()
+	}
+
+	// For X Layer, split db and ac
+	freshSmtTx := false
+	if txsmt == nil {
+		freshSmtTx = true
+		log.Debug(fmt.Sprintf("[%s] no txsmt provided, creating a new one", logPrefix))
+		var err error
+		if cfg.dbsmt != nil {
+			txsmt, err = cfg.dbsmt.BeginRw(ctx)
+			if err != nil {
+				return fmt.Errorf("cfg.db.BeginRw, %w", err)
+			}
+			defer txsmt.Rollback()
+		}
 	}
 
 	stageWitnessProgressBlockNo, err := stages.GetStageProgress(tx, stages.Witness)
@@ -162,7 +183,9 @@ func SpawnStageWitness(
 			}
 		}
 
-		w, err := g.GetWitnessByBlockRange(tx, ctx, startBlock, endBlock, false, false)
+		// For X Layer, split db and ac
+		cache := s.GetSmtHistorySnapshotCache(endBlock)
+		w, err := g.GetWitnessByBlockRange(tx, txsmt, ctx, startBlock, endBlock, false, false, cache)
 		if err != nil {
 			return fmt.Errorf("GetWitnessByBlockRange: %w", err)
 		}
@@ -187,6 +210,13 @@ func SpawnStageWitness(
 
 	if freshTx {
 		if err = tx.Commit(); err != nil {
+			return fmt.Errorf("tx.Commit: %w", err)
+		}
+	}
+
+	// For X Layer, split db and ac
+	if freshSmtTx && txsmt != nil {
+		if err = txsmt.Commit(); err != nil {
 			return fmt.Errorf("tx.Commit: %w", err)
 		}
 	}

@@ -15,13 +15,42 @@ import (
 
 func TestCompareAllTreesInsertTimesAndFinalHashesUsingDiskDb(t *testing.T) {
 	incrementalDbPath := "/tmp/smt-incremental"
-	smtIncrementalDb, smtIncrementalTx, smtIncrementalSmtDb := initDb(t, incrementalDbPath)
+	smtIncrementalDb, smtIncrementalTx, smtIncrementalSmtDb := initDb(t, incrementalDbPath, false)
 
 	bulkDbPath := "/tmp/smt-bulk"
-	smtBulkDb, smtBulkTx, smtBulkSmtDb := initDb(t, bulkDbPath)
+	smtBulkDb, smtBulkTx, smtBulkSmtDb := initDb(t, bulkDbPath, false)
 
 	batchDbPath := "/tmp/smt-batch"
-	smtBatchDb, smtBatchTx, smtBatchSmtDb := initDb(t, batchDbPath)
+	smtBatchDb, smtBatchTx, smtBatchSmtDb := initDb(t, batchDbPath, false)
+
+	smtIncremental := smt.NewSMT(smtIncrementalSmtDb, false)
+	smtBulk := smt.NewSMT(smtBulkSmtDb, false)
+	smtBatch := smt.NewSMT(smtBatchSmtDb, false)
+
+	compareAllTreesInsertTimesAndFinalHashes(t, smtIncremental, smtBulk, smtBatch)
+
+	smtIncrementalTx.Commit()
+	smtBulkTx.Commit()
+	smtBatchTx.Commit()
+	t.Cleanup(func() {
+		smtIncrementalDb.Close()
+		smtBulkDb.Close()
+		smtBatchDb.Close()
+		os.RemoveAll(incrementalDbPath)
+		os.RemoveAll(bulkDbPath)
+		os.RemoveAll(batchDbPath)
+	})
+}
+
+func TestCompareAllTreesInsertTimesAndFinalHashesUsingSplitDiskDb(t *testing.T) {
+	incrementalDbPath := "/tmp/smt-incremental"
+	smtIncrementalDb, smtIncrementalTx, smtIncrementalSmtDb := initDb(t, incrementalDbPath, true)
+
+	bulkDbPath := "/tmp/smt-bulk"
+	smtBulkDb, smtBulkTx, smtBulkSmtDb := initDb(t, bulkDbPath, true)
+
+	batchDbPath := "/tmp/smt-batch"
+	smtBatchDb, smtBatchTx, smtBatchSmtDb := initDb(t, batchDbPath, true)
 
 	smtIncremental := smt.NewSMT(smtIncrementalSmtDb, false)
 	smtBulk := smt.NewSMT(smtBulkSmtDb, false)

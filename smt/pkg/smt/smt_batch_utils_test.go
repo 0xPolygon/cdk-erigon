@@ -18,10 +18,12 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
+func initDb(t *testing.T, dbPath string, standaloneSmtDb bool) (kv.RwDB, kv.RwTx, *db.EriDb) {
 	ctx := context.Background()
 
 	os.RemoveAll(dbPath)
+
+	kv.InitStandaloneSMT(standaloneSmtDb)
 
 	dbOpts := mdbx.NewMDBX(log.Root()).Path(dbPath).Label(kv.ChainDB).GrowthStep(16 * datasize.MB).RoTxsLimiter(semaphore.NewWeighted(128))
 	database, err := dbOpts.Open(ctx)
@@ -29,7 +31,7 @@ func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
 		t.Fatalf("Cannot create db %e", err)
 	}
 
-	migrator := migrations.NewMigrator(kv.ChainDB)
+	migrator := migrations.NewMigrator(kv.ChainDB, false)
 	if err := migrator.VerifyVersion(database); err != nil {
 		t.Fatalf("Cannot verify db version %e", err)
 	}
@@ -45,11 +47,29 @@ func initDb(t *testing.T, dbPath string) (kv.RwDB, kv.RwTx, *db.EriDb) {
 
 	dbTransaction, err := database.BeginRw(ctx)
 	if err != nil {
-		t.Fatalf("Cannot craete db transaction")
+		t.Fatalf("Cannot create db transaction")
+	}
+
+	eridb := db.NewEriDb(dbTransaction, nil)
+	if standaloneSmtDb {
+		dbOpts := mdbx.NewMDBX(log.Root()).Path(dbPath + "/smt").Label(kv.SmtDB).GrowthStep(16 * datasize.MB).RoTxsLimiter(semaphore.NewWeighted(128))
+		dbsmt, err := dbOpts.Open(ctx)
+		if err != nil {
+			t.Fatalf("Cannot create SMT db %e", err)
+		}
+		txsmt, err := dbsmt.BeginRw(ctx)
+		if err != nil {
+			t.Fatalf("Cannot create SMT db transaction")
+		}
+		err = db.CreateEriDbBuckets(txsmt)
+		if err != nil {
+			t.Fatalf("Cannot create SMT db buckets")
+		}
+		eridb = db.NewEriDb(txsmt, dbTransaction)
 	}
 
 	db.CreateEriDbBuckets(dbTransaction)
-	return database, dbTransaction, db.NewEriDb(dbTransaction)
+	return database, dbTransaction, eridb
 }
 
 func prepareData() ([]*BatchInsertDataHolder, int) {
