@@ -14,7 +14,7 @@ import (
 
 // loadSequencer loads the apollo sequencer config cache on startup
 func (c *Client) loadSequencer(value interface{}) {
-	ctx, err := c.getConfigContext(value)
+	ctx, _, err := c.getConfigContext(value)
 	if err != nil {
 		utils.Fatalf("load sequencer from apollo config failed, err: %v", err)
 	}
@@ -25,13 +25,7 @@ func (c *Client) loadSequencer(value interface{}) {
 }
 
 // fireSequencer fires the apollo sequencer config change
-func (c *Client) fireSequencer(key string, value *storage.ConfigChange) {
-	ctx, err := c.getConfigContext(value.NewValue)
-	if err != nil {
-		log.Error(fmt.Sprintf("fire sequencer from apollo config failed, err: %v", err))
-		return
-	}
-
+func (c *Client) fireSequencer(ctx *cli.Context, value *storage.ConfigChange) {
 	loadSequencerConfig(ctx)
 	log.Info(fmt.Sprintf("apollo sequencer old config : %+v", value.OldValue.(string)))
 	log.Info(fmt.Sprintf("apollo sequencer config changed: %+v", value.NewValue.(string)))
@@ -84,6 +78,12 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	if ctx.IsSet(utils.BulkAddTxsWaitTimeFlag.Name) {
 		ethCfg.Zk.XLayer.BulkAddTxsWaitTime = ctx.Duration(utils.BulkAddTxsWaitTimeFlag.Name)
 	}
+	if ctx.IsSet(utils.EnableAddTxNotify.Name) {
+		ethCfg.Zk.XLayer.EnableAddTxNotify = ctx.Bool(utils.EnableAddTxNotify.Name)
+	}
+	if ctx.IsSet(utils.YieldSizeFlag.Name) {
+		ethCfg.YieldSize = ctx.Uint64(utils.YieldSizeFlag.Name)
+	}
 }
 
 // setSequencerFlag sets the dynamic sequencer apollo flag
@@ -109,4 +109,13 @@ func GetSequencerHalt(localHaltBatchNumber uint64) uint64 {
 		return UnsafeGetApolloConfig().EthCfg.Zk.SequencerHaltOnBatchNumber
 	}
 	return localHaltBatchNumber
+}
+
+func GetYieldSize(localYieldSize uint16) uint16 {
+	if IsApolloConfigSequencerEnabled() {
+		UnsafeGetApolloConfig().RLock()
+		defer UnsafeGetApolloConfig().RUnlock()
+		return uint16(UnsafeGetApolloConfig().EthCfg.YieldSize)
+	}
+	return localYieldSize
 }

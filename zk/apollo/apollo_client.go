@@ -125,20 +125,28 @@ func (c *CustomChangeListener) OnChange(changeEvent *storage.ChangeEvent) {
 				log.Warn(fmt.Sprintf("not processing change event: %v", err))
 				continue
 			}
+
+			ctx, config, err := c.getConfigContext(value.NewValue)
+			if err != nil {
+				log.Error(fmt.Sprintf("invalid new value, prefix: %s, newValue: %v, err: %v", prefix, value.NewValue, err))
+				return
+			}
+
 			switch prefix {
 			case Sequencer:
-				c.fireSequencer(key, value)
+				c.fireSequencer(ctx, value)
 			case JsonRPC:
-				c.fireJsonRPC(key, value)
+				c.fireJsonRPC(ctx, value)
 			case L2GasPricer:
-				c.fireL2GasPricer(key, value)
+				c.fireL2GasPricer(ctx, value)
 			case Pool:
-				c.firePool(key, value)
+				c.firePool(ctx, value)
 			}
 
 			UnsafeGetApolloConfig().Lock()
 			defer UnsafeGetApolloConfig().Unlock()
 
+			UnsafeGetApolloConfig().EthCfg.XLayer.ApolloChanged = getChangedFlags(config)
 			ethCfgStream.Pub(&UnsafeGetApolloConfig().EthCfg)
 			nodeCfgStream.Pub(&UnsafeGetApolloConfig().NodeCfg)
 		}

@@ -11,6 +11,7 @@ type XLayerConfig struct {
 	Apollo        ApolloClientConfig
 	Nacos         NacosConfig
 	EnableInnerTx bool
+	ApolloChanged []string
 	// Sequencer
 	SequencerBatchSleepDuration time.Duration
 	StandaloneSMTDatabase       bool

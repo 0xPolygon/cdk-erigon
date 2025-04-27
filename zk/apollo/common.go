@@ -3,6 +3,7 @@ package apollo
 import (
 	"crypto/rand"
 	"fmt"
+	"maps"
 	"math/big"
 	"os"
 	"reflect"
@@ -20,12 +21,12 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
-func (c *Client) getConfigContext(value interface{}) (*cli.Context, error) {
+func (c *Client) getConfigContext(value interface{}) (*cli.Context, map[string]interface{}, error) {
 	config := make(map[string]interface{})
 	err := yaml.Unmarshal([]byte(value.(string)), config)
 	if err != nil {
 		log.Error(fmt.Sprintf("failed to load config: %v error: %v", value, err))
-		return nil, err
+		return nil, nil, err
 	}
 
 	// sets global flags to value in apollo config
@@ -40,18 +41,18 @@ func (c *Client) getConfigContext(value interface{}) (*cli.Context, error) {
 				}
 				err := ctx.Set(key, strings.Join(s, ","))
 				if err != nil {
-					return nil, fmt.Errorf("failed setting %s flag with values=%s error=%s", key, s, err)
+					return nil, nil, fmt.Errorf("failed setting %s flag with values=%s error=%s", key, s, err)
 				}
 			} else {
 				err := ctx.Set(key, fmt.Sprintf("%v", value))
 				if err != nil {
-					return nil, fmt.Errorf("failed setting %s flag with value=%v error=%s", key, value, err)
+					return nil, nil, fmt.Errorf("failed setting %s flag with value=%v error=%s", key, value, err)
 				}
 			}
 		}
 	}
 
-	return ctx, nil
+	return ctx, config, nil
 }
 
 const (
@@ -120,4 +121,12 @@ func GetEthConfigStream() *NotificationPubSub[ethconfig.Config] {
 
 func GetNodeConfigStream() *NotificationPubSub[nodecfg.Config] {
 	return nodeCfgStream
+}
+
+func getChangedFlags(config map[string]interface{}) []string {
+	changed := make([]string, 0, len(config))
+	for k := range maps.Keys(config) {
+		changed = append(changed, k)
+	}
+	return changed
 }

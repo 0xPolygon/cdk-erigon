@@ -15,7 +15,7 @@ import (
 
 // loadJsonRPC loads the apollo jsonrpc config cache on startup
 func (c *Client) loadJsonRPC(value interface{}) {
-	ctx, err := c.getConfigContext(value)
+	ctx, _, err := c.getConfigContext(value)
 	if err != nil {
 		utils.Fatalf("load jsonrpc from apollo config failed, err: %v", err)
 	}
@@ -26,13 +26,7 @@ func (c *Client) loadJsonRPC(value interface{}) {
 }
 
 // fireJsonRPC fires the apollo jsonrpc config change
-func (c *Client) fireJsonRPC(key string, value *storage.ConfigChange) {
-	ctx, err := c.getConfigContext(value.NewValue)
-	if err != nil {
-		log.Error(fmt.Sprintf("fire jsonrpc from apollo config failed, err: %v", err))
-		return
-	}
-
+func (c *Client) fireJsonRPC(ctx *cli.Context, value *storage.ConfigChange) {
 	loadJsonRPCConfig(ctx)
 	log.Info(fmt.Sprintf("apollo jsonrpc old config : %+v", value.OldValue.(string)))
 	log.Info(fmt.Sprintf("apollo jsonrpc config changed: %+v", value.NewValue.(string)))

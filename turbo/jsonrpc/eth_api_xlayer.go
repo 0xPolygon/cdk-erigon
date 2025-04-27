@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"slices"
 	"sync"
 
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/eth/gasprice/gaspricecfg"
 	"github.com/ledgerwatch/erigon/zk/apollo"
@@ -34,16 +36,16 @@ func (apii *APIImpl) listenApollo(ctx context.Context) {
 			if ethCfg == nil {
 				continue
 			}
-			if apii.BulkAddTxs != ethCfg.XLayer.BulkAddTxs {
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BulkAddTxsFlag.Name) {
 				apii.BulkAddTxs = ethCfg.XLayer.BulkAddTxs
 			}
-			if apii.BulkAddTxsSize != ethCfg.XLayer.BulkAddTxsSize {
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BulkAddTxsSizeFlag.Name) {
 				apii.BulkAddTxsSize = ethCfg.XLayer.BulkAddTxsSize
 			}
-			if apii.BulkAddTxsWaitTime != ethCfg.XLayer.BulkAddTxsWaitTime {
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BulkAddTxsWaitTimeFlag.Name) {
 				apii.BulkAddTxsWaitTime = ethCfg.XLayer.BulkAddTxsWaitTime
 			}
-			if apii.EnableNotify != ethCfg.XLayer.EnableAddTxNotify {
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.EnableAddTxNotify.Name) {
 				apii.EnableNotify = ethCfg.XLayer.EnableAddTxNotify
 			}
 		case <-ctx.Done():

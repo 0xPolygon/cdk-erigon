@@ -14,7 +14,7 @@ import (
 
 // loadPool loads the apollo pool config cache on startup
 func (c *Client) loadPool(value interface{}) {
-	ctx, err := c.getConfigContext(value)
+	ctx, _, err := c.getConfigContext(value)
 	if err != nil {
 		utils.Fatalf("load pool from apollo config failed, err: %v", err)
 	}
@@ -25,13 +25,7 @@ func (c *Client) loadPool(value interface{}) {
 }
 
 // firePool fires the apollo pool config change
-func (c *Client) firePool(key string, value *storage.ConfigChange) {
-	ctx, err := c.getConfigContext(value.NewValue)
-	if err != nil {
-		log.Error(fmt.Sprintf("fire pool from apollo config failed, err: %v", err))
-		return
-	}
-
+func (c *Client) firePool(ctx *cli.Context, value *storage.ConfigChange) {
 	loadPoolConfig(ctx)
 	log.Info(fmt.Sprintf("apollo pool old config : %+v", value.OldValue.(string)))
 	log.Info(fmt.Sprintf("apollo pool config changed: %+v", value.NewValue.(string)))
