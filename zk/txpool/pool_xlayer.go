@@ -1,14 +1,18 @@
 package txpool
 
 import (
+	"context"
 	"math/big"
+	"slices"
 	"strings"
 	"sync/atomic"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/types"
+	"github.com/ledgerwatch/erigon/cmd/utils"
 	ecommon "github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/zk/apollo"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 )
 
@@ -195,6 +199,28 @@ func (p *TxPool) setFreeGasList(freeGasList []ethconfig.FreeGasInfo) {
 		}
 		infoCopy := info
 		p.xlayerCfg.FreeGasList[info.Name] = &infoCopy
+	}
+}
+
+func (p *TxPool) listenApollo(ctx context.Context) {
+	stream := apollo.GetEthConfigStream()
+	ch, remove := stream.Sub()
+	defer remove()
+
+	for {
+		select {
+		case ethCfg := <-ch:
+			if ethCfg == nil {
+				continue
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.TxPoolEnableTimsort.Name) {
+				p.pending.mtx.Lock()
+				p.pending.enbaleTimsort = ethCfg.DeprecatedTxPool.EnableTimsort
+				p.pending.mtx.Unlock()
+			}
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
