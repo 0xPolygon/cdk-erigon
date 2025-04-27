@@ -141,6 +141,8 @@ COMMANDS += verkle
 COMMANDS += evm
 COMMANDS += sentinel
 COMMANDS += acl
+
+# For X Layer, split db
 COMMANDS += smt-db-split
 
 # build each command using %.cmd rule
@@ -172,6 +174,7 @@ test-unwind-default:
 	cd ./zk/tests/unwinds/datastream && tar -xzf ./datastream-net8-upto-11318-101.zip
 	cd ../../../../
 	make cdk-erigon
+	# For X Layer, split-db
 	./zk/tests/unwinds/unwind.sh default
 	rm dynamic-integration8.yaml dynamic-integration-allocs.json dynamic-integration-chainspec.json dynamic-integration-conf.json
 

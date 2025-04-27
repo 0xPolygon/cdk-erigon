@@ -39,6 +39,7 @@ func TestPack(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			encb, err := hex.DecodeString(test.packed)
 			if err != nil {
+				// For X Layer, ut
 				t.Fatalf("invalid hex: %s", test.packed)
 			}
 			inDef := fmt.Sprintf(`[{ "name" : "method", "type": "function", "inputs": %s}]`, test.def)

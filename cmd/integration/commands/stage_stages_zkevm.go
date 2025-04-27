@@ -28,6 +28,7 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx, _ := common2.RootContext()
 		logger := debug.SetupCobra(cmd, "integration")
+		// For X Layer, split db
 		kv.InitStandaloneSMT(standaloneSmtDb)
 		db, err := openDB(dbCfg(kv.ChainDB, chaindata), true, logger)
 		if err != nil {
@@ -36,6 +37,7 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 		}
 		defer db.Close()
 
+		// For X Layer, split db
 		var dbsmt kv.RwDB = nil
 		if standaloneSmtDb {
 			dbsmt, err = openDB(dbCfg(kv.SmtDB, smtDbPath), false, logger)
@@ -54,6 +56,7 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 		}
 
 		if len(datadirCompare) > 0 {
+			// For X Layer, split db
 			compareDB(db, kv.ChainDB, "chaindata", logger)
 			if standaloneSmtDb {
 				compareDB(db, kv.SmtDB, "smt", logger)
@@ -62,6 +65,7 @@ state_stages_zkevm --datadir=/datadirs/hermez-mainnet --unwind-batch-no=2 --chai
 	},
 }
 
+// For X Layer, split db
 func compareDB(db kv.RwDB, label kv.Label, dbDirName string, logger log.Logger) {
 	dbCompare, err := openDB(dbCfg(label, filepath.Join(datadirCompare, dbDirName)), true, logger)
 	if err != nil {
@@ -91,6 +95,7 @@ func init() {
 	withDataDirCompare(stateStagesZk)
 	withUnwind(stateStagesZk)
 	withUnwindBatchNo(stateStagesZk) // populates package global flag unwindBatchNo
+	// For X Layer, split db
 	withStandaloneSmtDb(stateStagesZk)
 	rootCmd.AddCommand(stateStagesZk)
 }
@@ -105,6 +110,7 @@ func unwindZk(ctx context.Context, db, dbsmt kv.RwDB) error {
 	}
 	defer tx.Rollback()
 
+	// For X Layer, split db
 	var txsmt kv.RwTx = nil
 	if dbsmt != nil {
 		txsmt, err = dbsmt.BeginRw(ctx)
@@ -121,6 +127,7 @@ func unwindZk(ctx context.Context, db, dbsmt kv.RwDB) error {
 		}
 	}
 
+	// For X Layer, split db
 	if err := hermez_db.CreateHermezBuckets(tx); err != nil {
 		return err
 	}
@@ -132,18 +139,21 @@ func unwindZk(ctx context.Context, db, dbsmt kv.RwDB) error {
 		return err
 	}
 
+	// For X Layer, split db
 	err = stateStages.RunUnwind(db, wrap.TxContainer{Tx: tx, TxSmt: txsmt})
 	if err != nil {
 		return err
 	}
 
 	if err := tx.Commit(); err != nil {
+		// For X Layer, split db
 		if txsmt != nil {
 			txsmt.Rollback()
 		}
 		return err
 	}
 
+	// For X Layer, split db
 	if txsmt != nil {
 		return txsmt.Commit()
 	}
@@ -153,6 +163,7 @@ func unwindZk(ctx context.Context, db, dbsmt kv.RwDB) error {
 func compareDbs(db1, db2 kv.RwDB, label kv.Label) ([]string, error) {
 	var discrepancies []string
 
+	// For X Layer, split db
 	excludedTables := []string{}
 	if label == kv.ChainDB {
 		excludedTables = append(excludedTables, kv.Senders)
@@ -169,6 +180,7 @@ func compareDbs(db1, db2 kv.RwDB, label kv.Label) ([]string, error) {
 	}
 
 LOOP:
+	// For X Layer, split db
 	for _, table := range tables {
 		// if table is excluded, skip it
 		for _, excludedTable := range excludedTables {

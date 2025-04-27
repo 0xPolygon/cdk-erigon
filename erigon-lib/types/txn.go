@@ -226,6 +226,7 @@ func (ctx *TxParseContext) ParseTransaction(payload []byte, pos int, slot *TxSlo
 		}
 
 		dataPos, dataLen, err = rlp.List(payload, p)
+		// For X Layer, inner tx
 		slot.BlobTo = common.BytesToAddress(payload[dataPos : dataPos+dataLen])
 		if err != nil {
 			return 0, fmt.Errorf("%w: blobs len: %s", ErrParseTxn, err) //nolint
@@ -370,6 +371,7 @@ func (ctx *TxParseContext) parseTransactionBody(payload []byte, pos, p0 int, slo
 	}
 	// Next follows the destination address (if present)
 	dataPos, dataLen, err := rlp.String(payload, p)
+	// For X Layer, inner tx
 	slot.To = common.BytesToAddress(payload[dataPos : dataPos+dataLen])
 	if err != nil {
 		return 0, fmt.Errorf("%w: to len: %s", ErrParseTxn, err) //nolint

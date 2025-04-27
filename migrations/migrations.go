@@ -37,14 +37,14 @@ var migrations = map[kv.Label][]Migration{
 		TxsBeginEnd,
 		TxsV3,
 		ProhibitNewDownloadsLock,
-		// refactorTableLastRoot, // this is added dynamically in NewMigrator based on isStandaloneSMTDatabase flag
+		// refactorTableLastRoot, // For X Layer, this is added dynamically in NewMigrator based on isStandaloneSMTDatabase flag
 		ProhibitNewDownloadsLock2,
 		countersToArray,
 		resetL1Sequences,
 	},
 	kv.TxPoolDB: {},
 	kv.SentryDB: {},
-	kv.SmtDB:    {},
+	kv.SmtDB:    {}, // For X Layer, split db
 }
 
 type Callback func(tx kv.RwTx, progress []byte, isDone bool) error
@@ -62,12 +62,13 @@ var (
 )
 
 func NewMigrator(label kv.Label, isStandaloneSMTDatabase bool) *Migrator {
+	// For X Layer, split db and ac
 	m := migrations[label]
 	if !isStandaloneSMTDatabase && label == kv.ChainDB {
 		m = append(m, refactorTableLastRoot)
 	}
 	return &Migrator{
-		Migrations: m,
+		Migrations: m, // For X Layer, split db and ac
 	}
 }
 

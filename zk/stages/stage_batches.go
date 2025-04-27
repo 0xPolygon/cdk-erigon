@@ -298,6 +298,7 @@ func SpawnStageBatches(
 		// if both download routine stopped and channel empty - stop loop
 		select {
 		case <-errorChan:
+			// For X Layer, fix ds receive slow issue
 			log.Warn("Error in datastream client, stopping after all entries in entryChan are processed")
 			receivedError = true
 		case entry := <-*entryChan:
@@ -318,6 +319,7 @@ func SpawnStageBatches(
 			log.Warn(fmt.Sprintf("[%s] Context done", logPrefix))
 			endLoop = true
 		default:
+			// For X Layer, fix ds receive slow issue
 			// Only break if we've received an error and the channel is empty
 			if receivedError && len(*entryChan) == 0 {
 				endLoop = true

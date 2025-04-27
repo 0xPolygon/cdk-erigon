@@ -24,6 +24,7 @@ func handleLimbo(batchContext *BatchContext, batchState *BatchState, verifierBun
 		return err
 	}
 
+	// For X Layer, split db and ac
 	witness, err := legacyVerifier.WitnessGenerator.GetWitnessByBlockRange(batchContext.sdb.tx, batchContext.sdb.txsmt, batchContext.ctx, blockNumber, blockNumber, false, batchContext.cfg.zk.WitnessFull, cache)
 	if err != nil {
 		return err

@@ -288,10 +288,14 @@ var (
 		Usage: "Enable concurrent block info calculation",
 		Value: false,
 	}
-
 	EnableAsyncCommit = cli.BoolFlag{
 		Name:  "zkevm.enable-async-commit",
 		Usage: "Enable async smt commit feature",
+		Value: false,
+	}
+	StandaloneSMTDatabase = cli.BoolFlag{
+		Name:  "zkevm.standalone-smt-db",
+		Usage: "Use standalone SMT database, not integrated with chaindb",
 		Value: false,
 	}
 	SequencerSkipEmptyBlocks = cli.BoolFlag{

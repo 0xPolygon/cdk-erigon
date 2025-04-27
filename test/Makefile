@@ -417,7 +417,7 @@ data-loss-6:
 	docker wait $(DOCKER_SEQ) > /dev/null
 	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
 
-	git checkout -- ../turbo/stages/stageloop.go
+	git checkout -- ../turbo/stages/stageloop_xlayer.go
 	make build-docker
 	$(RUN_DOCKER_SEQ)
 	sleep 60
@@ -447,7 +447,7 @@ data-loss-7:
 	docker wait $(DOCKER_SEQ) > /dev/null
 	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
 
-	git checkout -- ../zk/stages/stage_sequence_execute.go
+	git checkout -- ../zk/stages/stage_sequence_execute_xlayer.go
 	make build-docker
 	$(RUN_DOCKER_SEQ)
 	sleep 60

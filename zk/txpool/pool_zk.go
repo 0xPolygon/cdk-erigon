@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
@@ -44,6 +43,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 	minFeeCap := uint256.NewInt(0).SetAllOne()
 	minTip := uint64(math.MaxUint64)
 	var toDel []*metaTx // can't delete items while iterate them
+	// For X Layer, optimize tx pool
 	pending.mtx.Lock()
 
 	senderAddr := common.Address{}
@@ -61,6 +61,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 			// del from sub-pool
 			switch mt.currentSubPool {
 			case PendingSubPool:
+				// For X Layer, optimize tx pool
 				pending.RemoveNoLock(mt)
 			case BaseFeeSubPool:
 				baseFee.Remove(mt)
@@ -123,6 +124,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 		// parameter of minimal base fee. Set to 0 if feeCap is less than minimum base fee, which means
 		// this transaction will never be included into this particular chain.
 		mt.subPool &^= EnoughFeeCapProtocol
+		// For X Layer, optimize tx pool
 		if mt.minFeeCap.CmpUint64(protocolBaseFee) >= 0 {
 			mt.subPool |= EnoughFeeCapProtocol
 		} else {
@@ -171,6 +173,7 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 		// Some fields of mt might have changed, need to fix the invariants in the subpool best and worst queues
 		switch mt.currentSubPool {
 		case PendingSubPool:
+			// For X Layer, optimize tx pool
 			pending.UpdatedNoLock(mt)
 		case BaseFeeSubPool:
 			baseFee.Updated(mt)
@@ -179,19 +182,17 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 		}
 		return true
 	})
+	// For X Layer, optimize tx pool
 	pending.mtx.Unlock()
 	for _, mt := range toDel {
 		discard(mt, NonceTooLow)
 	}
 }
 
-var (
-	removeWG sync.WaitGroup
-)
-
 // zk: the implementation of best here is changed only to not take into account block gas limits as we don't care about
 // these in zk.  Instead we do a quick check on the transaction maximum gas in zk
 func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, error) {
+	// For X Layer, optimize tx pool
 	removeWG.Wait()
 	ok, count, toRemove, err := p.bestRead(n, txs, tx, onTopOf, availableGas, availableBlobGas, toSkip)
 	if err != nil {
@@ -219,6 +220,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 	return true, count, nil
 }
 
+// For X Layer, optimize tx pool
 func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, []*metaTx, error) {
 	if p.isDeniedYieldingTransactions() {
 		//log.Trace("Denied yielding transactions, cannot proceed")
@@ -234,6 +236,7 @@ func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availa
 	isShanghai := p.isShanghai()
 	isLondon := p.isLondon()
 
+	// For X Layer, optimize tx pool
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
@@ -276,6 +279,7 @@ func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availa
 		rlpTx, sender, isLocal, err := p.getRlpLocked(tx, mt.Tx.IDHash[:])
 		if err != nil {
 			//log.Trace("Error getting RLP of transaction", "txID", mt.Tx.IDHash, "error", err)
+			// For X Layer, optimize tx pool
 			return false, count, toRemove, err
 		}
 		if len(rlpTx) == 0 {
@@ -315,6 +319,7 @@ func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availa
 		count++
 	}
 
+	// For X Layer, optimize tx pool
 	return true, count, toRemove, nil
 }
 
@@ -346,6 +351,7 @@ func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGas
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	// For X Layer, optimize tx pool
 	sendersWithChangedState := make(map[uint64]struct{})
 	for _, id := range ids {
 		if mt, ok := p.byHash[string(id[:])]; ok {
@@ -366,6 +372,7 @@ func (p *TxPool) RemoveMinedTransactions(ctx context.Context, tx kv.Tx, blockGas
 
 	baseFee := p.pendingBaseFee.Load()
 
+	// For X Layer, optimize tx pool
 	cacheView, err := p._stateCache.View(ctx, tx)
 	if err != nil {
 		return err

@@ -364,6 +364,7 @@ func (r *ResequenceBatchJob) CurrentBlock() *dsTypes.FullL2Block {
 	return nil
 }
 
+// For X Layer, for local replay
 func (r *ResequenceBatchJob) PreviousBlock() *dsTypes.FullL2Block {
 	if r.StartBlockIndex > 0 {
 		return r.batchToProcess[r.StartBlockIndex-1]

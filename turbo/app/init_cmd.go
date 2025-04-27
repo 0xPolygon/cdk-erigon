@@ -61,6 +61,7 @@ func initGenesis(cliCtx *cli.Context) error {
 	stack := MakeConfigNodeDefault(cliCtx, logger)
 	defer stack.Close()
 
+	// For X Layer, split db and ac
 	chaindb, err := node.OpenDatabase(cliCtx.Context, stack.Config(), kv.ChainDB, "", false, false, logger)
 	if err != nil {
 		utils.Fatalf("Failed to open database: %v", err)

@@ -1,8 +1,10 @@
 package txpool
 
 import (
+	"container/heap"
 	"math/big"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -18,6 +20,10 @@ const (
 	claim
 	freeByNonce
 	specificProject
+)
+
+var (
+	removeWG sync.WaitGroup
 )
 
 const (
@@ -206,4 +212,18 @@ func ArquireTxPoolLock(acquire bool) {
 
 func IsAcquireTxPoolLock() bool {
 	return requireTxPoolLock.Load()
+}
+
+// For X Layer, optimize tx pool
+func (p *PendingPool) RemoveNoLock(i *metaTx) {
+	if i.worstIndex >= 0 {
+		heap.Remove(p.worst, i.worstIndex)
+	}
+	if i.bestIndex >= 0 {
+		p.best.UnsafeRemove(i)
+	}
+	if i.bestIndex != p.best.Len()-1 {
+		p.sorted.Swap(false)
+	}
+	i.currentSubPool = 0
 }

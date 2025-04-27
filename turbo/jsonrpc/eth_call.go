@@ -127,6 +127,7 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	}
 	defer dbtx.Rollback()
 
+	// For X Layer, split db and ac
 	var dbtxsmt kv.Tx = nil
 	if api.dbsmt != nil {
 		dbtxsmt, err = api.dbsmt.BeginRo(ctx)
@@ -260,6 +261,7 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	header := block.HeaderNoCopy()
 
 	useCounters := !api.DisableVirtualCounters
+	// For X Layer, split db and ac
 	caller, err := transactions.NewReusableCaller(engine, stateReader, nil, header, args, api.GasCap, latestNumOrHash, dbtx, dbtxsmt, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters)
 	if err != nil {
 		return 0, err

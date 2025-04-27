@@ -57,6 +57,7 @@ func NewHashBatch(tx kv.Tx, quit <-chan struct{}, tmpdir string, logger log.Logg
 func (m *Mapmutation) getMem(table string, key []byte) ([]byte, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	// For X Layer, split db
 	if ptm, ok := m.puts[table]; ok {
 		if value, ok := ptm[*(*string)(unsafe.Pointer(&key))]; ok {
 			return value, ok
@@ -323,6 +324,7 @@ func (m *Mapmutation) panicOnEmptyDB() {
 	}
 }
 
+// For X Layer, ac
 func (m *Mapmutation) SetCache(cache map[string]map[string][]byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

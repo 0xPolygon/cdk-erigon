@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -17,8 +16,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/length"
 	poseidon "github.com/okx/poseidongold/go"
-
-	"golang.org/x/exp/constraints"
 )
 
 const (
@@ -173,19 +170,6 @@ func (nv *NodeValue12) Get0to8() [8]uint64 {
 	return [8]uint64{nv[0].Uint64(), nv[1].Uint64(), nv[2].Uint64(), nv[3].Uint64(), nv[4].Uint64(), nv[5].Uint64(), nv[6].Uint64(), nv[7].Uint64()}
 }
 
-func (nv *NodeValue12) IsNil() bool {
-	if nv != nil {
-		isNil := true
-		for i := 0; i < 12; i++ {
-			isNil = isNil && nv[i] == nil
-		}
-
-		return isNil
-	} else {
-		return true
-	}
-}
-
 func (nv *NodeValue12) IsUniqueSibling() (int, error) {
 	count := 0
 	fnd := 0
@@ -303,6 +287,7 @@ func ConvertBigIntToHex(n *big.Int) string {
 	return unsafe.String(&buf[0], len(buf))
 }
 
+// For X Layer, optimize the conversion
 func ConvertHexToBigInt(hexStr string) *big.Int {
 	hexStr = strings.TrimPrefix(hexStr, "0x")
 	isOdd := len(hexStr)%2 != 0
@@ -346,6 +331,7 @@ func ConvertHexToAddress(hex string) common.Address {
 }
 
 func ArrayToScalar(array []uint64) *big.Int {
+	// For X Layer, optimize the conversion
 	if strconv.IntSize == 64 {
 		abs := make([]big.Word, len(array))
 		for i, v := range array {
@@ -360,46 +346,6 @@ func ArrayToScalar(array []uint64) *big.Int {
 		}
 		return new(big.Int).SetBits(abs)
 	}
-}
-
-const hextable = "0123456789abcdef"
-
-func ArrayToHex[T constraints.Unsigned](array []T) string {
-	if len(array) == 0 {
-		return "0x0"
-	}
-	byteLen := len(array) * int(unsafe.Sizeof(array[0]))
-	byteArray := unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(array))), byteLen)
-
-	nonZeroPos := len(byteArray)
-	for i := len(byteArray) - 1; i >= 0; i-- {
-		if byteArray[i] == 0 {
-			nonZeroPos -= 1
-		} else {
-			break
-		}
-	}
-	byteArray = byteArray[:nonZeroPos]
-	if len(byteArray) == 0 {
-		return "0x0"
-	}
-
-	buf := make([]byte, len(byteArray)*2+2)
-
-	j := len(buf) - 2
-	for _, v := range byteArray {
-		buf[j] = hextable[v>>4]
-		buf[j+1] = hextable[v&0x0f]
-		j -= 2
-	}
-
-	if buf[2] == '0' {
-		buf = buf[1:]
-	}
-	buf[0] = '0'
-	buf[1] = 'x'
-
-	return unsafe.String(&buf[0], len(buf))
 }
 
 func ScalarToArray(scalar *big.Int) []uint64 {
@@ -421,43 +367,8 @@ func ScalarToArray(scalar *big.Int) []uint64 {
 	return []uint64{r0.Uint64(), r1.Uint64(), r2.Uint64(), r3.Uint64()}
 }
 
-// fast path for 64-bit systems
-func arrayToScalarBigFast(array []*big.Int) (*big.Int, bool) {
-	if len(array) == 0 || bits.UintSize != 64 {
-		return nil, false
-	}
-
-	scalarBitsSize := len(array)
-	intBits := make([]big.Word, scalarBitsSize)
-
-	for i := 0; i < len(array); i++ {
-		if array[i] == nil || len(array[i].Bits()) == 0 {
-			intBits[i] = 0
-		} else {
-			intBits[i] = array[i].Bits()[0]
-			if array[i].Sign() < 0 {
-				return nil, false
-			}
-			for _, v := range array[i].Bits()[1:] {
-				if v != 0 {
-					return nil, false
-				}
-			}
-		}
-	}
-	return new(big.Int).SetBits(intBits), true
-}
-
-func arrayToScalarBigSlow(array []*big.Int) *big.Int {
-	scalar := new(big.Int)
-	for i := len(array) - 1; i >= 0; i-- {
-		scalar.Lsh(scalar, 64)
-		scalar.Add(scalar, array[i])
-	}
-	return scalar
-}
-
 func ArrayToScalarBig(array []*big.Int) *big.Int {
+	// For X Layer, optimize the conversion
 	// fast path for 64-bit systems
 	v, ok := arrayToScalarBigFast(array)
 	if ok {
@@ -495,21 +406,8 @@ func ScalarToNodeKey(s *big.Int) NodeKey {
 	}
 }
 
-func scalarToRootSlow(s *big.Int) NodeKey {
-	var result [4]uint64
-	divisor := new(big.Int).Exp(big.NewInt(2), big.NewInt(64), nil)
-
-	sCopy := new(big.Int).Set(s)
-
-	for i := 0; i < 4; i++ {
-		mod := new(big.Int).Mod(sCopy, divisor)
-		result[i] = mod.Uint64()
-		sCopy.Div(sCopy, divisor)
-	}
-	return result
-}
-
 func ScalarToRoot(s *big.Int) NodeKey {
+	// For X Layer, optimize the conversion
 	if s.Sign() < 0 {
 		return scalarToRootSlow(s)
 	}
@@ -535,53 +433,19 @@ func ScalarToRoot(s *big.Int) NodeKey {
 		sCopy := new(big.Int).Set(s)
 
 		for i := 0; i < 4; i++ {
-			// sCopy mod divisor == sCopy & (divisor - 1) == sCopy & 0xFFFFFFFFFFFFFFFF
+			// For X Layer, optimize the conversion
 			//mod := new(big.Int).Mod(sCopy, divisor)
 			result[i] = sCopy.Uint64()
 			// sCopy.Div(sCopy, divisor)
 			sCopy.Rsh(sCopy, 64)
 		}
 	}
-
 	return result
-}
-
-// fast path for 64-bit systems
-func scalarToNodeValueFast(scalarIn *big.Int, out *[12]*big.Int) bool {
-	if bits.UintSize != 64 || scalarIn.Sign() < 0 {
-		return false
-	}
-
-	outData := [12]big.Int{}
-	words := scalarIn.Bits()
-	outDataBits := make([][1]big.Word, len(words))
-	for i := 0; i < 12; i++ {
-		if i < len(words) {
-			outDataBits[i][0] = words[i]
-			out[i] = (&outData[i]).SetBits(outDataBits[i][:])
-		} else {
-			out[i] = &outData[i]
-		}
-	}
-	return true
-}
-
-func scalarToNodeValueSlow(scalarIn *big.Int) NodeValue12 {
-	out := [12]*big.Int{}
-	mask := new(big.Int).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
-	scalar := new(big.Int).Set(scalarIn)
-
-	for i := 0; i < 12; i++ {
-		value := new(big.Int).And(scalar, mask)
-		out[i] = value
-		scalar.Rsh(scalar, 64)
-	}
-	return out
 }
 
 func ScalarToNodeValue(scalarIn *big.Int) NodeValue12 {
 	out := [12]*big.Int{}
-
+	// For X Layer, optimize the conversion
 	if ok := scalarToNodeValueFast(scalarIn, &out); ok {
 		return out
 	}
@@ -1024,29 +888,4 @@ func DecodeKeySource(keySource []byte) (int, common.Address, common.Hash, error)
 		storagePosition = common.BytesToHash(keySource[length.Addr+1 : length.Addr+length.Hash+1])
 	}
 	return t, accountAddr, storagePosition, nil
-}
-
-func ConvertUint64ToBytes(n uint64) []byte {
-	bytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(bytes, n)
-	// or use binary.LittleEndian.PutUint64(bytes, n)
-	return bytes
-}
-
-func ConvertBytesToUint64(bytes []byte) (uint64, error) {
-	if bytes == nil || len(bytes) == 0 {
-		return 0, nil
-	}
-
-	n := binary.BigEndian.Uint64(bytes)
-	// or use binary.LittleEndian.Uint64(bytes)
-	return n, nil
-}
-
-func UnsafeBytesToString(b []byte) string {
-	return unsafe.String(unsafe.SliceData(b), len(b))
-}
-
-func UnsafeStringToBytes(s string) []byte {
-	return unsafe.Slice(unsafe.StringData(s), len(s))
 }

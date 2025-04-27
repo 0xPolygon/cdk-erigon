@@ -30,6 +30,7 @@ func UnwindSequencerInterhashsStage(
 	ctx context.Context,
 	cfg ZkInterHashesCfg,
 ) error {
+	// For X Layer, split db and ac
 	return UnwindZkIntermediateHashesStage(u, s, tx, txsmt, cfg, ctx, false)
 }
 

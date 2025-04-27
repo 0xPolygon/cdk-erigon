@@ -43,6 +43,7 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		blockinfo.InitUseBlockInfoTreeTrue()
 	}
 
+	// For X Layer, pre run
 	utils.SetPreRunList(ctx, cfg)
 
 	if ctx.IsSet(utils.ApolloNamespaceName.Name) {

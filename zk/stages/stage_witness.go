@@ -40,7 +40,6 @@ type WitnessCfg struct {
 func StageWitnessCfg(db, dbsmt kv.RwDB, zkCfg *ethconfig.Zk, chainConfig *chain.Config, engine consensus.Engine, blockReader services.FullBlockReader, agg *eristate.Aggregator, historyV3 bool, dirs datadir.Dirs, forcedContracts []common.Address, unwindLimit uint64) WitnessCfg {
 	cfg := WitnessCfg{
 		db:              db,
-		dbsmt:           dbsmt,
 		zkCfg:           zkCfg,
 		chainConfig:     chainConfig,
 		engine:          engine,
@@ -50,6 +49,9 @@ func StageWitnessCfg(db, dbsmt kv.RwDB, zkCfg *ethconfig.Zk, chainConfig *chain.
 		dirs:            dirs,
 		forcedContracts: forcedContracts,
 		unwindLimit:     unwindLimit,
+
+		// For X Layer, split db and ac
+		dbsmt: dbsmt,
 	}
 
 	return cfg
@@ -91,6 +93,8 @@ func SpawnStageWitness(
 		}
 		defer tx.Rollback()
 	}
+
+	// For X Layer, split db and ac
 	freshSmtTx := false
 	if txsmt == nil {
 		freshSmtTx = true
@@ -179,6 +183,7 @@ func SpawnStageWitness(
 			}
 		}
 
+		// For X Layer, split db and ac
 		cache := s.GetSmtHistorySnapshotCache(endBlock)
 		w, err := g.GetWitnessByBlockRange(tx, txsmt, ctx, startBlock, endBlock, false, false, cache)
 		if err != nil {
@@ -208,6 +213,8 @@ func SpawnStageWitness(
 			return fmt.Errorf("tx.Commit: %w", err)
 		}
 	}
+
+	// For X Layer, split db and ac
 	if freshSmtTx && txsmt != nil {
 		if err = txsmt.Commit(); err != nil {
 			return fmt.Errorf("tx.Commit: %w", err)

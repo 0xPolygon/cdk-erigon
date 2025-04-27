@@ -62,18 +62,20 @@ import (
 )
 
 var (
-	action          = flag.String("action", "", "action to execute")
-	cpuprofile      = flag.String("cpuprofile", "", "write cpu profile `file`")
-	block           = flag.Int("block", 1, "specifies a block number for operation")
-	blockTotal      = flag.Int("blocktotal", 1, "specifies a total amount of blocks to process (will offset from head block if <= 0)")
-	account         = flag.String("account", "0x", "specifies account to investigate")
-	name            = flag.String("name", "", "name to add to the file names")
-	chaindata       = flag.String("chaindata", "chaindata", "path to the chaindata database file")
-	standaloneSmtDb = flag.Bool("standalone-smt-db", false, "specifies if the SMT DB is separate from the ChainDB")
+	action     = flag.String("action", "", "action to execute")
+	cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
+	block      = flag.Int("block", 1, "specifies a block number for operation")
+	blockTotal = flag.Int("blocktotal", 1, "specifies a total amount of blocks to process (will offset from head block if <= 0)")
+	account    = flag.String("account", "0x", "specifies account to investigate")
+	name       = flag.String("name", "", "name to add to the file names")
+	chaindata  = flag.String("chaindata", "chaindata", "path to the chaindata database file")
+	bucket     = flag.String("bucket", "", "bucket in the database")
+	hash       = flag.String("hash", "0x00", "image for preimage or state root for testBlockHashes action")
+	output     = flag.String("output", "", "output path")
+
+	// For X Layer, split db
 	pathSmtDb       = flag.String("smt-db-path", "smt", "path to the standalone SMT database file")
-	bucket          = flag.String("bucket", "", "bucket in the database")
-	hash            = flag.String("hash", "0x00", "image for preimage or state root for testBlockHashes action")
-	output          = flag.String("output", "", "output path")
+	standaloneSmtDb = flag.Bool("standalone-smt-db", false, "specifies if the SMT DB is separate from the ChainDB")
 )
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
@@ -346,6 +348,7 @@ func dumpAll(chaindata, output string) error {
 		}
 	}
 
+	// For X Layer, split db
 	fdumper := func(tx kv.Tx) error {
 		buckets, err := tx.ListBuckets()
 		if err != nil {
@@ -375,6 +378,8 @@ func dumpAll(chaindata, output string) error {
 		}
 		return nil
 	}
+
+	// For X Layer, split db
 	if *standaloneSmtDb {
 		err := db.View(context.Background(), fdumper)
 		if err != nil {
@@ -1435,6 +1440,7 @@ func main() {
 	debug.RaiseFdLimit()
 	flag.Parse()
 
+	// For X Layer, split db
 	kv.InitStandaloneSMT(*standaloneSmtDb)
 
 	logging.SetupLogger("hack")

@@ -230,6 +230,7 @@ jobs:
         run: sudo -E make test-e2e
         working-directory: test
 
+  # For X Layer, split db and ac
   test-data-loss:
     strategy:
       matrix:
@@ -244,6 +245,7 @@ jobs:
         run: sudo -E make data-loss-${{ matrix.case }}
         working-directory: test
 
+  # For X Layer, split db and ac
   test-executor:
     strategy:
       fail-fast: false
@@ -262,7 +264,8 @@ jobs:
       - name: Test
         run: make test-executor
         working-directory: test
-
+        
+  # For X Layer
   check-chinese-chars:
     name: Check Chinese Characters
     if: github.event_name == 'pull_request'

@@ -151,6 +151,7 @@ func (c *ecrecover_zkevm) Run(input []byte) ([]byte, error) {
 	sig := make([]byte, 65)
 	copy(sig, input[64:128])
 	sig[64] = v
+	// For X Layer, pre run
 	if PrecompiledCache != nil {
 		value, ok := PrecompiledCache.Get(string(input))
 		if ok {
@@ -165,6 +166,7 @@ func (c *ecrecover_zkevm) Run(input []byte) ([]byte, error) {
 		return nil, nil
 	}
 
+	// For X Layer, pre run
 	result := common.LeftPadBytes(crypto.Keccak256(pubKey[1:])[12:], 32)
 	if PrecompiledCache != nil {
 		PrecompiledCache.Add(string(input), result)
@@ -1261,6 +1263,7 @@ func (c *p256Verify_zkevm) Run(input []byte) ([]byte, error) {
 		c.cc.preP256Verify(r, s, x, y)
 	}
 
+	// For X Layer, pre run
 	if PrecompiledCache != nil {
 		value, ok := PrecompiledCache.Get(string(input))
 		if ok {
@@ -1271,6 +1274,7 @@ func (c *p256Verify_zkevm) Run(input []byte) ([]byte, error) {
 	// Verify the secp256r1 signature
 	if secp256r1.Verify(hash, r, s, x, y) {
 		// Signature is valid
+		// For X Layer, pre run
 		result := common.LeftPadBytes(big1.Bytes(), 32)
 		if PrecompiledCache != nil {
 			PrecompiledCache.Add(string(input), result)

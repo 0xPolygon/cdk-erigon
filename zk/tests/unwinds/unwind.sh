@@ -13,6 +13,7 @@ unwindBatch=70
 datastreamPort=6900
 logFile="script.log"
 
+# For X Layer, split db and ac
 SPLIT_DB=${1:-false}
 
 # Redirect stdout to log file and keep stderr to console
@@ -73,6 +74,7 @@ dump_data() {
     local stop=$1
     local label=$2
     echo "[$(date)] Dumping data - $label ($stop)"
+    # For X Layer, split db and ac
     if [ "$SPLIT_DB" = "split-db" ]; then
         go run ./cmd/hack --action=dumpAll --standalone-smt-db=true --smt-db-path="$dataPath/rpc-datadir/smt" --chaindata="$dataPath/rpc-datadir/chaindata" --output="$dataPath/$stop" || { echo "Failed to dump data for $label"; exit 1; }
     else
@@ -80,9 +82,11 @@ dump_data() {
     fi
 }
 
+# For X Layer, split db and ac
 CONFIG_FILE="temp-dynamic-integration8.yaml"
 cp zk/tests/unwinds/config/dynamic-integration8.yaml $CONFIG_FILE
 
+# For X Layer, split db and ac
 if [ "$SPLIT_DB" = "split-db" ]; then
     echo "Will use split-db"
     printf "\n" >> "$CONFIG_FILE"
@@ -174,6 +178,7 @@ compare_dumps() {
             exit 1
         fi
 
+        # For X Layer, split db and ac
         # ignore key "lastHeight" in HermezSmtStats.txt (hex 6c617374486569676874)
         if [[ "$filename" == "HermezSmtStats.txt" ]]; then
             found=`grep "6c617374486569676874" $file || true`

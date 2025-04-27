@@ -36,7 +36,7 @@ const (
 var (
 	// ErrFileEntryNotFound denotes error that is returned when the certain file entry is not found in the datastream
 	ErrFileEntryNotFound       = errors.New("file entry not found")
-	ErrReachedEntryNumberLimit = errors.New("reached entry number limit")
+	ErrReachedEntryNumberLimit = errors.New("reached entry number limit") // For X Layer, fix ds receive issue
 	minimumCheckTimeout        = 500 * time.Millisecond
 )
 
@@ -543,6 +543,7 @@ LOOP:
 
 		if readNewProto {
 			if parsedProto, entryNum, err = ReadParsedProto(c); err != nil {
+				// For X Layer, fix ds receive issue
 				if err == ErrReachedEntryNumberLimit {
 					return c.trySendStopSignal()
 				}
@@ -576,6 +577,7 @@ LOOP:
 		if c.header.TotalEntries == entryNum+1 {
 			log.Trace("[Datastream client] reached the current end of the stream", "header_totalEntries", c.header.TotalEntries, "entryNum", entryNum)
 
+			// For X Layer, fix ds receive issue
 			if err := c.trySendStopSignal(); err != nil {
 				return err
 			}
@@ -586,6 +588,7 @@ LOOP:
 	return nil
 }
 
+// For X Layer, fix ds receive issue
 func (c *StreamClient) trySendStopSignal() error {
 	retries := 0
 	for {
@@ -736,6 +739,7 @@ func ReadParsedProto(iterator FileEntryIterator) (
 				return
 			}
 			if entryNum == iterator.GetEntryNumberLimit() {
+				// For X Layer, fix ds receive issue
 				err = ErrReachedEntryNumberLimit
 				return
 			}

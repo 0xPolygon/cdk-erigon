@@ -5,7 +5,9 @@ import (
 )
 
 type TxContainer struct {
-	Tx    kv.RwTx
+	Tx  kv.RwTx
+	Ttx kv.TemporalTx
+
+	// For X Layer, split db
 	TxSmt kv.RwTx
-	Ttx   kv.TemporalTx
 }

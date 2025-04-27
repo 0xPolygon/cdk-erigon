@@ -66,7 +66,6 @@ func StageZkInterHashesCfg(
 ) ZkInterHashesCfg {
 	return ZkInterHashesCfg{
 		db:                db,
-		dbsmt:             dbsmt,
 		checkRoot:         checkRoot,
 		tmpDir:            tmpDir,
 		saveNewHashesToDB: saveNewHashesToDB,
@@ -77,6 +76,7 @@ func StageZkInterHashesCfg(
 		historyV3: historyV3,
 		agg:       agg,
 		zk:        zk,
+		dbsmt:     dbsmt, // For X Layer, split db and ac
 	}
 }
 
@@ -95,6 +95,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 		}
 		defer tx.Rollback()
 	}
+	// For X Layer, split db and ac
 	useExternalSmtTx := txsmt != nil
 	if !useExternalSmtTx {
 		if cfg.dbsmt != nil {
@@ -141,6 +142,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 	shouldIncrementBecauseOfExecutionConditions := s.BlockNumber > 0 && !shouldRegenerate
 	shouldIncrement := shouldIncrementBecauseOfAFlag || shouldIncrementBecauseOfExecutionConditions
 
+	// For X Layer, split db and ac
 	eridb := db2.NewEriDb(txsmt, tx)
 	if txsmt == nil {
 		eridb = db2.NewEriDb(tx, tx)
@@ -154,6 +156,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 
 		eridb.OpenBatch(quit)
 
+		// For X Layer, split db and ac
 		if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, smt, s.BlockNumber, to); err != nil {
 			return trie.EmptyRoot, err
 		}
@@ -201,6 +204,7 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 			return trie.EmptyRoot, err
 		}
 	}
+	// For X Layer, split db and ac
 	if !useExternalSmtTx && txsmt != nil {
 		if err := txsmt.Commit(); err != nil {
 			return trie.EmptyRoot, err
@@ -219,6 +223,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 		}
 		defer tx.Rollback()
 	}
+	// For X Layer, split db and ac
 	useExternalSmtTx := txsmt != nil
 	if !useExternalSmtTx {
 		if cfg.dbsmt != nil {
@@ -246,6 +251,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 		expectedRootHash = syncHeadHeader.Root
 	}
 
+	// For X Layer, split db and ac
 	if _, err = zkSmt.UnwindZkSMT(ctx, s.LogPrefix(), s.BlockNumber, u.UnwindPoint, tx, txsmt, cfg.checkRoot, &expectedRootHash, silent, s.GetSmtHistorySnapshotCache(s.BlockNumber)); err != nil {
 		return err
 	}
@@ -262,6 +268,7 @@ func UnwindZkIntermediateHashesStage(u *stagedsync.UnwindState, s *stagedsync.St
 			return err
 		}
 	}
+	// For X Layer, split db and ac
 	if !useExternalSmtTx && txsmt != nil {
 		if err := txsmt.Commit(); err != nil {
 			return err
@@ -468,6 +475,7 @@ func zkIncrementIntermediateHashes(ctx context.Context, logPrefix string, s *sta
 		return trie.EmptyRoot, err
 	}
 
+	// For X Layer, split db and ac
 	if err := dbSmt.SetLastHeight(to); err != nil {
 		return trie.EmptyRoot, err
 	}

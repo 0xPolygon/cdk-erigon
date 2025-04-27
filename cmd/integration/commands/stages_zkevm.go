@@ -32,6 +32,7 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
+// For X Layer, split db
 func newSyncZk(ctx context.Context, db, dbsmt kv.RwDB) (consensus.Engine, *vm.Config, *stagedsync.Sync) {
 	historyV3, pm := kvcfg.HistoryV3.FromDB(db), fromdb.PruneMode(db)
 

@@ -134,6 +134,7 @@ func (ms *MockSentry) Close() {
 	if ms.DB != nil {
 		ms.DB.Close()
 	}
+	// For X Layer, split db and ac
 	if ms.DBSMT != nil {
 		ms.DBSMT.Close()
 	}
@@ -266,6 +267,7 @@ func MockWithEverything(tb testing.TB, gspec *types.Genesis, key *ecdsa.PrivateK
 	} else {
 		db = memdb.New(tmpdir)
 	}
+	// For X Layer, split db and ac
 	var dbsmt kv.RwDB
 	if tb != nil {
 		dbsmt = memdb.NewTestDB(tb)

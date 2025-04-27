@@ -223,6 +223,7 @@ func NewReusableCaller(
 	blockCtx := NewEVMBlockContext(engine, header, blockNrOrHash.RequireCanonical, tx, headerReader)
 	txCtx := core.NewEVMTxContext(msg)
 
+	// For X Layer, split db and ac
 	eriDb := db2.NewRoEriDb(txsmt, tx)
 	if txsmt == nil {
 		eriDb = db2.NewRoEriDb(tx, tx)

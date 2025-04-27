@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/kv"
 	"runtime"
 	"sync"
+
+	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 
 	"io"
 
@@ -36,6 +37,7 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 	cfg.txPool.PreYield()
 	defer cfg.txPool.PostYield()
 
+	// For X Layer, optimize getTransactions
 	slots := types2.TxsRlp{}
 	if err := cfg.txPoolDb.View(ctx, func(poolTx kv.Tx) error {
 		if allConditionsOk, _, err = cfg.txPool.YieldBest(cfg.yieldSize, &slots, poolTx, executionAt, gasLimit, 0, alreadyYielded); err != nil {
@@ -46,6 +48,7 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 		return nil, nil, allConditionsOk, err
 	}
 
+	// For X Layer, optimize getTransactions
 	yieldedTxs, yieldedIds, toRemove, err := extractTransactionsFromSlot(&slots, executionAt, cfg)
 	if err != nil {
 		return nil, nil, allConditionsOk, err
@@ -85,23 +88,8 @@ func getLimboTransaction(ctx context.Context, cfg SequenceBlockCfg, txHash *comm
 	return transactions, nil
 }
 
-// task represents a transaction processing task
-type task struct {
-	idx     int
-	txBytes []byte
-	id      common.Hash
-	sender  common.Address
-}
-
-// result represents the outcome of a transaction processing task
-type result struct {
-	idx      int
-	tx       types.Transaction
-	id       common.Hash
-	toRemove bool
-}
-
 func extractTransactionsFromSlot(slot *types2.TxsRlp, currentHeight uint64, cfg SequenceBlockCfg) ([]types.Transaction, []common.Hash, []common.Hash, error) {
+	// For X Layer, optimize extractTransactionsFromSlot
 	if len(slot.Txs) != len(slot.TxIds) {
 		return nil, nil, nil, fmt.Errorf("mismatched lengths: Txs=%d, TxIds=%d", len(slot.Txs), len(slot.TxIds))
 	}
@@ -122,6 +110,7 @@ func extractTransactionsFromSlot(slot *types2.TxsRlp, currentHeight uint64, cfg 
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
 
+	// For X Layer, optimize extractTransactionsFromSlot
 	// Start workers
 	for i := 0; i < numWorkers; i++ {
 		go func() {
@@ -177,6 +166,7 @@ func extractTransactionsFromSlot(slot *types2.TxsRlp, currentHeight uint64, cfg 
 		}
 	}
 
+	// For X Layer, optimize extractTransactionsFromSlot
 	// Build ordered results
 	transactions := make([]types.Transaction, 0, validCount)
 	ids := make([]common.Hash, 0, validCount)
@@ -188,16 +178,6 @@ func extractTransactionsFromSlot(slot *types2.TxsRlp, currentHeight uint64, cfg 
 	}
 
 	return transactions, ids, toRemove, nil
-}
-
-// contains checks if an id is in the slice
-func contains(slice []common.Hash, id common.Hash) bool {
-	for _, item := range slice {
-		if item == id {
-			return true
-		}
-	}
-	return false
 }
 
 type overflowType uint8

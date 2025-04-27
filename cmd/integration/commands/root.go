@@ -63,7 +63,6 @@ func dbCfg(label kv.Label, path string) kv2.MdbxOpts {
 	opts := kv2.NewMDBX(log.New()).Path(path).Label(label).RoTxsLimiter(limiterB)
 	// integration tool don't intent to create db, then easiest way to open db - it's pass mdbx.Accede flag, which allow
 	// to read all options from DB, instead of overriding them
-
 	opts = opts.Accede()
 
 	if databaseVerbosity != -1 {
@@ -75,6 +74,7 @@ func dbCfg(label kv.Label, path string) kv2.MdbxOpts {
 func openDB(opts kv2.MdbxOpts, applyMigrations bool, logger log.Logger) (kv.RwDB, error) {
 	db := opts.MustOpen()
 	if applyMigrations {
+		// For X Layer, split db
 		migrator := migrations.NewMigrator(opts.GetLabel(), standaloneSmtDb)
 		has, err := migrator.HasPendingMigrations(db)
 		if err != nil {
