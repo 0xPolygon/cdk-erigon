@@ -110,18 +110,3 @@ func GetSequencerHalt(localHaltBatchNumber uint64) uint64 {
 	}
 	return localHaltBatchNumber
 }
-
-func GetEnableAsyncCommit(localEnableAsyncCommit bool) bool {
-	if IsApolloConfigSequencerEnabled() {
-		UnsafeGetApolloConfig().RLock()
-		defer UnsafeGetApolloConfig().RUnlock()
-		return UnsafeGetApolloConfig().EthCfg.Zk.XLayer.EnableAsyncCommit
-	}
-	return localEnableAsyncCommit
-}
-
-var enableAsyncCommitChannel = make(chan chan struct{})
-
-func EnableAsyncCommitChannel() chan chan struct{} {
-	return enableAsyncCommitChannel
-}

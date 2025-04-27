@@ -25,7 +25,6 @@ func (apii *APIImpl) runL2GasPricerForXLayer() {
 
 func (apii *APIImpl) listenApollo(ctx context.Context) {
 	stream := apollo.GetEthConfigStream()
-	fmt.Println("apii stream", stream)
 	ch, remove := stream.Sub()
 	defer remove()
 
