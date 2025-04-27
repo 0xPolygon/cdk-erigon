@@ -96,10 +96,6 @@ func (cache *SmtCache) GetSmtCache() map[string]map[string][]byte {
 	return cache.LongLivedSmtCache
 }
 
-func (cache *SmtCache) ResetSmtCache() {
-	cache.LongLivedSmtCache = make(map[string]map[string][]byte)
-}
-
 func (cache *SmtCache) CascadeGetCurrentBatchSnapshotCache(blockNumber uint64) map[string]map[string][]byte {
 	cache.CurrentBatchSnapshotLock.RLock()
 	cacheData, ok := cache.CurrentBatchBlockSnapshotList.cascadeGetCacheShapshot(blockNumber)

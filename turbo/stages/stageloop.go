@@ -26,7 +26,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/wrap"
 	"github.com/ledgerwatch/erigon/polygon/bor/finality"
 	"github.com/ledgerwatch/erigon/zk"
-	"github.com/ledgerwatch/erigon/zk/apollo"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 
 	"github.com/ledgerwatch/erigon/consensus"
@@ -59,7 +58,7 @@ func AsyncFlushSmtData(ctx context.Context,
 	logger log.Logger,
 	smtFlushDoneCh chan struct{},
 ) {
-	if !sequencer.IsSequencer() {
+	if !sequencer.IsSequencer() || !config.EnableAsyncCommit {
 		logger.Info("AsyncFlushSmtData skipped",
 			"isSequencer", sequencer.IsSequencer(),
 			"enableAsyncCommit", config.EnableAsyncCommit)
@@ -72,7 +71,6 @@ func AsyncFlushSmtData(ctx context.Context,
 		return
 	}
 
-	enableAcChan := apollo.EnableAsyncCommitChannel()
 	cache := s.GetCache()
 	const maxWorkers = 6
 	workerPool := make(chan struct{}, maxWorkers)
@@ -111,12 +109,6 @@ func AsyncFlushSmtData(ctx context.Context,
 			logger.Info("AsyncFlushSmtData received stop signal", "reason", ctx.Err())
 			handleShutdown(s, config, &wg, workerPool, db, cache, logger)
 			return
-
-		case ch, ok := <-enableAcChan:
-			if ok && ch != nil {
-				wg.Wait()
-				ch <- struct{}{}
-			}
 		}
 	}
 }

@@ -51,10 +51,6 @@ func (s *StageState) GetSmtCache() map[string]map[string][]byte {
 	return s.state.GetSmtCache()
 }
 
-func (s *StageState) ResetSmtCache() {
-	s.state.ResetSmtCache()
-}
-
 func (s *StageState) GetSmtHistorySnapshotCache(blockNumber uint64) map[string]map[string][]byte {
 	return s.state.GetSmtSnapshotCache(blockNumber)
 }
