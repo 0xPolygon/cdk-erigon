@@ -1,0 +1,80 @@
+name: CI Workflows
+tasks:
+  - name: build
+    command: make cdk-erigon
+    type: base
+    events:
+      - pull_request
+      - push
+
+  - name: tests
+    command: make -B test
+    type: base
+    events:
+      - pull_request
+
+  - name: lint
+    command: cd ./docs/endpoints && make check-doc
+    type: base
+    events:
+      - pull_request
+
+  - name: check_chinese_characters
+    command: ./.github/scripts/check_chinese_characters.sh
+    type: base
+    events:
+      - pull_request
+
+  - name: unwind-default
+    command: make test-unwind-default
+    type: base
+    events:
+      - pull_request
+
+  - name: unwind-split-db
+    command: make test-unwind-split-db
+    type: base
+    events:
+      - pull_request
+
+  - name: test-e2e
+    command: cd test && make test-e2e
+    type: compose
+    events:
+      - pull_request
+
+  - name: test-executor
+    command: ./.github/scripts/update_config.sh && cd test && make test-executor
+    type: compose
+    events:
+      - pull_request
+
+  - name: data-loss
+    command: cd ./test && make test-data-loss
+    type: compose
+    events:
+      - pull_request
+
+  - name: kurtosis-cdk
+    command: ./.github/scripts/run_kurtosis_cdk.sh
+    type: kurtosis
+    events:
+      - pull_request
+
+  - name: kurtosis-cdk-post-london
+    command: ./.github/scripts/run_kurtosis_cdk_post_london.sh
+    type: kurtosis
+    events:
+      - pull_request
+
+  - name: resequence-default
+    command: ./.github/scripts/test_resequence.sh default
+    type: kurtosis
+    events:
+      - pull_request
+
+  - name: resequence-ac-split
+    command: ./.github/scripts/test_resequence.sh ac-split
+    type: kurtosis
+    events:
+      - pull_request

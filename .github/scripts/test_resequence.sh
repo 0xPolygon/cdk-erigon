@@ -1,5 +1,5 @@
 #!/bin/bash
-
+set -x
 set -e  # Exit immediately if a command exits with a non-zero status
 
 get_latest_l2_batch() {
