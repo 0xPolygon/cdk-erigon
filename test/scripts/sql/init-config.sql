@@ -100,7 +100,7 @@ VALUES ('XLayerSeq', 'default', 'jsonrpc-config.txt', 0),
        ('XLayerRpc', 'default', 'jsonrpc-rpc-config.txt', 0);
 
 INSERT INTO `Item` (`NamespaceId`, `Key`, `Type`, `Value`, `IsDeleted`)
-VALUES ('2', 'content', 0, 'zkevm.sequencer-batch-sleep-duration: 1s\nzkevm.sequencer-block-seal-time: 1s\nzkevm.enable-async-commit: false\nzkevm.bulk-add-txs: false', 0),
+VALUES ('2', 'content', 0, 'zkevm.sequencer-batch-sleep-duration: 1s\nzkevm.sequencer-block-seal-time: 2s\nzkevm.sequencer-batch-seal-time: 20s\nzkevm.bulk-add-txs: false', 0),
        ('4', 'content', 0, 'txpool.enabletimsort: false', 0),
        ('5', 'content', 0, 'http.enabled: false', 0);
 

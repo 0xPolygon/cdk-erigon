@@ -1262,6 +1262,10 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
 
+			// For Xlayer
+			if cfg.Zk.XLayer.Apollo.Enable {
+				go listenApollo(ctx, cfg)
+			}
 		} else {
 			/*
 			 if we are syncing from for the RPC, we do the normal ZK sync loop
