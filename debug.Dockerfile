@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.2
-FROM docker.io/library/golang:1.24-alpine3.21 AS builder
+FROM docker.io/library/golang:1.24-alpine AS builder
 
 RUN apk --no-cache add build-base linux-headers git bash ca-certificates libstdc++
 
@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/root/.cache \
     make all
 
 
-FROM docker.io/library/golang:1.24-alpine3.21 AS tools-builder
+FROM docker.io/library/golang:1.24-alpine AS tools-builder
 RUN apk --no-cache add build-base linux-headers git bash ca-certificates libstdc++
 WORKDIR /app
 
@@ -27,7 +27,7 @@ ADD go.sum go.sum
 
 RUN mkdir -p /app/build/bin
 
-FROM docker.io/library/alpine:3.20
+FROM docker.io/library/alpine:latest
 
 # install required runtime libs, along with some helpers for debugging
 RUN apk add --no-cache ca-certificates libstdc++ tzdata
