@@ -108,7 +108,7 @@ func StageLoopIteration(ctx context.Context, db kv.RwDB, txc wrap.TxContainer, s
 	}() // avoid crash because Erigon's core does many things
 
 	externalTx := txc.Tx != nil
-	finishProgressBefore, borProgressBefore, headersProgressBefore, err := stagesHeadersAndFinish(db, txc.Tx)
+	headersProgressBefore, borProgressBefore, finishProgressBefore, err := stagesHeadersAndFinish(db, txc.Tx)
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func StageLoopIteration(ctx context.Context, db kv.RwDB, txc wrap.TxContainer, s
 	// - Prune(limited time)+Commit(sync). Write to disk happening here.
 
 	if hook != nil {
-		if err = hook.BeforeRun(txc.Tx, isSynced); err != nil {
+		if err = hook.BeforeRun(txc.Tx, !isSynced); err != nil {
 			return err
 		}
 	}
