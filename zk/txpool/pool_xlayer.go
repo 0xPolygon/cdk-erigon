@@ -2,6 +2,7 @@ package txpool
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/zk/apollo"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
 // free gas tx type
@@ -152,6 +154,7 @@ func (p *TxPool) checkFreeGasTxXLayer(addr common.Address, tx *types.TxSlot) (fr
 	if p.apolloCfg != nil && p.apolloCfg.GetEnableFreeGasList(p.xlayerCfg.EnableFreeGasList) {
 		fromToName, freeGpList := p.xlayerCfg.FreeGasFromNameMap, p.xlayerCfg.FreeGasList
 		info := freeGpList[fromToName[addr]]
+		log.Info("checkFreeGasTxXLayer info=", info == nil)
 		if info != nil &&
 			contains(info.ToList, tx.To) &&
 			containsMethod(ecommon.Bytes2Hex(tx.Rlp), info.MethodSigs) {
@@ -194,6 +197,7 @@ func (p *TxPool) setFreeGasList(freeGasList []ethconfig.FreeGasInfo) {
 	p.xlayerCfg.FreeGasFromNameMap = make(map[common.Address]string)
 	p.xlayerCfg.FreeGasList = make(map[string]*ethconfig.FreeGasInfo, len(freeGasList))
 	for _, info := range freeGasList {
+		log.Info(fmt.Sprintf("setFreeGasList fromlist=%v, tolist=%v, name=%s", info.FromList, info.ToList, info.Name))
 		for _, from := range info.FromList {
 			p.xlayerCfg.FreeGasFromNameMap[from] = info.Name
 		}
