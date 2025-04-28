@@ -156,7 +156,7 @@ services:
       - 9091:9095
     volumes:
       - ./data/rpc/:/home/erigon/data/
-      - ./config/test.erigon.rpc.config.yaml:/usr/src/app/config.yaml
+      - ./config/apollo.rpc.config.yaml:/usr/src/app/config.yaml
       - ./config/dynamic-mynetwork-allocs.json:/usr/src/app/dynamic-mynetwork-allocs.json
       - ./config/dynamic-mynetwork-chainspec.json:/usr/src/app/dynamic-mynetwork-chainspec.json
       - ./config/dynamic-mynetwork-conf.json:/usr/src/app/dynamic-mynetwork-conf.json
