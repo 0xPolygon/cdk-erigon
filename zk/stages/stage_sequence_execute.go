@@ -361,6 +361,8 @@ func sequencingBatchStep(
 
 	// For X Layer, split db and ac
 	blockNumber := uint64(0)
+	breakBatchLoop := false
+BatchLoop:
 	for blockNumber = executionAt + 1; runLoopBlocks; blockNumber++ {
 		if batchTimedOut {
 			log.Debug(fmt.Sprintf("[%s] Closing batch due to timeout", logPrefix))
@@ -815,7 +817,8 @@ func sequencingBatchStep(
 				log.Warn(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
 				break
 			}
-			log.Warn(fmt.Sprintf("[%s] Keeping empty block %d to keep liveness", logPrefix, blockNumber))
+			log.Warn(fmt.Sprintf("[%s] Closing batch to keep liveness when encountering empty block %d", logPrefix, blockNumber))
+			breakBatchLoop = true
 		}
 
 		// For X Layer, split db and ac
@@ -959,6 +962,10 @@ func sequencingBatchStep(
 		// For X Layer
 		metrics.GetLogStatistics().SetTag(metrics.FinalizeBlockNumber, strconv.Itoa(int(blockNumber)))
 		metrics.GetLogStatistics().SummaryCheckpoint()
+
+		if breakBatchLoop {
+			break BatchLoop
+		}
 	}
 
 	/*
