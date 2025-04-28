@@ -20,9 +20,9 @@ import (
 
 var initBlockInfoTreeConcurrent bool
 
-func InitUseBlockInfoTreeTrue() {
-	log.Info("using concurrent block info tree calculation")
-	initBlockInfoTreeConcurrent = true
+func SetUseBlockInfoTree(value bool) {
+	log.Info(fmt.Sprintf("using concurrent block info tree calculation: %v\n", value))
+	initBlockInfoTreeConcurrent = value
 }
 
 type ExecutedTxInfo struct {

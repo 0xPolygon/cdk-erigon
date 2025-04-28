@@ -39,7 +39,7 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		EnableAddTxNotify:                 ctx.Bool(utils.EnableAddTxNotify.Name),
 	}
 	if cfg.XLayer.BlockInfoConcurrent {
-		blockinfo.InitUseBlockInfoTreeTrue()
+		blockinfo.SetUseBlockInfoTree(true)
 	}
 
 	utils.SetPreRunList(ctx, cfg)

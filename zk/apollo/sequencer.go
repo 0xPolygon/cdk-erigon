@@ -93,6 +93,9 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 			ethCfg.XLayer.PreRunList[libcommon.HexToAddress(addr)] = struct{}{}
 		}
 	}
+	if ctx.IsSet(utils.BlockInfoConcurrent.Name) {
+		ethCfg.XLayer.BlockInfoConcurrent = ctx.Bool(utils.BlockInfoConcurrent.Name)
+	}
 }
 
 // setSequencerFlag sets the dynamic sequencer apollo flag
