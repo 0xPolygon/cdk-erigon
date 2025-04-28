@@ -218,6 +218,11 @@ func (p *TxPool) listenApollo(ctx context.Context) {
 				p.pending.enbaleTimsort = ethCfg.DeprecatedTxPool.EnableTimsort
 				p.pending.mtx.Unlock()
 			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.TxPoolFreeGasList.Name) {
+				p.lock.Lock()
+				p.setFreeGasList(ethCfg.DeprecatedTxPool.FreeGasList)
+				p.lock.Unlock()
+			}
 		case <-ctx.Done():
 			return
 		}
