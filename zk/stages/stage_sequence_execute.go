@@ -256,6 +256,8 @@ func sequencingBatchStep(
 	// until the next batch starts
 	sendersToSkip := make(map[common.Address]struct{})
 
+	breakBatchLoop := false
+BatchLoop:
 	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {
 		if batchTimedOut {
 			log.Debug(fmt.Sprintf("[%s] Closing batch due to timeout", logPrefix))
@@ -675,8 +677,8 @@ func sequencingBatchStep(
 		// this could happen if there were lots of nonce issues from transaction in the pool due to a failed tx processing or similar and
 		// there wasn't much time left in the batch to mine any transactions
 		if len(batchState.blockState.transactionsForInclusion) > 0 && len(batchState.blockState.builtBlockElements.transactions) == 0 {
-			log.Info(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
-			break
+			log.Warn(fmt.Sprintf("[%s] Closing batch to keep liveness when encountering empty block %d", logPrefix, blockNumber))
+			breakBatchLoop = true
 		}
 
 		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
@@ -763,6 +765,10 @@ func sequencingBatchStep(
 		// was the previous block created
 		if err := cfg.doneHook.AfterRun(batchContext.sdb.tx, block.NumberU64()-1, s.PrevUnwindPoint()); err != nil {
 			return err
+		}
+
+		if breakBatchLoop {
+			break BatchLoop
 		}
 	}
 
