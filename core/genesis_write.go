@@ -78,6 +78,7 @@ func CommitGenesisBlockWithOverride(db kv.RwDB, genesis *types.Genesis, override
 		return nil, nil, err
 	}
 	defer tx.Rollback()
+	// honourChainspec is false here, CommitGenesisBlock is for integration.
 	c, b, err := WriteGenesisBlock(tx, genesis, overridePragueTime, false, tmpDir, logger)
 	if err != nil {
 		return c, b, err

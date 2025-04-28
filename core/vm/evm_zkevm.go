@@ -70,9 +70,9 @@ func NewZkEVM(blockCtx evmtypes.BlockContext, txCtx evmtypes.TxContext, state ev
 	return evm
 }
 
-func (evm *EVM) Deploy(caller ContractRef, code []byte, gas uint64, endowment *uint256.Int, intrinsicGas uint64) (ret []byte, contractAddr libcommon.Address, leftOverGas uint64, err error) {
+func (evm *EVM) Deploy(caller ContractRef, code []byte, gas uint64, endowment *uint256.Int, bailout bool, intrinsicGas uint64) (ret []byte, contractAddr libcommon.Address, leftOverGas uint64, err error) {
 	contractAddr = crypto.CreateAddress(caller.Address(), evm.intraBlockState.GetNonce(caller.Address()))
-	return evm.createZkEvm(caller, &codeAndHash{code: code}, gas, endowment, contractAddr, CREATE, true, false, intrinsicGas)
+	return evm.createZkEvm(caller, &codeAndHash{code: code}, gas, endowment, contractAddr, CREATE, true, bailout, intrinsicGas)
 }
 
 // createZkEvm creates a new contract using code as deployment code.
