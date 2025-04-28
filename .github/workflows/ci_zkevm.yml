@@ -70,7 +70,7 @@ jobs:
 
       - name: Test
         run: make -B test
-      
+
       # - name: SonarCloud Scan
       #   uses: SonarSource/sonarcloud-github-action@master
       #   if: ${{ matrix.os == 'ubuntu-20.04' }}
@@ -230,6 +230,7 @@ jobs:
         run: sudo -E make test-e2e
         working-directory: test
 
+  # For X Layer, split db and ac
   test-data-loss:
     strategy:
       matrix:
@@ -244,6 +245,7 @@ jobs:
         run: sudo -E make data-loss-${{ matrix.case }}
         working-directory: test
 
+  # For X Layer, split db and ac
   test-executor:
     strategy:
       fail-fast: false
@@ -263,28 +265,14 @@ jobs:
         run: make test-executor
         working-directory: test
         
+  # For X Layer
   check-chinese-chars:
     name: Check Chinese Characters
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Check for Chinese characters
         run: |
-          found_chinese=false
-          while IFS= read -r line; do
-            if [ -n "$line" ]; then
-              echo "Chinese chars found in $line"
-              found_chinese=true
-            fi
-          done < <(find . \( -name "*.go" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \
-                  -o -name "*.sol" -o -name "*.js" -o -name "*.jsx" -o -name "*.ts" \
-                  -o -name "*.tsx" -o -name "Makefile" -o -name "*.mk" \
-                  -o -name "Dockerfile" -o -name "*.md" \
-                  -o -name "*.yaml" -o -name "*.yml" \) \
-                  -type f -exec sh -c 'grep -H -n -P "[\x{4e00}-\x{9fa5}]" "$0"' {} \;)
-          if [ "$found_chinese" = true ]; then
-            echo "Error: Found Chinese characters in source files!"
-            exit 1
-          fi
+          bash ./.github/scripts/check_chinese_characters.sh

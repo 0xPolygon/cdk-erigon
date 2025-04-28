@@ -21,12 +21,14 @@ import (
 
 // SendRawTransaction implements eth_sendRawTransaction. Creates new message call transaction or a contract creation for previously-signed transactions.
 func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility.Bytes) (common.Hash, error) {
+	// For X Layer, optimize tx pool
 	if !api.BulkAddTxs {
 		return api.sendRawTransactionSingle(ctx, encodedTx)
 	}
 	return api.sendRawTransactionBulk(ctx, encodedTx)
 }
 
+// For X Layer, optimize tx pool
 func (api *APIImpl) sendRawTransactionSingle(ctx context.Context, encodedTx hexutility.Bytes) (common.Hash, error) {
 	t := utils.StartTimer("rpc", "sendrawtransaction")
 	defer t.LogTimer()
@@ -131,6 +133,7 @@ func (api *APIImpl) sendRawTransactionSingle(ctx context.Context, encodedTx hexu
 		return common.Hash{}, errors.New("transaction uses too many counters to fit into a batch")
 	}
 
+	// For X Layer, optimize pre-run
 	if len(api.PreRunList) > 0 && utils2.CheckAddressExists(api.PreRunList, sender) {
 		api.preRun(txn, chainId)
 	}

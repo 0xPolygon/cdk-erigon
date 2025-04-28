@@ -33,11 +33,12 @@ const TableMetadata = "HermezSmtMetadata"
 const TableHashKey = "HermezSmtHashKey"
 
 const MetaLastRoot = "lastRoot"
-const MetaLastHeight = "lastHeight"
 const MetaDepth = "depth"
+const MetaLastHeight = "lastHeight" // For X Layer, split db and ac
 
 var HermezSmtTables = []string{TableSmt, TableStats, TableAccountValues, TableMetadata, TableHashKey}
 
+// For X Layer, split db and ac
 type EriDb struct {
 	kvTxSMT     kv.RwTx
 	tx          SmtDbTx
@@ -51,6 +52,7 @@ type EriRoDb struct {
 }
 
 func CreateEriDbBuckets(tx kv.RwTx) error {
+	// For X Layer, split db and ac
 	for _, table := range HermezSmtTables {
 		err := tx.CreateBucket(table)
 		if err != nil {
@@ -61,6 +63,7 @@ func CreateEriDbBuckets(tx kv.RwTx) error {
 }
 
 func NewEriDb(txsmt kv.RwTx, txcdb kv.RwTx) *EriDb {
+	// For X Layer, split db and ac
 	var tx kv.RwTx = txsmt
 	if tx == nil {
 		tx = txcdb
@@ -74,6 +77,7 @@ func NewEriDb(txsmt kv.RwTx, txcdb kv.RwTx) *EriDb {
 }
 
 func NewRoEriDb(txsmt, txcdb kv.Getter) *EriRoDb {
+	// For X Layer, split db and ac
 	var tx kv.Getter = txsmt
 	if tx == nil {
 		tx = txcdb
@@ -91,23 +95,6 @@ func (m *EriDb) OpenBatch(quitCh <-chan struct{}) {
 	}()
 	m.tx = batch
 	m.kvTxRoSMT = batch
-}
-
-func (m *EriDb) SetCache(smtCachedMapValue map[string]map[string][]byte) {
-	if smtCachedMapValue == nil {
-		smtCachedMapValue = make(map[string]map[string][]byte)
-	}
-
-	mapCache, ok := m.tx.(*membatch.Mapmutation)
-	if !ok {
-		return // don't roll back a kvRw tx
-	}
-
-	mapCache.SetCache(smtCachedMapValue)
-}
-
-func (m *EriDb) RetriveAndCleanCache() map[string]map[string][]byte {
-	return nil
 }
 
 func (m *EriDb) CommitBatch() error {
@@ -155,20 +142,6 @@ func (m *EriRoDb) GetLastRoot() (*big.Int, error) {
 func (m *EriDb) SetLastRoot(r *big.Int) error {
 	v := utils.ConvertBigIntToHex(r)
 	return m.tx.Put(TableStats, []byte(MetaLastRoot), []byte(v))
-}
-
-func (m *EriRoDb) GetLastHeight() (uint64, error) {
-	data, err := m.kvTxRoSMT.GetOne(TableStats, []byte(MetaLastHeight))
-	if err != nil {
-		return 0, err
-	}
-
-	return utils.ConvertBytesToUint64(data)
-}
-
-func (m *EriDb) SetLastHeight(blockHeight uint64) error {
-	v := utils.ConvertUint64ToBytes(blockHeight)
-	return m.tx.Put(TableStats, []byte(MetaLastHeight), []byte(v))
 }
 
 func (m *EriRoDb) GetDepth() (uint8, error) {
@@ -227,6 +200,7 @@ func (m *EriDb) Delete(key string) error {
 func (m *EriDb) DeleteByNodeKey(key utils.NodeKey) error {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
+	// For X Layer, optimize the byte conversion
 	return m.tx.Delete(TableSmt, unsafe.Slice(unsafe.StringData(k), len(k)))
 }
 
@@ -234,6 +208,7 @@ func (m *EriRoDb) GetAccountValue(key utils.NodeKey) (utils.NodeValue8, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 	k := utils.ConvertBigIntToHex(keyConc)
 
+	// For X Layer, split db and ac
 	data, err := m.kvTxRoSMT.GetOne(TableAccountValues, []byte(k))
 	if err != nil {
 		return utils.NodeValue8{}, err
@@ -277,6 +252,7 @@ func (m *EriDb) DeleteKeySource(key utils.NodeKey) error {
 func (m *EriRoDb) GetKeySource(key utils.NodeKey) ([]byte, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 
+	// For X Layer, split db and ac
 	data, err := m.kvTxRoSMT.GetOne(TableMetadata, keyConc.Bytes())
 	if err != nil {
 		return nil, err
@@ -305,6 +281,7 @@ func (m *EriDb) DeleteHashKey(key utils.NodeKey) error {
 func (m *EriRoDb) GetHashKey(key utils.NodeKey) (utils.NodeKey, error) {
 	keyConc := utils.ArrayToScalar(key[:])
 
+	// For X Layer, split db and ac
 	data, err := m.kvTxRoSMT.GetOne(TableHashKey, keyConc.Bytes())
 	if err != nil {
 		return utils.NodeKey{}, err
@@ -324,6 +301,7 @@ func (m *EriRoDb) GetHashKey(key utils.NodeKey) (utils.NodeKey, error) {
 func (m *EriRoDb) GetCode(codeHash []byte) ([]byte, error) {
 	codeHash = utils.ResizeHashTo32BytesByPrefixingWithZeroes(codeHash)
 
+	// For X Layer, split db and ac
 	data, err := m.kvTxRoChainDB.GetOne(kv.Code, codeHash)
 	if err != nil {
 		return nil, err
@@ -346,10 +324,12 @@ func (m *EriDb) AddCode(code []byte) error {
 
 	codeHashBytes = utils.ResizeHashTo32BytesByPrefixingWithZeroes(codeHashBytes)
 
+	// For X Layer, split db and ac
 	return m.kvTxChainDB.Put(kv.Code, codeHashBytes, code)
 }
 
 func (m *EriRoDb) PrintDb() {
+	// For X Layer, split db and ac
 	err := m.kvTxRoSMT.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
 		println(string(k), string(v))
 		return nil
@@ -362,6 +342,7 @@ func (m *EriRoDb) PrintDb() {
 func (m *EriRoDb) GetDb() map[string][]string {
 	transformedDb := make(map[string][]string)
 
+	// For X Layer, split db and ac
 	err := m.kvTxRoSMT.ForEach(TableSmt, []byte{}, func(k, v []byte) error {
 		hk := string(k)
 

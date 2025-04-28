@@ -175,7 +175,7 @@ func (l Label) String() string {
 		return "inMem"
 	case DiagnosticsDB:
 		return "diagnostics"
-	case SmtDB:
+	case SmtDB: // For X Layer, split db
 		return "smt"
 	default:
 		return "unknown"

@@ -235,6 +235,7 @@ func TestLocalUnpackTests(t *testing.T) {
 			}
 			encb, err := hex.DecodeString(test.enc)
 			if err != nil {
+				// For X Layer, ut
 				t.Fatalf("invalid hex: %s", test.enc)
 			}
 			outptr := reflect.New(reflect.TypeOf(test.want))
@@ -928,6 +929,7 @@ func TestOOMMaliciousInput(t *testing.T) {
 		}
 		encb, err := hex.DecodeString(test.enc)
 		if err != nil {
+			// For X Layer, ut
 			t.Fatalf("invalid hex: %s", test.enc)
 		}
 		_, err = abi.Methods["method"].Outputs.UnpackValues(encb)

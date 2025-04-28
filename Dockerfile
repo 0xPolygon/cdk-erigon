@@ -17,6 +17,7 @@ RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
     make BUILD_TAGS=nosqlite,noboltdb,nosilkworm all
 
+# For X Layer, split db
 RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/tmp/go-build \
     --mount=type=cache,target=/go/pkg/mod \
@@ -45,6 +46,8 @@ FROM docker.io/library/alpine:3.17
 # install required runtime libs, along with some helpers for debugging
 RUN apk add --no-cache ca-certificates libstdc++ tzdata
 RUN apk add --no-cache curl jq bind-tools
+
+# For X Layer, add vmtouch
 RUN apk add --no-cache perl perl-utils
 RUN apk add --no-cache build-base git && \
     git clone https://github.com/hoytech/vmtouch.git && \
@@ -95,6 +98,7 @@ COPY --from=builder /app/build/bin/state /usr/local/bin/state
 COPY --from=builder /app/build/bin/txpool /usr/local/bin/txpool
 COPY --from=builder /app/build/bin/verkle /usr/local/bin/verkle
 COPY --from=builder /app/build/bin/acl /usr/local/bin/acl
+# For X Layer, split db
 COPY --from=builder /app/build/bin/smt-db-split /usr/local/bin/smt-db-split
 
 EXPOSE 8545 \

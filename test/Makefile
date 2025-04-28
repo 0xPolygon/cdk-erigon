@@ -157,16 +157,91 @@ min-run: build-docker ## Runs a minimal node
 	$(RUN_DOCKER_PROMETHEUS)
 	$(RUN_DOCKER_GRAFANA)
 
-.PHONY: test
-test: test-e2e ## Runs all e2e tests
-	echo "Tests passed"
-	sleep 3
+.PHONY: test # Run all tests on Linux, but some are not supported on Mac
+test: 
+	@echo "Starting tests at $$(date)"
+	@ERROR_COUNT=0; \
+	FAILED_TESTS=""; \
+	/bin/bash -c ' \
+		run_test() { \
+			echo "\n========== Running $$1... =========="; \
+			if make $$1; then \
+				echo "✅ $$1 passed"; \
+			else \
+				echo "❌ $$1 FAILED"; \
+				ERROR_COUNT=$$((ERROR_COUNT+1)); \
+				FAILED_TESTS="$$FAILED_TESTS\n  - $$1"; \
+			fi; \
+		}; \
+		export ERROR_COUNT=0; \
+		export FAILED_TESTS=""; \
+		run_test test-e2e; \
+		run_test test-data-loss; \
+		run_test test-executor; \
+		run_test tests; \
+		run_test lint; \
+		run_test check_chinese_characters; \
+		run_test test-unwind-default; \
+		run_test test-unwind-split-db; \
+		run_test kurtosis-cdk; \
+		run_test resequence-default; \
+		run_test resequence-ac-split; \
+		echo "\n========== Tests completed at $$(date) =========="; \
+		if [ $$ERROR_COUNT -gt 0 ]; then \
+			echo "❌ $$ERROR_COUNT tests failed:"; \
+			echo -e "$$FAILED_TESTS"; \
+			exit 1; \
+		else \
+			echo "✅ All tests passed successfully!"; \
+		fi \
+	'
+
+.PHONY: test-unwind-default
+test-unwind-default:
+	cd ../ && make test-unwind-default
+	echo "Unwind tests passed"
+
+.PHONY: test-unwind-split-db
+test-unwind-split-db:
+	cd ../ && make test-unwind-split-db
+	kill 
+	echo "Unwind tests passed"
+
+.PHONY: check_chinese_characters
+check_chinese_characters:
+	cd ../ && bash .github/scripts/check_chinese_characters.sh
+	echo "Chinese characters check passed"
+
+resequence-default:
+	cd ../ && bash .github/scripts/make-init-cdk.sh default && bash ./.github/scripts/test_resequence.sh default
+	echo "Default resequence tests passed"
+
+resequence-ac-split:
+	cd ../ && bash .github/scripts/make-init-cdk.sh ac-split && bash ./.github/scripts/test_resequence.sh ac-split
+	echo "AC split resequence tests passed"
+
+.PHONY: kurtosis-cdk
+kurtosis-cdk:
+	cd ../ && bash .github/scripts/make-init-cdk.sh ac-split && bash ./.github/scripts/make-cdk.sh
+	echo "Kurtosis cdk tests passed"
+
+.PHONY: tests
+tests:
+	mkdir -p $(CURDIR)/app/tmp
+	cd ../ && TMPDIR=$(CURDIR)/app/tmp make -B test
+	echo "Unit tests passed"
+
+.PHONY: lint
+lint:
+	cd ../docs/endpoints && make check-doc
+	echo "Lint passed"
 
 .PHONY: test-e2e
 test-e2e: stop all ## Runs group xlayer feature e2e tests checking race conditions
 	sleep 3
 	docker ps -a
 	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/...
+	echo "E2E tests passed"
 
 .PHONY: min-apollo
 min-apollo: build-docker
@@ -223,6 +298,7 @@ apollo:  build-docker
 # Target to add data loss testing logic
 .PHONY: test-data-loss
 test-data-loss: data-loss-1 data-loss-2 data-loss-3 data-loss-4 data-loss-5 data-loss-6 data-loss-7 data-loss-8
+	echo "Data loss tests passed"
 
 # interrupt before doFinishBlockAndUpdateState (before RemoveMinedTransactions)
 # txs are still in txpool, data is lost in chaindata and not written to datastream yet
@@ -408,7 +484,7 @@ data-loss-6:
 	docker wait $(DOCKER_SEQ) > /dev/null
 	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
 
-	git checkout -- ../turbo/stages/stageloop.go
+	git checkout -- ../turbo/stages/stageloop_xlayer.go
 	make build-docker
 	$(RUN_DOCKER_SEQ)
 	sleep 60
@@ -438,7 +514,7 @@ data-loss-7:
 	docker wait $(DOCKER_SEQ) > /dev/null
 	docker logs $(DOCKER_SEQ) > data/seq_1.log 2>&1
 
-	git checkout -- ../zk/stages/stage_sequence_execute.go
+	git checkout -- ../zk/stages/stage_sequence_execute_xlayer.go
 	make build-docker
 	$(RUN_DOCKER_SEQ)
 	sleep 60
@@ -463,10 +539,15 @@ data-recovery:
 
 
 .PHONY: test-executor
-test-executor: stop run ## Runs group 2 to check if the true executor is working
+test-executor:
+	cd ../ && bash ./.github/scripts/update_config.sh
+	make stop
+	make run
 	sleep 30 # wait for the executor to be ready
 	docker ps -a
 	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/... -run "^TestEthTransfer$$"
+	git checkout -- ../test/config/test.erigon.seq.config.yaml
+	echo "Executor tests passed"
 
 mainnet: build-docker
 	# base services

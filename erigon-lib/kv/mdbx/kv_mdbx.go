@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -96,69 +95,9 @@ func NewMDBX(log log.Logger) MdbxOpts {
 	return opts
 }
 
-// Custom marshaling for MdbxOpts
-func MdbxOptsFromJSON(data []byte) (*MdbxOpts, error) {
-	var aux struct {
-		Path            string            `json:"path"`
-		SyncPeriod      time.Duration     `json:"syncPeriod"`
-		MapSize         datasize.ByteSize `json:"mapSize"`
-		GrowthStep      datasize.ByteSize `json:"growthStep"`
-		ShrinkThreshold int               `json:"shrinkThreshold"`
-		Flags           uint              `json:"flags"`
-		PageSize        uint64            `json:"pageSize"`
-		DirtySpace      uint64            `json:"dirtySpace"`
-		MergeThreshold  uint64            `json:"mergeThreshold"`
-		Verbosity       kv.DBVerbosityLvl `json:"verbosity"`
-		Label           kv.Label          `json:"label"`
-		InMem           bool              `json:"inMem"`
-	}
-
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return nil, err
-	}
-
-	opts := &MdbxOpts{
-		path:            aux.Path,
-		syncPeriod:      aux.SyncPeriod,
-		mapSize:         aux.MapSize,
-		growthStep:      aux.GrowthStep,
-		shrinkThreshold: aux.ShrinkThreshold,
-		flags:           aux.Flags,
-		pageSize:        aux.PageSize,
-		dirtySpace:      aux.DirtySpace,
-		mergeThreshold:  aux.MergeThreshold,
-		verbosity:       aux.Verbosity,
-		label:           aux.Label,
-		inMem:           aux.InMem,
-	}
-
-	return opts, nil
-}
-
-func (opts MdbxOpts) toMap() map[string]interface{} {
-	return map[string]interface{}{
-		"path":            opts.path,
-		"syncPeriod":      opts.syncPeriod,
-		"mapSize":         opts.mapSize,
-		"growthStep":      opts.growthStep,
-		"shrinkThreshold": opts.shrinkThreshold,
-		"flags":           opts.flags,
-		"pageSize":        opts.pageSize,
-		"dirtySpace":      opts.dirtySpace,
-		"mergeThreshold":  opts.mergeThreshold,
-		"verbosity":       opts.verbosity,
-		"label":           opts.label,
-		"inMem":           opts.inMem,
-	}
-}
-
 func (opts MdbxOpts) GetLabel() kv.Label  { return opts.label }
 func (opts MdbxOpts) GetInMem() bool      { return opts.inMem }
 func (opts MdbxOpts) GetPageSize() uint64 { return opts.pageSize }
-func (opts MdbxOpts) GetMapSize() datasize.ByteSize {
-	return opts.mapSize
-}
-func (opts MdbxOpts) GetFlags() uint { return opts.flags }
 
 func (opts MdbxOpts) Label(label kv.Label) MdbxOpts {
 	opts.label = label
@@ -187,11 +126,6 @@ func (opts MdbxOpts) GrowthStep(v datasize.ByteSize) MdbxOpts {
 
 func (opts MdbxOpts) Path(path string) MdbxOpts {
 	opts.path = path
-	return opts
-}
-
-func (opts MdbxOpts) Logger(log log.Logger) MdbxOpts {
-	opts.log = log
 	return opts
 }
 
@@ -432,6 +366,7 @@ func (opts MdbxOpts) Open(ctx context.Context) (kv.RwDB, error) {
 
 	opts.pageSize = uint64(in.PageSize)
 	opts.mapSize = datasize.ByteSize(in.MapSize)
+	// For X Layer, split db
 	if opts.label == kv.ChainDB || opts.label == kv.SmtDB {
 		opts.log.Info("[db] open", "label", opts.label, "sizeLimit", opts.mapSize, "pageSize", opts.pageSize)
 	} else {
@@ -483,9 +418,8 @@ func (opts MdbxOpts) Open(ctx context.Context) (kv.RwDB, error) {
 		MaxBatchDelay: DefaultMaxBatchDelay,
 	}
 
+	// For X Layer, SMT db has all chaindata tables deprecated
 	var customBuckets kv.TableCfg
-
-	// SMT db has all chaindata tables deprecated
 	if opts.label == kv.SmtDB {
 		customBuckets = kv.TableCfg{}
 		for name, cfg := range kv.ChaindataTablesCfg {
@@ -541,21 +475,6 @@ func (opts MdbxOpts) Open(ctx context.Context) (kv.RwDB, error) {
 	}
 	db.path = opts.path
 	addToPathDbMap(opts.path, db)
-	// opts.debug()
-
-	// for split db only
-	/*
-		optsJson, err := json.Marshal(opts.toMap())
-		if err != nil {
-			log.Error("Failed to MarshalIndent opts", "err", err)
-		} else {
-			err = os.WriteFile(db.path+"/opts_chaindb.json", optsJson, 0644)
-			if err != nil {
-				log.Error("Error writing json to file", "err", err)
-			}
-		}
-	*/
-
 	return db, nil
 }
 
@@ -607,7 +526,7 @@ type MdbxKV struct {
 // Default values if not set in a DB instance.
 const (
 	DefaultMaxBatchSize  int = 1000
-	DefaultMaxBatchDelay     = 100 * time.Millisecond
+	DefaultMaxBatchDelay     = 100 * time.Millisecond // For X Layer, split db
 )
 
 type batch struct {
@@ -812,6 +731,7 @@ func (db *MdbxKV) trackTxEnd() {
 
 func (db *MdbxKV) waitTxsAllDoneOnClose() {
 	for !db.hasTxsAllDoneAndClosed() {
+		// For X Layer, split db
 		db.txsAllDoneOnCloseCond.L.Lock()
 		defer db.txsAllDoneOnCloseCond.L.Unlock()
 

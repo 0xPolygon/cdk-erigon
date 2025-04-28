@@ -304,7 +304,7 @@ func SortByNonceLess(a, b *metaTx) bool {
 type TxPool struct {
 	_chainDB               kv.RoDB // remote db - use it wisely
 	_stateCache            kvcache.Cache
-	lock                   *sync.RWMutex
+	lock                   *sync.RWMutex           // For X Layer, optimize tx pool
 	recentlyConnectedPeers *recentlyConnectedPeers // all txs will be propagated to this peers eventually, and clear list
 	senders                *sendersBatch
 	// batch processing of remote transactions
@@ -388,7 +388,7 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		discardReasonsLRU:       discardHistory,
 		all:                     byNonce,
 		recentlyConnectedPeers:  &recentlyConnectedPeers{},
-		pending:                 NewPendingSubPool(PendingSubPool, cfg.PendingSubPoolLimit, ethCfg.DeprecatedTxPool.EnableTimsort),
+		pending:                 NewPendingSubPool(PendingSubPool, cfg.PendingSubPoolLimit, ethCfg.DeprecatedTxPool.EnableTimsort), // For X Layer, optimize tx pool
 		baseFee:                 NewSubPool(BaseFeeSubPool, cfg.BaseFeeSubPoolLimit),
 		queued:                  NewSubPool(QueuedSubPool, cfg.QueuedSubPoolLimit),
 		newPendingTxs:           newTxs,
@@ -462,10 +462,10 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 	pendingBaseFee, baseFeeChanged := p.setBaseFee(stateChanges.PendingBlockBaseFee, p.ethCfg.AllowFreeTransactions)
 	// Update pendingBase for all pool queues and slices
 	if baseFeeChanged {
-		p.pending.mtx.Lock()
+		p.pending.mtx.Lock() // For X Layer, optimize tx pool
 		p.pending.best.pendingBaseFee = pendingBaseFee
 		p.pending.worst.pendingBaseFee = pendingBaseFee
-		p.pending.mtx.Unlock()
+		p.pending.mtx.Unlock() // For X Layer, optimize tx pool
 		p.baseFee.best.pendingBastFee = pendingBaseFee
 		p.baseFee.worst.pendingBaseFee = pendingBaseFee
 		p.queued.best.pendingBastFee = pendingBaseFee
@@ -638,6 +638,7 @@ func (p *TxPool) getRlpLocked(tx kv.Tx, hash []byte) (rlpTxn []byte, sender comm
 	return v[20:], *(*[20]byte)(v[:20]), txn != nil && txn.subPool&IsLocal > 0, nil
 }
 func (p *TxPool) GetRlp(tx kv.Tx, hash []byte) ([]byte, error) {
+	// For X Layer, optimize tx pool
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	rlpTx, _, _, err := p.getRlpLocked(tx, hash)
@@ -682,6 +683,7 @@ func (p *TxPool) AppendAllAnnouncements(types []byte, sizes []uint32, hashes []b
 	return types, sizes, hashes
 }
 func (p *TxPool) IdHashKnown(tx kv.Tx, hash []byte) (bool, error) {
+	// For X Layer, optimize tx pool
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	if _, ok := p.discardReasonsLRU.Get(string(hash)); ok {
@@ -696,6 +698,7 @@ func (p *TxPool) IdHashKnown(tx kv.Tx, hash []byte) (bool, error) {
 	return tx.Has(kv.PoolTransaction, hash)
 }
 func (p *TxPool) IsLocal(idHash []byte) bool {
+	// For X Layer, optimize tx pool
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	return p.isLocalLRU.Contains(string(idHash))
@@ -704,6 +707,7 @@ func (p *TxPool) AddNewGoodPeer(peerID types.PeerID) { p.recentlyConnectedPeers.
 func (p *TxPool) Started() bool                      { return p.started.Load() }
 
 func (p *TxPool) ResetYieldedStatus() {
+	// For X Layer, optimize tx pool
 	p.pending.mtx.Lock()
 	defer p.pending.mtx.Unlock()
 	best := p.pending.best
@@ -723,6 +727,7 @@ func (p *TxPool) PeekBest(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availa
 }
 
 func (p *TxPool) CountContent() (int, int, int) {
+	// For X Layer, optimize tx pool
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	return p.pending.Len(), p.baseFee.Len(), p.queued.Len()
@@ -998,6 +1003,7 @@ func (p *TxPool) AddLocalTxs(ctx context.Context, newTransactions types.TxSlots,
 		return nil, err
 	}
 	defer coreTx.Rollback()
+	// For X Layer, optimize tx pool
 	cacheView, err := p._stateCache.View(ctx, coreTx)
 	if err != nil {
 		return nil, err
@@ -1024,6 +1030,7 @@ func (p *TxPool) AddLocalTxs(ctx context.Context, newTransactions types.TxSlots,
 		return nil, err
 	}
 
+	// For X Layer, optimize tx pool
 	validIndices := make([]int, 0, len(newTxs.Txs))
 	for i, reason := range reasons {
 		if reason == NotSet {
@@ -1036,6 +1043,7 @@ func (p *TxPool) AddLocalTxs(ctx context.Context, newTransactions types.TxSlots,
 	if err == nil {
 		for i, reason := range addReasons {
 			if reason != NotSet {
+				// For X Layer, optimize tx pool
 				reasons[validIndices[i]] = reason
 			}
 		}
@@ -1045,9 +1053,11 @@ func (p *TxPool) AddLocalTxs(ctx context.Context, newTransactions types.TxSlots,
 	p.promoted.Reset()
 	p.promoted.AppendOther(announcements)
 
+	// For X Layer, optimize tx pool
 	reasons = fillDiscardReasons(reasons, newTransactions, p.discardReasonsLRU)
 	for i, reason := range reasons {
 		if reason == Success {
+			// For X Layer, optimize tx pool
 			txn := newTransactions.Txs[i]
 			if txn.Traced {
 				log.Info(fmt.Sprintf("TX TRACING: AddLocalTxs promotes idHash=%x, senderId=%d", txn.IDHash, txn.SenderID))
@@ -1065,12 +1075,14 @@ func (p *TxPool) AddLocalTxs(ctx context.Context, newTransactions types.TxSlots,
 }
 
 func (p *TxPool) coreDB() kv.RoDB {
+	// For X Layer, optimize tx pool
 	// p.lock.Lock()
 	// defer p.lock.Unlock()
 	return p._chainDB
 }
 
 func (p *TxPool) cache() kvcache.Cache {
+	// For X Layer, optimize tx pool
 	// p.lock.Lock()
 	// defer p.lock.Unlock()
 	return p._stateCache
@@ -1317,6 +1329,7 @@ func (p *TxPool) discardLocked(mt *metaTx, reason DiscardReason) {
 }
 
 func (p *TxPool) NonceFromAddress(addr [20]byte) (nonce uint64, inPool bool) {
+	// For X Layer, optimize tx pool
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	senderID, found := p.senders.getID(addr)
@@ -1872,6 +1885,7 @@ func (p *TxPool) logStats() {
 		return
 	}
 
+	// For X Layer, optimize tx pool
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
@@ -2271,11 +2285,13 @@ func (b *BySenderAndNonce) replaceOrInsert(mt *metaTx) *metaTx {
 // It's more expensive to maintain "slice sort" invariant, but it allow do cheap copy of
 // pending.best slice for mining (because we consider txs and metaTx are immutable)
 type PendingPool struct {
-	sorted        atomic.Bool // means `PendingPool.best` is sorted or not
-	best          *bestSlice
-	worst         *WorstQueue
-	limit         int
-	t             SubPoolType
+	sorted atomic.Bool // means `PendingPool.best` is sorted or not
+	best   *bestSlice
+	worst  *WorstQueue
+	limit  int
+	t      SubPoolType
+
+	// For X Layer, optimize tx pool
 	mtx           sync.RWMutex
 	enbaleTimsort bool
 }
@@ -2298,6 +2314,7 @@ func (s *bestSlice) Swap(i, j int) {
 	s.ms[i].bestIndex, s.ms[j].bestIndex = i, j
 }
 func (s *bestSlice) Less(i, j int) bool {
+	// For X Layer, optimize tx pool
 	return s.ms[i].better(s.ms[j], s.pendingBaseFee)
 }
 func (s *bestSlice) UnsafeRemove(i *metaTx) {
@@ -2312,12 +2329,14 @@ func (s *bestSlice) UnsafeAdd(i *metaTx) {
 }
 
 func (p *PendingPool) EnforceWorstInvariants() {
+	// For X Layer, optimize tx pool
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
 	heap.Init(p.worst)
 }
 func (p *PendingPool) EnforceBestInvariants() {
+	// For X Layer, optimize tx pool
 	if !p.sorted.Load() {
 		p.mtx.Lock()
 		defer p.mtx.Unlock()
@@ -2332,6 +2351,7 @@ func (p *PendingPool) EnforceBestInvariants() {
 }
 
 func (p *PendingPool) Best() *metaTx { //nolint
+	// For X Layer, optimize tx pool
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
@@ -2341,6 +2361,7 @@ func (p *PendingPool) Best() *metaTx { //nolint
 	return p.best.ms[0]
 }
 func (p *PendingPool) Worst() *metaTx { //nolint
+	// For X Layer, optimize tx pool
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
@@ -2350,6 +2371,7 @@ func (p *PendingPool) Worst() *metaTx { //nolint
 	return (p.worst.ms)[0]
 }
 func (p *PendingPool) PopWorst() *metaTx { //nolint
+	// For X Layer, optimize tx pool
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
@@ -2360,6 +2382,7 @@ func (p *PendingPool) PopWorst() *metaTx { //nolint
 	return i
 }
 func (p *PendingPool) Updated(mt *metaTx) {
+	// For X Layer, optimize tx pool
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
@@ -2369,50 +2392,43 @@ func (p *PendingPool) UpdatedNoLock(mt *metaTx) {
 	heap.Fix(p.worst, mt.worstIndex)
 }
 func (p *PendingPool) Len() int {
+	// For X Layer, optimize tx pool
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
 	return len(p.best.ms)
 }
 func (p *PendingPool) IsFull() bool {
+	// For X Layer, optimize tx pool
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
 	return p.Len() >= p.limit
 }
 func (p *PendingPool) Remove(i *metaTx) {
+	// For X Layer, optimize tx pool
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
 	p.RemoveNoLock(i)
 }
 
-func (p *PendingPool) RemoveNoLock(i *metaTx) {
-	if i.worstIndex >= 0 {
-		heap.Remove(p.worst, i.worstIndex)
-	}
-	if i.bestIndex >= 0 {
-		p.best.UnsafeRemove(i)
-	}
-	if i.bestIndex != p.best.Len()-1 {
-		p.sorted.Swap(false)
-	}
-	i.currentSubPool = 0
-}
-
 func (p *PendingPool) Add(i *metaTx) {
 	if i.Tx.Traced {
 		log.Info(fmt.Sprintf("TX TRACING: moved to subpool %s, IdHash=%x, sender=%d", p.t, i.Tx.IDHash, i.Tx.SenderID))
 	}
+	// For X Layer, optimize tx pool
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
 	i.currentSubPool = p.t
 	heap.Push(p.worst, i)
 	p.best.UnsafeAdd(i)
+	// For X Layer, optimize tx pool
 	p.sorted.Swap(false)
 }
 func (p *PendingPool) DebugPrint(prefix string) {
+	// For X Layer, optimize tx pool
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
@@ -2501,6 +2517,7 @@ func (mt *metaTx) better(than *metaTx, pendingBaseFee uint64) bool {
 	subPool := mt.subPool
 	thanSubPool := than.subPool
 
+	// For X Layer, optimize tx pool
 	difference := &uint256.Int{}
 	difference.SubUint64(&mt.minFeeCap, pendingBaseFee)
 
@@ -2520,6 +2537,7 @@ func (mt *metaTx) better(than *metaTx, pendingBaseFee uint64) bool {
 	switch mt.currentSubPool {
 	case PendingSubPool:
 		var effectiveTip, thanEffectiveTip uint256.Int
+		// For X Layer, optimize tx pool
 		if (subPool & EnoughFeeCapBlock) == EnoughFeeCapBlock {
 			if difference.CmpUint64(mt.minTip) <= 0 {
 				effectiveTip = *difference
@@ -2548,6 +2566,7 @@ func (mt *metaTx) better(than *metaTx, pendingBaseFee uint64) bool {
 			return mt.cumulativeBalanceDistance < than.cumulativeBalanceDistance
 		}
 	case BaseFeeSubPool:
+		// For X Layer, optimize tx pool
 		if res := mt.minFeeCap.Cmp(&than.minFeeCap); res != 0 {
 			return res > 0
 		}
@@ -2565,6 +2584,7 @@ func (mt *metaTx) better(than *metaTx, pendingBaseFee uint64) bool {
 func (mt *metaTx) worse(than *metaTx, pendingBaseFee uint64) bool {
 	subPool := mt.subPool
 	thanSubPool := than.subPool
+	// For X Layer, optimize tx pool
 	if mt.minFeeCap.CmpUint64(pendingBaseFee) >= 0 {
 		subPool |= EnoughFeeCapBlock
 	}
@@ -2599,6 +2619,7 @@ func (mt *metaTx) worse(than *metaTx, pendingBaseFee uint64) bool {
 
 func (p BestQueue) Len() int { return len(p.ms) }
 func (p BestQueue) Less(i, j int) bool {
+	// For X Layer, optimize tx pool
 	return p.ms[i].better(p.ms[j], p.pendingBastFee)
 }
 func (p BestQueue) Swap(i, j int) {
@@ -2631,6 +2652,7 @@ type WorstQueue struct {
 
 func (p WorstQueue) Len() int { return len(p.ms) }
 func (p WorstQueue) Less(i, j int) bool {
+	// For X Layer, optimize tx pool
 	return p.ms[i].worse(p.ms[j], p.pendingBaseFee)
 }
 func (p WorstQueue) Swap(i, j int) {

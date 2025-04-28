@@ -131,7 +131,6 @@ func StageSequenceBlocksCfg(
 
 	return SequenceBlockCfg{
 		db:               db,
-		dbsmt:            dbsmt,
 		prune:            pm,
 		batchSize:        batchSize,
 		changeSetHook:    changeSetHook,
@@ -156,6 +155,9 @@ func StageSequenceBlocksCfg(
 		yieldSize:        yieldSize,
 		infoTreeUpdater:  infoTreeUpdater,
 		doneHook:         doneHook,
+
+		// For X Layer, split db and ac
+		dbsmt: dbsmt,
 	}
 }
 
@@ -185,10 +187,10 @@ func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockC
 
 func validateIfDatastreamIsAheadOfExecution(
 	s *stagedsync.StageState,
-// u stagedsync.Unwinder,
+	// u stagedsync.Unwinder,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
-// historyCfg stagedsync.HistoryCfg,
+	// historyCfg stagedsync.HistoryCfg,
 ) error {
 	roTx, err := cfg.db.BeginRo(ctx)
 	if err != nil {
@@ -327,6 +329,7 @@ func prepareL1AndInfoTreeRelatedStuff(sdb *stageDb, batchState *BatchState, prop
 			if batchState.resequenceBatchJob.AtNewBlockBoundary() {
 				l1TreeUpdateIndex = uint64(batchState.resequenceBatchJob.CurrentBlock().L1InfoTreeIndex)
 			}
+			// For X Layer, fix mismatch issue
 			if infoTreeIndexProgress >= l1TreeUpdateIndex {
 				shouldWriteGerToContract = false
 			}
@@ -455,7 +458,6 @@ func tryHaltSequencer(batchContext *BatchContext, batchState *BatchState, stream
 		for {
 			if pending, count := batchContext.cfg.legacyVerifier.HasPendingVerifications(); pending {
 				log.Info(fmt.Sprintf("[%s] Waiting for pending verifications to complete before halting sequencer...", batchContext.s.LogPrefix()), "count", count)
-				time.Sleep(2 * time.Second)
 				needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u, s)
 				if needsUnwind || err != nil {
 					return needsUnwind, false, err

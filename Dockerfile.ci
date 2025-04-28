@@ -1,0 +1,43 @@
+# Use Ubuntu 22.04 as the base image
+FROM ubuntu:22.04 AS xedind
+
+# Install dependencies
+RUN apt update && apt install -qy build-essential wget curl git python3 jq bc
+RUN apt update && apt -qy full-upgrade && curl -sSL https://get.docker.com/ | sh
+RUN mkdir -p /app
+
+# Install Go 1.24
+RUN wget https://go.dev/dl/go1.24.2.linux-amd64.tar.gz && tar -xf go1.24.2.linux-amd64.tar.gz && rm go1.24.2.linux-amd64.tar.gz
+RUN mkdir gopath
+ENV GOPATH="/gopath"
+ENV GOROOT="/go"
+ENV PATH="/go/bin:/gopath/bin:${PATH}"
+
+# Install Foundry
+RUN curl -L https://foundry.paradigm.xyz | bash
+ENV PATH="$PATH:/root/.foundry/bin"
+RUN foundryup
+
+# Install polycli
+WORKDIR /app
+RUN tmp_dir=$(mktemp -d) && curl -L https://github.com/0xPolygon/polygon-cli/releases/download/v0.1.48/polycli_v0.1.48_linux_amd64.tar.gz | tar -xz -C "$tmp_dir" && mv "$tmp_dir"/* /usr/local/bin/polycli && rm -rf "$tmp_dir" && chmod +x /usr/local/bin/polycli && /usr/local/bin/polycli version
+
+# Install yq
+RUN curl -L https://github.com/mikefarah/yq/releases/download/v4.44.2/yq_linux_amd64 -o /usr/local/bin/yq && chmod +x /usr/local/bin/yq && /usr/local/bin/yq --version
+
+# Install kurtosis
+WORKDIR /app
+ARG KURTOSIS_CDK_VERSION=v0.2.24
+RUN git clone https://github.com/0xPolygon/kurtosis-cdk.git && cd kurtosis-cdk && git checkout ${KURTOSIS_CDK_VERSION}
+ARG KURTOSIS_CLI_VERSION=1.7.1
+RUN echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | tee /etc/apt/sources.list.d/kurtosis.list && apt update && apt -qy install kurtosis-cli=${KURTOSIS_CLI_VERSION} && kurtosis version && kurtosis analytics disable
+
+
+# Build xlayer-erigon from git version specified by GIT_TAG
+WORKDIR /app
+RUN git clone https://github.com/okx/xlayer-erigon.git
+WORKDIR /app/xlayer-erigon
+# git tag/branch/commit
+ARG GIT_TAG=dev
+RUN git pull && git checkout ${GIT_TAG}
+RUN make cdk-erigon

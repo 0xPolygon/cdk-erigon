@@ -187,7 +187,7 @@ func finaliseBlock(
 
 	// For X Layer
 	zkIncStart := time.Now()
-	// this is actually the interhashes stage
+	// For X Layer, this is actually the interhashes stage
 	newRoot, err := zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
 	if err != nil {
 		return nil, err

@@ -116,6 +116,7 @@ func SequencerZkStages(
 				return SpawnSequencerInterhashesStage(s, u, txc.Tx, ctx, zkInterHashesCfg, true)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
+				// For X Layer, split db and ac
 				return UnwindSequencerInterhashsStage(u, s, txc.Tx, txc.TxSmt, ctx, zkInterHashesCfg)
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
@@ -345,10 +346,12 @@ func DefaultZkStages(
 			Description: "Generate intermediate hashes and computing state root",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
+				// For X Layer, split db and ac
 				_, err := SpawnZkIntermediateHashesStage(s, u, txc.Tx, txc.TxSmt, zkInterHashesCfg, ctx)
 				return err
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
+				// For X Layer, split db and ac
 				return UnwindZkIntermediateHashesStage(u, s, txc.Tx, txc.TxSmt, zkInterHashesCfg, ctx, false)
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
@@ -445,6 +448,7 @@ func DefaultZkStages(
 			Description: "Generate witness caches for each block",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
+				// For X Layer, split db and ac
 				return SpawnStageWitness(s, u, ctx, txc.Tx, txc.TxSmt, stageWitnessCfg)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {

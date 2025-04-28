@@ -123,6 +123,7 @@ func (g *Generator) GetWitnessByBadBatch(tx kv.Tx, txsmt kv.Tx, ctx context.Cont
 		blocks[i] = block
 	}
 
+	// For X Layer, split db and ac
 	return g.generateWitness(tx, txsmt, ctx, batchNum, blocks, debug, witnessFull, nil)
 }
 
@@ -155,6 +156,7 @@ func (g *Generator) GetWitnessByBlockRange(tx kv.Tx, txsmt kv.Tx, ctx context.Co
 		idx++
 	}
 
+	// For X Layer, split db and ac
 	return g.generateWitness(tx, txsmt, ctx, firstBatch, blocks, debug, witnessFull, cache)
 }
 
@@ -192,6 +194,7 @@ func (g *Generator) generateWitness(tx kv.Tx, txsmt kv.Tx, ctx context.Context, 
 		return nil, err
 	}
 
+	// For X Layer, split db and ac
 	var rwtxsmt kv.RwTx = nil
 	if txsmt != nil {
 		rwtxsmt = membatchwithdb.NewMemoryBatchWithSizeNoSequenceWithCache(txsmt, g.dirs.Tmp, g.zkConfig.WitnessMemdbSize, cache)
@@ -216,11 +219,13 @@ func (g *Generator) generateWitness(tx kv.Tx, txsmt kv.Tx, ctx context.Context, 
 			return nil, fmt.Errorf("requested block is too old, block must be within %d blocks of the head block number (currently %d)", g.witnessUnwindLimit, latestBlock)
 		}
 
+		// For X Layer, split db and ac
 		if err := UnwindForWitness(ctx, rwtx, rwtxsmt, startBlock, latestBlock, g.dirs, g.historyV3, g.agg, cache); err != nil {
 			return nil, fmt.Errorf("UnwindForWitness: %w", err)
 		}
 
 		tx = rwtx
+		// For X Layer, split db and ac
 		txsmt = rwtxsmt
 	}
 
@@ -289,6 +294,7 @@ func (g *Generator) generateWitness(tx kv.Tx, txsmt kv.Tx, ctx context.Context, 
 		prevStateRoot = block.Root()
 	}
 
+	// For X Layer, split db and ac
 	witness, err := BuildWitnessFromTrieDbState(ctx, rwtx, rwtxsmt, tds, reader, g.forcedContracts, forcedInfoTreeUpdates, witnessFull)
 	if err != nil {
 		return nil, fmt.Errorf("BuildWitnessFromTrieDbState: %w", err)

@@ -241,6 +241,7 @@ func (c *Collector) Load(db kv.RwTx, toBucket string, loadFunc LoadFunc, args Tr
 					return fmt.Errorf("%s: bucket: %s, append: k=%x, v=%x, %w", c.logPrefix, bucket, k, v, err)
 				}
 			}
+
 			return nil
 		}
 		if err := cursor.Put(k, v); err != nil {

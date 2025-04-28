@@ -364,7 +364,7 @@ log.Info(fmt.Sprintf("SetSmtCache:%v,%v", batchState.batchNumber, block.Number))
 // comment handleShutdown, disable the graceful shutdown
 func TestModifyCodeCase6(t *testing.T) {
 	// File to modify
-	filePath := "../../turbo/stages/stageloop.go"
+	filePath := "../../turbo/stages/stageloop_xlayer.go"
 
 	// Read the file contents
 	data, err := os.ReadFile(filePath)
@@ -402,7 +402,7 @@ func TestModifyCodeCase6(t *testing.T) {
 // comment smt alignment, disable the auto recovery
 func TestModifyCodeCase7(t *testing.T) {
 	// File to modify
-	filePath := "../../zk/stages/stage_sequence_execute.go"
+	filePath := "../../zk/stages/stage_sequence_execute_xlayer.go"
 
 	// Read the file contents
 	data, err := os.ReadFile(filePath)

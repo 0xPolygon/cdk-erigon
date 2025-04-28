@@ -53,6 +53,7 @@ func UnwindForWitness(ctx context.Context, tx kv.RwTx, txsmt kv.RwTx, startBlock
 		expectedRootHash = syncHeadHeader.Root
 	}
 
+	// For X Layer, split db and ac
 	if _, err := zkSmt.UnwindZkSMT(ctx, "api.generateWitness", stageState.BlockNumber, unwindState.UnwindPoint, tx, txsmt, true, &expectedRootHash, true, cache); err != nil {
 		return fmt.Errorf("UnwindZkSMT: %w", err)
 	}
@@ -163,6 +164,7 @@ func BuildWitnessFromTrieDbState(ctx context.Context, tx kv.Tx, txsmt kv.Tx, tds
 		}
 	}
 
+	// For X Layer, split db and ac
 	eridb := db2.NewRoEriDb(txsmt, tx)
 	if txsmt == nil {
 		eridb = db2.NewRoEriDb(tx, tx)

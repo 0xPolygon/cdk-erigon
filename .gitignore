@@ -127,3 +127,6 @@ test/*.out
 datadir
 zk/tests/unwinds/datastream/hermez-dynamic-integration8-datastream
 cmd/smt-db-split/smt-db-split
+test/app
+bridge-config-artifact
+kurtosis-cli.tar.gz

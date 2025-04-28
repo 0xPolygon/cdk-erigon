@@ -50,7 +50,7 @@ func (s *SMT) InsertBatch(cfg InsertBatchConfig, nodeKeys []*utils.NodeKey, node
 		maxInsertingNodePathLevel = 0
 		size                      = len(nodeKeys)
 		smtBatchNodeRoot          *smtBatchNode
-		nodeHashesForDelete       = make(map[utils.NodeKey]struct{})
+		nodeHashesForDelete       = make(map[utils.NodeKey]struct{}) // For X Layer, optimize the map
 	)
 
 	//BE CAREFUL: modifies the arrays
@@ -255,11 +255,12 @@ func (s *SMT) preprocessBatchedNodeValues(
 
 func (s *SMT) deleteBatchedNodeValues(
 	logPrefix string,
-	nodeHashesForDelete map[utils.NodeKey]struct{},
+	nodeHashesForDelete map[utils.NodeKey]struct{}, // For X Layer, optimize the map
 ) error {
 	progressChanDel, stopProgressPrinterDel := getProgressPrinterPre(logPrefix, "deletes", uint64(len(nodeHashesForDelete)), false)
 	defer stopProgressPrinterDel()
 
+	// For X Layer, optimize the map
 	for nodeHash, _ := range nodeHashesForDelete {
 		*progressChanDel <- uint64(1)
 		metrics.GetLogStatistics().CumulativeValue(metrics.ZKHashSMTDeleteByNodeKey, 1)
@@ -507,7 +508,7 @@ func (s *SMT) findInsertingPoint(
 }
 
 func updateNodeHashesForDelete(
-	nodeHashesForDelete map[utils.NodeKey]struct{},
+	nodeHashesForDelete map[utils.NodeKey]struct{}, // For X Layer, optimize the map
 	visitedNodeHashes []*utils.NodeKey,
 ) {
 	for _, visitedNodeHash := range visitedNodeHashes {
@@ -515,7 +516,7 @@ func updateNodeHashesForDelete(
 			continue
 		}
 
-		//setNodeKeyMapValue(nodeHashesForDelete, visitedNodeHash, visitedNodeHash)
+		// For X Layer, optimize the map
 		nodeHashesForDelete[*visitedNodeHash] = struct{}{}
 	}
 }

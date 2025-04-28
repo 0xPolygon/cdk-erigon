@@ -16,6 +16,12 @@ import (
 
 type SMTAlignmentCheckState int
 
+// For X Layer, for auto recovery
+var shouldCheckForExecutionAndSMTAlignment = SMTAlignmentInit
+
+// For X Layer, for local replay feature
+var externalDataStreamServerCreated = false
+
 const (
 	// Initial state
 	SMTAlignmentInit SMTAlignmentCheckState = iota

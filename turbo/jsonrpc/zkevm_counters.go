@@ -124,6 +124,7 @@ func (zkapi *ZkEvmAPIImpl) EstimateCounters(ctx context.Context, rpcTx *zkevmRPC
 	}
 	defer dbtx.Rollback()
 
+	// For X Layer, split db and ac
 	var dbtxsmt kv.Tx = nil
 	if zkapi.dbsmt != nil {
 		dbtxsmt, err = zkapi.dbsmt.BeginRo(ctx)
@@ -185,6 +186,7 @@ func (zkapi *ZkEvmAPIImpl) EstimateCounters(ctx context.Context, rpcTx *zkevmRPC
 
 	txCtx := core.NewEVMTxContext(msg)
 
+	// For X Layer, split db and ac
 	eriDb := db2.NewRoEriDb(dbtxsmt, dbtx)
 	if dbtxsmt == nil {
 		eriDb = db2.NewRoEriDb(dbtx, dbtx)
