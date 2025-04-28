@@ -499,7 +499,7 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 		// nonce to calculate the address of the contract that is being created
 		// It does get incremented inside the `Create` call, after the computation
 		// of the contract's address, but before the execution of the code.
-		ret, _, st.gasRemaining, vmerr = st.evm.Deploy(sender, st.data, st.gasRemaining, st.value, gas)
+		ret, _, st.gasRemaining, vmerr = st.evm.Deploy(sender, st.data, st.gasRemaining, st.value, bailout, gas)
 	} else {
 		// Increment the nonce for the next transaction
 		ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), st.data, st.gasRemaining, st.value, bailout, gas)
