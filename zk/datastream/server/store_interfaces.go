@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
+	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 // StreamStoreType identifies the underlying storage implementation
@@ -18,20 +18,14 @@ const (
 // StreamStoreConfig contains configuration for stream stores
 type StreamStoreConfig struct {
 	// Common config
-	SystemID   uint64
-	StreamType datastreamer.StreamType
-	FilePath   string
-
-	// Implementation selection
-	StoreType StreamStoreType
+	SystemID uint64
+	FilePath string
+	Logger   log.Logger
 
 	// MDBX specific options
 	MDBXMapSize int64
 	MDBXMaxDBS  int
 	MDBXFlags   uint
-
-	// File specific options
-	DatastreamVersion uint8
 }
 
 // StreamStoreFactory creates stream stores based on configuration

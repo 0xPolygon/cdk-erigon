@@ -20,9 +20,9 @@ func NewFileStreamStore(config *StreamStoreConfig) (*FileStreamStore, error) {
 
 	server, err := datastreamer.NewServer(
 		0, // port is not required for store
-		config.DatastreamVersion,
+		3,
 		config.SystemID,
-		config.StreamType,
+		1,
 		config.FilePath,
 		writeTimeout,
 		inactivityTimeout,

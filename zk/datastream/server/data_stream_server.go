@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"github.com/c2h5oh/datasize"
 	"sync"
 	"time"
 
@@ -93,15 +94,13 @@ func (f *ZkEVMDataStreamServerFactory) CreateStreamServer(port uint16, systemID 
 	if storageType == StreamStoreTypeMDBX {
 		// Create MDBX-based storage
 		config := &StreamStoreConfig{
-			SystemID:          systemID,
-			StreamType:        1, // Always use sequencer type
-			FilePath:          fileName,
-			StoreType:         StreamStoreTypeMDBX,
-			DatastreamVersion: datastreamVersion,
-			MDBXMaxDBS:        3,
+			SystemID:    systemID,
+			FilePath:    fileName,
+			MDBXMaxDBS:  3,
+			MDBXMapSize: int64(3 * datasize.GB),
 		}
 
-		mdbxStore, err := NewMDBXStreamStore(config)
+		mdbxStore, err := NewMDBXRwDBStreamStore(config)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create MDBX store: %w", err)
 		}

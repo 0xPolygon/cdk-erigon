@@ -48,21 +48,56 @@ type MDBXStreamStore struct {
 	mutex         sync.RWMutex
 	inTransaction bool
 	txn           *mdbx.Txn // Current transaction
+	streamChannel chan datastreamer.StreamAO
+	atomicOp      datastreamer.StreamAO
 }
 
-func (ms *MDBXStreamStore) SetStreamChannel(chan datastreamer.StreamAO) {
-	//TODO implement me
-	panic("implement me")
+// SetStreamChannel sets the channel for atomic operation notifications
+func (ms *MDBXStreamStore) SetStreamChannel(ch chan datastreamer.StreamAO) {
+	ms.mutex.Lock()
+	defer ms.mutex.Unlock()
+	ms.streamChannel = ch
 }
 
 func (ms *MDBXStreamStore) GetNextEntry() uint64 {
-	//TODO implement me
-	panic("implement me")
+	ms.mutex.RLock()
+	defer ms.mutex.RUnlock()
+	return ms.header.TotalEntries
 }
 
 func (ms *MDBXStreamStore) PrintDumpBookmarks() error {
-	//TODO implement me
-	panic("implement me")
+	ms.mutex.RLock()
+	defer ms.mutex.RUnlock()
+
+	// Create read transaction
+	txn, err := ms.env.BeginTxn(nil, mdbx.Readonly)
+	if err != nil {
+		return err
+	}
+	defer txn.Abort()
+
+	// Create cursor for bookmarks
+	cursor, err := txn.OpenCursor(ms.bookmarksDbi)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close()
+
+	// Walk through all bookmarks
+	key, val, err := cursor.Get(nil, nil, mdbx.First)
+	for ; err == nil; key, val, err = cursor.Get(nil, nil, mdbx.Next) {
+		if key == nil {
+			break
+		}
+		entryNum := binary.BigEndian.Uint64(val)
+		fmt.Printf("Bookmark: %X -> Entry %d\n", key, entryNum)
+	}
+
+	if err != nil && err != mdbx.NotFound {
+		return err
+	}
+
+	return nil
 }
 
 // NewMDBXStreamStore creates a new MDBX-based stream store
@@ -103,7 +138,7 @@ func NewMDBXStreamStore(config *StreamStoreConfig) (*MDBXStreamStore, error) {
 	store := &MDBXStreamStore{
 		env: env,
 		header: datastreamer.HeaderEntry{
-			Version:      config.DatastreamVersion,
+			Version:      3,
 			SystemID:     config.SystemID,
 			TotalEntries: 0,
 			TotalLength:  0,
@@ -250,25 +285,12 @@ func (ms *MDBXStreamStore) GetEntry(entryNum uint64) (datastreamer.FileEntry, er
 	ms.mutex.RLock()
 	defer ms.mutex.RUnlock()
 
-	// Create read transaction if not in a transaction
-	var txn *mdbx.Txn
-	var err error
-	var shouldAbort bool
-
-	if ms.inTransaction {
-		txn = ms.txn
-	} else {
-		txn, err = ms.env.BeginTxn(nil, mdbx.Readonly)
-		if err != nil {
-			return datastreamer.FileEntry{}, err
-		}
-		shouldAbort = true
-		defer func() {
-			if shouldAbort {
-				txn.Abort()
-			}
-		}()
+	// Create read transaction, setting parent if one exists
+	txn, err := ms.env.BeginTxn(ms.txn, mdbx.Readonly)
+	if err != nil {
+		return datastreamer.FileEntry{}, err
 	}
+	defer txn.Abort() // Ensure the transaction is aborted if not committed
 
 	// Create key
 	keyBytes := make([]byte, 8)
@@ -287,12 +309,6 @@ func (ms *MDBXStreamStore) GetEntry(entryNum uint64) (datastreamer.FileEntry, er
 	entry, err := decodeFileEntry(entryBytes)
 	if err != nil {
 		return datastreamer.FileEntry{}, err
-	}
-
-	// If we created a transaction, we need to abort it now
-	shouldAbort = false
-	if !ms.inTransaction {
-		txn.Abort()
 	}
 
 	return entry, nil
@@ -403,6 +419,18 @@ func (ms *MDBXStreamStore) CommitAtomicOp() error {
 	ms.txn = nil
 	ms.inTransaction = false
 
+	if ms.streamChannel != nil {
+		// Do broadcast of the committed atomic operation to the stream clients
+		atomic := datastreamer.StreamAO{
+			Status:     ms.atomicOp.Status,
+			StartEntry: ms.atomicOp.StartEntry,
+		}
+		atomic.Entries = make([]datastreamer.FileEntry, len(ms.atomicOp.Entries))
+		copy(atomic.Entries, ms.atomicOp.Entries)
+
+		ms.streamChannel <- atomic
+	}
+
 	return nil
 }
 
@@ -438,15 +466,57 @@ func (ms *MDBXStreamStore) TruncateFile(entryNum uint64) error {
 		return err
 	}
 
-	// TODO: Implement truncation logic
-	// This will require:
-	// 1. Getting the current header
-	// 2. Deleting all entries above entryNum using cursor to walk the database
-	// 3. Updating the header
+	// Get the current header
+	currentTotal := ms.header.TotalEntries
 
-	// For now, just return error
-	ms.RollbackAtomicOp()
-	return errors.New("truncate not implemented yet")
+	if entryNum >= currentTotal {
+		// Nothing to truncate
+		ms.RollbackAtomicOp()
+		return nil
+	}
+
+	// Create cursor to iterate through entries to delete
+	cursor, err := ms.txn.OpenCursor(ms.dbi)
+	if err != nil {
+		ms.RollbackAtomicOp()
+		return err
+	}
+	defer cursor.Close()
+
+	// Calculate total length adjustment
+	var lengthToSubtract uint64 = 0
+
+	// Delete entries from entryNum to the end
+	for i := entryNum; i < currentTotal; i++ {
+		keyBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(keyBytes, i)
+
+		// Get the entry to calculate length adjustment
+		entryBytes, err := ms.txn.Get(ms.dbi, keyBytes)
+		if err == nil {
+			entry, err := decodeFileEntry(entryBytes)
+			if err == nil {
+				lengthToSubtract += uint64(entry.Length)
+
+				// If it's a bookmark, also remove from bookmarks table
+				if entry.Type == 176 { // Bookmark type
+					ms.txn.Del(ms.bookmarksDbi, entry.Data, nil)
+				}
+			}
+		}
+
+		// Delete the entry
+		if err := ms.txn.Del(ms.dbi, keyBytes, nil); err != nil {
+			ms.RollbackAtomicOp()
+			return err
+		}
+	}
+
+	// Update header
+	ms.header.TotalEntries = entryNum
+	ms.header.TotalLength -= lengthToSubtract
+
+	return ms.CommitAtomicOp()
 }
 
 // IteratorFrom creates an iterator starting from the specified entry
@@ -625,9 +695,6 @@ func (it *MDBXStreamStoreIterator) End() {
 
 // GetEntry returns the current entry
 func (it *MDBXStreamStoreIterator) GetEntry() datastreamer.FileEntry {
-	if !it.hasCurrentEntry {
-		panic("No current entry exists, call iteratorNext first")
-	}
 	return it.currentEntry
 }
 
@@ -803,7 +870,7 @@ func (ms *MDBXStreamStore) GetIterator(entryNum uint64, readOnly bool) (datastre
 		return nil, err
 	}
 
-	// Return the iterator as an interface that can be type-asserted by the caller
+	// Return the iterator as the required interface type
 	return iterator, nil
 }
 

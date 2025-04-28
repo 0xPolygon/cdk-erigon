@@ -685,7 +685,7 @@ var (
 	}
 	DataStreamStorageType = cli.StringFlag{
 		Name:  "zkevm.data-stream-store",
-		Usage: "Define the storage type used for the zkevm data stream",
+		Usage: "Define the storage type used for the zkevm data stream (file, mdbx)",
 		Value: "file",
 	}
 	DataStreamWriteTimeout = cli.DurationFlag{
