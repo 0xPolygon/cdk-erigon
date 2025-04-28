@@ -101,6 +101,6 @@ VALUES ('XLayerSeq', 'default', 'jsonrpc-config.txt', 0),
 
 INSERT INTO `Item` (`NamespaceId`, `Key`, `Type`, `Value`, `IsDeleted`)
 VALUES ('2', 'content', 0, 'zkevm.sequencer-batch-sleep-duration: 1s\nzkevm.sequencer-block-seal-time: 2s\nzkevm.sequencer-batch-seal-time: 20s\nzkevm.bulk-add-txs: false\nyieldsize: 50\nzkevm.enable-add-tx-notify: false\nzkevm.pre-run-address-list: ["0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E"]\nzkevm.block-info-concurrent: false\n', 0),
-       ('4', 'content', 0, 'txpool.enabletimsort: false\ntxpool.packbatchspeciallist : ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"]\ntxpool.blockedlist: ["0xdD2FD4581271e230360230F9337D5c0430Bf44C0"]\ntxpool.enablefreegaslist: true\n[{"name":"e2e", "from_list":["0x586cbc95ed16031d9efdaebacf1c1d2bc3ccaa78"], "to_list":["0xad1d01007a56ee0a4ffd0488fb58fc6500cb1fbe"], "method_sigs":["a9059cbb"], "gas_price_multiple": 1}]\n', 0),
+       ('4', 'content', 0, 'txpool.enabletimsort: false\ntxpool.packbatchspeciallist: ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"]\ntxpool.blockedlist: ["0xdD2FD4581271e230360230F9337D5c0430Bf44C0"]\ntxpool.enablefreegaslist: true\ntxpool.freegaslist: ''[{\"name\":\"e2e\",\"from_list\":[\"0x586cbc95ed16031d9efdaebacf1c1d2bc3ccaa78\"],\"to_list\":[\"0xad1d01007a56ee0a4ffd0488fb58fc6500cb1fbe\"],\"method_sigs\":[\"a9059cbb\"],\"gas_price_multiple\":1}]''\n', 0),
        ('5', 'content', 0, 'http.enabled: false', 0);
 
