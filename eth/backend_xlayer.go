@@ -28,7 +28,7 @@ func listenApollo(ctx context.Context, cfg *ethconfig.Config) {
 				cfg.Zk.SequencerBlockSealTime = ethCfg.Zk.SequencerBlockSealTime
 			}
 			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BlockInfoConcurrent.Name) {
-				blockinfo.SetUseBlockInfoTree(cfg.Zk.XLayer.BlockInfoConcurrent)
+				blockinfo.SetUseBlockInfoTree(ethCfg.Zk.XLayer.BlockInfoConcurrent)
 			}
 		case <-ctx.Done():
 			return

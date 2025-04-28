@@ -94,7 +94,7 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 		}
 	}
 	if ctx.IsSet(utils.BlockInfoConcurrent.Name) {
-		ethCfg.XLayer.BlockInfoConcurrent = ctx.Bool(utils.BlockInfoConcurrent.Name)
+		ethCfg.Zk.XLayer.BlockInfoConcurrent = ctx.Bool(utils.BlockInfoConcurrent.Name)
 	}
 }
 
