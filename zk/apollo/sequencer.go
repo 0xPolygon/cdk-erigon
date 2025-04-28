@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/apolloconfig/agollo/v4/storage"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
@@ -83,6 +84,14 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	}
 	if ctx.IsSet(utils.YieldSizeFlag.Name) {
 		ethCfg.YieldSize = ctx.Uint64(utils.YieldSizeFlag.Name)
+	}
+	if ctx.IsSet(utils.PreRunAddressList.Name) {
+		addrHexes := libcommon.CliString2Array(ctx.String(utils.PreRunAddressList.Name))
+
+		ethCfg.XLayer.PreRunList = make(map[libcommon.Address]struct{}, len(addrHexes))
+		for _, addr := range addrHexes {
+			ethCfg.XLayer.PreRunList[libcommon.HexToAddress(addr)] = struct{}{}
+		}
 	}
 }
 

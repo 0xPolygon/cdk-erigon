@@ -48,6 +48,9 @@ func (apii *APIImpl) listenApollo(ctx context.Context) {
 			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.EnableAddTxNotify.Name) {
 				apii.EnableNotify = ethCfg.XLayer.EnableAddTxNotify
 			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.PreRunAddressList.Name) {
+				apii.PreRunList = ethCfg.XLayer.PreRunList
+			}
 		case <-ctx.Done():
 			return
 		}
