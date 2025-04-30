@@ -371,7 +371,8 @@ BatchLoop:
 		startTime := time.Now()
 		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, batchState.forkId))
 		logTicker.Reset(10 * time.Second)
-		blockTimer := time.NewTimer(cfg.zk.SequencerBlockSealTime)
+		// For X Layer block timer
+		blockTimer := time.NewTimer(cfg.zk.XLayer.SequencerMaxBlockSealTime)
 		ethBlockGasPool := new(core.GasPool).AddGas(transactionGasLimit) // used only in normalcy mode per block
 
 		if batchState.isL1Recovery() {
@@ -460,6 +461,11 @@ BatchLoop:
 			if innerBreak {
 				break
 			}
+			// For X Layer, block timer
+			if len(batchState.blockState.builtBlockElements.transactions) > 0 && time.Since(startTime) >= cfg.zk.SequencerBlockSealTime {
+				blockTimer.Reset(0)
+			}
+
 			select {
 			case <-logTicker.C:
 				if !batchState.isAnyRecovery() {

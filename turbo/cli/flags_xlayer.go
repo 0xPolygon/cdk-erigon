@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -11,6 +13,14 @@ import (
 )
 
 func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
+	sequencerBlockSealTime := cfg.Zk.SequencerBlockSealTime
+	sequencerBatchSealTime := cfg.Zk.SequencerBatchSealTime
+	sequencerMaxBlockSealTimeVal := ctx.String(utils.SequencerMaxBlockSealTime.Name)
+	sequencerMaxBlockSealTime, err := time.ParseDuration(sequencerMaxBlockSealTimeVal)
+	if err != nil || sequencerBlockSealTime > sequencerMaxBlockSealTime || sequencerMaxBlockSealTime > sequencerBatchSealTime {
+		panic(fmt.Sprintf("Got error: %v, sequencer-block-seal-time: %s, sequencer-max-block-seal-time: %s, sequencer-batch-seal-time: %s", err, sequencerBlockSealTime, sequencerMaxBlockSealTime, sequencerBatchSealTime))
+	}
+
 	cfg.XLayer = ethconfig.XLayerConfig{
 		Apollo: ethconfig.ApolloClientConfig{
 			Enable: ctx.Bool(utils.ApolloEnableFlag.Name),
@@ -38,6 +48,7 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		BulkAddTxsWaitTime:                ctx.Duration(utils.BulkAddTxsWaitTimeFlag.Name),
 		EnableAddTxNotify:                 ctx.Bool(utils.EnableAddTxNotify.Name),
 		SequencerSkipEmptyBlocks:          ctx.Bool(utils.SequencerSkipEmptyBlocks.Name),
+		SequencerMaxBlockSealTime:         sequencerMaxBlockSealTime,
 	}
 	if cfg.XLayer.BlockInfoConcurrent {
 		blockinfo.InitUseBlockInfoTreeTrue()

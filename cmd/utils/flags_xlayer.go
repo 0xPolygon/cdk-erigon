@@ -303,6 +303,11 @@ var (
 		Usage: "Skip empty blocks",
 		Value: false,
 	}
+	SequencerMaxBlockSealTime = cli.StringFlag{
+		Name:  "zkevm.sequencer-max-block-seal-time",
+		Usage: "Max block seal time. Defaults to 6s",
+		Value: "6s",
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {

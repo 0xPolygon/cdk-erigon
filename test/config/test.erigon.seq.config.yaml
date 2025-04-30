@@ -30,6 +30,7 @@ zkevm.witness-full: false
 zkevm.executor-mock: true
 
 zkevm.sequencer-block-seal-time: "1s"
+zkevm.sequencer-max-block-seal-time: "3s"
 zkevm.sequencer-batch-seal-time: "10s"
 zkevm.sequencer-batch-sleep-duration: "0s"
 
