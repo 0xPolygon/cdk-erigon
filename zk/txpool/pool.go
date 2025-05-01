@@ -421,9 +421,22 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		policyValidator:         policyValidator,
 		metrics:                 &Metrics{},
 		londonBlock:             londonBlock,
+		shanghaiTime:            blockTimeOrNil(shanghaiTime),
+		agraBlock:               blockTimeOrNil(agraBlock),
+		cancunTime:              blockTimeOrNil(cancunTime),
+		pragueTime:              blockTimeOrNil(pragueTime),
+		auths:                   map[common.Address]*metaTx{},
 	}
 
 	return res, nil
+}
+
+func blockTimeOrNil(block *big.Int) *uint64 {
+	if block == nil {
+		return nil
+	}
+	blockTime := block.Uint64()
+	return &blockTime
 }
 
 func (p *TxPool) Start(ctx context.Context, db kv.RwDB) error {
