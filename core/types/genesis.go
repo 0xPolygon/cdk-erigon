@@ -67,6 +67,9 @@ type Genesis struct {
 	ExcessBlobGas         *uint64      `json:"excessBlobGas"`         // EIP-4844
 	ParentBeaconBlockRoot *common.Hash `json:"parentBeaconBlockRoot"` // EIP-4788
 	RequestsHash          *common.Hash `json:"requestsHash"`          // EIP-7685
+
+	// Zkevm fields
+	HonourChainspec bool `json:"honourChainspec,omitempty"` // Used in normalcy mode
 }
 
 type AuRaSeal struct {

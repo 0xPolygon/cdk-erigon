@@ -2455,6 +2455,7 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 		genesis.Timestamp = dConf.Timestamp
 		genesis.GasLimit = dConf.GasLimit
 		genesis.Difficulty = big.NewInt(dConf.Difficulty)
+		genesis.HonourChainspec = ctx.Bool(HonourChainspec.Name)
 
 		cfg.Genesis = genesis
 
