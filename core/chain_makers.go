@@ -36,6 +36,7 @@ import (
 	"github.com/erigontech/erigon/core/state"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/core/vm"
+	"github.com/erigontech/erigon/core/vm/evmtypes"
 	"github.com/erigontech/erigon/params"
 	"github.com/erigontech/erigon/turbo/trie"
 	zktypes "github.com/erigontech/erigon/zk/types"
@@ -123,7 +124,29 @@ func (b *BlockGen) AddTxWithChain(getHeader func(hash libcommon.Hash, number uin
 		b.SetCoinbase(libcommon.Address{})
 	}
 	b.ibs.SetTxContext(tx.Hash(), libcommon.Hash{}, len(b.txs))
-	receipt, _, err := ApplyTransaction(b.config, GetHashFn(b.header, getHeader), engine, &b.header.Coinbase, b.gasPool, b.ibs, state.NewNoopWriter(), b.header, tx, &b.header.GasUsed, b.header.BlobGasUsed, vm.Config{}, zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED)
+
+	vmCfg := vm.ZkConfig{
+		Config: vm.Config{
+			Debug:         false,
+			Tracer:        nil,
+			NoRecursion:   false,
+			NoBaseFee:     false,
+			SkipAnalysis:  SkipAnalysis(b.config, b.header.Number.Uint64()),
+			TraceJumpDest: false,
+			NoReceipts:    false,
+			ReadOnly:      false,
+			StatelessExec: false,
+			RestoreState:  false,
+			ExtraEips:     nil,
+		},
+	}
+
+	blockHashFunc := GetHashFn(b.header, getHeader)
+	blockContext := NewEVMBlockContext(b.header, blockHashFunc, engine, (*libcommon.Address)(&b.header.Coinbase), b.config)
+
+	evm := vm.NewZkEVM(blockContext, evmtypes.TxContext{}, b.ibs, b.config, vmCfg)
+	receipt, _, err := ApplyTransaction_zkevm(b.config, engine, evm, b.gasPool, b.ibs, state.NewNoopWriter(), b.header, tx, &b.header.GasUsed, zktypes.EFFECTIVE_GAS_PRICE_PERCENTAGE_DISABLED, true)
+
 	if err != nil {
 		panic(err)
 	}

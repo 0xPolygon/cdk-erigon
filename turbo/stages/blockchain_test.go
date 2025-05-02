@@ -1,6 +1,3 @@
-//go:build notzkevm
-// +build notzkevm
-
 // Copyright 2014 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
@@ -2039,6 +2036,7 @@ func TestEIP2718Transition(t *testing.T) {
 					Balance: big.NewInt(0),
 				},
 			},
+			GasLimit: 10000000, // zkevm disable gas limit overrides, so we need to set it
 		}
 	)
 	m := mock.MockWithGenesis(t, gspec, key, false)
@@ -2137,6 +2135,7 @@ func TestEIP1559Transition(t *testing.T) {
 		}
 		signer = types.LatestSigner(gspec.Config)
 	)
+
 	m := mock.MockWithGenesis(t, gspec, key1, false)
 
 	chain, err := core.GenerateChain(m.ChainConfig, m.Genesis, m.Engine, m.DB, 501, func(i int, b *core.BlockGen) {
