@@ -224,6 +224,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.SequencerResequenceReuseL1InfoIndex,
 	&utils.SequencerDecodedTxCacheSize,
 	&utils.SequencerDecodedTxCacheTTL,
+	&utils.SequencerResequenceInfoTreeOffset,
 	&utils.ExecutorUrls,
 	&utils.ExecutorStrictMode,
 	&utils.ExecutorRequestTimeout,

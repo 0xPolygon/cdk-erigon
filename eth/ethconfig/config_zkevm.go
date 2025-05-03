@@ -51,6 +51,7 @@ type Zk struct {
 	SequencerResequenceReuseL1InfoIndex    bool
 	SequencerDecodedTxCacheSize            int
 	SequencerDecodedTxCacheTTL             time.Duration
+	SequencerResequenceInfoTreeOffset      *L1InfoTreeOffset
 	ExecutorUrls                           []string
 	ExecutorStrictMode                     bool
 	ExecutorRequestTimeout                 time.Duration
@@ -205,4 +206,10 @@ func (c *Zk) UsingHermezHardfork() bool {
 
 func (c *Zk) UsingEthereumHardfork() bool {
 	return c.Hardfork == HardforkTypeEthereum
+}
+
+type L1InfoTreeOffset struct {
+	Index           uint64
+	Offset          int64
+	ExpectedGerHash common.Hash
 }
