@@ -581,6 +581,11 @@ var (
 		Usage: "Reuse the L1 info index for resequencing",
 		Value: true,
 	}
+	SequencerResequenceInfoTreeOffset = cli.StringFlag{
+		Name:  "zkevm.sequencer-resequence-info-tree-offset",
+		Usage: "A tuple describing an info tree offset to use during resequencing.  Designed to recover from a skipped leaf in the info tree.  Format <index>:<offset>:<expected_ger_hash>",
+		Value: "",
+	}
 	ExecutorUrls = cli.StringFlag{
 		Name:  "zkevm.executor-urls",
 		Usage: "A comma separated list of grpc addresses that host executors",

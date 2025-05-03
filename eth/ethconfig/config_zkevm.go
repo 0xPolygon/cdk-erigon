@@ -46,6 +46,7 @@ type Zk struct {
 	SequencerResequence                    bool
 	SequencerResequenceStrict              bool
 	SequencerResequenceReuseL1InfoIndex    bool
+	SequencerResequenceInfoTreeOffset      *L1InfoTreeOffset
 	ExecutorUrls                           []string
 	ExecutorStrictMode                     bool
 	ExecutorRequestTimeout                 time.Duration
@@ -114,4 +115,10 @@ func (c *Zk) HasExecutors() bool {
 // ShouldImportInitialBatch returns true in case initial batch config file name is non-empty string.
 func (c *Zk) ShouldImportInitialBatch() bool {
 	return c.InitialBatchCfgFile != ""
+}
+
+type L1InfoTreeOffset struct {
+	Index           uint64
+	Offset          int64
+	ExpectedGerHash common.Hash
 }

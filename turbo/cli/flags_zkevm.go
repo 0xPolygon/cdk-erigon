@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
 
@@ -141,6 +142,39 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		witnessInclusion = append(witnessInclusion, libcommon.HexToAddress(s))
 	}
 
+	var l1InfoTreeOffset *ethconfig.L1InfoTreeOffset
+	infoTreeOffsetStr := ctx.String(utils.SequencerResequenceInfoTreeOffset.Name)
+	if infoTreeOffsetStr != "" {
+		parts := strings.Split(infoTreeOffsetStr, ":")
+		if len(parts) != 3 {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s, should be <index>:<offset>:<expected_ger_hash>", infoTreeOffsetStr))
+		}
+		index, err := strconv.ParseUint(parts[0], 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s", infoTreeOffsetStr))
+		}
+		offset, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s", infoTreeOffsetStr))
+		}
+		hashStr := parts[2]
+		if !strings.HasPrefix(hashStr, "0x") {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s, expected_ger_hash should start with 0x", infoTreeOffsetStr))
+		}
+		if _, err := hex.DecodeString(hashStr[2:]); err != nil {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s, expected_ger_hash should be a valid hex string", infoTreeOffsetStr))
+		}
+		if len(hashStr) != 66 {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s, expected_ger_hash should be 66 characters long", infoTreeOffsetStr))
+		}
+		expectedGerHash := libcommon.HexToHash(hashStr)
+		l1InfoTreeOffset = &ethconfig.L1InfoTreeOffset{
+			Index:           index,
+			Offset:          offset,
+			ExpectedGerHash: expectedGerHash,
+		}
+	}
+
 	cfg.Zk = &ethconfig.Zk{
 		L2ChainId:                              ctx.Uint64(utils.L2ChainIdFlag.Name),
 		L2RpcUrl:                               ctx.String(utils.L2RpcUrlFlag.Name),
@@ -182,6 +216,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		SequencerResequence:                    ctx.Bool(utils.SequencerResequence.Name),
 		SequencerResequenceStrict:              ctx.Bool(utils.SequencerResequenceStrict.Name),
 		SequencerResequenceReuseL1InfoIndex:    ctx.Bool(utils.SequencerResequenceReuseL1InfoIndex.Name),
+		SequencerResequenceInfoTreeOffset:      l1InfoTreeOffset,
 		ExecutorUrls:                           strings.Split(strings.ReplaceAll(ctx.String(utils.ExecutorUrls.Name), " ", ""), ","),
 		ExecutorStrictMode:                     ctx.Bool(utils.ExecutorStrictMode.Name),
 		ExecutorRequestTimeout:                 ctx.Duration(utils.ExecutorRequestTimeout.Name),
