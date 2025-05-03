@@ -72,6 +72,8 @@ var (
 	bucket     = flag.String("bucket", "", "bucket in the database")
 	hash       = flag.String("hash", "0x00", "image for preimage or state root for testBlockHashes action")
 	output     = flag.String("output", "", "output path")
+	key        = flag.Int("key", 1, "key to use from a table")
+	offset     = flag.Int("offset", 0, "offset to apply")
 )
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
@@ -1559,6 +1561,8 @@ func main() {
 		err = getOldAccInputHash(uint64(*block))
 	case "dumpAll":
 		err = dumpAll(*chaindata, *output)
+	case "infoTreeChange":
+		err = infoTreeChange(*chaindata, key, offset)
 	}
 
 	if err != nil {

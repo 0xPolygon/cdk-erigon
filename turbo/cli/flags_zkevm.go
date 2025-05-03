@@ -260,6 +260,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		MockWitnessGeneration:                  ctx.Bool(utils.MockWitnessGeneration.Name),
 		WitnessContractInclusion:               witnessInclusion,
 		BadTxAllowance:                         ctx.Uint64(utils.BadTxAllowance.Name),
+		AlwaysGenerateBatchL2Data:              ctx.Bool(utils.AlwaysGenerateBatchL2Data.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

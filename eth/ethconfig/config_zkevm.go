@@ -100,6 +100,7 @@ type Zk struct {
 	MockWitnessGeneration          bool
 	WitnessContractInclusion       []common.Address
 	BadTxAllowance                 uint64
+	AlwaysGenerateBatchL2Data      bool
 }
 
 var DefaultZkConfig = &Zk{}
