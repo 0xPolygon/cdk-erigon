@@ -162,6 +162,7 @@ func infoTreeChange(chaindata string, keyPtr, offsetPtr *int) error {
 	for blockNumber, index := range toChange {
 		fmt.Printf("blockNumber: %d, index: %d\n", blockNumber, index)
 		tx.Put(kv.BLOCK_L1_INFO_TREE_INDEX, hermez_db.Uint64ToBytes(blockNumber), hermez_db.Uint64ToBytes(index))
+		tx.Put(kv.BLOCK_L1_INFO_TREE_INDEX_PROGRESS, hermez_db.Uint64ToBytes(blockNumber), hermez_db.Uint64ToBytes(index))
 	}
 
 	if err := tx.Commit(); err != nil {
