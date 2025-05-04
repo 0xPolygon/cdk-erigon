@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon/cmd/utils"
+	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
@@ -19,6 +20,12 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	sequencerMaxBlockSealTime, err := time.ParseDuration(sequencerMaxBlockSealTimeVal)
 	if err != nil || sequencerBlockSealTime > sequencerMaxBlockSealTime || sequencerMaxBlockSealTime > sequencerBatchSealTime {
 		panic(fmt.Sprintf("Got error: %v, sequencer-block-seal-time: %s, sequencer-max-block-seal-time: %s, sequencer-batch-seal-time: %s", err, sequencerBlockSealTime, sequencerMaxBlockSealTime, sequencerBatchSealTime))
+	}
+
+	sequencerBatchCounterPercentage := ctx.Int(utils.SequencerBatchCounterPercentage.Name)
+	err = vm.SetBatchCounterLimitPercentage(sequencerBatchCounterPercentage)
+	if err != nil {
+		panic(fmt.Sprintf("Got error: %v, sequencer-batch-counter-percentage: %d", err, sequencerBatchCounterPercentage))
 	}
 
 	cfg.XLayer = ethconfig.XLayerConfig{

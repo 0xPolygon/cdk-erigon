@@ -308,6 +308,11 @@ var (
 		Usage: "Max block seal time. Defaults to 6s",
 		Value: "6s",
 	}
+	SequencerBatchCounterPercentage = cli.IntFlag{
+		Name:  "zkevm.sequencer-batch-counter-percentage",
+		Usage: "Percentage of the sequencer's counter to be used for the batch",
+		Value: 100,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {

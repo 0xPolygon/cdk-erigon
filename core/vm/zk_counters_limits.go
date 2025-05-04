@@ -114,7 +114,8 @@ func getTotalSteps(forkId uint16) int {
 	// we need to remove some steps as these will always be used during batch execution
 	totalSteps -= stepDeduction
 
-	return totalSteps
+	// X Layer is using counterPercentage of the limits
+	return rewriteTotalSteps(totalSteps)
 }
 
 func applyDeduction(fork uint16, input int) int {
