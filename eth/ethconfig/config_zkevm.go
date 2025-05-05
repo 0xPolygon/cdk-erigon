@@ -117,6 +117,7 @@ type Zk struct {
 	WitnessCacheBatchAheadOffset   uint64
 	WitnessCacheBatchBehindOffset  uint64
 	WitnessContractInclusion       []common.Address
+	AlwaysGenerateBatchL2Data      bool
 	RejectLowGasPriceTransactions  bool
 	RejectLowGasPriceTolerance     float64
 	LogLevel                       log.Lvl
