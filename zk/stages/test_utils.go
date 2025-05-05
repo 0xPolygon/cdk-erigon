@@ -51,6 +51,10 @@ func (c *TestDatastreamClient) ReadAllEntriesToChannel() error {
 	return nil
 }
 
+func (c *TestDatastreamClient) ReadRangeEntriesToChannel(from uint64, to uint64) error {
+	return nil
+}
+
 func (c *TestDatastreamClient) RenewEntryChannel() {
 }
 
@@ -60,6 +64,10 @@ func (c *TestDatastreamClient) StopReadingToChannel() {
 
 func (c *TestDatastreamClient) GetEntryChan() *chan interface{} {
 	return &c.entriesChan
+}
+
+func (c *TestDatastreamClient) GetHeader() (*types.HeaderEntry, error) {
+	return nil, nil
 }
 
 func (c *TestDatastreamClient) GetErrChan() chan error {
@@ -110,5 +118,13 @@ func (c *TestDatastreamClient) PrepUnwind() {
 }
 
 func (c *TestDatastreamClient) HandleStart() error {
+	return nil
+}
+
+func (c *TestDatastreamClient) HandleRestart() error {
+	return nil
+}
+
+func (c *TestDatastreamClient) TrySendStopSignal() error {
 	return nil
 }
