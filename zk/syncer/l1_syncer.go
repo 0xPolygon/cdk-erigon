@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/erigontech/erigon/zk/sequencer"
 	"math/big"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -80,11 +82,8 @@ type L1Syncer struct {
 	wgRunLoopDone      sync.WaitGroup
 	flagStop           atomic.Bool
 
-	// Channels
-	//logsChan chan []ethTypes.Log
-	// logsChanProgress chan string
-
 	highestBlockType string // finalized, latest, safe
+	isSequencer      bool
 }
 
 func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay uint64, highestBlockType string) *L1Syncer {
@@ -98,6 +97,7 @@ func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses
 		blockRange:          blockRange,
 		queryDelay:          queryDelay,
 		highestBlockType:    highestBlockType,
+		isSequencer:         sequencer.IsSequencer(),
 	}
 }
 
@@ -110,6 +110,15 @@ func (s *L1Syncer) getNextEtherman() IEtherman {
 	s.ethermanIndex++
 
 	return etherman
+}
+
+// MatchAddress matching address from received log
+func (s *L1Syncer) VerifyAddress(logEntry *ethTypes.Log) bool {
+	return slices.Contains(s.l1ContractAddresses, logEntry.Address)
+}
+
+func (s *L1Syncer) IsSequencer() bool {
+	return s.isSequencer
 }
 
 func (s *L1Syncer) IsSyncStarted() bool {
@@ -355,7 +364,6 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 	for header := range headersQueue {
 		headersMap[header.Number.Uint64()] = header
 	}
-
 	return headersMap, nil
 }
 
@@ -397,8 +405,6 @@ func (s *L1Syncer) queryBlocks(logPrefix string, startBlock, lastBlock uint64, l
 	// lastCheckedL1Block means that it has already been checked in the previous cycle.
 	// It should not be checked again in the new cycle, so +1 is added here.
 	startBlock += 1
-
-	log.Debug("GetHighestSequence", "startBlock", startBlock)
 
 	// define the blocks we're going to fetch up front
 	fetches := makeFetchJobs(startBlock, lastBlock, s.blockRange)
@@ -447,6 +453,10 @@ func (s *L1Syncer) queryBlocks(logPrefix string, startBlock, lastBlock uint64, l
 			progress.Add(res.Size)
 
 			if len(res.Logs) > 0 {
+				// for _, logEntry := range res.Logs {
+				// 	log.Info(fmt.Sprintf("[%s] Log received: %s ====> %s", logPrefix, logEntry.Address, logEntry.Topics))
+				// }
+
 				logsCh <- res.Logs
 			}
 

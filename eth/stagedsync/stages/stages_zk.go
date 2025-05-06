@@ -18,6 +18,7 @@ package stages
 
 var (
 	// ZK stages
+	L1CombinedSyncer            SyncStage = "L1CombinedSyncer"
 	L1Syncer                    SyncStage = "L1Syncer"
 	L1SequencerSyncer           SyncStage = "L1SequencerSyncer"
 	L1VerificationsBatchNo      SyncStage = "L1VerificationsBatchNo"

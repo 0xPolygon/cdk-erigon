@@ -203,6 +203,68 @@ LOOP:
 	return logsCount, nil
 }
 
+func (u *Updater) ProcessInfoTreeUpdates(logPrefix string, tx kv.RwTx, allLogs []types.Log) (logsCount int, err error) {
+	hermezDb := hermez_db.NewHermezDb(tx)
+
+	logsCount = len(allLogs)
+
+	if logsCount == 0 {
+		return 0, nil
+	}
+
+	// sort the logs by block number - it is important that we process them in order to get the index correct
+	sort.Slice(allLogs, func(i, j int) bool {
+		l1 := allLogs[i]
+		l2 := allLogs[j]
+		// first sort by block number and if equal then by tx index
+		if l1.BlockNumber != l2.BlockNumber {
+			return l1.BlockNumber < l2.BlockNumber
+		}
+		if l1.TxIndex != l2.TxIndex {
+			return l1.TxIndex < l2.TxIndex
+		}
+		return l1.Index < l2.Index
+	})
+
+	log.Info(fmt.Sprintf("[%s] Checking for L1 info tree updates, logs count:%v", logPrefix, logsCount))
+
+	commitBlockNumber := allLogs[logsCount-1].BlockNumber + 1
+
+	// chunk the logs into batches, so we don't overload the RPC endpoints too much at once
+	chunks := chunkLogs(allLogs, 50)
+
+	// mark for gc for free memory
+	allLogs = nil
+
+	processed := atomic.Uint32{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go logsProcessingStatus(ctx, logPrefix, &processed, logsCount)
+
+	tree, err := InitialiseL1InfoTree(hermezDb)
+	if err != nil {
+		return 0, fmt.Errorf("InitialiseL1InfoTree: %w", err)
+	}
+
+	// process the logs in chunks
+	for _, chunk := range chunks {
+		err = u.processChunks(tree, hermezDb, &chunk, &processed)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
+	u.progress = commitBlockNumber
+	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
+		return 0, fmt.Errorf("SaveStageProgress: %w", err)
+	}
+
+	return logsCount, nil
+}
+
 // processChunks processes a batch of logs to update the L1 Info Tree and store the results in the database.
 // It handles each chunk, log entry based on its topic, performs updates, and tracks processed log count.
 func (u *Updater) processChunks(tree *L1InfoTree, db *hermez_db.HermezDb, chunk *[]types.Log, processed *atomic.Uint32) (err error) {

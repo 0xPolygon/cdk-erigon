@@ -124,16 +124,32 @@ require (
 )
 
 require (
+	github.com/emirpasic/gods v1.12.0 // indirect
 	github.com/erigontech/erigon-snapshot v1.3.1-0.20240619030755-1e16b374e6cb // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/google/go-licenses v1.6.0 // indirect
+	github.com/google/licenseclassifier v0.0.0-20210722185704-3043a050f148 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
+	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
+	github.com/kevinburke/ssh_config v0.0.0-20190725054713-01f96b0aa0cd // indirect
+	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/otiai10/copy v1.6.0 // indirect
 	github.com/pion/transport/v3 v3.0.7 // indirect
+	github.com/sergi/go-diff v1.3.1 // indirect
+	github.com/src-d/gcfg v1.4.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.14 // indirect
 	github.com/tklauser/numcpus v0.8.0 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
+	github.com/xanzy/ssh-agent v0.2.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	go.opencensus.io v0.23.0 // indirect
+	gopkg.in/src-d/go-billy.v4 v4.3.2 // indirect
+	gopkg.in/src-d/go-git.v4 v4.13.1 // indirect
+	gopkg.in/warnings.v0 v0.1.2 // indirect
+	k8s.io/klog/v2 v2.80.1 // indirect
 )
 
 require (

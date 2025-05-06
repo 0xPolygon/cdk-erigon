@@ -51,8 +51,7 @@ func NewDefaultZkStages(ctx context.Context,
 	runInTestMode := cfg.ImportMode
 
 	return zkStages.DefaultZkStages(ctx,
-		zkStages.StageL1SyncerCfg(db, l1Syncer, cfg.Zk),
-		zkStages.StageL1InfoTreeCfg(db, cfg.Zk, infoTreeUpdater),
+		zkStages.StageL1CombinedSyncerCfg(db, l1Syncer, cfg.Zk, infoTreeUpdater),
 		zkStages.StageBatchesCfg(db, datastreamClient, cfg.Zk, controlServer.ChainConfig, &cfg.Miner),
 		zkStages.StageDataStreamCatchupCfg(dataStreamServer, db, cfg.Genesis.Config.ChainID.Uint64()),
 		stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig, blockWriter),
@@ -118,9 +117,7 @@ func NewSequencerZkStages(ctx context.Context,
 	runInTestMode := cfg.ImportMode
 
 	return zkStages.SequencerZkStages(ctx,
-		zkStages.StageL1SyncerCfg(db, l1Syncer, cfg.Zk),
-		zkStages.StageL1SequencerSyncCfg(db, cfg.Zk, sequencerStageSyncer),
-		zkStages.StageL1InfoTreeCfg(db, cfg.Zk, infoTreeUpdater),
+		zkStages.StageL1CombinedSyncerCfg(db, l1Syncer, cfg.Zk, infoTreeUpdater),
 		zkStages.StageSequencerL1BlockSyncCfg(db, cfg.Zk, l1BlockSyncer),
 		zkStages.StageDataStreamCatchupCfg(dataStreamServer, db, cfg.Genesis.Config.ChainID.Uint64()),
 		zkStages.StageSequenceBlocksCfg(
