@@ -1,0 +1,39 @@
+name: Type 1 test
+on:
+  push:
+    branches:
+      - zkevm
+      - stable/**
+      - project/**
+  pull_request:
+    branches:
+      - zkevm
+      - stable/**
+      - project/**
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+env:
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+jobs:
+  type-1-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cdk-erigon
+        uses: actions/checkout@v4
+      - name: Setup kurtosis
+        uses: ./.github/actions/setup-kurtosis-type-1
+
+      - name: Deploy Storage Contract
+        working-directory: ./cdk-erigon
+        run: |
+          chmod +x .github/scripts/deploy_contract.sh
+          .github/scripts/deploy_contract.sh \
+            "$(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc)" \
+            "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" \
+            ".github/scripts/contracts/storage.sol:Storage"
