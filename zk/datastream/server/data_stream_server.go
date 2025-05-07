@@ -100,7 +100,7 @@ func (f *ZkEVMDataStreamServerFactory) CreateStreamServer(port uint16, systemID 
 			MDBXMapSize: int64(3 * datasize.GB),
 		}
 
-		mdbxStore, err := NewMDBXRwDBStreamStore(config)
+		mdbxStore, err := NewMDBXStreamStore(config)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create MDBX store: %w", err)
 		}

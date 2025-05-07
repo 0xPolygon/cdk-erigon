@@ -14,8 +14,8 @@ import (
 	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
 )
 
-// MDBXRwDBStreamStore implements StreamStore using kv.RwDB interface
-type MDBXRwDBStreamStore struct {
+// MDBXStreamStore implements StreamStore using kv.RwDB interface
+type MDBXStreamStore struct {
 	db            kv.RwDB
 	header        datastreamer.HeaderEntry
 	mutex         sync.RWMutex
@@ -27,6 +27,19 @@ type MDBXRwDBStreamStore struct {
 	logger        log.Logger
 }
 
+// These constants define the MDBX tables we'll use
+const (
+	// Main tables
+	TableEntries   = "entries"   // Store all entries sequentially
+	TableBookmarks = "bookmarks" // Store bookmarks for fast seeking
+	TableMetadata  = "metadata"  // Store header information
+)
+
+const (
+	// Fixed StreamType value
+	StreamTypeValue = 1 // Always use StreamType 1 (sequencer) in this implementation
+)
+
 const (
 	// Atomic operation Status
 	aoNone datastreamer.AOStatus = iota + 1
@@ -35,8 +48,8 @@ const (
 	aoRollbacking
 )
 
-// NewMDBXRwDBStreamStore creates a new kv.RwDB-based stream store
-func NewMDBXRwDBStreamStore(config *StreamStoreConfig) (*MDBXRwDBStreamStore, error) {
+// NewMDBXStreamStore creates a new MDBX-based stream store
+func NewMDBXStreamStore(config *StreamStoreConfig) (StreamStore, error) {
 	ctx := context.Background()
 
 	// Use the logger from the config
@@ -56,7 +69,7 @@ func NewMDBXRwDBStreamStore(config *StreamStoreConfig) (*MDBXRwDBStreamStore, er
 	}
 
 	// Initialize store
-	store := &MDBXRwDBStreamStore{
+	store := &MDBXStreamStore{
 		db:     db,
 		header: datastreamer.NewHeader(3, config.SystemID, StreamTypeValue),
 		ctx:    ctx,
@@ -94,20 +107,17 @@ func NewMDBXRwDBStreamStore(config *StreamStoreConfig) (*MDBXRwDBStreamStore, er
 }
 
 // SetStreamChannel sets the channel for atomic operation notifications
-func (ms *MDBXRwDBStreamStore) SetStreamChannel(ch chan datastreamer.StreamAO) {
+func (ms *MDBXStreamStore) SetStreamChannel(ch chan datastreamer.StreamAO) {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 	ms.streamChannel = ch
 }
 
-func (ms *MDBXRwDBStreamStore) GetNextEntry() uint64 {
+func (ms *MDBXStreamStore) GetNextEntry() uint64 {
 	return ms.header.TotalEntries
 }
 
-func (ms *MDBXRwDBStreamStore) PrintDumpBookmarks() error {
-	ms.mutex.RLock()
-	defer ms.mutex.RUnlock()
-
+func (ms *MDBXStreamStore) PrintDumpBookmarks() error {
 	return ms.db.View(ms.ctx, func(tx kv.Tx) error {
 		cursor, err := tx.Cursor(TableBookmarks)
 		if err != nil {
@@ -129,7 +139,7 @@ func (ms *MDBXRwDBStreamStore) PrintDumpBookmarks() error {
 }
 
 // addToStream handles common entry storage logic
-func (ms *MDBXRwDBStreamStore) addToStream(entryType datastreamer.EntryType, data []byte) (uint64, error) {
+func (ms *MDBXStreamStore) addToStream(entryType datastreamer.EntryType, data []byte) (uint64, error) {
 	// Create entry
 	entryNum := ms.header.TotalEntries
 	entry := datastreamer.NewFileEntry(datastreamer.PtData, entryType, entryNum, data)
@@ -158,7 +168,7 @@ func (ms *MDBXRwDBStreamStore) addToStream(entryType datastreamer.EntryType, dat
 }
 
 // AddStreamEntry adds a new entry to the stream
-func (ms *MDBXRwDBStreamStore) AddStreamEntry(entryType datastreamer.EntryType, data []byte) (uint64, error) {
+func (ms *MDBXStreamStore) AddStreamEntry(entryType datastreamer.EntryType, data []byte) (uint64, error) {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
@@ -170,7 +180,7 @@ func (ms *MDBXRwDBStreamStore) AddStreamEntry(entryType datastreamer.EntryType, 
 }
 
 // AddStreamBookmark adds a new bookmark to the stream
-func (ms *MDBXRwDBStreamStore) AddStreamBookmark(data []byte) (uint64, error) {
+func (ms *MDBXStreamStore) AddStreamBookmark(data []byte) (uint64, error) {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
@@ -178,7 +188,7 @@ func (ms *MDBXRwDBStreamStore) AddStreamBookmark(data []byte) (uint64, error) {
 		return 0, errors.New("must be in transaction to add bookmarks")
 	}
 
-	entryNum, err := ms.addToStream(176, data) // 176 is bookmark type
+	entryNum, err := ms.addToStream(datastreamer.EntryType(types.BookmarkEntryType), data)
 	if err != nil {
 		return 0, err
 	}
@@ -194,89 +204,93 @@ func (ms *MDBXRwDBStreamStore) AddStreamBookmark(data []byte) (uint64, error) {
 }
 
 // GetEntry retrieves an entry from the stream
-func (ms *MDBXRwDBStreamStore) GetEntry(entryNum uint64) (datastreamer.FileEntry, error) {
-	ms.mutex.RLock()
-	defer ms.mutex.RUnlock()
+func (ms *MDBXStreamStore) GetEntry(entryNum uint64) (datastreamer.FileEntry, error) {
+	// Create key
+	keyBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(keyBytes, entryNum)
 
-	var entry datastreamer.FileEntry
+	// Define the read function
+	readFn := func() (interface{}, error) {
+		var entry datastreamer.FileEntry
+		err := ms.db.View(ms.ctx, func(tx kv.Tx) error {
+			// Get from db
+			entryBytes, err := tx.GetOne(TableEntries, keyBytes)
+			if err != nil {
+				return err
+			}
+			if entryBytes == nil {
+				return fmt.Errorf("entry not found: %d", entryNum)
+			}
 
-	// Function to get the entry using a transaction
-	getEntryFn := func(tx kv.Tx) error {
-		// Create key
-		keyBytes := make([]byte, 8)
-		binary.BigEndian.PutUint64(keyBytes, entryNum)
+			// Decode entry
+			decodedEntry, err := decodeFileEntry(entryBytes)
+			if err != nil {
+				return err
+			}
 
-		// Get from db
-		entryBytes, err := tx.GetOne(TableEntries, keyBytes)
-		if err != nil {
-			return err
-		}
-		if entryBytes == nil {
-			return fmt.Errorf("entry not found: %d", entryNum)
-		}
-
-		// Decode entry
-		decodedEntry, err := decodeFileEntry(entryBytes)
-		if err != nil {
-			return err
-		}
-
-		entry = decodedEntry
-		return nil
-	}
-
-	// If we're in a transaction, use the current transaction
-	if ms.inTransaction {
-		err := getEntryFn(ms.currentTx)
+			entry = decodedEntry
+			return nil
+		})
 		return entry, err
 	}
 
-	// Otherwise, start a new read transaction
-	err := ms.db.View(ms.ctx, func(tx kv.Tx) error {
-		return getEntryFn(tx)
-	})
+	// If we're in a transaction, run in separate goroutine
+	if ms.inTransaction {
+		result, err := ms.runReaderInSeparateGoroutine(readFn)
+		if err != nil {
+			return datastreamer.FileEntry{}, err
+		}
+		return result.(datastreamer.FileEntry), nil
+	}
 
-	return entry, err
+	// Otherwise, run directly
+	result, err := readFn()
+	if err != nil {
+		return datastreamer.FileEntry{}, err
+	}
+	return result.(datastreamer.FileEntry), nil
 }
 
 // GetBookmark retrieves a bookmark from the stream
-func (ms *MDBXRwDBStreamStore) GetBookmark(data []byte) (uint64, error) {
-	ms.mutex.RLock()
-	defer ms.mutex.RUnlock()
+func (ms *MDBXStreamStore) GetBookmark(key []byte) (uint64, error) {
+	// Define the read function
+	readFn := func() (interface{}, error) {
+		var entryNum uint64
+		err := ms.db.View(ms.ctx, func(tx kv.Tx) error {
+			// Get from db
+			entryNumBytes, err := tx.GetOne(TableBookmarks, key)
+			if err != nil {
+				return err
+			}
+			if entryNumBytes == nil {
+				return fmt.Errorf("bookmark not found")
+			}
 
-	var entryNum uint64
-
-	// Function to get the bookmark using a transaction
-	getBookmarkFn := func(tx kv.Tx) error {
-		// Get from db
-		entryNumBytes, err := tx.GetOne(TableBookmarks, data)
-		if err != nil {
-			return err
-		}
-		if entryNumBytes == nil {
-			return fmt.Errorf("bookmark not found")
-		}
-
-		entryNum = binary.BigEndian.Uint64(entryNumBytes)
-		return nil
-	}
-
-	// If we're in a transaction, use the current transaction
-	if ms.inTransaction {
-		err := getBookmarkFn(ms.currentTx)
+			entryNum = binary.BigEndian.Uint64(entryNumBytes)
+			return nil
+		})
 		return entryNum, err
 	}
 
-	// Otherwise, start a new read transaction
-	err := ms.db.View(ms.ctx, func(tx kv.Tx) error {
-		return getBookmarkFn(tx)
-	})
+	// If we're in a transaction, run in separate goroutine
+	if ms.inTransaction {
+		result, err := ms.runReaderInSeparateGoroutine(readFn)
+		if err != nil {
+			return 0, err
+		}
+		return result.(uint64), nil
+	}
 
-	return entryNum, err
+	// Otherwise, run directly
+	result, err := readFn()
+	if err != nil {
+		return 0, err
+	}
+	return result.(uint64), nil
 }
 
 // StartAtomicOp starts a transaction
-func (ms *MDBXRwDBStreamStore) StartAtomicOp() error {
+func (ms *MDBXStreamStore) StartAtomicOp() error {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
@@ -304,7 +318,7 @@ func (ms *MDBXRwDBStreamStore) StartAtomicOp() error {
 }
 
 // CommitAtomicOp commits the current transaction
-func (ms *MDBXRwDBStreamStore) CommitAtomicOp() error {
+func (ms *MDBXStreamStore) CommitAtomicOp() error {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
@@ -347,7 +361,7 @@ func (ms *MDBXRwDBStreamStore) CommitAtomicOp() error {
 }
 
 // RollbackAtomicOp aborts the current transaction
-func (ms *MDBXRwDBStreamStore) RollbackAtomicOp() error {
+func (ms *MDBXStreamStore) RollbackAtomicOp() error {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
@@ -362,12 +376,12 @@ func (ms *MDBXRwDBStreamStore) RollbackAtomicOp() error {
 }
 
 // GetHeader returns the current header
-func (ms *MDBXRwDBStreamStore) GetHeader() datastreamer.HeaderEntry {
+func (ms *MDBXStreamStore) GetHeader() datastreamer.HeaderEntry {
 	return ms.header
 }
 
 // TruncateFile truncates the stream to the specified entry number
-func (ms *MDBXRwDBStreamStore) TruncateFile(entryNum uint64) error {
+func (ms *MDBXStreamStore) TruncateFile(entryNum uint64) error {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
@@ -453,12 +467,89 @@ func (ms *MDBXRwDBStreamStore) TruncateFile(entryNum uint64) error {
 }
 
 // IteratorFrom returns an iterator starting from the specified entry
-func (ms *MDBXRwDBStreamStore) IteratorFrom(entryNum uint64, includeBookmarks bool) (*MDBXRwDBStreamStoreIterator, error) {
-	return newMDBXRwDBStreamStoreIterator(ms, entryNum, includeBookmarks), nil
+func (ms *MDBXStreamStore) IteratorFrom(entryNum uint64, includeBookmarks bool) (*MDBXStreamStoreIterator, error) {
+	return newMDBXStreamStoreIterator(ms, entryNum, includeBookmarks), nil
 }
 
 // GetFirstEventAfterBookmark gets the first event after a bookmark
-func (ms *MDBXRwDBStreamStore) GetFirstEventAfterBookmark(bookmark []byte) (datastreamer.FileEntry, error) {
+func (ms *MDBXStreamStore) GetFirstEventAfterBookmark(bookmark []byte) (datastreamer.FileEntry, error) {
+	// If we're in a transaction, we need a specialized approach
+	if ms.inTransaction {
+		// Define a read function that gets the bookmark and finds the first event
+		readFn := func() (interface{}, error) {
+			// Get the bookmark and find first event in a single transaction
+			var resultEntry datastreamer.FileEntry
+			err := ms.db.View(ms.ctx, func(tx kv.Tx) error {
+				// Get bookmark
+				entryNumBytes, err := tx.GetOne(TableBookmarks, bookmark)
+				if err != nil {
+					return err
+				}
+				if entryNumBytes == nil {
+					return fmt.Errorf("bookmark not found")
+				}
+
+				entryNum := binary.BigEndian.Uint64(entryNumBytes)
+				currentEntryNum := entryNum
+
+				// Get maxEntryNum by retrieving the header
+				headerBytes, err := tx.GetOne(TableMetadata, []byte("header"))
+				if err != nil {
+					return err
+				}
+				if headerBytes == nil {
+					return fmt.Errorf("header not found")
+				}
+
+				header, err := decodeHeader(headerBytes)
+				if err != nil {
+					return err
+				}
+
+				maxEntryNum := header.TotalEntries - 1
+
+				// Search for first non-bookmark entry
+				for currentEntryNum <= maxEntryNum {
+					keyBytes := make([]byte, 8)
+					binary.BigEndian.PutUint64(keyBytes, currentEntryNum)
+
+					entryBytes, err := tx.GetOne(TableEntries, keyBytes)
+					if err != nil || entryBytes == nil {
+						currentEntryNum++
+						continue // Skip missing entries
+					}
+
+					entry, err := decodeFileEntry(entryBytes)
+					if err != nil {
+						currentEntryNum++
+						continue // Skip invalid entries
+					}
+
+					// Skip bookmarks
+					if entry.Type == 176 { // Bookmark type
+						currentEntryNum++
+						continue
+					}
+
+					resultEntry = entry
+					return nil
+				}
+
+				return fmt.Errorf("no events after bookmark")
+			})
+
+			return resultEntry, err
+		}
+
+		// Run in separate goroutine
+		result, err := ms.runReaderInSeparateGoroutine(readFn)
+		if err != nil {
+			return datastreamer.FileEntry{}, err
+		}
+		return result.(datastreamer.FileEntry), nil
+	}
+
+	// Standard approach for non-transaction case
 	// Get entry number from bookmark
 	entryNum, err := ms.GetBookmark(bookmark)
 	if err != nil {
@@ -486,7 +577,7 @@ func (ms *MDBXRwDBStreamStore) GetFirstEventAfterBookmark(bookmark []byte) (data
 }
 
 // GetDataBetweenBookmarks gets all data between two bookmarks
-func (ms *MDBXRwDBStreamStore) GetDataBetweenBookmarks(bookmarkFrom, bookmarkTo []byte) ([]byte, error) {
+func (ms *MDBXStreamStore) GetDataBetweenBookmarks(bookmarkFrom, bookmarkTo []byte) ([]byte, error) {
 	// Get entry numbers from bookmarks
 	fromEntryNum, err := ms.GetBookmark(bookmarkFrom)
 	if err != nil {
@@ -502,27 +593,55 @@ func (ms *MDBXRwDBStreamStore) GetDataBetweenBookmarks(bookmarkFrom, bookmarkTo 
 		return nil, fmt.Errorf("invalid bookmark range")
 	}
 
-	// Collect all data in the range
-	var data []byte
-	for i := fromEntryNum + 1; i < toEntryNum; i++ {
-		entry, err := ms.GetEntry(i)
-		if err != nil {
-			continue // Skip errors
-		}
+	// Define the read function to collect data
+	readFn := func() (interface{}, error) {
+		var data []byte
+		err := ms.db.View(ms.ctx, func(tx kv.Tx) error {
+			for i := fromEntryNum + 1; i < toEntryNum; i++ {
+				keyBytes := make([]byte, 8)
+				binary.BigEndian.PutUint64(keyBytes, i)
 
-		// Skip bookmarks
-		if entry.Type == 176 { // Bookmark type
-			continue
-		}
+				entryBytes, err := tx.GetOne(TableEntries, keyBytes)
+				if err != nil || entryBytes == nil {
+					continue // Skip missing entries
+				}
 
-		data = append(data, entry.Data...)
+				entry, err := decodeFileEntry(entryBytes)
+				if err != nil {
+					continue // Skip invalid entries
+				}
+
+				// Skip bookmarks
+				if entry.Type == 176 { // Bookmark type
+					continue
+				}
+
+				data = append(data, entry.Data...)
+			}
+			return nil
+		})
+		return data, err
 	}
 
-	return data, nil
+	// If we're in a transaction, run in separate goroutine
+	if ms.inTransaction {
+		result, err := ms.runReaderInSeparateGoroutine(readFn)
+		if err != nil {
+			return nil, err
+		}
+		return result.([]byte), nil
+	}
+
+	// Otherwise, run directly
+	result, err := readFn()
+	if err != nil {
+		return nil, err
+	}
+	return result.([]byte), nil
 }
 
 // UpdateEntryData updates the data for an existing entry
-func (ms *MDBXRwDBStreamStore) UpdateEntryData(entryNum uint64, entryType datastreamer.EntryType, data []byte) error {
+func (ms *MDBXStreamStore) UpdateEntryData(entryNum uint64, entryType datastreamer.EntryType, data []byte) error {
 	if err := ms.StartAtomicOp(); err != nil {
 		return err
 	}
@@ -558,7 +677,7 @@ func (ms *MDBXRwDBStreamStore) UpdateEntryData(entryNum uint64, entryType datast
 }
 
 // GetIterator returns a file iterator for the stream store
-func (ms *MDBXRwDBStreamStore) GetIterator(entryNum uint64, readOnly bool) (datastreamer.StorageIterator, error) {
+func (ms *MDBXStreamStore) GetIterator(entryNum uint64, readOnly bool) (datastreamer.StorageIterator, error) {
 	// Create a real iterator using our existing implementation
 	iterator, err := ms.IteratorFrom(entryNum, true) // Include bookmarks for compatibility
 	if err != nil {
@@ -570,7 +689,7 @@ func (ms *MDBXRwDBStreamStore) GetIterator(entryNum uint64, readOnly bool) (data
 }
 
 // AddFileEntry adds a file entry directly to the stream
-func (ms *MDBXRwDBStreamStore) AddFileEntry(e datastreamer.FileEntry) error {
+func (ms *MDBXStreamStore) AddFileEntry(e datastreamer.FileEntry) error {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
@@ -601,7 +720,7 @@ func (ms *MDBXRwDBStreamStore) AddFileEntry(e datastreamer.FileEntry) error {
 }
 
 // WriteHeaderEntry writes the current header to storage
-func (ms *MDBXRwDBStreamStore) WriteHeaderEntry() error {
+func (ms *MDBXStreamStore) WriteHeaderEntry() error {
 	if !ms.inTransaction {
 		return errors.New("must be in transaction to write header")
 	}
@@ -615,13 +734,13 @@ func (ms *MDBXRwDBStreamStore) WriteHeaderEntry() error {
 }
 
 // BookmarkPrintDump prints debug information about bookmarks
-func (ms *MDBXRwDBStreamStore) BookmarkPrintDump() {
+func (ms *MDBXStreamStore) BookmarkPrintDump() {
 	// This is a no-op implementation
 	// Only needed to satisfy the StreamStore interface
 }
 
 // Close closes the stream store
-func (ms *MDBXRwDBStreamStore) Close() error {
+func (ms *MDBXStreamStore) Close() error {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
@@ -636,9 +755,9 @@ func (ms *MDBXRwDBStreamStore) Close() error {
 	return nil
 }
 
-// MDBXRwDBStreamStoreIterator implements the datastreamer.StorageIterator interface
-type MDBXRwDBStreamStoreIterator struct {
-	store            *MDBXRwDBStreamStore
+// MDBXStreamStoreIterator implements the datastreamer.StorageIterator interface
+type MDBXStreamStoreIterator struct {
+	store            *MDBXStreamStore
 	currentEntryNum  uint64
 	maxEntryNum      uint64
 	includeBookmarks bool
@@ -649,14 +768,13 @@ type MDBXRwDBStreamStoreIterator struct {
 }
 
 // Next advances the iterator to the next item
-func (it *MDBXRwDBStreamStoreIterator) Next() (bool, error) {
+func (it *MDBXStreamStoreIterator) Next() (bool, error) {
 	if it.currentEntryNum > it.maxEntryNum {
 		it.hasCurrentEntry = false
 		return false, nil
 	}
 
 	for {
-		// Get entry at current position
 		entry, err := it.store.GetEntry(it.currentEntryNum)
 		it.currentEntryNum++
 
@@ -680,27 +798,27 @@ func (it *MDBXRwDBStreamStoreIterator) Next() (bool, error) {
 
 		it.currentEntry = entry
 		it.hasCurrentEntry = true
-		return true, nil
+		return it.currentEntryNum >= it.maxEntryNum, nil
 	}
 }
 
 // End cleans up iterator resources
-func (it *MDBXRwDBStreamStoreIterator) End() {
+func (it *MDBXStreamStoreIterator) End() {
 	// Nothing to clean up for this implementation
 	it.hasCurrentEntry = false
 }
 
 // GetEntry returns the current entry
-func (it *MDBXRwDBStreamStoreIterator) GetEntry() datastreamer.FileEntry {
+func (it *MDBXStreamStoreIterator) GetEntry() datastreamer.FileEntry {
 	return it.currentEntry
 }
 
-// newMDBXRwDBStreamStoreIterator creates a new iterator for the kv.RwDB-based store
-func newMDBXRwDBStreamStoreIterator(store *MDBXRwDBStreamStore, startEntryNum uint64, includeBookmarks bool) *MDBXRwDBStreamStoreIterator {
+// newMDBXStreamStoreIterator creates a new iterator for the MDBX-based store
+func newMDBXStreamStoreIterator(store *MDBXStreamStore, startEntryNum uint64, includeBookmarks bool) *MDBXStreamStoreIterator {
 	// Get max entry num
 	maxEntryNum := store.GetHeader().TotalEntries - 1
 
-	return &MDBXRwDBStreamStoreIterator{
+	return &MDBXStreamStoreIterator{
 		store:            store,
 		currentEntryNum:  startEntryNum,
 		maxEntryNum:      maxEntryNum,
@@ -709,12 +827,12 @@ func newMDBXRwDBStreamStoreIterator(store *MDBXRwDBStreamStore, startEntryNum ui
 }
 
 // GetEntryNumberLimit returns the maximum entry number in the store
-func (it *MDBXRwDBStreamStoreIterator) GetEntryNumberLimit() uint64 {
+func (it *MDBXStreamStoreIterator) GetEntryNumberLimit() uint64 {
 	return it.maxEntryNum + 1
 }
 
 // NextFileEntry returns the next file entry from the iterator
-func (it *MDBXRwDBStreamStoreIterator) NextFileEntry() (*types.FileEntry, error) {
+func (it *MDBXStreamStoreIterator) NextFileEntry() (*types.FileEntry, error) {
 	hasNext, err := it.Next()
 	if err != nil {
 		return nil, err
@@ -736,6 +854,99 @@ func (it *MDBXRwDBStreamStoreIterator) NextFileEntry() (*types.FileEntry, error)
 }
 
 // Close closes the iterator and frees associated resources
-func (it *MDBXRwDBStreamStoreIterator) Close() {
+func (it *MDBXStreamStoreIterator) Close() {
 	it.End()
+}
+
+// Helper functions
+
+// encodeHeader encodes a HeaderEntry into bytes
+func encodeHeader(header *datastreamer.HeaderEntry) ([]byte, error) {
+	// Version(8) + SystemID(8) + TotalEntries(8) + TotalLength(8) = 32 bytes
+	result := make([]byte, 32)
+
+	// Write Version (bytes 0-8)
+	binary.LittleEndian.PutUint64(result[0:8], uint64(header.Version))
+
+	// Write SystemID (bytes 8-16)
+	binary.LittleEndian.PutUint64(result[8:16], header.SystemID)
+
+	// Write TotalEntries (bytes 16-24)
+	binary.LittleEndian.PutUint64(result[16:24], header.TotalEntries)
+
+	// Write TotalLength (bytes 24-32)
+	binary.LittleEndian.PutUint64(result[24:32], header.TotalLength)
+
+	return result, nil
+}
+
+// decodeHeader decodes bytes into a HeaderEntry
+func decodeHeader(data []byte) (*datastreamer.HeaderEntry, error) {
+	if len(data) < 32 {
+		return nil, fmt.Errorf("header data too short: got %d bytes, expected at least 32", len(data))
+	}
+
+	header := datastreamer.NewHeader(
+		uint8(binary.LittleEndian.Uint64(data[0:8])),
+		binary.LittleEndian.Uint64(data[8:16]),
+		datastreamer.StreamType(1), // Always use StreamType 1 (sequencer)
+	)
+	header.TotalEntries = binary.LittleEndian.Uint64(data[16:24])
+	header.TotalLength = binary.LittleEndian.Uint64(data[24:32])
+
+	return &header, nil
+}
+
+// encodeFileEntry encodes a FileEntry to bytes
+func encodeFileEntry(entry datastreamer.FileEntry) ([]byte, error) {
+	result := make([]byte, 17+len(entry.Data))
+	result[0] = 2 // PacketType (2 for data)
+	binary.BigEndian.PutUint32(result[1:5], entry.Length)
+	binary.BigEndian.PutUint32(result[5:9], uint32(entry.Type))
+	binary.BigEndian.PutUint64(result[9:17], entry.Number)
+	copy(result[17:], entry.Data)
+	return result, nil
+}
+
+// decodeFileEntry decodes bytes to a FileEntry
+func decodeFileEntry(data []byte) (datastreamer.FileEntry, error) {
+	if len(data) < 17 {
+		return datastreamer.FileEntry{}, errors.New("invalid file entry data")
+	}
+
+	length := binary.BigEndian.Uint32(data[1:5])
+	entryType := datastreamer.EntryType(binary.BigEndian.Uint32(data[5:9]))
+	number := binary.BigEndian.Uint64(data[9:17])
+	entryData := data[17:]
+
+	decoded := datastreamer.NewFileEntry(data[0], entryType, number, entryData)
+	decoded.Length = length
+	return decoded, nil
+}
+
+// runReaderInSeparateGoroutine executes a read operation in a separate goroutine
+// This is useful when we're in a write transaction and need to perform a read operation
+// which would otherwise fail due to MDBX's thread-specific transaction restrictions
+func (ms *MDBXStreamStore) runReaderInSeparateGoroutine(readFn func() (interface{}, error)) (interface{}, error) {
+	resultCh := make(chan interface{}, 1)
+	errCh := make(chan error, 1)
+
+	go func() {
+		result, err := readFn()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		resultCh <- result
+	}()
+
+	// Wait for the result or error
+	select {
+	case result := <-resultCh:
+		return result, nil
+	case err := <-errCh:
+		return nil, err
+	case <-ms.ctx.Done():
+		return nil, ms.ctx.Err()
+	}
 }
