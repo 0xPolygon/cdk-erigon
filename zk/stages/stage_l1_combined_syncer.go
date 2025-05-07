@@ -348,7 +348,7 @@ func processLogs(
 				return err
 			}
 
-			if err := processSequencerLog(&logEntries[logEntryIndex], rollupId, hermezDb, headersMap); err != nil {
+			if err = processSequencerLog(&logEntries[logEntryIndex], rollupId, hermezDb, headersMap, logsVerificationResult); err != nil {
 				return fmt.Errorf("processSequencerLog: %w", err)
 			}
 		case logTypeL1InfoTree:
@@ -427,6 +427,7 @@ func processSequencerLog(
 	rollupId uint64,
 	hermezDb *hermez_db.HermezDb,
 	headersMap map[uint64]*ethTypes.Header,
+	logsVerificationResult *logsVerificationResult,
 ) error {
 	switch logEntry.Topics[0] {
 	case contracts.InitialSequenceBatchesTopic:
@@ -435,6 +436,7 @@ func processSequencerLog(
 		if err := HandleInitialSequenceBatches(hermezDb, logEntry, header); err != nil {
 			return err
 		}
+		logsVerificationResult.UpdateHigherBlock(logEntry.BlockNumber)
 	case contracts.AddNewRollupTypeTopic:
 		fallthrough
 	case contracts.AddNewRollupTypeTopicBanana:
@@ -444,6 +446,7 @@ func processSequencerLog(
 		if err := hermezDb.WriteRollupType(rollupType, forkId); err != nil {
 			return err
 		}
+		logsVerificationResult.UpdateHigherBlock(logEntry.BlockNumber)
 	case contracts.CreateNewRollupTopic:
 		logRollupId := logEntry.Topics[1].Big().Uint64()
 		if logRollupId != rollupId {
@@ -461,6 +464,7 @@ func processSequencerLog(
 		if err = hermezDb.WriteNewForkHistory(fork, 0); err != nil {
 			return err
 		}
+		logsVerificationResult.UpdateHigherBlock(logEntry.BlockNumber)
 	case contracts.UpdateRollupTopic:
 		logRollupId := logEntry.Topics[1].Big().Uint64()
 		if logRollupId != rollupId {
@@ -481,6 +485,7 @@ func processSequencerLog(
 		if err = hermezDb.WriteNewForkHistory(fork, latestVerified); err != nil {
 			return err
 		}
+		logsVerificationResult.UpdateHigherBlock(logEntry.BlockNumber)
 	default:
 		log.Warn("received unexpected topic from l1 sequencer sync stage", "topic", logEntry.Topics[0])
 	}

@@ -200,9 +200,12 @@ LOOP:
 	}
 
 	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
-	u.progress = commitBlockNumber
-	if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
-		return 0, fmt.Errorf("SaveStageProgress: %w", err)
+	if commitBlockNumber > u.progress {
+		u.progress = commitBlockNumber
+
+		if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
+			return 0, fmt.Errorf("SaveStageProgress: %w", err)
+		}
 	}
 
 	return logsCount, nil
@@ -262,9 +265,12 @@ func (u *Updater) ProcessInfoTreeUpdates(logPrefix string, tx kv.RwTx, allLogs [
 	}
 
 	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
-	u.progress = commitBlockNumber
-	if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
-		return 0, fmt.Errorf("SaveStageProgress: %w", err)
+	if commitBlockNumber > u.progress {
+		u.progress = commitBlockNumber
+
+		if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
+			return 0, fmt.Errorf("SaveStageProgress: %w", err)
+		}
 	}
 
 	return logsCount, nil
