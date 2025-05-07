@@ -102,7 +102,7 @@ func (r *DatastreamClientRunner) StartRangeRead(
 
 			from := progress.Load()
 			if from >= highestDSL2Block {
-				return
+				break
 			}
 
 			to := min(from+blockRange, highestDSL2Block)
