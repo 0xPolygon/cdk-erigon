@@ -34,6 +34,7 @@ func TestSpawnStageL1Syncer(t *testing.T) {
 	tx := memdb.BeginRw(t, db1)
 	err := hermez_db.CreateHermezBuckets(tx)
 	require.NoError(t, err)
+
 	err = db.CreateEriDbBuckets(tx)
 	require.NoError(t, err)
 
@@ -321,6 +322,9 @@ func TestSpawnStageL1Syncer(t *testing.T) {
 	for _, tc := range testCases {
 		tc.assert(t, hDB)
 	}
+
+	progress, err := stages.GetStageProgress(tx, stages.L1CombinedSyncer)
+	assert.Equal(t, latestBlockNumber.Uint64(), progress)
 }
 
 func TestSpawnL1SequencerSyncStage(t *testing.T) {
@@ -643,8 +647,13 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 	EthermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
 
 	l1Syncer := syncer.NewL1Syncer(ctx, db2, []syncer.IEtherman{EthermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
-	updater := l1infotree.NewUpdater(&ethconfig.Zk{}, l1Syncer, l1infotree.NewInfoTreeL2RpcSyncer(ctx, &ethconfig.Zk{}))
-	cfg := StageL1CombinedSyncerCfg(db1, l1Syncer, &ethconfig.Zk{}, updater)
+
+	zkCfg := &ethconfig.Zk{
+		L1FirstBlock: latestBlockNumber.Uint64(),
+	}
+
+	updater := l1infotree.NewUpdater(zkCfg, l1Syncer, l1infotree.NewInfoTreeL2RpcSyncer(ctx, &ethconfig.Zk{}))
+	cfg := StageL1CombinedSyncerCfg(db1, l1Syncer, zkCfg, updater)
 
 	// act
 	err = SpawnStageL1CombinedSyncer(s, u, ctx, tx, cfg, false)
@@ -665,8 +674,10 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 	// check WriteL1InfoTreeLeaf
 	leaves, err := hDB.GetAllL1InfoTreeLeaves()
 	require.NoError(t, err)
+	require.NotNil(t, leaves)
 
 	leafHash := common.BytesToHash(leafBytes[:])
+	require.NotNil(t, leafHash)
 	assert.Len(t, leaves, 1)
 	assert.Equal(t, leafHash.String(), leaves[0].String())
 
@@ -702,8 +713,9 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 	assert.True(t, found)
 
 	// check SaveStageProgress
-	progress, err := stages.GetStageProgress(tx, stages.L1InfoTree)
+	progress, err := stages.GetStageProgress(tx, stages.L1CombinedSyncer)
 	require.NoError(t, err)
+	t.Logf("%d", latestBlockNumber.Uint64())
 	assert.Equal(t, latestBlockNumber.Uint64()+1, progress)
 }
 

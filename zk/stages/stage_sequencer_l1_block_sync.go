@@ -110,7 +110,7 @@ func SpawnSequencerL1BlockSyncStage(
 	if err != nil {
 		return err
 	}
-	if l1BlockHeight == 0 {
+	if l1BlockHeight == 0 && cfg.zkCfg.L1SyncStartBlock > 0 {
 		l1BlockHeight = cfg.zkCfg.L1SyncStartBlock
 	}
 

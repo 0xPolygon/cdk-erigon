@@ -206,7 +206,7 @@ func SpawnStageL1CombinedSyncer(
 		return fmt.Errorf("cfg.updater.WarmUp: %w", err)
 	}*/
 
-	if l1BlockProgress == 0 {
+	if l1BlockProgress == 0 && cfg.zkCfg.L1FirstBlock > 0 {
 		l1BlockProgress = cfg.zkCfg.L1FirstBlock - 1
 	}
 
