@@ -7,7 +7,6 @@ runs:
     - name: Checkout cdk-erigon
       uses: actions/checkout@v4
       with:
-        ref: project/pp2
         path: cdk-erigon
 
     - name: Checkout kurtosis-cdk

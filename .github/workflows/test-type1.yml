@@ -26,6 +26,7 @@ jobs:
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4
+
       - name: Setup kurtosis
         uses: ./.github/actions/setup-kurtosis-type-1
 
