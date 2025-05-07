@@ -72,7 +72,6 @@ type DatastreamClient interface {
 	Start() error
 	Stop() error
 	HandleStart() error
-	HandleRestart() error
 	TrySendStopSignal() error
 }
 

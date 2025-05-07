@@ -124,10 +124,6 @@ func (c *TestDatastreamClient) HandleStart() error {
 	return nil
 }
 
-func (c *TestDatastreamClient) HandleRestart() error {
-	return nil
-}
-
 func (c *TestDatastreamClient) TrySendStopSignal() error {
 	return nil
 }
