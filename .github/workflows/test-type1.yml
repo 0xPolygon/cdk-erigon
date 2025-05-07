@@ -32,4 +32,6 @@ jobs:
 
       - name: Deploy Storage Contract
         working-directory: ./cdk-erigon
-        run: .github/scripts/deploy_contract.sh "$(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc)" "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" ".github/scripts/contracts/storage.sol:Storage"
+        run: |
+          chmod +x .github/scripts/deploy_contract.sh
+          .github/scripts/deploy_contract.sh "$(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc)" "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" ".github/scripts/contracts/storage.sol:Storage"
