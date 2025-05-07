@@ -51,7 +51,7 @@ func (c *TestDatastreamClient) ReadAllEntriesToChannel() error {
 	return nil
 }
 
-func (c *TestDatastreamClient) ReadRangeEntriesToChannel(from uint64, to uint64) error {
+func (c *TestDatastreamClient) ReadRangeEntriesToChannel(to uint64) error {
 	return nil
 }
 
