@@ -228,6 +228,8 @@ type Ethereum struct {
 	l1Syncer        *syncer.L1Syncer
 	etherManClients []*etherman.Client
 	l1Cache         *l1_cache.L1Cache
+	// l1CacheDB is the database optional used by L1 syncer.
+	l1CacheDB kv.RwDB
 
 	preStartTasks *PreStartTasks
 
@@ -322,7 +324,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 	var chainConfig *chain.Config
 	var genesis *types.Block
-	if err := backend.chainDB.Update(context.Background(), func(tx kv.RwTx) error {
+	if err = backend.chainDB.Update(context.Background(), func(tx kv.RwTx) error {
 		h, err := rawdb.ReadCanonicalHash(tx, 0)
 		if err != nil {
 			panic(err)
@@ -348,7 +350,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 	setBorDefaultMinerGasPrice(chainConfig, config, logger)
 	setBorDefaultTxPoolPriceLimit(chainConfig, config.TxPool, logger)
 
-	if err := chainKv.Update(context.Background(), func(tx kv.RwTx) error {
+	if err = chainKv.Update(context.Background(), func(tx kv.RwTx) error {
 		isCorrectSync, useSnapshots, err := snap.EnsureNotChanged(tx, config.Snapshot)
 		if err != nil {
 			return err
@@ -384,7 +386,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		chainKv = backend.chainDB //nolint
 	}
 
-	if err := backend.setUpSnapDownloader(ctx, config.Downloader); err != nil {
+	if err = backend.setUpSnapDownloader(ctx, config.Downloader); err != nil {
 		return nil, err
 	}
 
@@ -961,7 +963,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 	// }
 
 	// create buckets
-	if err := createBuckets(tx); err != nil {
+	if err = createBuckets(tx); err != nil {
 		return nil, err
 	}
 
@@ -1069,8 +1071,14 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		log.Info("Rollup ID", "rollupId", cfg.L1RollupId)
 
+		backend.l1CacheDB, err = node.OpenDatabase(ctx, stack.Config(), kv.L1CacheDB, "", false, logger)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Failed to open l1cache db: %s", err))
+		}
+
 		l1InfoTreeSyncer := syncer.NewL1Syncer(
 			ctx,
+			backend.l1CacheDB,
 			ethermanClients,
 			[]libcommon.Address{cfg.AddressGerManager},
 			[][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic}},
@@ -1103,6 +1111,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			seqVerSyncer := syncer.NewL1Syncer(
 				ctx,
+				backend.l1CacheDB,
 				ethermanClients,
 				l1Contracts,
 				l1Topics,
@@ -1113,6 +1122,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			backend.l1Syncer = syncer.NewL1Syncer(
 				ctx,
+				backend.l1CacheDB,
 				ethermanClients,
 				l1Contracts,
 				l1Topics,
@@ -1170,6 +1180,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			l1BlockSyncer := syncer.NewL1Syncer(
 				ctx,
+				backend.l1CacheDB,
 				ethermanClients,
 				[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup},
 				[][]libcommon.Hash{{
@@ -1233,6 +1244,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			backend.l1Syncer = syncer.NewL1Syncer(
 				ctx,
+				backend.l1CacheDB,
 				ethermanClients,
 				l1Contracts,
 				l1Topics,
@@ -2048,6 +2060,7 @@ func (s *Ethereum) Stop() error {
 		s.agg.Close()
 	}
 	s.chainDB.Close()
+	s.l1CacheDB.Close()
 
 	s.gasTracker.Stop()
 

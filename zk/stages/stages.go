@@ -429,7 +429,7 @@ func DefaultZkStages(
 }
 
 var AllStagesZk = []stages2.SyncStage{
-	stages2.L1Syncer,
+	//stages2.L1Syncer,stages2.L1CombinedSyncer,
 	stages2.Batches,
 	stages2.BlockHashes,
 	stages2.Senders,
@@ -452,7 +452,8 @@ var ZkSequencerUnwindOrder = stages.UnwindOrder{
 	stages2.AccountHistoryIndex,
 	stages2.CallTraces,
 	stages2.Execution, // need to happen after history and calltraces
-	stages2.L1Syncer,
+	stages2.L1CombinedSyncer,
+	//stages2.L1Syncer,
 	stages2.Finish,
 }
 
@@ -468,6 +469,7 @@ var ZkUnwindOrder = stages.UnwindOrder{
 	stages2.Senders,
 	stages2.BlockHashes,
 	stages2.Batches,
-	stages2.L1Syncer,
+	stages2.L1CombinedSyncer,
+	// stages2.L1Syncer,
 	stages2.Finish,
 }

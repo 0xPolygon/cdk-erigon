@@ -21,6 +21,11 @@ import (
 	"github.com/iden3/go-iden3-crypto/keccak256"
 )
 
+const (
+	// TODO: Configure chunk size, based on the number of available RPC endpoints
+	chunkSize = 100
+)
+
 type Syncer interface {
 	IsSyncStarted() bool
 	RunQueryBlocks(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error)
@@ -83,7 +88,7 @@ func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
 
 	hermezDb := hermez_db.NewHermezDb(tx)
 
-	progress, err := stages.GetStageProgress(tx, stages.L1InfoTree)
+	progress, err := stages.GetStageProgress(tx, stages.L1CombinedSyncer)
 	if err != nil {
 		return err
 	}
@@ -169,7 +174,7 @@ LOOP:
 	commitBlockNumber := allLogs[logsCount-1].BlockNumber + 1
 
 	// chunk the logs into batches, so we don't overload the RPC endpoints too much at once
-	chunks := chunkLogs(allLogs, 50)
+	chunks := chunkLogs(allLogs, chunkSize)
 
 	// mark for gc for free memory
 	allLogs = nil
@@ -196,7 +201,7 @@ LOOP:
 
 	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
 	u.progress = commitBlockNumber
-	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
 		return 0, fmt.Errorf("SaveStageProgress: %w", err)
 	}
 
@@ -231,7 +236,7 @@ func (u *Updater) ProcessInfoTreeUpdates(logPrefix string, tx kv.RwTx, allLogs [
 	commitBlockNumber := allLogs[logsCount-1].BlockNumber + 1
 
 	// chunk the logs into batches, so we don't overload the RPC endpoints too much at once
-	chunks := chunkLogs(allLogs, 50)
+	chunks := chunkLogs(allLogs, chunkSize)
 
 	// mark for gc for free memory
 	allLogs = nil
@@ -258,7 +263,7 @@ func (u *Updater) ProcessInfoTreeUpdates(logPrefix string, tx kv.RwTx, allLogs [
 
 	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
 	u.progress = commitBlockNumber
-	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
 		return 0, fmt.Errorf("SaveStageProgress: %w", err)
 	}
 
@@ -478,7 +483,7 @@ LOOP:
 		u.progress = infoTrees[len(infoTrees)-1].BlockNumber + 1
 	}
 
-	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
 		return nil, fmt.Errorf("SaveStageProgress: %w", err)
 	}
 

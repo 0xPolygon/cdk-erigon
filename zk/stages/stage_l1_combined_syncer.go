@@ -113,11 +113,11 @@ type logsVerificationResult struct {
 
 func SpawnStageL1CombinedSyncer(
 	s *stagedsync.StageState,
-	u stagedsync.Unwinder,
+	_ stagedsync.Unwinder,
 	ctx context.Context,
 	tx kv.RwTx,
 	cfg L1CombinedSyncerCfg,
-	quiet bool,
+	_ bool,
 ) error {
 	start := time.Now()
 	///// DEBUG BISECT /////
@@ -144,12 +144,13 @@ func SpawnStageL1CombinedSyncer(
 		defer tx.Rollback()
 	}
 
-	l1InfoTreeProgress, err := stages.GetStageProgress(tx, stages.L1InfoTree)
+	// get l1 block progress from this stage's progress
+	l1BlockProgress, err := stages.GetStageProgress(tx, stages.L1CombinedSyncer)
 	if err != nil {
-		return err
+		return fmt.Errorf("GetStageProgress, %w", err)
 	}
-	// L2InfoTreeUpdatesEnabled must be enabled, this method uses an updated rpc method that uses to and from.
-	if l1InfoTreeProgress == 0 && !sequencer.IsSequencer() && cfg.zkCfg.L2InfoTreeUpdatesEnabled {
+
+	if l1BlockProgress == 0 && !sequencer.IsSequencer() && cfg.zkCfg.L2InfoTreeUpdatesEnabled {
 		select {
 		default:
 			// If we are a rpc node, and we are starting from the beginning, we need to check for updates from the L2
@@ -175,12 +176,6 @@ func SpawnStageL1CombinedSyncer(
 
 			return nil
 		}
-	}
-
-	// get l1 block progress from this stage's progress
-	l1BlockProgress, err := stages.GetStageProgress(tx, stages.L1Syncer)
-	if err != nil {
-		return fmt.Errorf("GetStageProgress, %w", err)
 	}
 
 	if l1BlockProgress <= cfg.zkCfg.L1FinalizedBlockRequirement && cfg.zkCfg.L1FinalizedBlockRequirement > 0 {
@@ -241,7 +236,7 @@ func SpawnStageL1CombinedSyncer(
 		),
 		)
 
-		if err = stages.SaveStageProgress(tx, stages.L1Syncer, result.HighestWrittenL1BlockNumber()); err != nil {
+		if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, result.HighestWrittenL1BlockNumber()); err != nil {
 			return fmt.Errorf("SaveStageProgress: %w", err)
 		}
 		if result.HighestVerification().BatchNo > 0 {
@@ -261,14 +256,14 @@ func SpawnStageL1CombinedSyncer(
 
 		// For syncer only
 		// TODO: Combine
-		if cfg.IsSequencer() {
+		/*if cfg.IsSequencer() {
 			if l1BlockProgress >= cfg.zkCfg.L1FirstBlock {
 				// do not save progress if progress less than L1FirstBlock
 				if err = stages.SaveStageProgress(tx, stages.L1SequencerSync, l1BlockProgress); err != nil {
 					return err
 				}
 			}
-		}
+		}*/
 
 	} else {
 		log.Info(fmt.Sprintf("[%s] No new L1 blocks to sync", logPrefix))
@@ -436,7 +431,6 @@ func processSequencerLog(
 	switch logEntry.Topics[0] {
 	case contracts.InitialSequenceBatchesTopic:
 		// Called once, optimize
-		fmt.Println("InitialSequenceBatchesTopic")
 		header := headersMap[logEntry.BlockNumber]
 		if err := HandleInitialSequenceBatches(hermezDb, logEntry, header); err != nil {
 			return err
@@ -703,7 +697,7 @@ func verifyAgainstLocalBlocks(tx kv.RwTx, hermezDb *hermez_db.HermezDb, logPrefi
 	if !sequencer.IsSequencer() {
 		if err = blockComparison(tx, hermezDb, blockToCheck, logPrefix); err == nil {
 			log.Info(fmt.Sprintf("[%s] State root verified in block %d", logPrefix, blockToCheck))
-			if err := stages.SaveStageProgress(tx, stages.VerificationsStateRootCheck, verifiedBlockNo); err != nil {
+			if err = stages.SaveStageProgress(tx, stages.VerificationsStateRootCheck, verifiedBlockNo); err != nil {
 				return fmt.Errorf("SaveStageProgress: %w", err)
 			}
 		}
