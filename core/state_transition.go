@@ -462,8 +462,9 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 		}
 	}
 
+	isPragueNormalcy := rules.IsPrague && rules.IsNormalcy
 	// Check clauses 4-5, subtract intrinsic gas if everything is correct
-	gas, floorGas7623, err := IntrinsicGas(st.data, accessTuples, contractCreation, rules.IsHomestead, rules.IsIstanbul, isEIP3860, rules.IsPrague, uint64(len(auths)))
+	gas, floorGas7623, err := IntrinsicGas(st.data, accessTuples, contractCreation, rules.IsHomestead, rules.IsIstanbul, isEIP3860, isPragueNormalcy, uint64(len(auths)))
 	if err != nil {
 		return nil, err
 	}
@@ -513,12 +514,12 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 		gasUsed := st.gasUsed()
 		refund := min(gasUsed/refundQuotient, st.state.GetRefund())
 		gasUsed = gasUsed - refund
-		if rules.IsPrague {
+		if isPragueNormalcy {
 			gasUsed = max(floorGas7623, gasUsed)
 		}
 		st.gasRemaining = st.initialGas - gasUsed
 		st.refundGas()
-	} else if rules.IsPrague {
+	} else if isPragueNormalcy {
 		st.gasRemaining = st.initialGas - max(floorGas7623, st.gasUsed())
 	}
 
