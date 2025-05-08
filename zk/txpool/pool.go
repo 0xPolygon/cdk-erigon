@@ -317,6 +317,8 @@ type TxPool struct {
 	isPostCancun            atomic.Bool
 	pragueTime              *uint64
 	isPostPrague            atomic.Bool
+	normalcyBlock           *big.Int
+	isPostNormalcy          atomic.Bool
 	blobSchedule            *chain.BlobSchedule
 	feeCalculator           FeeCalculator
 	// log          log.Logger
@@ -353,7 +355,7 @@ type FeeCalculator interface {
 
 func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, cache kvcache.Cache,
 	chainID uint256.Int, shanghaiTime, agraBlock, cancunTime, pragueTime *big.Int, blobSchedule *chain.BlobSchedule,
-	londonBlock *big.Int, ethCfg *ethconfig.Config, aclDB kv.RwDB) (*TxPool, error) {
+	londonBlock *big.Int, normalcyBlock *big.Int, ethCfg *ethconfig.Config, aclDB kv.RwDB) (*TxPool, error) {
 	var err error
 	localsHistory, err := simplelru.NewLRU[string, struct{}](10_000, nil)
 	if err != nil {
@@ -425,6 +427,7 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		agraBlock:               blockTimeOrNil(agraBlock),
 		cancunTime:              blockTimeOrNil(cancunTime),
 		pragueTime:              blockTimeOrNil(pragueTime),
+		normalcyBlock:           normalcyBlock,
 		auths:                   map[common.Address]*metaTx{},
 	}
 
@@ -1082,7 +1085,23 @@ func (p *TxPool) isCancun() bool {
 }
 
 func (p *TxPool) isPrague() bool {
-	return isTimeBasedForkActivated(&p.isPostPrague, p.pragueTime)
+	return isTimeBasedForkActivated(&p.isPostPrague, p.pragueTime) && p.isNormalcy()
+}
+
+func (p *TxPool) isNormalcy() bool {
+	set := p.isPostNormalcy.Load()
+	if set {
+		return true
+	}
+	if p.normalcyBlock == nil {
+		return false
+	}
+	lsbBig := big.NewInt(0).SetUint64(p.lastSeenBlock.Load())
+	if p.normalcyBlock.Cmp(lsbBig) <= 0 {
+		p.isPostNormalcy.Swap(true)
+		return true
+	}
+	return false
 }
 
 func (p *TxPool) GetMaxBlobsPerBlock() uint64 {

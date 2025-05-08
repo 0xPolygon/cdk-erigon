@@ -173,7 +173,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 
 	isShanghai := p.isShanghai()
 	isLondon := p.isLondon()
-	_ = isLondon
+	isPrague := p.isPrague()
 	best := p.pending.best
 
 	txs.Resize(uint(cmp.Min(int(n), len(best.ms))))
@@ -232,8 +232,8 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		// make sure we have enough gas in the caller to add this transaction.
 		// not an exact science using intrinsic gas but as close as we could hope for at
 		// this stage
-		intrinsicGas, floorGas, _ := txpoolcfg.CalcIntrinsicGas(uint64(mt.Tx.DataLen), uint64(mt.Tx.DataNonZeroLen), uint64(len(mt.Tx.Authorizations)), uint64(mt.Tx.AlAddrCount), uint64(mt.Tx.AlStorCount), mt.Tx.Creation, true, true, isShanghai, p.isPrague())
-		if p.isPrague() && floorGas > intrinsicGas {
+		intrinsicGas, floorGas, _ := txpoolcfg.CalcIntrinsicGas(uint64(mt.Tx.DataLen), uint64(mt.Tx.DataNonZeroLen), uint64(len(mt.Tx.Authorizations)), uint64(mt.Tx.AlAddrCount), uint64(mt.Tx.AlStorCount), mt.Tx.Creation, true, true, isShanghai, isPrague)
+		if isPrague && floorGas > intrinsicGas {
 			intrinsicGas = floorGas
 		}
 

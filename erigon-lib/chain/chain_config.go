@@ -595,7 +595,7 @@ func (c *Config) checkCompatible(newcfg *Config, head uint64) *ConfigCompatError
 		return newCompatError("Merge netsplit block", c.MergeNetsplitBlock, newcfg.MergeNetsplitBlock)
 	}
 	if incompatible(c.NormalcyBlock, newcfg.NormalcyBlock, head) {
-		return newCompatError("London fork block", c.NormalcyBlock, newcfg.NormalcyBlock)
+		return newCompatError("Normalcy fork block", c.NormalcyBlock, newcfg.NormalcyBlock)
 	}
 
 	return nil
