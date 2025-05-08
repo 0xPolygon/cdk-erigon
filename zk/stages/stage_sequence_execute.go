@@ -311,7 +311,7 @@ func sequencingBatchStep(
 		// timer: evm + smt
 		t := utils.StartTimer("stage_sequence_execute", "evm", "smt")
 
-		infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, shouldWriteGerToContract, err := prepareL1AndInfoTreeRelatedStuff(sdb, batchState, header.Time, cfg.zk.SequencerResequenceReuseL1InfoIndex)
+		infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, shouldWriteGerToContract, err := prepareL1AndInfoTreeRelatedStuff(logPrefix, sdb, batchState, header.Time, cfg.zk.SequencerResequenceReuseL1InfoIndex, cfg.zk.SequencerResequenceInfoTreeOffset)
 		if err != nil {
 			return err
 		}
@@ -700,12 +700,6 @@ func sequencingBatchStep(
 				return errCommitAndStart
 			}
 			defer sdb.tx.Rollback()
-		}
-
-		// remove mined transactions from the pool
-		toRemove := append(batchState.blockState.builtBlockElements.txSlots, batchState.blockState.transactionsToDiscard...)
-		if err := cfg.txPool.RemoveMinedTransactions(ctx, sdb.tx, header.GasLimit, toRemove); err != nil {
-			return err
 		}
 
 		// remove the decoded transactions from the cache
