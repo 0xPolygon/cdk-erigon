@@ -27,9 +27,3 @@ type StreamStoreConfig struct {
 	MDBXMaxDBS  int
 	MDBXFlags   uint
 }
-
-// StreamStoreFactory creates stream stores based on configuration
-type StreamStoreFactory interface {
-	// CreateStore creates a new stream store based on the provided configuration
-	CreateStore(config *StreamStoreConfig) (StreamStore, error)
-}

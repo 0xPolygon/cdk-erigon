@@ -25,8 +25,6 @@ type StreamStore interface {
 
 	GetEntry(entryNum uint64) (datastreamer.FileEntry, error)
 	GetBookmark(data []byte) (uint64, error)
-	GetFirstEventAfterBookmark(bookmark []byte) (datastreamer.FileEntry, error)
-	GetDataBetweenBookmarks(bookmarkFrom, bookmarkTo []byte) ([]byte, error)
 
 	UpdateEntryData(entryNum uint64, etype datastreamer.EntryType, data []byte) error
 
