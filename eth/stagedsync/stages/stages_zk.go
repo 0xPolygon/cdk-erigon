@@ -18,7 +18,10 @@ package stages
 
 var (
 	// ZK stages
-	L1Syncer                    SyncStage = "L1Syncer"
+	L1CombinedSyncer SyncStage = "L1CombinedSyncer"
+	// L1Syncer Deprecated
+	L1Syncer SyncStage = "L1Syncer"
+	// L1SequencerSyncer Deprecated
 	L1SequencerSyncer           SyncStage = "L1SequencerSyncer"
 	L1VerificationsBatchNo      SyncStage = "L1VerificationsBatchNo"
 	Batches                     SyncStage = "Batches"
@@ -27,7 +30,8 @@ var (
 	VerificationsStateRootCheck SyncStage = "VerificationStateRootCheck"
 	ForkId                      SyncStage = "ForkId"
 	L1SequencerSync             SyncStage = "L1SequencerSync"
-	L1InfoTree                  SyncStage = "L1InfoTree"
+	// L1InfoTree Deprecated
+	L1InfoTree SyncStage = "L1InfoTree"
 	// HighestUsedL1InfoIndex      SyncStage = "HighestUsedL1InfoTree"
 	SequenceExecutorVerify SyncStage = "SequenceExecutorVerify"
 	L1BlockSync            SyncStage = "L1BlockSync"

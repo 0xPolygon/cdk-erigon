@@ -21,6 +21,11 @@ import (
 	"github.com/iden3/go-iden3-crypto/keccak256"
 )
 
+const (
+	// TODO: Configure chunk size, based on the number of available RPC endpoints
+	chunkSize = 100
+)
+
 type Syncer interface {
 	IsSyncStarted() bool
 	RunQueryBlocks(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error)
@@ -83,7 +88,7 @@ func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
 
 	hermezDb := hermez_db.NewHermezDb(tx)
 
-	progress, err := stages.GetStageProgress(tx, stages.L1InfoTree)
+	progress, err := stages.GetStageProgress(tx, stages.L1CombinedSyncer)
 	if err != nil {
 		return err
 	}
@@ -169,7 +174,7 @@ LOOP:
 	commitBlockNumber := allLogs[logsCount-1].BlockNumber + 1
 
 	// chunk the logs into batches, so we don't overload the RPC endpoints too much at once
-	chunks := chunkLogs(allLogs, 50)
+	chunks := chunkLogs(allLogs, chunkSize)
 
 	// mark for gc for free memory
 	allLogs = nil
@@ -195,9 +200,77 @@ LOOP:
 	}
 
 	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
-	u.progress = commitBlockNumber
-	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
-		return 0, fmt.Errorf("SaveStageProgress: %w", err)
+	if commitBlockNumber > u.progress {
+		u.progress = commitBlockNumber
+
+		if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
+			return 0, fmt.Errorf("SaveStageProgress: %w", err)
+		}
+	}
+
+	return logsCount, nil
+}
+
+func (u *Updater) ProcessInfoTreeUpdates(logPrefix string, tx kv.RwTx, allLogs []types.Log) (logsCount int, err error) {
+	hermezDb := hermez_db.NewHermezDb(tx)
+
+	logsCount = len(allLogs)
+
+	if logsCount == 0 {
+		return 0, nil
+	}
+
+	// sort the logs by block number - it is important that we process them in order to get the index correct
+	sort.Slice(allLogs, func(i, j int) bool {
+		l1 := allLogs[i]
+		l2 := allLogs[j]
+		// first sort by block number and if equal then by tx index
+		if l1.BlockNumber != l2.BlockNumber {
+			return l1.BlockNumber < l2.BlockNumber
+		}
+		if l1.TxIndex != l2.TxIndex {
+			return l1.TxIndex < l2.TxIndex
+		}
+		return l1.Index < l2.Index
+	})
+
+	log.Info(fmt.Sprintf("[%s] Checking for L1 info tree updates, logs count:%v", logPrefix, logsCount))
+
+	commitBlockNumber := allLogs[logsCount-1].BlockNumber + 1
+
+	// chunk the logs into batches, so we don't overload the RPC endpoints too much at once
+	chunks := chunkLogs(allLogs, chunkSize)
+
+	// mark for gc for free memory
+	allLogs = nil
+
+	processed := atomic.Uint32{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go logsProcessingStatus(ctx, logPrefix, &processed, logsCount)
+
+	tree, err := InitialiseL1InfoTree(hermezDb)
+	if err != nil {
+		return 0, fmt.Errorf("InitialiseL1InfoTree: %w", err)
+	}
+
+	// process the logs in chunks
+	for _, chunk := range chunks {
+		err = u.processChunks(tree, hermezDb, &chunk, &processed)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
+	if commitBlockNumber > u.progress {
+		u.progress = commitBlockNumber
+
+		if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
+			return 0, fmt.Errorf("SaveStageProgress: %w", err)
+		}
 	}
 
 	return logsCount, nil
@@ -416,7 +489,7 @@ LOOP:
 		u.progress = infoTrees[len(infoTrees)-1].BlockNumber + 1
 	}
 
-	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
 		return nil, fmt.Errorf("SaveStageProgress: %w", err)
 	}
 

@@ -110,7 +110,7 @@ func SpawnSequencerL1BlockSyncStage(
 	if err != nil {
 		return err
 	}
-	if l1BlockHeight == 0 {
+	if l1BlockHeight == 0 && cfg.zkCfg.L1SyncStartBlock > 0 {
 		l1BlockHeight = cfg.zkCfg.L1SyncStartBlock
 	}
 
@@ -256,14 +256,15 @@ func processSequencerBlocksSyncLogs(
 		// this is important because the batches are written in reverse order
 		for idx, batch := range batches {
 			b := initBatch + uint64(idx)
-			size := 20 + 32 + 8 + len(batch)
-					if size > LIMIT_120_KB {
-						log.Error(fmt.Sprintf("[%s] L1 batch data is too large", logPrefix), "size", size)
-						err = fmt.Errorf("L1 batch data is too large: %d", size)
-						return err
-					}
 
-					data := make([]byte, size)
+			size := 20 + 32 + 8 + len(batch)
+			if size > LIMIT_120_KB {
+				log.Error(fmt.Sprintf("[%s] L1 batch data is too large", logPrefix), "size", size)
+				err = fmt.Errorf("L1 batch data is too large: %d", size)
+				return err
+			}
+
+			data := make([]byte, size)
 			copy(data, coinbase.Bytes())
 			copy(data[20:], l1InfoRoot)
 			copy(data[52:], limitTimestampBytes)
@@ -277,7 +278,7 @@ func processSequencerBlocksSyncLogs(
 			if l1SyncStopBatch > 0 {
 				stopBlockMap[b] = struct{}{}
 				if checkStopBlockMap(highestBatch, l1SyncStopBatch, stopBlockMap) {
-					log.Info(fmt.Sprintf("[%s] Stopping L1 sync based on stop batch config", logPrefix))
+					log.Info("Stopping L1 sync based on stop batch config")
 					return nil
 				}
 			}

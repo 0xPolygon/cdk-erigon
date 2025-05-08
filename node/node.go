@@ -306,6 +306,8 @@ func OpenDatabase(ctx context.Context, config *nodecfg.Config, label kv.Label, n
 		if len(name) == 0 {
 			return nil, fmt.Errorf("expected a consensus name")
 		}
+	case kv.L1CacheDB:
+		name = "l1cache"
 	default:
 		name = "test"
 	}
@@ -397,7 +399,7 @@ func OpenDatabase(ctx context.Context, config *nodecfg.Config, label kv.Label, n
 		}
 	}
 
-	if err := db.Update(context.Background(), func(tx kv.RwTx) (err error) {
+	if err = db.Update(context.Background(), func(tx kv.RwTx) (err error) {
 		return params.SetErigonVersion(tx, params.VersionKeyCreated)
 	}); err != nil {
 		return nil, err
