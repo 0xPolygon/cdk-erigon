@@ -20,12 +20,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/erigontech/erigon-lib/log/v3"
+	rlp2 "github.com/erigontech/erigon-lib/rlp"
 	"io"
 	"math/big"
 	"sync/atomic"
-
-	"github.com/erigontech/erigon-lib/log/v3"
-	rlp2 "github.com/erigontech/erigon-lib/rlp"
 
 	"github.com/holiman/uint256"
 	"github.com/protolambda/ztyp/codec"
