@@ -352,6 +352,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.SequencerSkipEmptyBlocks,
 	&utils.SequencerMaxBlockSealTime,
 	&utils.SequencerBatchCounterPercentage,
+	&utils.GetLogsTimeout,
+	&utils.GetLogsRetries,
 
 	&utils.ACLPrintHistory,
 	&utils.InfoTreeUpdateInterval,

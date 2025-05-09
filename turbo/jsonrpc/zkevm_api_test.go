@@ -397,6 +397,8 @@ func TestGetBatchByNumber(t *testing.T) {
 		10,
 		0,
 		"latest",
+		10*time.Second,
+		5,
 	)
 	cfg := &ethconfig.Defaults
 	cfg.Zk.L1RollupId = 1
@@ -678,6 +680,8 @@ func TestGetExitRootsByGER(t *testing.T) {
 		10,
 		0,
 		"latest",
+		10*time.Second,
+		5,
 	)
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, dbsmt, 100_000, &ethconfig.Defaults, l1Syncer, "", nil, nil)
 	tx, err := db.BeginRw(ctx)
@@ -754,6 +758,8 @@ func TestLatestGlobalExitRoot(t *testing.T) {
 		10,
 		0,
 		"latest",
+		10*time.Second,
+		5,
 	)
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, dbsmt, 100_000, &ethconfig.Defaults, l1Syncer, "", nil, nil)
 	tx, err := db.BeginRw(ctx)
