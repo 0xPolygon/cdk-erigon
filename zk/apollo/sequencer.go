@@ -99,6 +99,15 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	if ctx.IsSet(utils.SequencerBatchCounterPercentage.Name) {
 		ethCfg.Zk.XLayer.SequencerBatchCounterPercentage = ctx.Int(utils.SequencerBatchCounterPercentage.Name)
 	}
+	if ctx.IsSet(utils.SequencerMaxBlockSealTime.Name) {
+		sequencerMaxBlockSealTimeVal := ctx.String(utils.SequencerMaxBlockSealTime.Name)
+		sequencerMaxBlockSealTime, err := time.ParseDuration(sequencerMaxBlockSealTimeVal)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Apollo parse %s: %s got error %v\n", utils.SequencerMaxBlockSealTime.Name, sequencerMaxBlockSealTimeVal, err))
+		} else {
+			ethCfg.Zk.XLayer.SequencerMaxBlockSealTime = sequencerMaxBlockSealTime
+		}
+	}
 }
 
 // setSequencerFlag sets the dynamic sequencer apollo flag

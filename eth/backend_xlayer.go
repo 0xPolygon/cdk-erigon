@@ -2,6 +2,7 @@ package eth
 
 import (
 	"context"
+	"fmt"
 	"slices"
 
 	"github.com/ledgerwatch/erigon/cmd/utils"
@@ -9,6 +10,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
 	"github.com/ledgerwatch/erigon/zk/apollo"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
 func listenApollo(ctx context.Context, cfg *ethconfig.Config) {
@@ -34,6 +36,14 @@ func listenApollo(ctx context.Context, cfg *ethconfig.Config) {
 			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.SequencerBatchCounterPercentage.Name) {
 				vm.SetBatchCounterLimitPercentage(ethCfg.Zk.XLayer.SequencerBatchCounterPercentage)
 			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.SequencerMaxBlockSealTime.Name) {
+				if cfg.Zk.SequencerBlockSealTime > ethCfg.XLayer.SequencerMaxBlockSealTime || cfg.Zk.SequencerBatchSealTime > ethCfg.XLayer.SequencerMaxBlockSealTime {
+					log.Warn(fmt.Sprintf("Got error: sequencer-block-seal-time: %s, sequencer-max-block-seal-time: %s, sequencer-batch-seal-time: %s"), cfg.Zk.SequencerBlockSealTime, ethCfg.XLayer.SequencerMaxBlockSealTime, cfg.Zk.SequencerBatchSealTime)
+				} else {
+					cfg.Zk.XLayer.SequencerMaxBlockSealTime = ethCfg.XLayer.SequencerMaxBlockSealTime
+				}
+			}
+
 		case <-ctx.Done():
 			return
 		}
