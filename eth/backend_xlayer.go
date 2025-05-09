@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/ledgerwatch/erigon/cmd/utils"
+	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
 	"github.com/ledgerwatch/erigon/zk/apollo"
@@ -29,6 +30,9 @@ func listenApollo(ctx context.Context, cfg *ethconfig.Config) {
 			}
 			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BlockInfoConcurrent.Name) {
 				blockinfo.SetUseBlockInfoTree(ethCfg.Zk.XLayer.BlockInfoConcurrent)
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.SequencerBatchCounterPercentage.Name) {
+				vm.SetBatchCounterLimitPercentage(ethCfg.Zk.XLayer.SequencerBatchCounterPercentage)
 			}
 		case <-ctx.Done():
 			return

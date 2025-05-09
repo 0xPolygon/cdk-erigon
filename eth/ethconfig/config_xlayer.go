@@ -45,6 +45,8 @@ type XLayerConfig struct {
 
 	GetLogsTimeout time.Duration
 	GetLogsRetries int
+
+	SequencerBatchCounterPercentage int
 }
 
 var DefaultXLayerConfig = XLayerConfig{}
