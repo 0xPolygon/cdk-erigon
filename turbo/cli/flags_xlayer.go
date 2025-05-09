@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ledgerwatch/erigon/cmd/utils"
+	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
@@ -11,6 +14,20 @@ import (
 )
 
 func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
+	sequencerBlockSealTime := cfg.Zk.SequencerBlockSealTime
+	sequencerBatchSealTime := cfg.Zk.SequencerBatchSealTime
+	sequencerMaxBlockSealTimeVal := ctx.String(utils.SequencerMaxBlockSealTime.Name)
+	sequencerMaxBlockSealTime, err := time.ParseDuration(sequencerMaxBlockSealTimeVal)
+	if err != nil || sequencerBlockSealTime > sequencerMaxBlockSealTime || sequencerMaxBlockSealTime > sequencerBatchSealTime {
+		panic(fmt.Sprintf("Got error: %v, sequencer-block-seal-time: %s, sequencer-max-block-seal-time: %s, sequencer-batch-seal-time: %s", err, sequencerBlockSealTime, sequencerMaxBlockSealTime, sequencerBatchSealTime))
+	}
+
+	sequencerBatchCounterPercentage := ctx.Int(utils.SequencerBatchCounterPercentage.Name)
+	err = vm.SetBatchCounterLimitPercentage(sequencerBatchCounterPercentage)
+	if err != nil {
+		panic(fmt.Sprintf("Got error: %v, sequencer-batch-counter-percentage: %d", err, sequencerBatchCounterPercentage))
+	}
+
 	cfg.XLayer = ethconfig.XLayerConfig{
 		Apollo: ethconfig.ApolloClientConfig{
 			Enable: ctx.Bool(utils.ApolloEnableFlag.Name),
@@ -38,6 +55,9 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		BulkAddTxsWaitTime:                ctx.Duration(utils.BulkAddTxsWaitTimeFlag.Name),
 		EnableAddTxNotify:                 ctx.Bool(utils.EnableAddTxNotify.Name),
 		SequencerSkipEmptyBlocks:          ctx.Bool(utils.SequencerSkipEmptyBlocks.Name),
+		SequencerMaxBlockSealTime:         sequencerMaxBlockSealTime,
+		GetLogsTimeout:                    ctx.Duration(utils.GetLogsTimeout.Name),
+		GetLogsRetries:                    ctx.Int(utils.GetLogsRetries.Name),
 	}
 	if cfg.XLayer.BlockInfoConcurrent {
 		blockinfo.SetUseBlockInfoTree(true)

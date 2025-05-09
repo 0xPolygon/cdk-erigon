@@ -363,6 +363,8 @@ func sequencingBatchStep(
 
 	// For X Layer, split db and ac
 	blockNumber := uint64(0)
+	breakBatchLoop := false
+BatchLoop:
 	for blockNumber = executionAt + 1; runLoopBlocks; blockNumber++ {
 		if batchTimedOut {
 			log.Debug(fmt.Sprintf("[%s] Closing batch due to timeout", logPrefix))
@@ -371,7 +373,8 @@ func sequencingBatchStep(
 		startTime := time.Now()
 		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, batchState.forkId))
 		logTicker.Reset(10 * time.Second)
-		blockTimer := time.NewTimer(cfg.zk.SequencerBlockSealTime)
+		// For X Layer block timer
+		blockTimer := time.NewTimer(cfg.zk.XLayer.SequencerMaxBlockSealTime)
 		ethBlockGasPool := new(core.GasPool).AddGas(transactionGasLimit) // used only in normalcy mode per block
 
 		if batchState.isL1Recovery() {
@@ -460,6 +463,11 @@ func sequencingBatchStep(
 			if innerBreak {
 				break
 			}
+			// For X Layer, block timer
+			if len(batchState.blockState.builtBlockElements.transactions) > 0 && time.Since(startTime) >= cfg.zk.SequencerBlockSealTime {
+				blockTimer.Reset(0)
+			}
+
 			select {
 			case <-logTicker.C:
 				if !batchState.isAnyRecovery() {
@@ -817,7 +825,8 @@ func sequencingBatchStep(
 				log.Warn(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
 				break
 			}
-			log.Warn(fmt.Sprintf("[%s] Keeping empty block %d to keep liveness", logPrefix, blockNumber))
+			log.Warn(fmt.Sprintf("[%s] Closing batch to keep liveness when encountering empty block %d", logPrefix, blockNumber))
+			breakBatchLoop = true
 		}
 
 		// For X Layer, split db and ac
@@ -961,6 +970,10 @@ func sequencingBatchStep(
 		// For X Layer
 		metrics.GetLogStatistics().SetTag(metrics.FinalizeBlockNumber, strconv.Itoa(int(blockNumber)))
 		metrics.GetLogStatistics().SummaryCheckpoint()
+
+		if breakBatchLoop {
+			break BatchLoop
+		}
 	}
 
 	/*

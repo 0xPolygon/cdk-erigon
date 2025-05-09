@@ -574,7 +574,7 @@ LOOP:
 			time.Sleep(10 * time.Microsecond)
 		}
 
-		if c.header.TotalEntries == entryNum+1 {
+		if c.header.TotalEntries < entryNum {
 			log.Trace("[Datastream client] reached the current end of the stream", "header_totalEntries", c.header.TotalEntries, "entryNum", entryNum)
 
 			// For X Layer, fix ds receive issue

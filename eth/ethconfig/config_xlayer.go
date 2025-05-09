@@ -40,7 +40,11 @@ type XLayerConfig struct {
 	BulkAddTxsWaitTime time.Duration
 	EnableAddTxNotify  bool
 
-	SequencerSkipEmptyBlocks bool
+	SequencerSkipEmptyBlocks  bool
+	SequencerMaxBlockSealTime time.Duration
+
+	GetLogsTimeout time.Duration
+	GetLogsRetries int
 }
 
 var DefaultXLayerConfig = XLayerConfig{}

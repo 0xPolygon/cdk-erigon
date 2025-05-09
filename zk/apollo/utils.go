@@ -139,6 +139,9 @@ func loadZkConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	if ctx.IsSet(utils.AllowInternalTransactions.Name) {
 		ethCfg.Zk.XLayer.EnableInnerTx = ctx.Bool(utils.AllowInternalTransactions.Name)
 	}
+	if ctx.IsSet(utils.SequencerMaxBlockSealTime.Name) {
+		ethCfg.Zk.XLayer.SequencerMaxBlockSealTime = ctx.Duration(utils.SequencerMaxBlockSealTime.Name)
+	}
 }
 
 func getNamespacePrefix(namespace string) (string, error) {

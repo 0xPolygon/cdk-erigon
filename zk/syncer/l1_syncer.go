@@ -82,9 +82,12 @@ type L1Syncer struct {
 	logsChanProgress chan string
 
 	highestBlockType string // finalized, latest, safe
+
+	getLogsTimeout time.Duration
+	getLogsRetries int
 }
 
-func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay uint64, highestBlockType string) *L1Syncer {
+func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay uint64, highestBlockType string, getLogsTimeout time.Duration, getLogsRetries int) *L1Syncer {
 	return &L1Syncer{
 		ctx:                 ctx,
 		etherMans:           etherMans,
@@ -97,6 +100,8 @@ func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses
 		logsChan:            make(chan []ethTypes.Log),
 		logsChanProgress:    make(chan string),
 		highestBlockType:    highestBlockType,
+		getLogsTimeout:      getLogsTimeout,
+		getLogsRetries:      getLogsRetries,
 	}
 }
 
@@ -447,11 +452,13 @@ func (s *L1Syncer) getSequencedLogs(jobs <-chan fetchJob, results chan jobResult
 			retry := 0
 			for {
 				em := s.getNextEtherman()
-				logs, err = em.FilterLogs(context.Background(), query)
+				ctx, cancel := context.WithTimeout(context.Background(), s.getLogsTimeout)
+				defer cancel()
+				logs, err = em.FilterLogs(ctx, query)
 				if err != nil {
-					log.Debug("getSequencedLogs retry error", "err", err)
+					log.Warn("getSequencedLogs retry error", "err", err, "from", j.From, "to", j.To, "retry", retry)
 					retry++
-					if retry > 5 {
+					if retry >= s.getLogsRetries {
 						results <- jobResult{
 							Error: err,
 							Logs:  nil,
