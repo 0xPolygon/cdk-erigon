@@ -30,6 +30,7 @@ zkevm.witness-full: false
 zkevm.executor-mock: true
 
 zkevm.sequencer-block-seal-time: "1s"
+zkevm.sequencer-max-block-seal-time: "3s"
 zkevm.sequencer-batch-seal-time: "10s"
 zkevm.sequencer-batch-sleep-duration: "0s"
 
@@ -95,8 +96,8 @@ networkid: 195
 pprof: true
 pprof.port: 6060
 pprof.addr: 0.0.0.0
-txpool.enablefreegaslist : false
-txpool.freegaslist : ''
+txpool.enablefreegaslist : true
+txpool.freegaslist : '[{"name":"e2e", "from_list":["0x586cbc95ed16031d9efdaebacf1c1d2bc3ccaa78"], "to_list":["0xad1d01007a56ee0a4ffd0488fb58fc6500cb1fbe"], "method_sigs":["a9059cbb"], "gas_price_multiple": 1}]'
 
 # close a block/batch immediately after the 1st zkCounter overflow TX
 zkevm.seal-batch-immediately-on-overflow: true
