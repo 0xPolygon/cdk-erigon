@@ -108,6 +108,12 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 			ethCfg.Zk.XLayer.SequencerMaxBlockSealTime = sequencerMaxBlockSealTime
 		}
 	}
+	if ctx.IsSet(utils.GetLogsTimeout.Name) {
+		ethCfg.Zk.XLayer.GetLogsTimeout = ctx.Duration(utils.GetLogsTimeout.Name)
+	}
+	if ctx.IsSet(utils.GetLogsRetries.Name) {
+		ethCfg.Zk.XLayer.GetLogsRetries = ctx.Int(utils.GetLogsRetries.Name)
+	}
 }
 
 // setSequencerFlag sets the dynamic sequencer apollo flag
