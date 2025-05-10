@@ -104,6 +104,7 @@ func (c *Collector) extractNextFunc(originalK, k []byte, v []byte) error {
 	// 	return nil
 	// }
 	return c.flushBuffer(false)
+	// return c.flushBuffer(true)
 }
 
 func (c *Collector) Collect(k, v []byte) error {
@@ -122,6 +123,7 @@ func (c *Collector) flushBuffer(canStoreInRam bool) error {
 		c.buf.Sort()
 		provider = KeepInRAM(c.buf)
 		c.allFlushed = true
+		fmt.Printf("++++++++++++++++++++ Collector: flushed to RAM")
 	} else {
 		doFsync := !c.autoClean /* is critical collector */
 		var err error
@@ -156,6 +158,7 @@ func (c *Collector) flushBuffer(canStoreInRam bool) error {
 func (c *Collector) Flush() error {
 	if !c.allFlushed {
 		if e := c.flushBuffer(false); e != nil {
+			// if e := c.flushBuffer(true); e != nil {
 			return e
 		}
 	}
@@ -169,7 +172,8 @@ func (c *Collector) Load(db kv.RwTx, toBucket string, loadFunc LoadFunc, args Tr
 	args.BufferType = c.bufType
 
 	if !c.allFlushed {
-		if e := c.flushBuffer(true); e != nil {
+		// if e := c.flushBuffer(true); e != nil {
+		if e := c.flushBuffer(false); e != nil {
 			return e
 		}
 	}

@@ -42,6 +42,7 @@ func addTestAccount(tx kv.Putter, hash libcommon.Hash, balance uint64, incarnati
 }
 
 func TestAccountAndStorageTrieSingleAcc(t *testing.T) {
+	// Check on each step if the account trie is correct
 	path := "/Users/blade/work/software/cdk-erigon/ivan"
 	db := mdbx.NewMDBX(log.New()).Path(path).DBVerbosity(6).SyncPeriod(10 * time.Millisecond).MustOpen()
 	ctx := context.Background()
@@ -52,23 +53,47 @@ func TestAccountAndStorageTrieSingleAcc(t *testing.T) {
 
 	hash1 := libcommon.HexToHash("0xB000000000000000000000000000000000000000000000000000000000000000")
 	assert.Nil(t, addTestAccount(tx, hash1, 3*params.Ether, 0))
-	hash5 := libcommon.HexToHash("0xB310000000000000000000000000000000000000000000000000000000000000")
-	assert.Nil(t, addTestAccount(tx, hash5, 8*params.Ether, 0))
-	hash6 := libcommon.HexToHash("0xB340000000000000000000000000000000000000000000000000000000000000")
-	assert.Nil(t, addTestAccount(tx, hash6, 1*params.Ether, 0))
+	// hash5 := libcommon.HexToHash("0xB310000000000000000000000000000000000000000000000000000000000000")
+	// assert.Nil(t, addTestAccount(tx, hash5, 8*params.Ether, 0))
+	// hash6 := libcommon.HexToHash("0xB340000000000000000000000000000000000000000000000000000000000000")
+	// assert.Nil(t, addTestAccount(tx, hash6, 1*params.Ether, 0))
 
 	historyV3 := false
 	blockReader := freezeblocks.NewBlockReader(freezeblocks.NewRoSnapshots(ethconfig.BlocksFreezing{Enabled: false}, path, 0, log.New()), freezeblocks.NewBorRoSnapshots(ethconfig.BlocksFreezing{Enabled: false}, path, 0, log.New()))
 	cfg := stagedsync.StageTrieCfg(db, false, true, false, path, blockReader, nil, historyV3, nil)
 	hash, err := stagedsync.RegenerateIntermediateHashes("IH", tx, cfg, libcommon.Hash{} /* expectedRootHash */, ctx, log.New())
 	assert.Nil(t, err)
+	fmt.Printf("++++++++++++++++++++ hash 1: %x\n", hash)
 
-	fmt.Printf("hash: %x\n", hash)
+	err = tx.ForEach(kv.TrieOfAccounts, nil, func(k, v []byte) error {
+		fmt.Printf("TrieOfAccounts hash1 key: %x, value: %x\n", k, v)
+		return nil
+	})
+
+	hash5 := libcommon.HexToHash("0xB310000000000000000000000000000000000000000000000000000000000000")
+	assert.Nil(t, addTestAccount(tx, hash5, 8*params.Ether, 0))
+	hash, err = stagedsync.RegenerateIntermediateHashes("IH", tx, cfg, libcommon.Hash{} /* expectedRootHash */, ctx, log.New())
+	assert.Nil(t, err)
+	fmt.Printf("++++++++++++++++++++ hash 5: %x\n", hash)
+	err = tx.ForEach(kv.TrieOfAccounts, nil, func(k, v []byte) error {
+		fmt.Printf("TrieOfAccounts hash5 key: %x, value: %x\n", k, v)
+		return nil
+	})
+
+	hash6 := libcommon.HexToHash("0xB340000000000000000000000000000000000000000000000000000000000000")
+	assert.Nil(t, addTestAccount(tx, hash6, 1*params.Ether, 0))
+	hash, err = stagedsync.RegenerateIntermediateHashes("IH", tx, cfg, libcommon.Hash{} /* expectedRootHash */, ctx, log.New())
+	assert.Nil(t, err)
+	fmt.Printf("++++++++++++++++++++ hash 6: %x\n", hash)
+	err = tx.ForEach(kv.TrieOfAccounts, nil, func(k, v []byte) error {
+		fmt.Printf("TrieOfAccounts hash6 key: %x, value: %x\n", k, v)
+		return nil
+	})
 
 	tx.Commit()
 	db.Close()
 
-	assert.Fail(t, "TODO: check account trie")
+	assert.Fail(t, "Fail to see the logs")
 }
 
 func TestAccountAndStorageTrie(t *testing.T) {

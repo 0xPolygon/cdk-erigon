@@ -54,7 +54,7 @@ func FlushToDiskAsync(logPrefix string, b Buffer, tmpdir string, doFsync bool, l
 			return err
 		}
 		_, fName := filepath.Split(provider.file.Name())
-		log.Log(lvl, fmt.Sprintf("[%s] Flushed buffer file", logPrefix), "name", fName)
+		log.Log(lvl, fmt.Sprintf("[%s] Flushed ASYNC buffer file", logPrefix), "name", fName)
 		return nil
 	})
 
@@ -74,7 +74,7 @@ func FlushToDisk(logPrefix string, b Buffer, tmpdir string, doFsync bool, lvl lo
 		return nil, err
 	}
 	_, fName := filepath.Split(provider.file.Name())
-	log.Log(lvl, fmt.Sprintf("[%s] Flushed buffer file", logPrefix), "name", fName)
+	log.Log(lvl, fmt.Sprintf("[%s] Flushed SYNC buffer file", logPrefix), "name", fName)
 	return provider, nil
 }
 

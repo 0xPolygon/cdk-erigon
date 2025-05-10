@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/erigontech/erigon-lib/common"
-	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
 
 	"github.com/erigontech/erigon/core"
@@ -156,35 +155,37 @@ func sequencingBatchStep(
 	if executionAt == 0 {
 		// if executionAt <= 1 {
 		// panic("executionAt is 0")
-		zkInterHashesCfg.checkRoot = false
-		zkInterHashesCfg.tmpDir = ""
-		trieCfg := trieConfig(zkInterHashesCfg)
-		logger := log.New(logPrefix, "trie", log.LvlTrace)
-		hash, err := stagedsync.RegenerateIntermediateHashes(logPrefix, sdb.tx, trieCfg, common.Hash{}, ctx, logger)
-		log.Info(fmt.Sprintf("[%s] Regenerated intermediate hashes", logPrefix), "hash", hash)
-		fmt.Printf("+++++++++++++++++++++++ sdb.tx: %p\n", sdb.tx)
-		if err != nil {
-			panic("failed to regenerate intermediate hashes")
+		if err := processInjectedInitialBatch(batchContext, batchState); err != nil {
+			return err
 		}
-		err = sdb.tx.ForEach(kv.TrieOfAccounts, nil, func(k, v []byte) error {
-			fmt.Printf("TrieOfAccounts key: %x, value: %x\n", k, v)
-			return nil
-		})
-		if err != nil {
-			panic("failed to iterate over TrieOfAccounts")
+
+		if err := cfg.dataStreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
+			return err
 		}
-		// 	if err := processInjectedInitialBatch(batchContext, batchState); err != nil {
-		// 		return err
-		// 	}
+		if err := stages.SaveStageProgress(sdb.tx, stages.DataStream, 1); err != nil {
+			return err
+		}
 
-		// 	if err := cfg.dataStreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
-		// 		return err
-		// 	}
-		// 	if err := stages.SaveStageProgress(sdb.tx, stages.DataStream, 1); err != nil {
-		// 		return err
-		// 	}
+		// // Regenerate intermediate hashes
+		// zkInterHashesCfg.checkRoot = false
+		// zkInterHashesCfg.tmpDir = ""
+		// trieCfg := trieConfig(zkInterHashesCfg)
+		// logger := log.New(logPrefix, "trie", log.LvlTrace)
+		// hash, err := stagedsync.RegenerateIntermediateHashes(logPrefix, sdb.tx, trieCfg, common.Hash{}, ctx, logger)
+		// log.Info(fmt.Sprintf("[%s] ++++++ AT 0 Regenerated intermediate hashes", logPrefix), "hash", hash)
+		// // fmt.Printf("+++++++++++++++++++++++ sdb.tx: %p\n", sdb.tx)
+		// if err != nil {
+		// 	panic("failed to regenerate intermediate hashes")
+		// }
+		// err = sdb.tx.ForEach(kv.TrieOfAccounts, nil, func(k, v []byte) error {
+		// 	fmt.Printf("------TrieOfAccounts key: %x, value: %x\n", k, v)
+		// 	return nil
+		// })
+		// if err != nil {
+		// 	panic("failed to iterate over TrieOfAccounts")
+		// }
 
-		// 	return sdb.tx.Commit()
+		return sdb.tx.Commit()
 	}
 
 	if shouldCheckForExecutionAndDataStreamAlignment {
@@ -796,6 +797,8 @@ func sequencingBatchStep(
 		if err := cfg.doneHook.AfterRun(batchContext.sdb.tx, block.NumberU64()-1, s.PrevUnwindPoint()); err != nil {
 			return err
 		}
+
+		log.Info("BLOC MINED, BLOCK NUMBER IN batchContext.s", "blockNumber", block.NumberU64(), "batchContext.s", batchContext.s.BlockNumber, "batchState.batchNumber", batchState.batchNumber)
 	}
 
 	/*

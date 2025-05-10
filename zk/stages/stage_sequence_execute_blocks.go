@@ -40,8 +40,8 @@ func handleStateForNewBlockStarting(
 	// handle writing to the ger manager contract but only if the index is above 0
 	// block 1 is a special case as it's the injected batch, so we always need to check the GER/L1 block hash
 	// as these will be force-fed from the event from L1
-	// if l1info != nil && l1info.Index > 0 || blockNumber == 1 {
-	if l1info != nil && l1info.Index > 0 {
+	if l1info != nil && l1info.Index > 0 || blockNumber == 1 {
+		// if l1info != nil && l1info.Index > 0 {
 		// store it so we can retrieve for the data stream
 		if err := hermezDb.WriteBlockGlobalExitRoot(blockNumber, l1info.GER); err != nil {
 			return err
@@ -228,31 +228,34 @@ func finaliseBlock(
 		// 	// headerHash = syncHeadHeader.Hash()
 		// }
 
-		// logger := log.New()
+		// REGENERATE INTERMEDIATE HASHES
+		// // logger := log.New()
 		expectedRootHash := common.Hash{}
 		batchContext.interhashesCfg.checkRoot = false
-		// batchContext.interhashesCfg.tmpDir = ""
+		// // batchContext.interhashesCfg.tmpDir = ""
 		trieCfg := trieConfig(batchContext.interhashesCfg)
 		logger := log.New(batchContext.s.LogPrefix(), "trie", log.LvlTrace)
-		// hash, err := stagedsync.RegenerateIntermediateHashes(logPrefix, sdb.tx, trieCfg, common.Hash{}, ctx, logger)
-		// log.Info(fmt.Sprintf("[%s] Regenerated intermediate hashes", logPrefix), "hash", hash)
-		// fmt.Printf("+++++++++++++++++++++++ sdb.tx: %p\n", sdb.tx)
+		// // hash, err := stagedsync.RegenerateIntermediateHashes(logPrefix, sdb.tx, trieCfg, common.Hash{}, ctx, logger)
+		// // fmt.Printf("+++++++++++++++++++++++ sdb.tx: %p\n", sdb.tx)
+		// // if err != nil {
+		// // panic("failed to regenerate intermediate hashes")
+		// // }
+		// newRoot, err = stagedsync.RegenerateIntermediateHashes(batchContext.s.LogPrefix(), batchContext.sdb.tx, trieCfg, expectedRootHash, batchContext.ctx, logger)
 		// if err != nil {
-		// panic("failed to regenerate intermediate hashes")
+		// 	panic("failed to regenerate intermediate hashes")
 		// }
-		newRoot, err = stagedsync.RegenerateIntermediateHashes(batchContext.s.LogPrefix(), batchContext.sdb.tx, trieCfg, expectedRootHash, batchContext.ctx, logger)
-		if err != nil {
-			panic("failed to regenerate intermediate hashes")
-		}
-		err = batchContext.sdb.tx.ForEach(kv.TrieOfAccounts, nil, func(k, v []byte) error {
-			fmt.Printf("TrieOfAccounts key: %x, value: %x\n", k, v)
-			return nil
-		})
-		if err != nil {
-			panic("failed to iterate over TrieOfAccounts")
-		}
-		// newRoot, err = stagedsync.IncrementIntermediateHashes(batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, thisBlockNumber, trieCfg, expectedRootHash, quit, logger)
-		// log.Info(fmt.Sprintf("[%s] IncrementIntermediateHashes newRoot: %s", batchContext.s.LogPrefix(), newRoot.String()))
+		// log.Info(fmt.Sprintf("[%s] FINALIZE block Regenerated intermediate hashes", batchContext.s.LogPrefix()), "hash", newRoot)
+		// err = batchContext.sdb.tx.ForEach(kv.TrieOfAccounts, nil, func(k, v []byte) error {
+		// 	fmt.Printf("+++++ finalize block: TrieOfAccounts key: %x, value: %x\n", k, v)
+		// 	return nil
+		// })
+		// if err != nil {
+		// 	panic("failed to iterate over TrieOfAccounts")
+		// }
+		// END OF REGENERATE INTERMEDIATE HASHES
+
+		newRoot, err = stagedsync.IncrementIntermediateHashes(batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, thisBlockNumber, trieCfg, expectedRootHash, quit, logger)
+		log.Info(fmt.Sprintf("[%s] IncrementIntermediateHashes finished newRoot: %s", batchContext.s.LogPrefix(), newRoot.String()), "from", batchContext.s.BlockNumber, "to", thisBlockNumber)
 	}
 
 	if err != nil {
@@ -319,9 +322,9 @@ func finaliseBlock(
 	// this is actually account + storage indices stages
 	quitCh := batchContext.ctx.Done()
 	from := newNum.Uint64()
-	// if from == 1 {
-	// 	from = 0
-	// }
+	if from == 1 {
+		from = 0
+	}
 	to := newNum.Uint64() + 1
 	if err = stagedsync.PromoteHistory(batchContext.s.LogPrefix(), batchContext.sdb.tx, kv.AccountChangeSet, from, to, *batchContext.historyCfg, quitCh); err != nil {
 		return nil, err

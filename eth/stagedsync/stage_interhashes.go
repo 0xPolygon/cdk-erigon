@@ -128,9 +128,12 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 			return trie.EmptyRoot, err
 		}
 	} else {
+		logger.Info(fmt.Sprintf("[%s] Starting Incremental intermediate hashes", logPrefix), "from", s.BlockNumber, "to", to)
 		if root, err = IncrementIntermediateHashes(logPrefix, s, tx, to, cfg, expectedRootHash, quit, logger); err != nil {
 			return trie.EmptyRoot, err
 		}
+
+		logger.Info(fmt.Sprintf("[%s] Incremental intermediate hashes completed", logPrefix), "root", root.String())
 	}
 
 	if cfg.checkRoot && root != expectedRootHash {
@@ -163,8 +166,8 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 }
 
 func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, expectedRootHash libcommon.Hash, ctx context.Context, logger log.Logger) (libcommon.Hash, error) {
-	logger.Info(fmt.Sprintf("[%s] Regeneration trie hashes started at %s", logPrefix, cfg.tmpDir))
-	defer logger.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
+	logger.Info(fmt.Sprintf("[%s] Regeneration trie hashes started", logPrefix), "at", cfg.tmpDir)
+	defer logger.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix), "at", cfg.tmpDir)
 	_ = db.ClearBucket(kv.TrieOfAccounts)
 	_ = db.ClearBucket(kv.TrieOfStorage)
 	clean := kv.ReadAhead(ctx, cfg.db, &atomic.Bool{}, kv.HashedAccounts, nil, math.MaxUint32)
