@@ -70,6 +70,7 @@ type Genesis struct {
 
 	// Zkevm fields
 	HonourChainspec bool `json:"honourChainspec,omitempty"` // Used in normalcy mode
+	Type1           bool `json:"type1,omitempty"`
 }
 
 type AuRaSeal struct {

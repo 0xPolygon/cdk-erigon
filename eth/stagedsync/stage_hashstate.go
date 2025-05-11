@@ -155,6 +155,52 @@ func unwindHashStateStageImpl(logPrefix string, u *UnwindState, s *StageState, t
 	return nil
 }
 
+// HashStateFromTo hashes the state for the PMT. Used in the zk sequencer node.
+// It is like SpawnHashStateStage, but it does not get the fromBlock from the executionAt because this happens mid-execution on zk sequencer.
+func HashStateFromTo(s *StageState, tx kv.RwTx, cfg HashStateCfg, from, to uint64, ctx context.Context, logger log.Logger) error {
+	useExternalTx := tx != nil
+	if !useExternalTx {
+		var err error
+		tx, err = cfg.db.BeginRw(context.Background())
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+	}
+
+	logPrefix := s.LogPrefix()
+	if from == to {
+		// we already did hash check for this block
+		// we don't do the obvious `if s.BlockNumber > to` to support reorgs more naturally
+		log.Info(fmt.Sprintf("[%s] Nothing new to process", logPrefix))
+		return nil
+	}
+	if from > to { // Erigon will self-heal (download missed blocks) eventually
+		log.Warn(fmt.Sprintf("[%s] promotion backwards from %d to %d", s.LogPrefix(), from, to))
+		return nil
+	}
+
+	if to > from+16 {
+		logger.Info(fmt.Sprintf("[%s] Promoting plain state", logPrefix), "from", from, "to", to)
+	}
+	if from == 0 { // Initial hashing of the state is performed at the previous stage
+		if err := PromoteHashedStateCleanly(logPrefix, tx, cfg, ctx, logger); err != nil {
+			return err
+		}
+	} else {
+		if err := promoteHashedStateIncrementally(logPrefix, from, to, tx, cfg, ctx, logger); err != nil {
+			return err
+		}
+	}
+
+	if !useExternalTx {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func PromoteHashedStateCleanly(logPrefix string, tx kv.RwTx, cfg HashStateCfg, ctx context.Context, logger log.Logger) error {
 	err := promotePlainState(
 		logPrefix,

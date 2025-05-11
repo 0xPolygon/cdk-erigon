@@ -2,9 +2,9 @@ package stages
 
 import (
 	"fmt"
-
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
 
 	"math/big"
 
@@ -186,12 +186,25 @@ func finaliseBlock(
 
 	quit := batchContext.ctx.Done()
 	batchContext.sdb.eridb.OpenBatch(quit)
+
 	// this is actually the interhashes stage
-	newRoot, err := zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.eridb, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
+	var newRoot common.Hash
+	if batchContext.cfg.zk.UsingPMT() {
+		logger := log.New()
+		if err = stagedsync.HashStateFromTo(batchContext.s, batchContext.sdb.tx, batchContext.cfg.hashStateCfg, newHeader.Number.Uint64()-1, newHeader.Number.Uint64(), batchContext.ctx, logger); err != nil {
+			return nil, err
+		}
+
+		newRoot, err = stagedsync.IncrementIntermediateHashes(batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, thisBlockNumber, trieConfigSequencer(batchContext.cfg.intersCfg), common.Hash{}, quit, logger)
+	} else {
+		newRoot, err = zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.eridb, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
+	}
 	if err != nil {
 		batchContext.sdb.eridb.RollbackBatch()
 		return nil, err
 	}
+
+	log.Info(fmt.Sprintf("[%s] IncrementIntermediateHashes finished newRoot: %s", batchContext.s.LogPrefix(), newRoot.String()), "from", batchContext.s.BlockNumber, "to", thisBlockNumber)
 
 	if err = batchContext.sdb.eridb.CommitBatch(); err != nil {
 		return nil, err

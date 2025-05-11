@@ -149,6 +149,10 @@ func (c Commitment) ValidCommitments() []Commitment {
 	return []Commitment{CommitmentPMT, CommitmentSMT}
 }
 
+func (c Commitment) IsType1() bool {
+	return c == CommitmentPMT
+}
+
 var DefaultZkConfig = &Zk{}
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
