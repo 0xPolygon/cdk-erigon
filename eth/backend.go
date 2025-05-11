@@ -322,6 +322,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 	var chainConfig *chain.Config
 	var genesis *types.Block
+
 	if err := backend.chainDB.Update(context.Background(), func(tx kv.RwTx) error {
 		h, err := rawdb.ReadCanonicalHash(tx, 0)
 		if err != nil {

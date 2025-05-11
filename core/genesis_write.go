@@ -23,6 +23,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/erigontech/erigon/turbo/trie"
 	"math"
 	"math/big"
 	"os"
@@ -650,16 +651,24 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 				statedb.SetIncarnation(addr, state.FirstContractIncarnation)
 			}
 
-			ro, err = processAccount(sparseTree, ro, &account, addr)
-			if err != nil {
-				return
+			if !g.Type1 {
+				ro, err = processAccount(sparseTree, ro, &account, addr)
+				if err != nil {
+					return
+				}
 			}
 		}
 		if err = statedb.FinalizeTx(&chain.Rules{}, w); err != nil {
 			return
 		}
 
-		root = libcommon.BigToHash(ro)
+		if g.Type1 {
+			if root, err = trie.CalcRoot("genesis", tx); err != nil {
+				return
+			}
+		} else {
+			root = libcommon.BigToHash(ro)
+		}
 	}()
 	wg.Wait()
 	if err != nil {
