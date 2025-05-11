@@ -142,10 +142,11 @@ func GetSequencerHalt(localHaltBatchNumber uint64) uint64 {
 }
 
 func GetYieldSize(localYieldSize uint16) uint16 {
-	if IsApolloConfigSequencerEnabled() {
+	yieldSize := UnsafeGetApolloConfig().EthCfg.YieldSize
+	if IsApolloConfigSequencerEnabled() && yieldSize > 0 {
 		UnsafeGetApolloConfig().RLock()
 		defer UnsafeGetApolloConfig().RUnlock()
-		return uint16(UnsafeGetApolloConfig().EthCfg.YieldSize)
+		return uint16(yieldSize)
 	}
 	return localYieldSize
 }
