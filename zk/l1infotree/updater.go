@@ -229,7 +229,9 @@ LOOP:
 
 	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
 	if len(allLogs) > 0 {
-		u.progress = allLogs[len(allLogs)-1].BlockNumber + 1
+		// here we save progress at the exact block number of the last log.  The syncer will automatically add 1 to this value
+		// when the node / syncing process is restarted.
+		u.progress = allLogs[len(allLogs)-1].BlockNumber
 	}
 	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
 		return 0, fmt.Errorf("SaveStageProgress: %w", err)
