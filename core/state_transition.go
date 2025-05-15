@@ -222,20 +222,21 @@ func (st *StateTransition) buyGas(gasBailout bool) error {
 	}
 
 	// compute blob fee for eip-4844 data blobs if any
+	// Blob txs are not supported for L2
 	blobGasVal := new(uint256.Int)
-	if st.evm.ChainRules().IsCancun {
-		blobGasPrice := st.evm.Context.BlobBaseFee
-		if blobGasPrice == nil {
-			return fmt.Errorf("%w: Cancun is active but ExcessBlobGas is nil", ErrInternalFailure)
-		}
-		blobGasVal, overflow = blobGasVal.MulOverflow(blobGasPrice, new(uint256.Int).SetUint64(st.msg.BlobGas()))
-		if overflow {
-			return fmt.Errorf("%w: overflow converting blob gas: %v", ErrInsufficientFunds, blobGasVal)
-		}
-		if err := st.gp.SubBlobGas(st.msg.BlobGas()); err != nil {
-			return err
-		}
-	}
+	// if st.evm.ChainRules().IsCancun {
+	// 	blobGasPrice := st.evm.Context.BlobBaseFee
+	// 	if blobGasPrice == nil {
+	// 		return fmt.Errorf("%w: Cancun is active but ExcessBlobGas is nil", ErrInternalFailure)
+	// 	}
+	// 	blobGasVal, overflow = blobGasVal.MulOverflow(blobGasPrice, new(uint256.Int).SetUint64(st.msg.BlobGas()))
+	// 	if overflow {
+	// 		return fmt.Errorf("%w: overflow converting blob gas: %v", ErrInsufficientFunds, blobGasVal)
+	// 	}
+	// 	if err := st.gp.SubBlobGas(st.msg.BlobGas()); err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	if !gasBailout {
 		balanceCheck := gasVal
@@ -249,23 +250,23 @@ func (st *StateTransition) buyGas(gasBailout bool) error {
 			if overflow {
 				return fmt.Errorf("%w: address %v", ErrInsufficientFunds, st.msg.From().Hex())
 			}
-			if st.evm.ChainRules().IsCancun {
-				maxBlobFee, overflow := new(uint256.Int).MulOverflow(st.msg.MaxFeePerBlobGas(), new(uint256.Int).SetUint64(st.msg.BlobGas()))
-				if overflow {
-					return fmt.Errorf("%w: address %v", ErrInsufficientFunds, st.msg.From().Hex())
-				}
-				balanceCheck, overflow = balanceCheck.AddOverflow(balanceCheck, maxBlobFee)
-				if overflow {
-					return fmt.Errorf("%w: address %v", ErrInsufficientFunds, st.msg.From().Hex())
-				}
-			}
+			// if st.evm.ChainRules().IsCancun {
+			// 	maxBlobFee, overflow := new(uint256.Int).MulOverflow(st.msg.MaxFeePerBlobGas(), new(uint256.Int).SetUint64(st.msg.BlobGas()))
+			// 	if overflow {
+			// 		return fmt.Errorf("%w: address %v", ErrInsufficientFunds, st.msg.From().Hex())
+			// 	}
+			// 	balanceCheck, overflow = balanceCheck.AddOverflow(balanceCheck, maxBlobFee)
+			// 	if overflow {
+			// 		return fmt.Errorf("%w: address %v", ErrInsufficientFunds, st.msg.From().Hex())
+			// 	}
+			// }
 		}
 		balance := st.state.GetBalance(st.msg.From())
 		if have, want := balance, balanceCheck; have.Cmp(want) < 0 {
 			return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
 		}
 		st.state.SubBalance(st.msg.From(), gasVal)
-		st.state.SubBalance(st.msg.From(), blobGasVal)
+		// st.state.SubBalance(st.msg.From(), blobGasVal) // Blob txs are not supported for L2
 	}
 
 	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
@@ -329,17 +330,23 @@ func (st *StateTransition) preCheck(gasBailout bool) error {
 			}
 		}
 	}
-	if st.msg.BlobGas() > 0 && st.evm.ChainRules().IsCancun {
-		blobGasPrice := st.evm.Context.BlobBaseFee
-		if blobGasPrice == nil {
-			return fmt.Errorf("%w: Cancun is active but ExcessBlobGas is nil", ErrInternalFailure)
-		}
-		maxFeePerBlobGas := st.msg.MaxFeePerBlobGas()
-		if !st.evm.Config().NoBaseFee && blobGasPrice.Cmp(maxFeePerBlobGas) > 0 {
-			return fmt.Errorf("%w: address %v, maxFeePerBlobGas: %v < blobGasPrice: %v",
-				ErrMaxFeePerBlobGas, st.msg.From().Hex(), st.msg.MaxFeePerBlobGas(), blobGasPrice)
-		}
+
+	// Blob txs are not supported for L2
+	if st.msg.BlobHashes() != nil {
+		return fmt.Errorf("%w: address %v, blob txs are not supported for L2", ErrTxTypeNotSupported, st.msg.From().Hex())
 	}
+
+	// if st.msg.BlobGas() > 0 && st.evm.ChainRules().IsCancun {
+	// 	blobGasPrice := st.evm.Context.BlobBaseFee
+	// 	if blobGasPrice == nil {
+	// 		return fmt.Errorf("%w: Cancun is active but ExcessBlobGas is nil", ErrInternalFailure)
+	// 	}
+	// 	maxFeePerBlobGas := st.msg.MaxFeePerBlobGas()
+	// 	if !st.evm.Config().NoBaseFee && blobGasPrice.Cmp(maxFeePerBlobGas) > 0 {
+	// 		return fmt.Errorf("%w: address %v, maxFeePerBlobGas: %v < blobGasPrice: %v",
+	// 			ErrMaxFeePerBlobGas, st.msg.From().Hex(), st.msg.MaxFeePerBlobGas(), blobGasPrice)
+	// 	}
+	// }
 
 	return st.buyGas(gasBailout)
 }
