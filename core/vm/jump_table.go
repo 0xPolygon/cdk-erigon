@@ -62,8 +62,8 @@ var (
 	londonInstructionSet           = newLondonInstructionSet()
 	shanghaiInstructionSet         = newShanghaiInstructionSet()
 	napoliInstructionSet           = newNapoliInstructionSetZk()
-	cancunInstructionSet           = newCancunInstructionSet()
-	pragueInstructionSet           = newPragueInstructionSet()
+	cancunInstructionSet           = newCancunInstructionSetZk()
+	pragueInstructionSet           = newPragueInstructionSetZk()
 )
 
 // JumpTable contains the EVM opcodes supported at a given fork.
@@ -101,7 +101,7 @@ func newPragueInstructionSet() JumpTable {
 // constantinople, istanbul, petersburg, berlin, london, paris, shanghai,
 // and cancun instructions.
 func newCancunInstructionSet() JumpTable {
-	instructionSet := newNapoliInstructionSetZk()
+	instructionSet := newNapoliInstructionSet()
 	// Disable BLOBHASH and BLOBBASEFEE opcodes for L2
 	// enable4844(&instructionSet) // BLOBHASH opcode
 	// enable7516(&instructionSet) // BLOBBASEFEE opcode

@@ -118,3 +118,19 @@ func newFrontierInstructionSetZk() JumpTable {
 	}
 	return is
 }
+
+func newCancunInstructionSetZk() JumpTable {
+	instructionSet := newNapoliInstructionSetZk()
+	// Disable BLOBHASH and BLOBBASEFEE opcodes for L2
+	// enable4844(&instructionSet) // BLOBHASH opcode
+	enable7516(&instructionSet) // BLOBBASEFEE opcode
+	validateAndFillMaxStack(&instructionSet)
+	return instructionSet
+}
+
+func newPragueInstructionSetZk() JumpTable {
+	instructionSet := newCancunInstructionSetZk()
+	enable7702(&instructionSet) // EIP-7702: set code tx
+	validateAndFillMaxStack(&instructionSet)
+	return instructionSet
+}
