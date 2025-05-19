@@ -71,6 +71,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.WSEnabledFlag,
 	&utils.WSListenAddrFlag,
 	&utils.WSApiFlag,
+	&utils.WSSubscribeLogsChannelSize,
 	&utils.WsCompressionFlag,
 	&utils.HTTPTraceFlag,
 	&utils.HTTPDebugSingleFlag,
