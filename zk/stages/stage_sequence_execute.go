@@ -9,12 +9,11 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/log/v3"
-
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
@@ -24,6 +23,7 @@ import (
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/log/v3"
 )
 
 var shouldCheckForExecutionAndDataStreamAlignment = true
@@ -297,6 +297,7 @@ func sequencingBatchStep(
 	}
 
 	batchCounters := prepareBatchCounters(batchContext, batchState)
+	olderBatchCounters := vm.NewEmptyCounters()
 
 	if batchState.isL1Recovery() {
 		if cfg.zk.L1SyncStopBatch > 0 && batchState.batchNumber > cfg.zk.L1SyncStopBatch {
@@ -918,7 +919,12 @@ BatchLoop:
 		if err != nil {
 			return err
 		}
-		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.XLayer.ExecutorMock, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
+		if cfg.zk.SequencerBlockSingleBlockVerify {
+			cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), vm.GetDifferUsedAsMap(counters, olderBatchCounters), []uint64{blockNumber}, useExecutorForVerification, batchContext.cfg.zk.XLayer.ExecutorMock, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
+			olderBatchCounters = counters
+		} else {
+			cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.XLayer.ExecutorMock, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
+		}
 
 		// For X Layer, local replay and smt alignment's feature of stateroot mismatch detection
 		if cfg.zk.XLayer.SequencerReplay || shouldCheckForExecutionAndSMTAlignment == SMTAlignmentPendingResequence {

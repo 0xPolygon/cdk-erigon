@@ -60,6 +60,9 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	loadZkConfig(ctx, ethCfg)
 
 	// Load sequencer config
+	if ctx.IsSet(utils.SequencerBlockSingleBlockVerify.Name) {
+		ethCfg.Zk.SequencerBlockSingleBlockVerify = ctx.Bool(utils.SequencerBlockSingleBlockVerify.Name)
+	}
 	if ctx.IsSet(utils.SequencerBlockSealTime.Name) {
 		ethCfg.Zk.SequencerBlockSealTime = ctx.Duration(utils.SequencerBlockSealTime.Name)
 	}

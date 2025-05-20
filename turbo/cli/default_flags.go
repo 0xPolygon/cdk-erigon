@@ -206,6 +206,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.RebuildTreeAfterFlag,
 	&utils.IncrementTreeAlways,
 	&utils.SmtRegenerateInMemory,
+	&utils.SequencerBlockSingleBlockVerify,
 	&utils.SequencerBlockSealTime,
 	&utils.SequencerBatchSealTime,
 	&utils.SequencerBatchVerificationTimeout,

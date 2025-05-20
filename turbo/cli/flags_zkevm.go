@@ -178,6 +178,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		RebuildTreeAfter:                       ctx.Uint64(utils.RebuildTreeAfterFlag.Name),
 		IncrementTreeAlways:                    ctx.Bool(utils.IncrementTreeAlways.Name),
 		SmtRegenerateInMemory:                  ctx.Bool(utils.SmtRegenerateInMemory.Name),
+		SequencerBlockSingleBlockVerify:        ctx.Bool(utils.SequencerBlockSingleBlockVerify.Name),
 		SequencerBlockSealTime:                 sequencerBlockSealTime,
 		SequencerBatchSealTime:                 sequencerBatchSealTime,
 		SequencerBatchVerificationTimeout:      sequencerBatchVerificationTimeout,
