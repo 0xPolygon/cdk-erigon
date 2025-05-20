@@ -141,7 +141,7 @@ func sequencingBatchStep(
 	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState)
 
 	// injected batch
-	if executionAt == 0 && !cfg.chainConfig.IsNormalcy(executionAt) {
+	if executionAt == 0 && cfg.zk.InjectBatch {
 		if err = processInjectedInitialBatch(batchContext, batchState); err != nil {
 			return err
 		}

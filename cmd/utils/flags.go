@@ -913,9 +913,9 @@ var (
 		Usage: "Values { smt | pmt }. Default, smt.",
 		Value: "smt",
 	}
-	InjectGers = cli.BoolFlag{
-		Name:  "zkevm.inject-gers",
-		Usage: "Inject L1 information into the scalable contract and ger manager. Default true.",
+	InjectBatch = cli.BoolFlag{
+		Name:  "zkevm.inject-batch",
+		Usage: "Inject initial batch. Default true.",
 		Value: true,
 	}
 	HonourChainspec = cli.BoolFlag{
