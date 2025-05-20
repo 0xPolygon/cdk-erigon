@@ -141,9 +141,16 @@ func sequencingBatchStep(
 	streamWriter := newSequencerBatchStreamWriter(batchContext, batchState)
 
 	// injected batch
-	if executionAt == 0 && cfg.zk.InjectBatch {
-		if err = processInjectedInitialBatch(batchContext, batchState); err != nil {
-			return err
+	if executionAt == 0 {
+		if cfg.zk.InjectBatch {
+			if err = processInjectedInitialBatch(batchContext, batchState); err != nil {
+				return err
+			}
+		} else {
+			// sealed empty block batch
+			if err = processEmptyInitialBatch(batchContext, batchState); err != nil {
+				return err
+			}
 		}
 
 		if err = cfg.dataStreamServer.WriteWholeBatchToStream(logPrefix, sdb.tx, sdb.hermezDb.HermezDbReader, lastBatch, injectedBatchBatchNumber); err != nil {
