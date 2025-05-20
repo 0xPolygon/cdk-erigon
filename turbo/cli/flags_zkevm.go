@@ -326,7 +326,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L2InfoTreeUpdatesBatchSize:             ctx.Uint64(utils.L2InfoTreeUpdatesBatchSize.Name),
 		L2InfoTreeUpdatesEnabled:               ctx.Bool(utils.L2InfoTreeUpdatesEnabled.Name),
 		Commitment:                             commitment,
-		InjectGers:                             ctx.Bool(utils.InjectGers.Name),
+		InjectBatch:                            ctx.Bool(utils.InjectBatch.Name),
 		HonourChainspec:                        ctx.Bool(utils.HonourChainspec.Name),
 	}
 
