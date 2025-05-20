@@ -913,9 +913,9 @@ var (
 		Usage: "Values { smt | pmt }. Default, smt.",
 		Value: "smt",
 	}
-	InjectGers = cli.BoolFlag{
-		Name:  "zkevm.inject-gers",
-		Usage: "Inject L1 information into the scalable contract and ger manager. Default true.",
+	InjectBatch = cli.BoolFlag{
+		Name:  "zkevm.inject-batch",
+		Usage: "Inject initial batch. Default true.",
 		Value: true,
 	}
 	HonourChainspec = cli.BoolFlag{
@@ -2446,6 +2446,11 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 		genesis.GasLimit = dConf.GasLimit
 		genesis.Difficulty = big.NewInt(dConf.Difficulty)
 		genesis.HonourChainspec = ctx.Bool(HonourChainspec.Name)
+		commitment := ethconfig.Commitment(ctx.String(Commitment.Name))
+		if !commitment.IsValid() {
+			panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(Commitment.Name), commitment.ValidCommitments()))
+		}
+		genesis.Type1 = commitment.IsType1()
 
 		cfg.Genesis = genesis
 

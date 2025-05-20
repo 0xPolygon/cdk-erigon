@@ -80,6 +80,8 @@ type SequenceBlockCfg struct {
 	dataStreamServer server.DataStreamServer
 	zk               *ethconfig.Zk
 	miningConfig     *params.MiningConfig
+	hashStateCfg     stagedsync.HashStateCfg
+	intersCfg        ZkInterHashesCfg
 
 	txPool   *txpool.TxPool
 	txPoolDb kv.RwDB
@@ -114,6 +116,8 @@ func StageSequenceBlocksCfg(
 	dataStreamServer server.DataStreamServer,
 	zk *ethconfig.Zk,
 	miningConfig *params.MiningConfig,
+	hashStateCfg stagedsync.HashStateCfg,
+	intersCfg ZkInterHashesCfg,
 
 	txPool *txpool.TxPool,
 	txPoolDb kv.RwDB,
@@ -145,6 +149,8 @@ func StageSequenceBlocksCfg(
 		dataStreamServer: dataStreamServer,
 		zk:               zk,
 		miningConfig:     miningConfig,
+		hashStateCfg:     hashStateCfg,
+		intersCfg:        intersCfg,
 		txPool:           txPool,
 		txPoolDb:         txPoolDb,
 		legacyVerifier:   legacyVerifier,

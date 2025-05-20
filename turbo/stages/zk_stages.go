@@ -117,12 +117,14 @@ func NewSequencerZkStages(ctx context.Context,
 	// Hence we run it in the test mode.
 	runInTestMode := cfg.ImportMode
 
+	hashStateCfg := stagedsync.StageHashStateCfg(db, dirs, cfg.HistoryV3, agg)
+	zkIntersCfg := zkStages.StageZkInterHashesCfg(db, !cfg.DebugDisableStateRootCheck, true, false, dirs.Tmp, blockReader, controlServer.Hd, cfg.HistoryV3, agg, cfg.Zk)
+
 	return zkStages.SequencerZkStages(ctx,
 		zkStages.StageL1SyncerCfg(db, l1Syncer, cfg.Zk),
 		zkStages.StageL1SequencerSyncCfg(db, cfg.Zk, sequencerStageSyncer),
 		zkStages.StageL1InfoTreeCfg(db, cfg.Zk, infoTreeUpdater),
 		zkStages.StageSequencerL1BlockSyncCfg(db, cfg.Zk, l1BlockSyncer),
-		zkStages.StageDataStreamCatchupCfg(dataStreamServer, db, cfg.Genesis.Config.ChainID.Uint64()),
 		zkStages.StageSequenceBlocksCfg(
 			db,
 			cfg.Prune,
@@ -143,6 +145,8 @@ func NewSequencerZkStages(ctx context.Context,
 			dataStreamServer,
 			cfg.Zk,
 			&cfg.Miner,
+			hashStateCfg,
+			zkIntersCfg,
 			txPool,
 			txPoolDb,
 			verifier,
@@ -150,12 +154,13 @@ func NewSequencerZkStages(ctx context.Context,
 			infoTreeUpdater,
 			hook,
 		),
-		stagedsync.StageHashStateCfg(db, dirs, cfg.HistoryV3, agg),
-		zkStages.StageZkInterHashesCfg(db, !cfg.DebugDisableStateRootCheck, true, false, dirs.Tmp, blockReader, controlServer.Hd, cfg.HistoryV3, agg, cfg.Zk),
+		zkIntersCfg,
 		stagedsync.StageHistoryCfg(db, cfg.Prune, dirs.Tmp),
 		stagedsync.StageLogIndexCfg(db, cfg.Prune, dirs.Tmp, &cfg.Genesis.Config.DepositContract),
 		stagedsync.StageCallTracesCfg(db, cfg.Prune, 0, dirs.Tmp),
 		stagedsync.StageTxLookupCfg(db, cfg.Prune, cfg.Sync, dirs.Tmp, controlServer.ChainConfig.Bor, blockReader),
 		stagedsync.StageFinishCfg(db, dirs.Tmp, forkValidator),
-		runInTestMode)
+		hashStateCfg,
+		runInTestMode,
+	)
 }

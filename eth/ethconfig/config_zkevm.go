@@ -126,7 +126,7 @@ type Zk struct {
 	L2InfoTreeUpdatesEnabled       bool
 
 	Commitment      Commitment
-	InjectGers      bool
+	InjectBatch     bool
 	HonourChainspec bool
 }
 
@@ -147,6 +147,10 @@ func (c Commitment) IsValid() bool {
 
 func (c Commitment) ValidCommitments() []Commitment {
 	return []Commitment{CommitmentPMT, CommitmentSMT}
+}
+
+func (c Commitment) IsType1() bool {
+	return c == CommitmentPMT
 }
 
 var DefaultZkConfig = &Zk{}
