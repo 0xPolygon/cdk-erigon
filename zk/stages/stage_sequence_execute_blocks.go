@@ -191,7 +191,7 @@ func finaliseBlock(
 	var newRoot common.Hash
 	if batchContext.cfg.zk.UsingPMT() {
 		logger := log.New()
-		if err = stagedsync.HashStateFromTo(batchContext.s, batchContext.sdb.tx, batchContext.cfg.hashStateCfg, newHeader.Number.Uint64()-1, newHeader.Number.Uint64(), batchContext.ctx, logger); err != nil {
+		if err = stagedsync.HashStateFromTo(batchContext.s.LogPrefix(), batchContext.sdb.tx, batchContext.cfg.hashStateCfg, newHeader.Number.Uint64()-1, newHeader.Number.Uint64(), batchContext.ctx, logger); err != nil {
 			return nil, err
 		}
 
