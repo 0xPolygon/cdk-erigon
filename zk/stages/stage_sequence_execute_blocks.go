@@ -39,7 +39,7 @@ func handleStateForNewBlockStarting(
 	// handle writing to the ger manager contract but only if the index is above 0
 	// block 1 is a special case as it's the injected batch, so we always need to check the GER/L1 block hash
 	// as these will be force-fed from the event from L1
-	if l1info != nil && l1info.Index > 0 || blockNumber == 1 {
+	if l1info != nil && (l1info.Index > 0 || blockNumber == 1) {
 		// store it so we can retrieve for the data stream
 		if err := hermezDb.WriteBlockGlobalExitRoot(blockNumber, l1info.GER); err != nil {
 			return err
