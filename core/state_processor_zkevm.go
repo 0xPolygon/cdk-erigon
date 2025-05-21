@@ -56,6 +56,11 @@ func GetTxContext(config *chain.Config, engine consensus.EngineReader, ibs *stat
 		msg.SetIsFree(engine.IsServiceTransaction(msg.From(), syscall))
 	}
 
+	// ensure block 1 (injected batch) is always free in a zk context
+	if header.Number.Uint64() == 1 {
+		msg.SetIsFree(true)
+	}
+
 	txContext := NewEVMTxContext(msg)
 
 	return msg, txContext, nil
