@@ -913,11 +913,6 @@ var (
 		Usage: "Values { smt | pmt }. Default, smt.",
 		Value: "smt",
 	}
-	InjectBatch = cli.BoolFlag{
-		Name:  "zkevm.inject-batch",
-		Usage: "Inject initial batch. Default true.",
-		Value: true,
-	}
 	HonourChainspec = cli.BoolFlag{
 		Name:  "zkevm.honour-chainspec",
 		Usage: "Honour the actual chainspec values. This means that no chainspec values will get changed based on normalcy mode. Default false.",

@@ -36,6 +36,11 @@ func handleStateForNewBlockStarting(
 
 	ibs.PreExecuteStateSet(chainConfig, blockNumber, timestamp, stateRoot)
 
+	if chainConfig.DebugDisableZkevmStateChanges {
+		// we don't want to write anything to the GER contract when debugging emulating ethereum
+		return nil
+	}
+
 	// handle writing to the ger manager contract but only if the index is above 0
 	// block 1 is a special case as it's the injected batch, so we always need to check the GER/L1 block hash
 	// as these will be force-fed from the event from L1
