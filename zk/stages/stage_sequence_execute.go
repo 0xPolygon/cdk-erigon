@@ -142,7 +142,7 @@ func sequencingBatchStep(
 
 	// injected batch
 	if executionAt == 0 {
-		if cfg.chainConfig.DisableZkevmStateChanges {
+		if cfg.chainConfig.DebugDisableZkevmStateChanges {
 			// sealed empty block batch
 			if err = processEmptyInitialBatch(batchContext, batchState); err != nil {
 				return err

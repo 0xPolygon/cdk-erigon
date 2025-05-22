@@ -125,7 +125,7 @@ type Config struct {
 	// used for debugging, will turn off IBS interaction for info tree / GER / etc.
 	// this option should only be used in conjunction with normalcy, it is designed for testing
 	// vanilla EVM execution for comparison of state roots only and not to be used in production
-	DisableZkevmStateChanges bool `json:"disableZkevmStateChanges,omitempty"`
+	DebugDisableZkevmStateChanges bool `json:"debugDisableZkevmStateChanges,omitempty"`
 }
 
 type BlobConfig struct {
