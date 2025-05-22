@@ -119,9 +119,9 @@ type Config struct {
 	ForkId13Durian          *big.Int `json:"forkID13Durian,omitempty"`
 	NormalcyBlock           *big.Int `json:"normalcyBlock,omitempty"`
 
-	AllowFreeTransactions bool   `json:"allowFreeTransactions,omitempty"`
-	ZkDefaultGasPrice     uint64 `json:"zkDefaultGasFee,omitempty"`
-	DebugEthereumMode     bool   `json:"debugEthereumMode,omitempty"` // used for debugging, will turn off IBS interaction for info tree / GER / etc.
+	AllowFreeTransactions    bool   `json:"allowFreeTransactions,omitempty"`
+	ZkDefaultGasPrice        uint64 `json:"zkDefaultGasFee,omitempty"`
+	DisableZkevmStateChanges bool   `json:"disableZkevmStateChanges,omitempty"` // used for debugging, will turn off IBS interaction for info tree / GER / etc.
 }
 
 type BlobConfig struct {
