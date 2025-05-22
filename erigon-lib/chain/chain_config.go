@@ -119,9 +119,13 @@ type Config struct {
 	ForkId13Durian          *big.Int `json:"forkID13Durian,omitempty"`
 	NormalcyBlock           *big.Int `json:"normalcyBlock,omitempty"`
 
-	AllowFreeTransactions    bool   `json:"allowFreeTransactions,omitempty"`
-	ZkDefaultGasPrice        uint64 `json:"zkDefaultGasFee,omitempty"`
-	DisableZkevmStateChanges bool   `json:"disableZkevmStateChanges,omitempty"` // used for debugging, will turn off IBS interaction for info tree / GER / etc.
+	AllowFreeTransactions bool   `json:"allowFreeTransactions,omitempty"`
+	ZkDefaultGasPrice     uint64 `json:"zkDefaultGasFee,omitempty"`
+
+	// used for debugging, will turn off IBS interaction for info tree / GER / etc.
+	// this option should only be used in conjunction with normalcy, it is designed for testing
+	// vanilla EVM execution for comparison of state roots only and not to be used in production
+	DisableZkevmStateChanges bool `json:"disableZkevmStateChanges,omitempty"`
 }
 
 type BlobConfig struct {
