@@ -332,6 +332,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.ZkevmLogExcludeFlags,
 
 	&utils.Commitment,
-	&utils.InjectBatch,
 	&utils.HonourChainspec,
 }
