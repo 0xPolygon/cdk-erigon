@@ -112,3 +112,6 @@ zkevm.enable-async-commit: true
 txpool.enabletimsort: true
 zkevm.bulk-add-txs: true
 zkevm.enable-add-tx-notify: true
+
+zkevm.enable-trace-log: true
+zkevm.trace-log-path: /home/erigon/data/logs/trace.log

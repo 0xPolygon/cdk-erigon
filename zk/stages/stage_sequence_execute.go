@@ -371,6 +371,17 @@ BatchLoop:
 		}
 		startTime := time.Now()
 		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, batchState.forkId))
+		utils.LogTrace(
+			"",                          // txhash
+			utils.ServiceNameSequencer,  // serviceName
+			utils.StepSeqBeginBlock.ID,  // processId
+			utils.StepSeqBeginBlock.Key, // processWord
+			blockNumber,                 // blockHeight
+			"",                          // blockHash
+			0,                           // blockTime
+			-1,                          // transactionType
+		)
+
 		logTicker.Reset(10 * time.Second)
 		// For X Layer block timer
 		blockTimer := time.NewTimer(cfg.zk.XLayer.SequencerMaxBlockSealTime)
@@ -912,6 +923,16 @@ BatchLoop:
 			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions...", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions)), "info-tree-index", infoTreeIndexProgress, "taken", time.Since(startTime))
 		}
 
+		utils.LogTrace(
+			"",                         // txhash
+			utils.ServiceNameSequencer, // serviceName
+			utils.StepSeqEndBlock.ID,   // processId
+			utils.StepSeqEndBlock.Key,  // processWord
+			blockNumber,                // blockHeight
+			block.Hash().String(),      // blockHash
+			block.Time(),               // blockTime
+			-1,                         // transactionType
+		)
 		// do not use remote executor in l1recovery mode
 		// if we need remote executor in l1 recovery then we must allow commit/start DB transactions
 		useExecutorForVerification := !batchState.isL1Recovery() && batchState.hasExecutorForThisBatch
@@ -919,6 +940,18 @@ BatchLoop:
 		if err != nil {
 			return err
 		}
+
+		utils.LogTrace(
+			"",                                // txhash
+			utils.ServiceNameSequencer,        // serviceName
+			utils.StepSeqVerifyBlockBegin.ID,  // processId
+			utils.StepSeqVerifyBlockBegin.Key, // processWord
+			blockNumber,                       // blockHeight
+			block.Hash().String(),             // blockHash
+			block.Time(),                      // blockTime
+			-1,                                // transactionType
+		)
+
 		if cfg.zk.SequencerBlockSingleBlockVerify {
 			cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), vm.GetDifferUsedAsMap(counters, olderBatchCounters), []uint64{blockNumber}, useExecutorForVerification, batchContext.cfg.zk.XLayer.ExecutorMock, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
 			olderBatchCounters = counters

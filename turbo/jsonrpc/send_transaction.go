@@ -9,18 +9,38 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	txPoolProto "github.com/ledgerwatch/erigon-lib/gointerfaces/txpool"
-
 	utils2 "github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/utils"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
 // SendRawTransaction implements eth_sendRawTransaction. Creates new message call transaction or a contract creation for previously-signed transactions.
 func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility.Bytes) (common.Hash, error) {
+	if !sequencer.IsSequencer() {
+		txn, err := types.DecodeWrappedTransaction(encodedTx)
+		if err != nil {
+			log.Error("Failed to decode transaction", "error", err)
+		}
+		if err == nil {
+			utils.LogTrace(
+				txn.Hash().Hex(),           // txhash
+				utils.ServiceNameRPC,       // serviceName
+				utils.StepRPCReceiveTx.ID,  // processId
+				utils.StepRPCReceiveTx.Key, // processWord
+				0,                          // blockHeight
+				"",                         // blockHash
+				0,                          // blockTime
+				int8(txn.Type()),           // transactionType
+			)
+		}
+	}
+
 	// For X Layer, optimize tx pool
 	if !api.BulkAddTxs {
 		return api.sendRawTransactionSingle(ctx, encodedTx)

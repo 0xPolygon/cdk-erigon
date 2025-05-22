@@ -264,6 +264,19 @@ func (srv *ZkEVMDataStreamServer) WriteBlockWithBatchStartToStream(
 		return err
 	}
 
+	if blockEntries != nil && blockEntries.Size() > 0 {
+		utils.LogTrace(
+			"",                                 // txhash
+			utils.ServiceNameSequencer,         // serviceName
+			utils.StepSeqVerifyBlockResult.ID,  // processId
+			utils.StepSeqVerifyBlockResult.Key, // processWord
+			blockNum,                           // blockHeight
+			block.Hash().String(),              // blockHash
+			block.Time(),                       // blockTime
+			-1,                                 // transactionType
+		)
+	}
+
 	if batchStartEntries != nil {
 		if err = srv.commitEntriesToStreamProto(batchStartEntries.Entries()); err != nil {
 			return err
@@ -277,6 +290,17 @@ func (srv *ZkEVMDataStreamServer) WriteBlockWithBatchStartToStream(
 	if err = srv.commitAtomicOp(&blockNum, &batchNum, nil); err != nil {
 		return err
 	}
+
+	utils.LogTrace(
+		"",                         // txhash
+		utils.ServiceNameSequencer, // serviceName
+		utils.StepSeqDsSent.ID,     // processId
+		utils.StepSeqDsSent.Key,    // processWord
+		blockNum,                   // blockHeight
+		block.Hash().String(),      // blockHash
+		block.Time(),               // blockTime
+		-1,                         // transactionType
+	)
 
 	return nil
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -747,6 +748,18 @@ func ReadParsedProto(iterator FileEntryIterator) (
 
 		l2Block.L2Txs = txs
 		parsedEntry = l2Block
+
+		utils.LogTrace(
+			"",                            // txhash
+			utils.ServiceNameSequencer,    // serviceName
+			utils.StepRPCReceiveBlock.ID,  // processId
+			utils.StepRPCReceiveBlock.Key, // processWord
+			l2Block.L2BlockNumber,         // blockHeight
+			l2Block.L2Blockhash.String(),  // blockHash
+			uint64(l2Block.Timestamp),     // blockTime
+			-1,                            // transactionType
+		)
+
 		return
 	case types.EntryTypeL2BlockEnd:
 		log.Debug(fmt.Sprintf("retrieved EntryTypeL2BlockEnd: %+v", file))

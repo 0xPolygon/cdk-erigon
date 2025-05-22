@@ -44,6 +44,9 @@ type XLayerConfig struct {
 
 	GetLogsTimeout time.Duration
 	GetLogsRetries int
+
+	TraceLogPath   string
+	EnableTraceLog bool
 }
 
 var DefaultXLayerConfig = XLayerConfig{}
