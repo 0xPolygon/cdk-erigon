@@ -6,14 +6,14 @@ get_latest_l2_batch() {
 
     local latest_batch
     latest_batch=$(cast rpc zkevm_batchNumberByBlockNumber "$latest_block" --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)" | sed 's/^"//;s/"$//')
-    
+
     if [[ -z "$latest_batch" ]]; then
         echo "Error: Failed to get latest batch number" >&2
         return 1
     fi
-    
+
     latest_batch_dec=$((latest_batch))
-    
+
     echo "$latest_batch_dec"
 }
 
@@ -123,7 +123,8 @@ sleep 30
 num_requests=2000
 
 echo "Running loadtest using polycli"
-/usr/local/bin/polycli loadtest --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc)" --private-key "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" --verbosity 600 --requests $num_requests --rate-limit 500  --mode uniswapv3 --legacy
+polycli_bin=$(which polycli)
+$polycli_bin loadtest --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc)" --private-key "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" --verbosity 700 --requests $num_requests --rate-limit 500  --mode uniswapv3 --legacy
 
 echo "Waiting for batch virtualization"
 if ! wait_for_l1_batch 600 "virtual"; then

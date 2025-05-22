@@ -5,11 +5,13 @@ runs:
   using: "composite"
   steps:
     - name: Checkout cdk-erigon
+      if: env.SKIP_ENCLAVE_SETUP != 'true'
       uses: actions/checkout@v4
       with:
         path: cdk-erigon
 
     - name: Checkout kurtosis-cdk
+      if: env.SKIP_ENCLAVE_SETUP != 'true'
       uses: actions/checkout@v4
       with:
         repository: 0xPolygon/kurtosis-cdk
@@ -17,60 +19,41 @@ runs:
         path: kurtosis-cdk
 
     - name: Install Kurtosis CDK tools
+      if: env.SKIP_ENCLAVE_SETUP != 'true'
       uses: ./kurtosis-cdk/.github/actions/setup-kurtosis-cdk
 
     - name: Install Foundry
+      if: env.SKIP_ENCLAVE_SETUP != 'true'
       uses: foundry-rs/foundry-toolchain@v1
-
-    - name: Install yq
-      shell: bash
-      run: |
-        sudo curl -L https://github.com/mikefarah/yq/releases/download/v4.44.2/yq_linux_amd64 -o /usr/local/bin/yq
-        sudo chmod +x /usr/local/bin/yq
-        /usr/local/bin/yq --version
-
-    # Cleanup before running Kurtosis to have more space. Those dirs are claimed to be universal and safe to remove
-    - name: Cleanup Disk Space
-      shell: bash
-      run: |
-        echo "Disk usage before cleanup:"
-        df -h
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /usr/local/share/boost
-        docker system prune -af
-        echo "Disk usage after cleanup:"
-        df -h
 
     - name: Build docker image
       working-directory: ${{ github.workspace }}
       shell: bash
       run: docker build -t cdk-erigon-type1:local --file Dockerfile .
 
-    - name: Remove unused flags
+    - name: Edit config.yml
+      if: env.SKIP_ENCLAVE_SETUP != 'true'
       working-directory: ./kurtosis-cdk
       shell: bash
       run: |
-        sed -i '/zkevm.sequencer-batch-seal-time:/d' templates/cdk-erigon/config.yml
-        sed -i '/zkevm.sequencer-non-empty-batch-seal-time:/d' templates/cdk-erigon/config.yml
-        sed -i '/zkevm\.sequencer-initial-fork-id/d' ./templates/cdk-erigon/config.yml
-        sed -i '/sentry.drop-useless-peers:/d' templates/cdk-erigon/config.yml
-        sed -i '/zkevm\.pool-manager-url/d' ./templates/cdk-erigon/config.yml
-        sed -i '$a\zkevm.disable-virtual-counters: true' ./templates/cdk-erigon/config.yml
-        sed -i '/zkevm.l2-datastreamer-timeout:/d' templates/cdk-erigon/config.yml
-        sed -i '/zkevm.datastream-version:/d' templates/cdk-erigon/config.yml
+        sed -i '/zkevm.datastream-version:/d' ./templates/cdk-erigon/config.yml
+        sed -i '$a\zkevm.honour-chainspec: true' ./templates/cdk-erigon/config.yml
+        sed -i '$a\zkevm.initial-commitment: pmt' ./templates/cdk-erigon/config.yml
 
     - name: Create params.yml overrides
+      if: env.SKIP_ENCLAVE_SETUP != 'true'
       working-directory: ./kurtosis-cdk
       shell: bash
       run: |
         echo 'args:' > params.yml
         echo '  cdk_erigon_node_image: cdk-erigon-type1:local' >> params.yml
         echo '  el-1-geth-lighthouse: ethpandaops/lighthouse@sha256:4902d9e4a6b6b8d4c136ea54f0e51582a32f356f3dec7194a1adee13ed2d662e' >> params.yml
-        /usr/local/bin/yq -i '.args.data_availability_mode = "${{ matrix.da-mode }}"' params.yml
-        sed -i 's/"pragueTime": [0-9]\+/"pragueTime": 0/' ./templates/cdk-erigon/chainspec.json
-        sed -i '/"terminalTotalDifficulty"/d' ./templates/cdk-erigon/chainspec.json
+
+    - name: Teardown existing enclave
+      if: env.SKIP_ENCLAVE_SETUP == 'true'
+      run: |
+        kurtosis enclave stop cdk-v1 || true
+        kurtosis enclave rm   cdk-v1 || true
 
     - name: Deploy Kurtosis CDK package
       working-directory: ./kurtosis-cdk

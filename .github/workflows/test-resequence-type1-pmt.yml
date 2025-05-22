@@ -1,15 +1,9 @@
-name: Resequence test
+name: Resequence type-1 test
 on:
-  push:
-    branches:
-      - zkevm
-      - stable/**
-      - project/**
   pull_request:
     branches:
-      - zkevm
-      - stable/**
       - project/**
+      - fix/type-1-unwind-tests
     types:
       - opened
       - reopened
@@ -21,21 +15,26 @@ env:
   DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
 jobs:
-  resequence-test:
+  resequence-type1-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout cdk-erigon
-        uses: actions/checkout@v4
-      - name: Setup kurtosis
-        uses: ./.github/actions/setup-kurtosis
+      - name: Setup kurtosis for type-1
+        uses: ./.github/actions/setup-kurtosis-type1
 
-      - name: Test resequence
-        working-directory: ./cdk-erigon
-        run: .github/scripts/test_resequence.sh
+      - name: Install polycli
+        shell: bash
+        run: |
+          tmp_dir=$(mktemp -d) && curl -L https://github.com/0xPolygon/polygon-cli/releases/download/v0.1.48/polycli_v0.1.48_linux_amd64.tar.gz | tar -xz -C "$tmp_dir" && mv "$tmp_dir"/* /usr/local/bin/polycli && rm -rf "$tmp_dir"
+          sudo chmod +x /usr/local/bin/polycli
+          /usr/local/bin/polycli version
+
+      - name: Test resequence type-1 PMT
+        working-directory: ${{ github.workspace }}
+        run: ./.github/scripts/test_resequence.sh
 
       - name: Prepare logs
         working-directory: ./kurtosis-cdk
-        if: failure()
+        if: failure() && env.ACT != 'true'
         run: |
           mkdir -p ci_logs
           cd ci_logs
@@ -45,8 +44,9 @@ jobs:
           kurtosis service logs cdk-v1 zkevm-prover-001 --all > zkevm-prover-001.log
           kurtosis service logs cdk-v1 cdk-node-001 --all > cdk-node-001.log
           kurtosis service logs cdk-v1 zkevm-bridge-service-001 --all > zkevm-bridge-service-001.log
+
       - name: Upload logs
-        if: failure()
+        if: failure() && env.ACT != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: logs_${{ github.run_id }}
