@@ -126,7 +126,6 @@ type Zk struct {
 	L2InfoTreeUpdatesEnabled       bool
 
 	Commitment      Commitment
-	InjectBatch     bool
 	HonourChainspec bool
 }
 

@@ -142,13 +142,13 @@ func sequencingBatchStep(
 
 	// injected batch
 	if executionAt == 0 {
-		if cfg.zk.InjectBatch {
-			if err = processInjectedInitialBatch(batchContext, batchState); err != nil {
+		if cfg.chainConfig.DebugEthereumMode {
+			// sealed empty block batch
+			if err = processEmptyInitialBatch(batchContext, batchState); err != nil {
 				return err
 			}
 		} else {
-			// sealed empty block batch
-			if err = processEmptyInitialBatch(batchContext, batchState); err != nil {
+			if err = processInjectedInitialBatch(batchContext, batchState); err != nil {
 				return err
 			}
 		}

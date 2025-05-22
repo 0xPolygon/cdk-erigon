@@ -69,7 +69,8 @@ func (sdb *IntraBlockState) PostExecuteStateSet(chainConfig *chain.Config, block
 }
 
 func (sdb *IntraBlockState) PreExecuteStateSet(chainConfig *chain.Config, blockNumber uint64, blockTimestamp uint64, stateRoot *libcommon.Hash) {
-	if chainConfig.IsNormalcy(blockNumber) {
+	if chainConfig.DebugEthereumMode {
+		// in debug we return early here, no out of EVM state changes
 		return
 	}
 
@@ -103,7 +104,8 @@ func (sdb *IntraBlockState) SyncerPreExecuteStateSet(
 	gerUpdates *[]dstypes.GerUpdate,
 	reUsedL1InfoTreeIndex bool,
 ) {
-	if chainConfig.IsNormalcy(blockNumber) {
+	if chainConfig.DebugEthereumMode {
+		// in debug we return early here, no out of EVM state changes
 		return
 	}
 

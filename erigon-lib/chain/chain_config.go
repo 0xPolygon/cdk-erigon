@@ -121,6 +121,7 @@ type Config struct {
 
 	AllowFreeTransactions bool   `json:"allowFreeTransactions,omitempty"`
 	ZkDefaultGasPrice     uint64 `json:"zkDefaultGasFee,omitempty"`
+	DebugEthereumMode     bool   `json:"debugEthereumMode,omitempty"` // used for debugging, will turn off IBS interaction for info tree / GER / etc.
 }
 
 type BlobConfig struct {
