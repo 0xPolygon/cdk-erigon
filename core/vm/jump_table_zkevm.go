@@ -123,7 +123,7 @@ func newCancunInstructionSetZk() JumpTable {
 	instructionSet := newNapoliInstructionSetZk()
 	// Disable BLOBHASH and BLOBBASEFEE opcodes for L2
 	// enable4844(&instructionSet) // BLOBHASH opcode
-	enable7516(&instructionSet) // BLOBBASEFEE opcode
+	enable7516_zkevm(&instructionSet) // BLOBBASEFEE opcode
 	validateAndFillMaxStack(&instructionSet)
 	return instructionSet
 }

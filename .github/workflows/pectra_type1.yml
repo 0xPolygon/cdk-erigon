@@ -1,0 +1,50 @@
+name: Pectra type1 test
+on:
+  push:
+    branches:
+      - project/pp2
+  pull_request:
+    branches:
+      - project/pp2
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+env:
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+jobs:
+  pectra-type1:
+    strategy:
+      matrix:
+        da-mode: [ "rollup" ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cdk-erigon
+        uses: actions/checkout@v4
+
+      - name: Setup kurtosis type-1
+        uses: ./.github/actions/setup-kurtosis-type1
+
+      - name: Test pectra type1
+        working-directory:  ${{ github.workspace }}
+        run: ./zk/tests/pectra/pectra.sh
+
+      - name: Prepare logs
+        working-directory: ./kurtosis-cdk
+        if: failure()
+        run: |
+          mkdir -p ci_logs
+          cd ci_logs
+          kurtosis service logs cdk-v1 cdk-erigon-rpc-001 --all > cdk-erigon-rpc-001.log
+          kurtosis service logs cdk-v1 cdk-erigon-sequencer-001 --all > cdk-erigon-sequencer-001.log
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs_${{ github.run_id }}
+          path: ./kurtosis-cdk/ci_logs
