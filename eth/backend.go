@@ -1024,6 +1024,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		backend.chainConfig.AllowFreeTransactions = cfg.AllowFreeTransactions
 		backend.chainConfig.ZkDefaultGasPrice = cfg.DefaultGasPrice
+		backend.chainConfig.FreeInjectedBatch = cfg.FreeInjectedBatch
 		l1Urls := strings.Split(cfg.L1RpcUrl, ",")
 
 		if cfg.Zk.L1CacheEnabled {

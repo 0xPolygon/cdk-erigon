@@ -234,6 +234,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.ExecutorMaxConcurrentRequests,
 	&utils.Limbo,
 	&utils.AllowFreeTransactions,
+	&utils.FreeInjectedBatch,
 	&utils.AllowPreEIP155Transactions,
 	&utils.EffectiveGasPriceForEthTransfer,
 	&utils.EffectiveGasPriceForErc20Transfer,

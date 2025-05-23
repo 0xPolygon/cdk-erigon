@@ -120,6 +120,7 @@ type Config struct {
 	NormalcyBlock           *big.Int `json:"normalcyBlock,omitempty"`
 
 	AllowFreeTransactions bool   `json:"allowFreeTransactions,omitempty"`
+	FreeInjectedBatch     bool   `json:"freeInjectedBatch,omitempty"`
 	ZkDefaultGasPrice     uint64 `json:"zkDefaultGasFee,omitempty"`
 
 	// used for debugging, will turn off IBS interaction for info tree / GER / etc.
