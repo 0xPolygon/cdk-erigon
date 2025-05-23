@@ -61,6 +61,7 @@ type Zk struct {
 	ExecutorMaxConcurrentRequests          int
 	Limbo                                  bool
 	AllowFreeTransactions                  bool
+	FreeInjectedBatch                      bool
 	AllowPreEIP155Transactions             bool
 	EffectiveGasPriceForEthTransfer        uint8
 	EffectiveGasPriceForErc20Transfer      uint8

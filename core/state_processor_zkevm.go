@@ -56,8 +56,11 @@ func GetTxContext(config *chain.Config, engine consensus.EngineReader, ibs *stat
 		msg.SetIsFree(engine.IsServiceTransaction(msg.From(), syscall))
 	}
 
-	// ensure block 1 (injected batch) is always free in a zk context
-	if header.Number.Uint64() == 1 {
+	// some zk networks need to ensure the injected batch is free, the transaction for this lives on the
+	// L1 or on a disk on file as part of launching the ZK contracts so can't be changed which means
+	// the price could be incompatible with the genesis network config and the transaction won't run
+	// when we need it to.
+	if config.FreeInjectedBatch && header.Number.Uint64() == 1 {
 		msg.SetIsFree(true)
 	}
 

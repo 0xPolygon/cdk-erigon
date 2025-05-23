@@ -698,6 +698,11 @@ var (
 		Usage: "Allow the sequencer to proceed transactions with 0 gas price",
 		Value: false,
 	}
+	FreeInjectedBatch = cli.BoolFlag{
+		Name:  "zkevm.free-injected-batch",
+		Usage: "Process the injected batch for free - default true",
+		Value: true,
+	}
 	RejectLowGasPriceTransactions = cli.BoolFlag{
 		Name:  "zkevm.reject-low-gas-price-transactions",
 		Usage: "Reject the sequencer to proceed transactions with low gas price",
