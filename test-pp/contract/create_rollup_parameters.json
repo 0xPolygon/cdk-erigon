@@ -1,0 +1,19 @@
+{
+    "adminZkEVM": "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534",
+    "chainID": 195,
+    "consensusContract": "PolygonPessimisticConsensus",
+    "dataAvailabilityProtocol": "PolygonDataCommittee",
+    "deployerPvtKey": "",
+    "description": "description",
+    "forkID": 13,
+    "gasTokenAddress":"0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "maxFeePerGas": "",
+    "maxPriorityFeePerGas": "",
+    "multiplierGas": "",
+    "networkName": "zkevm",
+    "realVerifier": false,
+    "trustedSequencer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "trustedSequencerURL": "http://xlayer-seq:8545",
+    "trustedAggregator":"0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "programVKey": "0x00d6e4bdab9cac75a50d58262bb4e60b3107a6b61131ccdff649576c624b6fb7"
+}

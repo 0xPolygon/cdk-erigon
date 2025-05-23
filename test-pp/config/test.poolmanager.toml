@@ -1,0 +1,37 @@
+[Log]
+Environment = "development" # "production" or "development"
+Level = "info"
+Outputs = ["stderr"]
+
+[Server]
+Host = "0.0.0.0"
+Port = 8545
+ReadTimeout = "60s"
+WriteTimeout = "60s"
+MaxRequestsPerIPAndSecond = 50000
+EnableHttpLog = true
+BatchRequestsEnabled = false
+BatchRequestsLimit = 20
+
+[DB]
+User = "pool_user"
+Password = "pool_password"
+Name = "pool_db"
+Host = "xlayer-pool-db"
+Port = "5432"
+EnableLog = false
+MaxConns = 200
+
+[Sender]
+SequencerURL = "http://xlayer-seq:8545"
+ResendTxsCheckInterval = "1s"
+Workers = 5
+QueueSize = 25
+
+[Monitor]
+L2NodeURL = "http://xlayer-seq:8545"
+Workers = 5
+QueueSize = 25
+RetryWaitInterval = "3s"
+InitialWaitInterval = "1s"
+TxLifeTimeMax = "10s"

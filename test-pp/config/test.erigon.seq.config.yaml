@@ -1,0 +1,114 @@
+datadir: /home/erigon/data/
+chain: dynamic-mynetwork
+http: true
+private.api.addr: localhost:9091
+zkevm.l2-chain-id: 195
+zkevm.l2-sequencer-rpc-url:
+zkevm.l2-datastreamer-url:
+zkevm.l1-chain-id: 1337
+zkevm.l1-rpc-url: http://xlayer-mock-l1-network:8545
+zkevm.l1-highest-block-type: latest
+
+zkevm.address-sequencer: "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
+zkevm.address-zkevm: "0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd"
+zkevm.address-admin: "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"
+zkevm.address-rollup: "0xE96dBF374555C6993618906629988d39184716B3"
+zkevm.address-ger-manager: "0xB8cedD4B9eF683f0887C44a6E4312dC7A6e2fcdB"
+
+zkevm.l1-rollup-id: 1
+zkevm.l1-first-block: 156
+zkevm.l1-block-range: 10
+zkevm.l1-query-delay: 6000
+zkevm.rpc-ratelimit: 0
+zkevm.datastream-version: 2
+
+log.console.verbosity: info
+
+#zkevm.executor-urls: xlayer-executor:50071
+zkevm.executor-strict: false
+zkevm.witness-full: false
+zkevm.executor-mock: true
+
+zkevm.sequencer-block-seal-time: "1s"
+zkevm.sequencer-max-block-seal-time: "3s"
+zkevm.sequencer-batch-seal-time: "10s"
+zkevm.sequencer-batch-sleep-duration: "0s"
+
+zkevm.data-stream-host: "localhost"
+zkevm.data-stream-port: 6900
+zkevm.default-gas-price: 1000000000
+zkevm.max-gas-price: 0
+zkevm.gas-price-factor: 0.000001
+zkevm.allow-free-transactions: true
+
+externalcl: true
+http.api: [eth, debug, net, trace, web3, erigon, txpool, zkevm]
+http.addr: 0.0.0.0
+http.port: 8545
+http.vhosts: any
+http.corsdomain: any
+http.timeouts.read: "10s"
+http.timeouts.write: "10s"
+http.timeouts.idle: "10s"
+rpc.batch.concurrency: 2
+rpc.batch.limit: 20
+ws: true
+
+zkevm.apollo-enabled: false
+zkevm.apollo-ip-addr: ""
+zkevm.apollo-app-id: ""
+zkevm.apollo-namespace-name: ""
+
+zkevm.nacos-urls: ""
+zkevm.nacos-namespace-id: ""
+zkevm.nacos-application-name: ""
+zkevm.nacos-external-listen-addr: ""
+
+metrics: true
+metrics.addr: "0.0.0.0"
+metrics.port: 9095
+
+db.read.concurrency: 20000
+txpool.globalslots: 1000000
+txpool.globalbasefeeslots: 1000000
+txpool.globalqueue: 1000000
+txpool.packbatchspeciallist : ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"]
+txpool.gaspricemultiple : 2
+txpool.blockedlist: ["0xdD2FD4581271e230360230F9337D5c0430Bf44C0"]
+txpool.enablefreegasbynonce : true
+txpool.freegascountperaddr : 100
+txpool.commit.every: "10m"
+
+gpo.type: "follower"
+gpo.update-period: "3s"
+gpo.factor: 0.01
+gpo.kafka-url: "0.0.0.0"
+gpo.topic: "explorer"
+gpo.group-id: "web3"
+gpo.blocks: 3
+gpo.default-l1-coin-price: 2000
+gpo.default-l2-coin-price: 50
+gpo.gas-price-usdt: 0.000000476190476
+gpo.congestion-threshold: 0
+
+networkid: 195
+
+pprof: true
+pprof.port: 6060
+pprof.addr: 0.0.0.0
+txpool.enablefreegaslist : true
+txpool.freegaslist : '[{"name":"e2e", "from_list":["0x586cbc95ed16031d9efdaebacf1c1d2bc3ccaa78"], "to_list":["0xad1d01007a56ee0a4ffd0488fb58fc6500cb1fbe"], "method_sigs":["a9059cbb"], "gas_price_multiple": 1}]'
+
+# close a block/batch immediately after the 1st zkCounter overflow TX
+zkevm.seal-batch-immediately-on-overflow: true
+zkevm.sequencer-timeout-on-empty-tx-pool: 5ms
+zkevm.pre-run-address-list: [""]
+zkevm.block-info-concurrent: true
+zkevm.standalone-smt-db: true  # true: enable split smt db, false: not split
+zkevm.enable-async-commit: true
+
+# to reduce lock race in stress test
+txpool.enabletimsort: true
+zkevm.bulk-add-txs: true
+zkevm.enable-add-tx-notify: true
+zkevm.initial-batch.config: /usr/src/app/first-batch-config.json
