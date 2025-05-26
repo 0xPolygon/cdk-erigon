@@ -6,8 +6,13 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common/cmp"
+	"github.com/ledgerwatch/erigon-lib/common/fixedgas"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/types"
 	ecommon "github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
@@ -65,6 +70,133 @@ type GPCache interface {
 	SetLatest(hash common.Hash, price *big.Int)
 	GetLatestRawGP() *big.Int
 	SetLatestRawGP(rgp *big.Int)
+}
+
+func (p *TxPool) bestForXLayer(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, error) {
+	removeWG.Wait()
+	ok, count, toRemove, err := p.bestRead(n, txs, tx, onTopOf, availableGas, availableBlobGas, toSkip)
+	if err != nil {
+		return ok, count, err
+	}
+	if !ok {
+		return false, count, nil
+	}
+	txs.Resize(uint(count))
+	if len(toRemove) > 0 {
+		removeWG.Add(1)
+		go func() {
+			p.lock.Lock()
+			defer p.lock.Unlock()
+			removeWG.Done()
+			for _, mt := range toRemove {
+				p.pending.Remove(mt)
+				p.discardLocked(mt, UnsupportedTx)
+				//log.Debug("Removed transaction from pending pool", "txID", mt.Tx.IDHash)
+			}
+		}()
+		time.Sleep(1 * time.Nanosecond)
+	}
+
+	return true, count, nil
+}
+
+func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, []*metaTx, error) {
+	if p.isDeniedYieldingTransactions() {
+		//log.Trace("Denied yielding transactions, cannot proceed")
+		return false, 0, nil, nil
+	}
+
+	// First wait for the corresponding block to arrive
+	if p.lastSeenBlock.Load() < onTopOf {
+		//log.Trace("Block not yet arrived, too early to process", "lastSeenBlock", p.lastSeenBlock.Load(), "requiredBlock", onTopOf)
+		return false, 0, nil, nil
+	}
+
+	isShanghai := p.isShanghai()
+	isLondon := p.isLondon()
+
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
+	best := p.pending.best
+
+	txs.Resize(uint(cmp.Min(int(n), len(best.ms))))
+	var toRemove []*metaTx
+	count := 0
+
+	p.pending.EnforceBestInvariants()
+
+	for i := 0; count < int(n) && i < len(best.ms); i++ {
+		// if we wouldn't have enough gas for a standard transaction then quit out early
+		if availableGas < fixedgas.TxGas {
+			break
+		}
+
+		mt := best.ms[i]
+		//log.Trace("Processing transaction", "txID", mt.Tx.IDHash)
+
+		if toSkip.Contains(mt.Tx.IDHash) {
+			//log.Trace("Skipping transaction, already in toSkip", "txID", mt.Tx.IDHash)
+			continue
+		}
+
+		if !isLondon && mt.Tx.Type == 0x2 {
+			// remove ldn txs when not in london
+			toRemove = append(toRemove, mt)
+			toSkip.Add(mt.Tx.IDHash)
+			//log.Info("Removing London transaction in non-London environment", "txID", mt.Tx.IDHash)
+			continue
+		}
+
+		if mt.Tx.Gas > transactionGasLimit {
+			// Skip transactions with very large gas limit, these shouldn't enter the pool at all
+			//log.Debug("found a transaction in the pending pool with too high gas for tx - clear the tx pool")
+			//log.Trace("Skipping transaction with too high gas", "txID", mt.Tx.IDHash, "gas", mt.Tx.Gas)
+			continue
+		}
+		rlpTx, sender, isLocal, err := p.getRlpLocked(tx, mt.Tx.IDHash[:])
+		if err != nil {
+			//log.Trace("Error getting RLP of transaction", "txID", mt.Tx.IDHash, "error", err)
+			return false, count, toRemove, err
+		}
+		if len(rlpTx) == 0 {
+			toRemove = append(toRemove, mt)
+			//log.Info("Removing transaction with empty RLP", "txID", common.BytesToHash(mt.Tx.IDHash[:]))
+			continue
+		}
+
+		// Skip transactions that require more blob gas than is available
+		blobCount := uint64(len(mt.Tx.BlobHashes))
+		if blobCount*fixedgas.BlobGasPerBlob > availableBlobGas {
+			//log.Trace("Skipping transaction due to insufficient blob gas", "txID", mt.Tx.IDHash, "requiredBlobGas", blobCount*fixedgas.BlobGasPerBlob, "availableBlobGas", availableBlobGas)
+			continue
+		}
+		availableBlobGas -= blobCount * fixedgas.BlobGasPerBlob
+
+		// make sure we have enough gas in the caller to add this transaction.
+		// not an exact science using intrinsic gas but as close as we could hope for at
+		// this stage
+		intrinsicGas, _ := CalcIntrinsicGas(uint64(mt.Tx.DataLen), uint64(mt.Tx.DataNonZeroLen), nil, mt.Tx.Creation, true, true, isShanghai)
+		if intrinsicGas > availableGas {
+			// we might find another TX with a low enough intrinsic gas to include so carry on
+			//log.Trace("Skipping transaction due to insufficient gas", "txID", mt.Tx.IDHash, "intrinsicGas", intrinsicGas, "availableGas", availableGas)
+			continue
+		}
+
+		if intrinsicGas <= availableGas { // check for potential underflow
+			availableGas -= intrinsicGas
+		}
+
+		//log.Trace("Including transaction", "txID", mt.Tx.IDHash)
+		txs.Txs[count] = rlpTx
+		txs.TxIds[count] = mt.Tx.IDHash
+		copy(txs.Senders.At(count), sender.Bytes())
+		txs.IsLocal[count] = isLocal
+		toSkip.Add(mt.Tx.IDHash)
+		count++
+	}
+
+	return true, count, toRemove, nil
 }
 
 func contains(addresses []common.Address, addr common.Address) bool {
@@ -214,7 +346,6 @@ func IsAcquireTxPoolLock() bool {
 	return requireTxPoolLock.Load()
 }
 
-// For X Layer, optimize tx pool
 func (p *PendingPool) RemoveNoLock(i *metaTx) {
 	if i.worstIndex >= 0 {
 		heap.Remove(p.worst, i.worstIndex)

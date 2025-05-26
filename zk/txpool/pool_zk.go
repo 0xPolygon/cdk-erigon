@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/holiman/uint256"
@@ -193,54 +192,23 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 // zk: the implementation of best here is changed only to not take into account block gas limits as we don't care about
 // these in zk.  Instead we do a quick check on the transaction maximum gas in zk
 func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, error) {
-	// For X Layer, optimize tx pool
-	removeWG.Wait()
-	ok, count, toRemove, err := p.bestRead(n, txs, tx, onTopOf, availableGas, availableBlobGas, toSkip)
-	if err != nil {
-		return ok, count, err
-	}
-	if !ok {
-		return false, count, nil
-	}
-	txs.Resize(uint(count))
-	if len(toRemove) > 0 {
-		removeWG.Add(1)
-		go func() {
-			p.lock.Lock()
-			defer p.lock.Unlock()
-			removeWG.Done()
-			for _, mt := range toRemove {
-				p.pending.Remove(mt)
-				p.discardLocked(mt, UnsupportedTx)
-				//log.Debug("Removed transaction from pending pool", "txID", mt.Tx.IDHash)
-			}
-		}()
-		time.Sleep(1 * time.Nanosecond)
-	}
+	p.lock.Lock()
+	defer p.lock.Unlock()
 
-	return true, count, nil
-}
-
-// For X Layer, optimize tx pool
-func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, []*metaTx, error) {
 	if p.isDeniedYieldingTransactions() {
-		//log.Trace("Denied yielding transactions, cannot proceed")
-		return false, 0, nil, nil
+		log.Trace("Denied yielding transactions, cannot proceed")
+		return false, 0, nil
 	}
 
 	// First wait for the corresponding block to arrive
 	if p.lastSeenBlock.Load() < onTopOf {
-		//log.Trace("Block not yet arrived, too early to process", "lastSeenBlock", p.lastSeenBlock.Load(), "requiredBlock", onTopOf)
-		return false, 0, nil, nil
+		log.Trace("Block not yet arrived, too early to process", "lastSeenBlock", p.lastSeenBlock.Load(), "requiredBlock", onTopOf)
+		return false, 0, nil
 	}
 
 	isShanghai := p.isShanghai()
 	isLondon := p.isLondon()
-
-	// For X Layer, optimize tx pool
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-
+	_ = isLondon
 	best := p.pending.best
 
 	txs.Resize(uint(cmp.Min(int(n), len(best.ms))))
@@ -256,10 +224,10 @@ func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availa
 		}
 
 		mt := best.ms[i]
-		//log.Trace("Processing transaction", "txID", mt.Tx.IDHash)
+		log.Trace("Processing transaction", "txID", mt.Tx.IDHash)
 
 		if toSkip.Contains(mt.Tx.IDHash) {
-			//log.Trace("Skipping transaction, already in toSkip", "txID", mt.Tx.IDHash)
+			log.Trace("Skipping transaction, already in toSkip", "txID", mt.Tx.IDHash)
 			continue
 		}
 
@@ -267,32 +235,31 @@ func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availa
 			// remove ldn txs when not in london
 			toRemove = append(toRemove, mt)
 			toSkip.Add(mt.Tx.IDHash)
-			//log.Info("Removing London transaction in non-London environment", "txID", mt.Tx.IDHash)
+			log.Info("Removing London transaction in non-London environment", "txID", mt.Tx.IDHash)
 			continue
 		}
 
 		if mt.Tx.Gas > transactionGasLimit {
 			// Skip transactions with very large gas limit, these shouldn't enter the pool at all
-			//log.Debug("found a transaction in the pending pool with too high gas for tx - clear the tx pool")
-			//log.Trace("Skipping transaction with too high gas", "txID", mt.Tx.IDHash, "gas", mt.Tx.Gas)
+			log.Debug("found a transaction in the pending pool with too high gas for tx - clear the tx pool")
+			log.Trace("Skipping transaction with too high gas", "txID", mt.Tx.IDHash, "gas", mt.Tx.Gas)
 			continue
 		}
 		rlpTx, sender, isLocal, err := p.getRlpLocked(tx, mt.Tx.IDHash[:])
 		if err != nil {
-			//log.Trace("Error getting RLP of transaction", "txID", mt.Tx.IDHash, "error", err)
-			// For X Layer, optimize tx pool
-			return false, count, toRemove, err
+			log.Trace("Error getting RLP of transaction", "txID", mt.Tx.IDHash, "error", err)
+			return false, count, err
 		}
 		if len(rlpTx) == 0 {
 			toRemove = append(toRemove, mt)
-			//log.Info("Removing transaction with empty RLP", "txID", common.BytesToHash(mt.Tx.IDHash[:]))
+			log.Info("Removing transaction with empty RLP", "txID", common.BytesToHash(mt.Tx.IDHash[:]))
 			continue
 		}
 
 		// Skip transactions that require more blob gas than is available
 		blobCount := uint64(len(mt.Tx.BlobHashes))
 		if blobCount*fixedgas.BlobGasPerBlob > availableBlobGas {
-			//log.Trace("Skipping transaction due to insufficient blob gas", "txID", mt.Tx.IDHash, "requiredBlobGas", blobCount*fixedgas.BlobGasPerBlob, "availableBlobGas", availableBlobGas)
+			log.Trace("Skipping transaction due to insufficient blob gas", "txID", mt.Tx.IDHash, "requiredBlobGas", blobCount*fixedgas.BlobGasPerBlob, "availableBlobGas", availableBlobGas)
 			continue
 		}
 		availableBlobGas -= blobCount * fixedgas.BlobGasPerBlob
@@ -303,7 +270,7 @@ func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availa
 		intrinsicGas, _ := CalcIntrinsicGas(uint64(mt.Tx.DataLen), uint64(mt.Tx.DataNonZeroLen), nil, mt.Tx.Creation, true, true, isShanghai)
 		if intrinsicGas > availableGas {
 			// we might find another TX with a low enough intrinsic gas to include so carry on
-			//log.Trace("Skipping transaction due to insufficient gas", "txID", mt.Tx.IDHash, "intrinsicGas", intrinsicGas, "availableGas", availableGas)
+			log.Trace("Skipping transaction due to insufficient gas", "txID", mt.Tx.IDHash, "intrinsicGas", intrinsicGas, "availableGas", availableGas)
 			continue
 		}
 
@@ -311,7 +278,7 @@ func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availa
 			availableGas -= intrinsicGas
 		}
 
-		//log.Trace("Including transaction", "txID", mt.Tx.IDHash)
+		log.Trace("Including transaction", "txID", mt.Tx.IDHash)
 		txs.Txs[count] = rlpTx
 		txs.TxIds[count] = mt.Tx.IDHash
 		copy(txs.Senders.At(count), sender.Bytes())
@@ -320,8 +287,15 @@ func (p *TxPool) bestRead(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availa
 		count++
 	}
 
-	// For X Layer, optimize tx pool
-	return true, count, toRemove, nil
+	txs.Resize(uint(count))
+	if len(toRemove) > 0 {
+		for _, mt := range toRemove {
+			p.pending.Remove(mt)
+			p.discardLocked(mt, UnsupportedTx)
+			log.Debug("Removed transaction from pending pool", "txID", mt.Tx.IDHash)
+		}
+	}
+	return true, count, nil
 }
 
 func (p *TxPool) ForceUpdateLatestBlock(blockNumber uint64) {
