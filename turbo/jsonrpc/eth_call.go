@@ -507,6 +507,9 @@ func (api *APIImpl) CreateAccessList(ctx context.Context, args ethapi2.CallArgs,
 				if err != nil {
 					return nil, err
 				}
+				if a == nil {
+					return nil, fmt.Errorf("account %s not found", args.From)
+				}
 				nonce = a.Nonce + 1
 			}
 
