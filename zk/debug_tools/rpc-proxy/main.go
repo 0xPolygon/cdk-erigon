@@ -1,4 +1,7 @@
-// package main
+//go:build !skip_smoke
+// +build !skip_smoke
+
+package main
 
 // import (
 // 	"bytes"
