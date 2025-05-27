@@ -69,6 +69,7 @@ type IL1Syncer interface {
 	CheckL1BlockFinalized(blockNo uint64) (bool, uint64, error)
 	VerifyAddress(logEntry *ethTypes.Log) bool
 	IsSequencer() bool
+	WriteL1TreeLogs(ethTypes.Log) error
 }
 
 var (
@@ -76,6 +77,7 @@ var (
 	lastCheckedL1BlockCounter = metrics.GetOrCreateGauge(`last_checked_l1_block`)
 )
 
+// L1CombinedSyncerCfg provides unified access to the L1 syncer and  l1InfoTree updater
 type L1CombinedSyncerCfg struct {
 	db      kv.RwDB
 	syncer  IL1Syncer
@@ -107,7 +109,6 @@ type logsVerificationResult struct {
 	newSequencesCount           atomic.Uint64
 	highestWrittenL1BlockNumber atomic.Uint64
 	highestVerification         *types.L1BatchInfo
-	l1InfoTreeLogs              []ethTypes.Log
 	errChan                     chan error
 }
 
@@ -150,34 +151,6 @@ func SpawnStageL1CombinedSyncer(
 		return fmt.Errorf("GetStageProgress, %w", err)
 	}
 
-	if l1BlockProgress == 0 && !sequencer.IsSequencer() && cfg.zkCfg.L2InfoTreeUpdatesEnabled {
-		select {
-		default:
-			// If we are a rpc node, and we are starting from the beginning, we need to check for updates from the L2
-			infoTrees, err := cfg.updater.CheckL2RpcForInfoTreeUpdates(logPrefix, tx)
-			if err != nil {
-				log.Warn(fmt.Sprintf("[%s] L2 Info Tree sync failed, getting Info Tree from L1", logPrefix), "err", err)
-				break
-			}
-
-			var latestIndex uint64
-			latestUpdate := cfg.updater.GetLatestUpdate()
-			if latestUpdate != nil {
-				latestIndex = latestUpdate.Index
-			}
-
-			log.Info(fmt.Sprintf("[%s] Synced Info Tree updates from L2 Sequencer RPC", logPrefix), "count", len(infoTrees), "latestIndex", latestIndex)
-
-			if freshTx {
-				if err = tx.Commit(); err != nil {
-					return fmt.Errorf("tx.Commit: %w", err)
-				}
-			}
-
-			return nil
-		}
-	}
-
 	if l1BlockProgress <= cfg.zkCfg.L1FinalizedBlockRequirement && cfg.zkCfg.L1FinalizedBlockRequirement > 0 {
 		for {
 			finalized, finalizedBn, err := cfg.syncer.CheckL1BlockFinalized(cfg.zkCfg.L1FinalizedBlockRequirement)
@@ -202,10 +175,6 @@ func SpawnStageL1CombinedSyncer(
 		panic("L1 syncer should already started")
 	}
 
-	/*if err = cfg.updater.WarmUp(tx); err != nil {
-		return fmt.Errorf("cfg.updater.WarmUp: %w", err)
-	}*/
-
 	if l1BlockProgress == 0 && cfg.zkCfg.L1FirstBlock > 0 {
 		l1BlockProgress = cfg.zkCfg.L1FirstBlock - 1
 	}
@@ -216,9 +185,9 @@ func SpawnStageL1CombinedSyncer(
 	errCh := make(chan error)
 	go cfg.syncer.RunQueryBlocksOnce(logPrefix, l1BlockProgress, logsCh, errCh)
 
-	result, err := logsReader(logPrefix, cfg.zkCfg.L1RollupId, hermezDb, cfg.syncer, logsCh, errCh)
+	result, err := logsHandler(logPrefix, cfg.zkCfg.L1RollupId, hermezDb, cfg.syncer, logsCh, errCh)
 	if err != nil {
-		return fmt.Errorf("logsReader: %w", err)
+		return fmt.Errorf("logsHandler: %w", err)
 	}
 
 	latestCheckedBlock := cfg.syncer.GetLastCheckedL1Block()
@@ -269,19 +238,6 @@ func SpawnStageL1CombinedSyncer(
 		log.Info(fmt.Sprintf("[%s] No new L1 blocks to sync", logPrefix))
 	}
 
-	logsCount, err := cfg.updater.ProcessInfoTreeUpdates(logPrefix, tx, result.l1InfoTreeLogs)
-	if err != nil {
-		return fmt.Errorf("CheckForInfoTreeUpdates: %w", err)
-	}
-
-	var latestIndex uint64
-	latestUpdate := cfg.updater.GetLatestUpdate()
-	if latestUpdate != nil {
-		latestIndex = latestUpdate.Index
-	}
-
-	log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", logsCount, "latestIndex", latestIndex)
-
 	if freshTx {
 		log.Debug("l1 sync: first cycle, committing tx")
 		if err = tx.Commit(); err != nil {
@@ -294,13 +250,14 @@ func SpawnStageL1CombinedSyncer(
 
 	return nil
 }
-func logsReader(
+func logsHandler(
 	logPrefix string,
 	rollupId uint64,
 	hermezDb *hermez_db.HermezDb,
 	syncer IL1Syncer,
 	logsCh <-chan []ethTypes.Log,
-	errCh <-chan error) (*logsVerificationResult, error) {
+	errCh <-chan error,
+) (*logsVerificationResult, error) {
 	result := newLogsVerificationResult()
 	for {
 		select {
@@ -352,7 +309,12 @@ func processLogs(
 				return fmt.Errorf("processSequencerLog: %w", err)
 			}
 		case logTypeL1InfoTree:
-			logsVerificationResult.l1InfoTreeLogs = append(logsVerificationResult.l1InfoTreeLogs, logEntries[logEntryIndex])
+			err := syncer.WriteL1TreeLogs(logEntries[logEntryIndex])
+			if err != nil {
+				log.Warn("Cannot Write L1 Tree Logs", logPrefix, err)
+			}
+			// logsVerificationResult.l1InfoTreeLogs = append(logsVerificationResult.l1InfoTreeLogs, logEntries[logEntryIndex])
+
 		default:
 			log.Warn("L1 Syncer unknown topic", "topic", logEntries[logEntryIndex].Topics[0])
 		}
@@ -414,10 +376,9 @@ func processVerificationLog(
 		logsVerificationResult.UpdateHigherBlock(info.L1BlockNo)
 		logsVerificationResult.VerificationCountInc()
 	case logIncompatible:
-		log.Warn("L1 Syncer logIncompatible", "topic", logEntry.BlockNumber)
-		return nil
+		// log.Warn(fmt.Sprintf("L1 Syncer logIncompatible: %d %s", logEntry.BlockNumber, logEntry.Topics[0]))
 	default:
-		log.Warn("L1 Syncer unknown topic", "topic", logEntry.Topics[0])
+		log.Warn(fmt.Sprintf("L1 Syncer unknown topic: %d %s", logEntry.BlockNumber, logEntry.Topics[0]))
 	}
 	return nil
 }
@@ -547,7 +508,7 @@ func checkLogType(log *ethTypes.Log) uint8 {
 		contracts.CreateNewRollupTopic,
 		contracts.UpdateRollupTopic:
 		return logTypeSequence
-	case contracts.UpdateL1InfoTreeTopic:
+	case contracts.UpdateL1InfoTreeTopic, contracts.UpdateL1InfoTreeV2Topic:
 		return logTypeL1InfoTree
 	default:
 		return logTypeUnknown

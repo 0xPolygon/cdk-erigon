@@ -91,7 +91,7 @@ func sequencingBatchStep(
 	defer log.Info(fmt.Sprintf("[%s] Finished sequencing stage", logPrefix))
 
 	// at this point of time the datastream could not be ahead of the executor
-	if err := validateIfDatastreamIsAheadOfExecution(s, ctx, cfg); err != nil {
+	if err = validateIfDatastreamIsAheadOfExecution(s, ctx, cfg); err != nil {
 		return err
 	}
 
@@ -101,7 +101,7 @@ func sequencingBatchStep(
 	}
 	defer sdb.tx.Rollback()
 
-	if err := cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
+	if _, err = cfg.infoTreeUpdater.WarmUp(logPrefix, sdb.tx); err != nil {
 		return err
 	}
 

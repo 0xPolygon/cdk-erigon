@@ -29,11 +29,15 @@ const (
 type Syncer interface {
 	IsSyncStarted() bool
 	RunQueryBlocks(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error)
-	//GetLogsChan() chan []types.Log
-	// GetProgressMessageChan() chan string
 	IsDownloading() bool
 	GetHeader(blockNumber uint64) (*types.Header, error)
-	L1QueryHeaders(logs []types.Log) (map[uint64]*types.Header, error)
+	L1QueryHeaders([]types.Log) (map[uint64]*types.Header, error)
+	ClearTreeLogs() error
+	GetLastL1TreeLogBlockNumber() (uint64, error)
+	GetL1TreeLogs(startBlockNumber uint64, logsCh chan<- ethTypes.Log)
+	TruncateTreeLogs(toBlockNumber uint64) error
+	RunQueryBlocksOnce(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error)
+	VerifyAddress(logEntry *ethTypes.Log) bool
 	StopSyncer()
 	QueryForRootLog(to uint64) (*types.Log, error)
 }
@@ -53,8 +57,6 @@ type L2Syncer interface {
 type Updater struct {
 	cfg          *ethconfig.Zk
 	syncer       Syncer
-	logsL1Ch     chan []ethTypes.Log
-	errL1Ch      chan error
 	progress     uint64
 	latestUpdate *zkTypes.L1InfoTreeUpdate
 	l2Syncer     L2Syncer
@@ -64,8 +66,6 @@ func NewUpdater(cfg *ethconfig.Zk, syncer Syncer, l2Syncer L2Syncer) *Updater {
 	return &Updater{
 		cfg: cfg,
 		//	updater collects and sorting logs, buffering isn't required
-		logsL1Ch: make(chan []ethTypes.Log),
-		errL1Ch:  make(chan error),
 		syncer:   syncer,
 		l2Syncer: l2Syncer,
 	}
@@ -79,7 +79,7 @@ func (u *Updater) GetLatestUpdate() *zkTypes.L1InfoTreeUpdate {
 	return u.latestUpdate
 }
 
-func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
+func (u *Updater) WarmUp(logPrefix string, tx kv.RwTx) (processedLogs uint64, err error) {
 	defer func() {
 		if err != nil {
 			u.syncer.StopSyncer()
@@ -88,9 +88,9 @@ func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
 
 	hermezDb := hermez_db.NewHermezDb(tx)
 
-	progress, err := stages.GetStageProgress(tx, stages.L1CombinedSyncer)
+	progress, err := stages.GetStageProgress(tx, stages.L1InfoTree)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if progress == 0 {
 		progress = u.cfg.L1FirstBlock - 1
@@ -100,127 +100,148 @@ func (u *Updater) WarmUp(tx kv.RwTx) (err error) {
 
 	latestUpdate, err := hermezDb.GetLatestL1InfoTreeUpdate()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	u.latestUpdate = latestUpdate
 
-	if !u.syncer.IsSyncStarted() {
-		go u.syncer.RunQueryBlocks("Updater WarmUp", u.progress, u.logsL1Ch, u.errL1Ch)
+	lastL1TreeLogBlockNumber, err := u.syncer.GetLastL1TreeLogBlockNumber()
+
+	// check cached data for actuality
+	if err == nil && latestUpdate != nil && lastL1TreeLogBlockNumber < latestUpdate.BlockNumber {
+		// Just cleanup cache
+		err = u.syncer.ClearTreeLogs()
+		if err != nil {
+			log.Warn(fmt.Sprintf("[%s] ClearTreeLogs: %s", logPrefix, err))
+		}
+		return 0, nil
 	}
 
-	return nil
+	treeLogsChan := make(chan ethTypes.Log)
+	treelogs := make([]ethTypes.Log, 0)
+
+	if latestUpdate != nil {
+		go u.syncer.GetL1TreeLogs(latestUpdate.BlockNumber, treeLogsChan)
+	} else {
+		go u.syncer.GetL1TreeLogs(0, treeLogsChan)
+	}
+
+	// TODO: Optimized with chunked channel processing
+	for treeLog := range treeLogsChan {
+		treelogs = append(treelogs, treeLog)
+	}
+
+	if len(treelogs) > 0 {
+		processedLogs, err = u.ProcessInfoTreeUpdates("Updater WarmUp", tx, treelogs)
+		if err != nil {
+			return 0, err
+		}
+
+		if processedLogs > 0 {
+			u.latestUpdate, err = hermezDb.GetLatestL1InfoTreeUpdate()
+			if err != nil {
+				return 0, err
+			}
+		}
+
+		log.Info(fmt.Sprintf("[%s] L1 Info Tree logs processed: %d", logPrefix, processedLogs))
+	}
+
+	log.Info(fmt.Sprintf("[%s] L1 Info Tree finished", logPrefix))
+
+	err = u.syncer.TruncateTreeLogs(u.progress)
+	if err != nil {
+		log.Warn(fmt.Sprintf("[%s] ClearTreeLogs: %s", logPrefix, err))
+	}
+
+	// if !u.syncer.IsSyncStarted() {
+	// 	go u.syncer.RunQueryBlocks("Updater WarmUp", u.progress, u.logsL1Ch, u.errL1Ch)
+	// }
+
+	return 0, nil
 }
 
-func (u *Updater) CheckForInfoTreeUpdates(logPrefix string, tx kv.RwTx) (logsCount int, err error) {
-	defer func() {
-		if err != nil {
-			u.syncer.StopSyncer()
-		}
-	}()
+// CheckForInfoTreeUpdates deprecated
+func (u *Updater) CheckForInfoTreeUpdates(logPrefix string, tx kv.RwTx) (uint64, error) {
+	var err error
 
 	log.Info(fmt.Sprintf("[%s] Starting L1 Info Tree CheckForInfoTreeUpdates", logPrefix))
 
-	var allLogs = make([]types.Log, 0)
+	logsCh := make(chan []ethTypes.Log, 10000)
+	errCh := make(chan error)
 
-	hermezDb := hermez_db.NewHermezDb(tx)
+	go u.syncer.RunQueryBlocksOnce(logPrefix, u.progress, logsCh, errCh)
 
-	logsTicker := time.NewTicker(10 * time.Millisecond)
+	allLogs, err := u.logsHandler(logPrefix, logsCh, errCh)
 
-LOOP:
-	for {
-		select {
-		case logs, ok := <-u.logsL1Ch:
-			if !ok {
-				log.Info(fmt.Sprintf("[%s]  CheckForInfoTreeUpdates logs channel closed", logPrefix))
-				break LOOP
-			}
-			allLogs = append(allLogs, logs...)
-		case errVal := <-u.errL1Ch:
-			if errVal != nil {
-				log.Info(fmt.Sprintf("[%s] CheckForInfoTreeUpdates syncer error: %s", logPrefix, errVal))
-			}
-		case <-logsTicker.C:
-			if !u.syncer.IsDownloading() {
-				break LOOP
-			}
-		}
+	if err != nil {
+		return 0, err
 	}
 
-	logsTicker.Stop()
-
-	logsCount = len(allLogs)
+	logsCount := len(allLogs)
 
 	if logsCount == 0 {
 		return 0, nil
 	}
 
-	// sort the logs by block number - it is important that we process them in order to get the index correct
-	sort.Slice(allLogs, func(i, j int) bool {
-		l1 := allLogs[i]
-		l2 := allLogs[j]
-		// first sort by block number and if equal then by tx index
-		if l1.BlockNumber != l2.BlockNumber {
-			return l1.BlockNumber < l2.BlockNumber
-		}
-		if l1.TxIndex != l2.TxIndex {
-			return l1.TxIndex < l2.TxIndex
-		}
-		return l1.Index < l2.Index
-	})
-
-	log.Info(fmt.Sprintf("[%s] Checking for L1 info tree updates, logs count:%v", logPrefix, logsCount))
-
-	commitBlockNumber := allLogs[logsCount-1].BlockNumber + 1
-
-	// chunk the logs into batches, so we don't overload the RPC endpoints too much at once
-	chunks := chunkLogs(allLogs, chunkSize)
-
-	// mark for gc for free memory
-	allLogs = nil
-
-	processed := atomic.Uint32{}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go logsProcessingStatus(ctx, logPrefix, &processed, logsCount)
-
-	tree, err := InitialiseL1InfoTree(hermezDb)
-	if err != nil {
-		return 0, fmt.Errorf("InitialiseL1InfoTree: %w", err)
-	}
-
-	// process the logs in chunks
-	for _, chunk := range chunks {
-		err = u.processChunks(tree, hermezDb, &chunk, &processed)
-		if err != nil {
-			return 0, err
-		}
-	}
-
-	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
-	if commitBlockNumber > u.progress {
-		u.progress = commitBlockNumber
-
-		if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
-			return 0, fmt.Errorf("SaveStageProgress: %w", err)
-		}
-	}
-
-	return logsCount, nil
+	return u.ProcessInfoTreeUpdates(logPrefix, tx, allLogs)
 }
 
-func (u *Updater) ProcessInfoTreeUpdates(logPrefix string, tx kv.RwTx, allLogs []types.Log) (logsCount int, err error) {
+func (u *Updater) logsHandler(
+	logPrefix string,
+	logsCh <-chan []ethTypes.Log,
+	errCh <-chan error,
+) ([]ethTypes.Log, error) {
+	result := make([]ethTypes.Log, 0)
+
+	for {
+		select {
+		case logs, ok := <-logsCh:
+			if !ok {
+				log.Info(fmt.Sprintf("[%s] L1 syncer RunQueryBlocksOnce logs channel closed", logPrefix))
+				return result, nil
+			}
+			processedLogs := u.processLogs(logPrefix, logs)
+			if len(processedLogs) > 0 {
+				result = append(result, processedLogs...)
+			}
+		case errVal := <-errCh:
+			if errVal != nil {
+				log.Info(fmt.Sprintf("[%s] L1 syncer RunQueryBlocksOnce error: %s", logPrefix, errVal))
+			}
+		}
+	}
+}
+
+func (u *Updater) processLogs(logPrefix string, logEntries []ethTypes.Log) []ethTypes.Log {
+	result := make([]ethTypes.Log, 0)
+	for logEntryIndex := range logEntries {
+		if !u.syncer.VerifyAddress(&logEntries[logEntryIndex]) {
+			log.Info(fmt.Sprintf("[%s][Security] Log address mismatch with defined addresses. L1 syncer skipping log entry %s.", logPrefix, logEntries[logEntryIndex].Address))
+			continue
+		}
+
+		switch logEntries[logEntryIndex].Topics[0] {
+		case contracts.UpdateL1InfoTreeTopic, contracts.UpdateL1InfoTreeV2Topic:
+			result = append(result, logEntries[logEntryIndex])
+		default:
+			log.Warn(fmt.Sprintf("[%s] Received unexpected topic from L1 info tree stage: %s", logPrefix, logEntries[logEntryIndex].Topics[0]))
+		}
+	}
+	return result
+}
+
+func (u *Updater) ProcessInfoTreeUpdates(logPrefix string, tx kv.RwTx, allLogs []types.Log) (processedLogsCount uint64, err error) {
 	hermezDb := hermez_db.NewHermezDb(tx)
 
-	logsCount = len(allLogs)
+	logsCount := len(allLogs)
 
 	if logsCount == 0 {
 		return 0, nil
 	}
 
 	// sort the logs by block number - it is important that we process them in order to get the index correct
+	//the v2 topic always appears after the v1 topic so we can rely on this ordering to process the logs correctly.
 	sort.Slice(allLogs, func(i, j int) bool {
 		l1 := allLogs[i]
 		l2 := allLogs[j]
@@ -234,123 +255,219 @@ func (u *Updater) ProcessInfoTreeUpdates(logPrefix string, tx kv.RwTx, allLogs [
 		return l1.Index < l2.Index
 	})
 
-	log.Info(fmt.Sprintf("[%s] Checking for L1 info tree updates, logs count:%v", logPrefix, logsCount))
+	log.Info(fmt.Sprintf("[%s] Processing L1 info tree updates, logs count:%v", logPrefix, logsCount))
 
-	commitBlockNumber := allLogs[logsCount-1].BlockNumber + 1
+	// commitBlockNumber := allLogs[logsCount-1].BlockNumber + 1
 
 	// chunk the logs into batches, so we don't overload the RPC endpoints too much at once
 	chunks := chunkLogs(allLogs, chunkSize)
 
-	// mark for gc for free memory
-	allLogs = nil
-
-	processed := atomic.Uint32{}
+	processed := atomic.Uint64{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	go logsProcessingStatus(ctx, logPrefix, &processed, logsCount)
 
-	tree, err := InitialiseL1InfoTree(hermezDb)
-	if err != nil {
-		return 0, fmt.Errorf("InitialiseL1InfoTree: %w", err)
+	var tree *L1InfoTree
+	if logsCount > 0 {
+		log.Info(fmt.Sprintf("[%s] Checking for L1 info tree updates, logs count:%v", logPrefix, len(allLogs)))
+		tree, err = InitialiseL1InfoTree(hermezDb)
+		if err != nil {
+			return 0, fmt.Errorf("InitialiseL1InfoTree: %w", err)
+		}
 	}
 
 	// process the logs in chunks
 	for _, chunk := range chunks {
-		err = u.processChunks(tree, hermezDb, &chunk, &processed)
+		err = u.processChunks(logPrefix, tree, hermezDb, tx, &chunk, &processed)
 		if err != nil {
 			return 0, err
 		}
 	}
 
 	// save the progress - we add one here so that we don't cause overlap on the next run.  We don't want to duplicate an info tree update in the db
-	if commitBlockNumber > u.progress {
-		u.progress = commitBlockNumber
-
-		if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
-			return 0, fmt.Errorf("SaveStageProgress: %w", err)
-		}
+	if logsCount > 0 {
+		// here we save progress at the exact block number of the last log.  The syncer will automatically add 1 to this value
+		// when the node / syncing process is restarted.
+		u.progress = allLogs[logsCount-1].BlockNumber
+	}
+	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
+		return 0, fmt.Errorf("SaveStageProgress: %w", err)
 	}
 
-	return logsCount, nil
+	return processed.Load(), nil
 }
 
 // processChunks processes a batch of logs to update the L1 Info Tree and store the results in the database.
 // It handles each chunk, log entry based on its topic, performs updates, and tracks processed log count.
-func (u *Updater) processChunks(tree *L1InfoTree, db *hermez_db.HermezDb, chunk *[]types.Log, processed *atomic.Uint32) (err error) {
+func (u *Updater) processChunks(logPrefix string, tree *L1InfoTree, hermezDb *hermez_db.HermezDb, tx kv.RwTx, chunk *[]types.Log, processed *atomic.Uint64) error {
 	headersMap, err := u.syncer.L1QueryHeaders(*chunk)
 	if err != nil {
 		return fmt.Errorf("L1QueryHeaders: %w", err)
 	}
 
-	for _, logEntry := range *chunk {
-		if logEntry.Topics[0] != contracts.UpdateL1InfoTreeTopic {
-			log.Warn("received unexpected topic from l1 info tree stage", "topic", logEntry.Topics[0])
-			continue
-		}
-
-		header := headersMap[logEntry.BlockNumber]
-		if header == nil {
-			header, err = u.syncer.GetHeader(logEntry.BlockNumber)
-			if err != nil {
-				return fmt.Errorf("GetHeader: %w", err)
+	for _, l := range *chunk {
+		switch l.Topics[0] {
+		case contracts.UpdateL1InfoTreeTopic:
+			// calculate and store the info tree leaf / index
+			if err = u.HandleL1InfoTreeUpdate(hermezDb, l, tree, headersMap); err != nil {
+				return fmt.Errorf("HandleL1InfoTreeUpdate: %w", err)
 			}
+			processed.Add(1)
+		case contracts.UpdateL1InfoTreeV2Topic:
+			// here we can verify that the information we have stored about the info tree is indeed correct
+			leafCount := l.Topics[1].Big().Uint64()
+			root := l.Data[:32]
+			expectedIndex, found, err := hermezDb.GetL1InfoTreeIndexByRoot(common.BytesToHash(root))
+			if err != nil {
+				return fmt.Errorf("GetL1InfoTreeIndexByRoot: %w", err)
+			}
+			if !found {
+				// some leaf must have been missed in this case as the v2 event from the info tree suggests
+				// there is a root that we haven't calculated so we need to unwind the info tree locally
+				// and try syncing again
+				log.Error(fmt.Sprintf("[%s] Could not find an l1 info tree update by root", logPrefix), "root", common.BytesToHash(root).String())
+				if err = u.RollbackL1InfoTree(hermezDb, tx); err != nil {
+					return fmt.Errorf("RollbackL1InfoTree: %w", err)
+				}
+				// recursive call
+				//u.syncer.RunQueryBlocks(u.progress)
+
+				return nil
+			}
+			if expectedIndex == leafCount-1 {
+				if err = hermezDb.WriteConfirmedL1InfoTreeUpdate(expectedIndex, l.BlockNumber); err != nil {
+					return fmt.Errorf("WriteConfirmedL1InfoTreeUpdate: %w", err)
+				}
+			} else {
+				log.Error(fmt.Sprintf("[%s] Unexpected index for L1 info tree root", logPrefix), "expected", expectedIndex, "found", leafCount-1)
+				if err = u.RollbackL1InfoTree(hermezDb, tx); err != nil {
+					return fmt.Errorf("RollbackL1InfoTree: %w", err)
+				}
+				//  recursive call
+				//u.syncer.RunQueryBlocks(u.progress)
+
+				// early return as we need to re-start the syncing process here to get new
+				// leaves from scratch
+				return nil
+			}
+			processed.Add(1)
+		default:
+			log.Warn("received unexpected topic from l1 info tree stage", "topic", l.Topics[0])
 		}
-
-		tmpUpdate, err := createL1InfoTreeUpdate(logEntry, header)
-		if err != nil {
-			return fmt.Errorf("createL1InfoTreeUpdate: %w", err)
-		}
-
-		leafHash := HashLeafData(tmpUpdate.GER, tmpUpdate.ParentHash, tmpUpdate.Timestamp)
-		if tree.LeafExists(leafHash) {
-			log.Warn(fmt.Sprintf("Skipping log as L1 Info Tree leaf already exists: hash=%s block=%d", leafHash, logEntry.BlockNumber))
-			continue
-		}
-
-		if u.latestUpdate != nil {
-			tmpUpdate.Index = u.latestUpdate.Index + 1
-		} // if latestUpdate is nil then Index = 0 which is the default value so no need to set it
-		u.latestUpdate = tmpUpdate
-
-		newRoot, err := tree.AddLeaf(uint32(u.latestUpdate.Index), leafHash)
-		if err != nil {
-			return fmt.Errorf("tree.AddLeaf: %w", err)
-		}
-
-		log.Debug("New L1 Index",
-			"index", u.latestUpdate.Index,
-			"root", newRoot.String(),
-			"mainnet", u.latestUpdate.MainnetExitRoot.String(),
-			"rollup", u.latestUpdate.RollupExitRoot.String(),
-			"ger", u.latestUpdate.GER.String(),
-			"parent", u.latestUpdate.ParentHash.String(),
-		)
-
-		if err = handleL1InfoTreeUpdate(db, u.latestUpdate); err != nil {
-			return fmt.Errorf("handleL1InfoTreeUpdate: %w", err)
-		}
-		if err = db.WriteL1InfoTreeLeaf(u.latestUpdate.Index, leafHash); err != nil {
-			return fmt.Errorf("WriteL1InfoTreeLeaf: %w", err)
-		}
-		if err = db.WriteL1InfoTreeRoot(common.BytesToHash(newRoot[:]), u.latestUpdate.Index); err != nil {
-			return fmt.Errorf("WriteL1InfoTreeRoot: %w", err)
-		}
-
-		processed.Add(1)
-
 	}
 	return nil
 }
 
+func (u *Updater) HandleL1InfoTreeUpdate(hermezDb *hermez_db.HermezDb, l types.Log, tree *L1InfoTree, headersMap map[uint64]*types.Header) error {
+	var err error
+	header := headersMap[l.BlockNumber]
+	if header == nil {
+		header, err = u.syncer.GetHeader(l.BlockNumber)
+		if err != nil {
+			return fmt.Errorf("GetHeader: %w", err)
+		}
+	}
+
+	tmpUpdate, err := createL1InfoTreeUpdate(l, header)
+	if err != nil {
+		return fmt.Errorf("createL1InfoTreeUpdate: %w", err)
+	}
+
+	leafHash := HashLeafData(tmpUpdate.GER, tmpUpdate.ParentHash, tmpUpdate.Timestamp)
+	if tree.LeafExists(leafHash) {
+		log.Warn("Skipping log as L1 Info Tree leaf already exists", "hash", common.BytesToHash(leafHash[:]).String())
+		return nil
+	}
+
+	if u.latestUpdate != nil {
+		tmpUpdate.Index = u.latestUpdate.Index + 1
+	}
+	// if latestUpdate is nil then Index = 0 which is the default value so no need to set it
+	u.latestUpdate = tmpUpdate
+
+	newRoot, err := tree.AddLeaf(uint32(u.latestUpdate.Index), leafHash)
+	if err != nil {
+		return fmt.Errorf("tree.AddLeaf: %w", err)
+	}
+
+	log.Debug("New L1 Index",
+		"index", u.latestUpdate.Index,
+		"root", newRoot.String(),
+		"mainnet", u.latestUpdate.MainnetExitRoot.String(),
+		"rollup", u.latestUpdate.RollupExitRoot.String(),
+		"ger", u.latestUpdate.GER.String(),
+		"parent", u.latestUpdate.ParentHash.String(),
+	)
+
+	if err = writeL1InfoTreeUpdate(hermezDb, u.latestUpdate, leafHash, newRoot); err != nil {
+		return fmt.Errorf("writeL1InfoTreeUpdate: %w", err)
+	}
+
+	return nil
+}
+
+func (u *Updater) RollbackL1InfoTree(hermezDb *hermez_db.HermezDb, tx kv.RwTx) error {
+	// unexpected confirmedIndex means we missed a leaf somewhere so we need to rollback our data and start re-syncing
+	confirmedIndex, confirmedL1BlockNumber, err := hermezDb.GetConfirmedL1InfoTreeUpdate()
+	if err != nil {
+		return fmt.Errorf("GetConfirmedL1InfoTreeUpdate: %w", err)
+	}
+
+	if confirmedIndex == 0 && confirmedL1BlockNumber == 0 {
+		// so we know there are no confirmed leaves on the tree at this point
+		// now we check if we have an index in the DB or not.  If we do then we
+		// are in a state where we've detected fork 12 events but our previously
+		// synced info tree is invalid with no way of knowing where / how it became
+		// invalid.  Not good, this needs intervention so we just return an error
+		// to stop further indexes being used in the network
+		latestUpdate, err := hermezDb.GetLatestL1InfoTreeUpdate()
+		if err != nil {
+			return fmt.Errorf("GetLatestL1InfoTreeUpdate: %w", err)
+		}
+		if latestUpdate.Index > 0 {
+			// oh dear
+			return errors.New("first fork12 info tree update v2 transaction shows our info tree cannot be verified")
+		}
+
+		confirmedL1BlockNumber = u.cfg.L1FirstBlock - 1
+	} else {
+		// we have some data already so we need to truncate the tables down
+		// and reset the latest update data
+		if err = truncateL1InfoTreeData(hermezDb, confirmedIndex+1); err != nil {
+			return fmt.Errorf("truncateL1InfoTreeData: %w", err)
+		}
+
+		// now read the latest confirmed update and set the latest update to this value
+		latestUpdate, err := hermezDb.GetL1InfoTreeUpdate(confirmedIndex)
+		if err != nil {
+			return fmt.Errorf("GetL1InfoTreeUpdate: %w", err)
+		}
+		u.latestUpdate = latestUpdate
+	}
+
+	// stop the syncer
+	// TODO: ???
+	u.syncer.StopSyncer()
+
+	// reset progress for the next iteration
+	u.progress = confirmedL1BlockNumber - 1
+
+	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
+		return fmt.Errorf("SaveStageProgress: %w", err)
+	}
+
+	return nil
+}
+
 // logsProcessingStatus continuously logs the progress of logs processing at periodic intervals and upon context cancellation.
-func logsProcessingStatus(ctx context.Context, logPrefix string, processed *atomic.Uint32, logsCount int) {
+func logsProcessingStatus(ctx context.Context, logPrefix string, processed *atomic.Uint64, logsCount int) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	printStatus := func() {
-		log.Info(fmt.Sprintf("[%s] Processed %d/%d logs, %d%% complete", logPrefix, processed.Load(), logsCount, processed.Load()*100/uint32(logsCount)))
+		log.Info(fmt.Sprintf("[%s] Processed %d/%d logs, %d%% complete", logPrefix, processed.Load(), logsCount, processed.Load()*100/uint64(logsCount)))
 	}
 
 	for {
@@ -432,7 +549,7 @@ LOOP:
 
 				leafHash := HashLeafData(tmpUpdate.GER, tmpUpdate.ParentHash, tmpUpdate.Timestamp)
 				if tree.LeafExists(leafHash) {
-					log.Warn("Skipping log as L1 Info Tree leaf already exists", "hash", leafHash)
+					log.Warn("Skipping log as L1 Info Tree leaf already exists", "hash", common.BytesToHash(leafHash[:]).String())
 					continue
 				}
 
@@ -441,16 +558,8 @@ LOOP:
 					return nil, fmt.Errorf("tree.AddLeaf: %w", err)
 				}
 
-				if err = handleL1InfoTreeUpdate(hermezDb, tmpUpdate); err != nil {
-					return nil, fmt.Errorf("handleL1InfoTreeUpdate: %w", err)
-				}
-
-				if err = hermezDb.WriteL1InfoTreeLeaf(tmpUpdate.Index, leafHash); err != nil {
-					return nil, fmt.Errorf("WriteL1InfoTreeLeaf: %w", err)
-				}
-
-				if err = hermezDb.WriteL1InfoTreeRoot(common.BytesToHash(newRoot[:]), tmpUpdate.Index); err != nil {
-					return nil, fmt.Errorf("WriteL1InfoTreeRoot: %w", err)
+				if err = writeL1InfoTreeUpdate(hermezDb, tmpUpdate, leafHash, newRoot); err != nil {
+					return nil, fmt.Errorf("writeL1InfoTreeUpdate: %w", err)
 				}
 
 				processed++
@@ -461,7 +570,7 @@ LOOP:
 
 		leafHash := HashLeafData(u.latestUpdate.GER, u.latestUpdate.ParentHash, u.latestUpdate.Timestamp)
 		if tree.LeafExists(leafHash) {
-			log.Warn("Skipping log as L1 Info Tree leaf already exists", "hash", leafHash)
+			log.Warn("Skipping log as L1 Info Tree leaf already exists", "hash", common.BytesToHash(leafHash[:]).String())
 			continue
 		}
 
@@ -470,16 +579,8 @@ LOOP:
 			return nil, fmt.Errorf("tree.AddLeaf: %w", err)
 		}
 
-		if err = handleL1InfoTreeUpdate(hermezDb, u.latestUpdate); err != nil {
-			return nil, fmt.Errorf("handleL1InfoTreeUpdate: %w", err)
-		}
-
-		if err = hermezDb.WriteL1InfoTreeLeaf(u.latestUpdate.Index, leafHash); err != nil {
-			return nil, fmt.Errorf("WriteL1InfoTreeLeaf: %w", err)
-		}
-
-		if err = hermezDb.WriteL1InfoTreeRoot(common.BytesToHash(newRoot[:]), u.latestUpdate.Index); err != nil {
-			return nil, fmt.Errorf("WriteL1InfoTreeRoot: %w", err)
+		if err = writeL1InfoTreeUpdate(hermezDb, u.latestUpdate, leafHash, newRoot); err != nil {
+			return nil, fmt.Errorf("writeL1InfoTreeUpdate: %w", err)
 		}
 
 		processed++
@@ -489,7 +590,7 @@ LOOP:
 		u.progress = infoTrees[len(infoTrees)-1].BlockNumber + 1
 	}
 
-	if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, u.progress); err != nil {
+	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
 		return nil, fmt.Errorf("SaveStageProgress: %w", err)
 	}
 
@@ -555,16 +656,41 @@ func createL1InfoTreeUpdate(l types.Log, header *types.Header) (*zkTypes.L1InfoT
 	return update, nil
 }
 
-func handleL1InfoTreeUpdate(
+func writeL1InfoTreeUpdate(
 	hermezDb *hermez_db.HermezDb,
 	update *zkTypes.L1InfoTreeUpdate,
+	leafHash [32]byte,
+	newRoot [32]byte,
 ) error {
 	var err error
+
 	if err = hermezDb.WriteL1InfoTreeUpdate(update); err != nil {
 		return fmt.Errorf("WriteL1InfoTreeUpdate: %w", err)
 	}
 	if err = hermezDb.WriteL1InfoTreeUpdateToGer(update); err != nil {
 		return fmt.Errorf("WriteL1InfoTreeUpdateToGer: %w", err)
+	}
+	if err = hermezDb.WriteL1InfoTreeLeaf(update.Index, leafHash); err != nil {
+		return fmt.Errorf("WriteL1InfoTreeLeaf: %w", err)
+	}
+	if err = hermezDb.WriteL1InfoTreeRoot(common.BytesToHash(newRoot[:]), update.Index); err != nil {
+		return fmt.Errorf("WriteL1InfoTreeRoot: %w", err)
+	}
+	return nil
+}
+
+func truncateL1InfoTreeData(hermezDb *hermez_db.HermezDb, fromIndex uint64) error {
+	if err := hermezDb.TruncateL1InfoTreeUpdates(fromIndex); err != nil {
+		return fmt.Errorf("TruncateL1InfoTreeUpdates: %w", err)
+	}
+	if err := hermezDb.TruncateL1InfoTreeUpdatesByGer(fromIndex); err != nil {
+		return fmt.Errorf("TruncateL1InfoTreeUpdatesByGer: %w", err)
+	}
+	if err := hermezDb.TruncateL1InfoTreeLeaves(fromIndex); err != nil {
+		return fmt.Errorf("TruncateL1InfoTreeLeaves: %w", err)
+	}
+	if err := hermezDb.TruncateL1InfoTreeRoots(fromIndex); err != nil {
+		return fmt.Errorf("TruncateL1InfoTreeRoots: %w", err)
 	}
 	return nil
 }

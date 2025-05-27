@@ -1,13 +1,9 @@
 package syncer
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/erigontech/erigon-lib/kv"
-	"github.com/erigontech/erigon-lib/rlp"
-	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/sequencer"
 	"math/big"
 	"slices"
@@ -31,13 +27,12 @@ const (
 	batchWorkers            = 2
 	statusCodeNoError       = uint8(0)
 	statusCodeHasError      = uint8(0)
-
-	// l1 cache config
-	bucketL1Headers = "l1_headers"
 )
 
-var errorShortResponseLT32 = fmt.Errorf("response too short to contain hash data")
-var errorShortResponseLT96 = fmt.Errorf("response too short to contain last batch number data")
+var (
+	errShortResponseLT32 = fmt.Errorf("response too short to contain hash data")
+	errShortResponseLT96 = fmt.Errorf("response too short to contain last batch number data")
+)
 
 const (
 	rollupSequencedBatchesSignature = "0x25280169" // hardcoded abi signature
@@ -90,34 +85,20 @@ type L1Syncer struct {
 	flagStop           atomic.Bool
 
 	// tx provides access to l1 headers cache
-	l1CacheDB kv.RwDB
+	l1Cache *L1Cache
 
 	highestBlockType string // finalized, latest, safe
 	isSequencer      bool
-	isCacheEnabled   bool
 }
 
-func NewL1Syncer(ctx context.Context, db kv.RwDB, etherMans []IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay uint64, highestBlockType string) *L1Syncer {
-	var isCacheEnabled bool
-
-	tx, err := db.BeginRw(ctx)
-	if err == nil {
-		defer tx.Rollback()
-		if err = tx.CreateBucket(bucketL1Headers); err == nil {
-			if err = tx.Commit(); err == nil {
-				isCacheEnabled = true
-			} else {
-				log.Warn(fmt.Sprintf("[L1Syncer] NewL1Syncer: tx.Commit error: %s", err))
-			}
-		} else {
-			log.Warn(fmt.Sprintf("[L1Syncer] NewL1Syncer: tx.CreateBucket error: %s", err))
-		}
-
-	} else {
-		log.Warn(fmt.Sprintf("[L1Syncer] NewL1Syncer: l1CacheDB.BeginRw error: %s", err))
-	}
-
-	return &L1Syncer{
+func NewL1Syncer(ctx context.Context,
+	l1Cache *L1Cache, etherMans []IEtherman,
+	l1ContractAddresses []common.Address,
+	topics [][]common.Hash,
+	blockRange, queryDelay uint64,
+	highestBlockType string,
+) *L1Syncer {
+	l1Syncer := &L1Syncer{
 		ctx:                 ctx,
 		etherMans:           etherMans,
 		ethermanIndex:       0,
@@ -127,10 +108,11 @@ func NewL1Syncer(ctx context.Context, db kv.RwDB, etherMans []IEtherman, l1Contr
 		blockRange:          blockRange,
 		queryDelay:          queryDelay,
 		highestBlockType:    highestBlockType,
-		l1CacheDB:           db,
+		l1Cache:             l1Cache,
 		isSequencer:         sequencer.IsSequencer(),
-		isCacheEnabled:      isCacheEnabled,
 	}
+
+	return l1Syncer
 }
 
 func (s *L1Syncer) getNextEtherman() IEtherman {
@@ -299,30 +281,16 @@ func (s *L1Syncer) GetHeader(number uint64) (*ethTypes.Header, error) {
 	var (
 		header *ethTypes.Header
 		err    error
-		tx     kv.RwTx
 	)
 
-	isCacheEnabled := s.isCacheEnabled
-
-	if isCacheEnabled {
-		tx, err = s.l1CacheDB.BeginRw(context.Background())
-		if err != nil {
-			isCacheEnabled = false
-			log.Warn(fmt.Sprintf("[L1Syncer] GetHeader: l1CacheDB.BeginRw error: %s", err))
+	header, err = s.l1Cache.getL1BlockHeaderCache(number)
+	if err == nil {
+		if header != nil {
+			// log.Info(fmt.Sprintf("[L1Syncer] GetHeader: header from cache: %d", header.Number.Uint64()))
+			return header, nil
 		}
-	}
-
-	if isCacheEnabled {
-		header, err = s.getL1BlockHeaderCache(tx, number)
-		if err == nil {
-			if header != nil {
-				tx.Rollback()
-				// log.Info(fmt.Sprintf("[L1Syncer] GetHeader: header from cache: %d", header.Number.Uint64()))
-				return header, nil
-			}
-		} else {
-			log.Warn(fmt.Sprintf("[L1Syncer] GetHeader getL1BlockHeaderCache error: %s", err))
-		}
+	} else {
+		log.Warn(fmt.Sprintf("[L1Syncer] GetHeader getL1BlockHeaderCache error: %s", err))
 	}
 
 	em := s.getNextEtherman()
@@ -332,24 +300,14 @@ func (s *L1Syncer) GetHeader(number uint64) (*ethTypes.Header, error) {
 
 	if err != nil {
 		cancel()
-		if isCacheEnabled {
-			tx.Rollback()
-		}
 		return nil, err
 	}
 
 	cancel()
 
-	if isCacheEnabled {
-		err = s.writeL1BlockHeaderCache(tx, header)
-		if err == nil {
-			if err = tx.Commit(); err != nil {
-				log.Error(fmt.Sprintf("[L1Syncer] GetHeader: tx.Commit error: %s", err))
-			}
-		} else {
-			tx.Rollback()
-			log.Warn(fmt.Sprintf("[L1Syncer] GetHeader: write to cache: %s", err))
-		}
+	err = s.l1Cache.writeL1BlockHeaderCache(header)
+	if err != nil {
+		log.Warn(fmt.Sprintf("[L1Syncer] GetHeader: write to cache: %s", err))
 	}
 
 	return header, nil
@@ -404,7 +362,6 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 	var (
 		header *ethTypes.Header
 		err    error
-		tx     kv.RwTx
 	)
 
 	logsSize := len(logs)
@@ -424,46 +381,36 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 	process := func(em IEtherman) {
 
 		for {
+			if s.ctx.Err() != nil {
+				wg.Done()
+				break
+			}
+
 			l, ok := <-logQueue
 			if !ok {
 				break
 			}
 
-			isCacheEnabled := s.isCacheEnabled
-
-			if isCacheEnabled {
-				tx, err = s.l1CacheDB.BeginRw(context.Background())
-				if err != nil {
-					isCacheEnabled = false
-					log.Warn(fmt.Sprintf("[L1Syncer] L1QueryHeaders: l1CacheDB.BeginRw error: %s", err))
+			header, err = s.l1Cache.getL1BlockHeaderCache(l.BlockNumber)
+			if err == nil {
+				if header != nil {
+					// log.Info(fmt.Sprintf("[L1Syncer] L1QueryHeaders: header from cache: %d", header.Number.Uint64()))
+					headersQueue <- header
+					wg.Done()
+					continue
 				}
-			}
-
-			if isCacheEnabled {
-				header, err = s.getL1BlockHeaderCache(tx, l.BlockNumber)
-				if err == nil {
-					if header != nil {
-						tx.Rollback()
-						// log.Info(fmt.Sprintf("[L1Syncer] L1QueryHeaders: header from cache: %d", header.Number.Uint64()))
-						headersQueue <- header
-						wg.Done()
-						continue
-					}
-				} else {
-					log.Warn(fmt.Sprintf("[L1Syncer] L1QueryHeaders getL1BlockHeaderCache error: %s", err))
-				}
+			} else {
+				log.Warn(fmt.Sprintf("[L1Syncer] L1QueryHeaders getL1BlockHeaderCache error: %s", err))
 			}
 
 			// TODO: Use calls with timeout
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
 			header, err = em.HeaderByNumber(ctx, new(big.Int).SetUint64(l.BlockNumber))
+			// log.Info(fmt.Sprintf("[L1Syncer] L1QueryHeaders: not found from cache: %d", header.Number.Uint64()))
 
 			if err != nil {
 				cancel()
-				if isCacheEnabled {
-					tx.Rollback()
-				}
 				log.Error("Error getting block", "err", err)
 				// assume a transient error and try again
 				time.Sleep(1 * time.Second)
@@ -473,16 +420,9 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 
 			cancel()
 
-			if isCacheEnabled {
-				err = s.writeL1BlockHeaderCache(tx, header)
-				if err == nil {
-					if err = tx.Commit(); err != nil {
-						log.Error(fmt.Sprintf("[L1Syncer] L1QueryHeaders: tx.Commit error: %s", err))
-					}
-				} else {
-					tx.Rollback()
-					log.Warn(fmt.Sprintf("[L1Syncer] L1QueryHeaders: write to cache: %s", err))
-				}
+			err = s.l1Cache.writeL1BlockHeaderCache(header)
+			if err != nil {
+				log.Warn(fmt.Sprintf("[L1Syncer] L1QueryHeaders: write to cache: %s", err))
 			}
 
 			headersQueue <- header
@@ -744,12 +684,12 @@ func (s *L1Syncer) callGetRollupSequencedBatches(ctx context.Context, addr *comm
 	}
 
 	if len(resp) < 32 {
-		return common.Hash{}, 0, errorShortResponseLT32
+		return common.Hash{}, 0, errShortResponseLT32
 	}
 	h := common.BytesToHash(resp[:32])
 
 	if len(resp) < 96 {
-		return common.Hash{}, 0, errorShortResponseLT96
+		return common.Hash{}, 0, errShortResponseLT96
 	}
 	lastBatchNumber := binary.BigEndian.Uint64(resp[88:96])
 
@@ -784,7 +724,7 @@ func (s *L1Syncer) callGetAddress(ctx context.Context, addr *common.Address, dat
 	}
 
 	if len(resp) < 20 {
-		return common.Address{}, errorShortResponseLT32
+		return common.Address{}, errShortResponseLT32
 	}
 
 	return common.BytesToAddress(resp[len(resp)-20:]), nil
@@ -834,34 +774,22 @@ func (s *L1Syncer) QueryForRootLog(to uint64) (*ethTypes.Log, error) {
 	return &logs[0], nil
 }
 
-func (s *L1Syncer) writeL1BlockHeaderCache(tx kv.RwTx, header *ethTypes.Header) error {
-	var buf bytes.Buffer
-
-	if header == nil {
-		return fmt.Errorf("header is nil")
-	}
-
-	err := rlp.Encode(&buf, header)
-	if err != nil {
-		return fmt.Errorf("failed to serialize header: %s", err)
-	}
-	return tx.Put(bucketL1Headers, hermez_db.Uint64ToBytes(header.Number.Uint64()), buf.Bytes())
+func (s *L1Syncer) WriteL1TreeLogs(logEntry ethTypes.Log) error {
+	return s.l1Cache.writeL1TreeLogs(&logEntry)
 }
 
-func (s *L1Syncer) getL1BlockHeaderCache(tx kv.Tx, l1BlockNumber uint64) (*ethTypes.Header, error) {
-	data, err := tx.GetOne(bucketL1Headers, hermez_db.Uint64ToBytes(l1BlockNumber))
-	if err != nil {
-		return nil, err
-	}
+func (s *L1Syncer) GetLastL1TreeLogBlockNumber() (uint64, error) {
+	return s.l1Cache.getLastL1TreeLogBlockNumber()
+}
 
-	if data == nil {
-		return nil, nil
-	}
+func (s *L1Syncer) GetL1TreeLogs(startBlockNumber uint64, logsCh chan<- ethTypes.Log) {
+	s.l1Cache.getL1TreeLogs(startBlockNumber, logsCh)
+}
 
-	var header ethTypes.Header
-	err = rlp.DecodeBytes(data, &header)
-	if err != nil {
-		return nil, fmt.Errorf("failed to deserialize header: %d %s", l1BlockNumber, err)
-	}
-	return &header, nil
+func (s *L1Syncer) ClearTreeLogs() error {
+	return s.l1Cache.clearTreeLogs()
+}
+
+func (s *L1Syncer) TruncateTreeLogs(toBlockNumber uint64) error {
+	return s.l1Cache.truncateTreeLogs(toBlockNumber)
 }

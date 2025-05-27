@@ -46,7 +46,10 @@ func TestSpawnSequencingStage(t *testing.T) {
 	err = db.CreateEriDbBuckets(tx)
 	require.NoError(t, err)
 
-	_, db2 := context.Background(), memdb.NewTestDB(t)
+	l1CacheDb := memdb.NewTestDB(t)
+	l1CacheSyncer, err := syncer.NewL1SyncerCache(ctx, l1CacheDb)
+
+	assert.NoError(t, err)
 
 	chainID := *uint256.NewInt(1)
 	forkID := uint64(11)
@@ -125,7 +128,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 
 	ethermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestL1Block, nil).AnyTimes()
 
-	l1Syncer := syncer.NewL1Syncer(ctx, db2, []syncer.IEtherman{ethermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
+	l1Syncer := syncer.NewL1Syncer(ctx, l1CacheSyncer, []syncer.IEtherman{ethermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
 	updater := l1infotree.NewUpdater(&ethconfig.Zk{}, l1Syncer, l1infotree.NewInfoTreeL2RpcSyncer(ctx, &ethconfig.Zk{}))
 
 	cacheMock := cMocks.NewMockCache(mockCtrl)

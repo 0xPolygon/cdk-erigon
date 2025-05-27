@@ -228,8 +228,8 @@ type Ethereum struct {
 	l1Syncer        *syncer.L1Syncer
 	etherManClients []*etherman.Client
 	l1Cache         *l1_cache.L1Cache
-	// l1CacheDB is the database optional used by L1 syncer.
-	l1CacheDB kv.RwDB
+
+	l1SyncerCache *syncer.L1Cache
 
 	preStartTasks *PreStartTasks
 
@@ -778,7 +778,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 	if !config.DeprecatedTxPool.Disable {
 		// we need to start the pool before stage loop itself
 		// the pool holds the info about how execution stage should work - as regular or as limbo recovery
-		if err := backend.txPool2.StartIfNotStarted(ctx, backend.txPool2DB, tx); err != nil {
+		if err = backend.txPool2.StartIfNotStarted(ctx, backend.txPool2DB, tx); err != nil {
 			return nil, err
 		}
 
@@ -828,7 +828,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				})
 
 			case b := <-backend.pendingBlocks:
-				if err := miningRPC.(*privateapi.MiningServer).BroadcastPendingBlock(b); err != nil {
+				if err = miningRPC.(*privateapi.MiningServer).BroadcastPendingBlock(b); err != nil {
 					logger.Error("txpool rpc pending block broadcast", "err", err)
 				}
 			case <-backend.sentriesClient.Hd.QuitPoWMining:
@@ -1071,17 +1071,23 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		log.Info("Rollup ID", "rollupId", cfg.L1RollupId)
 
-		backend.l1CacheDB, err = node.OpenDatabase(ctx, stack.Config(), kv.L1CacheDB, "", false, logger)
+		l1CacheDB, err := node.OpenDatabase(ctx, stack.Config(), kv.L1CacheDB, "", false, logger)
 		if err != nil {
-			log.Warn(fmt.Sprintf("Failed to open l1cache db: %s", err))
+			panic(fmt.Sprintf("Failed to open l1cache db: %s", err))
+		}
+
+		backend.l1SyncerCache, err = syncer.NewL1SyncerCache(ctx, l1CacheDB)
+
+		if err != nil {
+			panic(fmt.Sprintf("Failed to create l1Cache: %s", err))
 		}
 
 		l1InfoTreeSyncer := syncer.NewL1Syncer(
 			ctx,
-			backend.l1CacheDB,
+			backend.l1SyncerCache,
 			ethermanClients,
 			[]libcommon.Address{cfg.AddressGerManager},
-			[][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic}},
+			[][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic, contracts.UpdateL1InfoTreeV2Topic}},
 			cfg.L1BlockRange,
 			cfg.L1QueryDelay,
 			cfg.L1HighestBlockType,
@@ -1107,11 +1113,12 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				contracts.CreateNewRollupTopic,
 				contracts.UpdateRollupTopic,
 				contracts.UpdateL1InfoTreeTopic,
+				contracts.UpdateL1InfoTreeV2Topic,
 			}}
 
 			seqVerSyncer := syncer.NewL1Syncer(
 				ctx,
-				backend.l1CacheDB,
+				backend.l1SyncerCache,
 				ethermanClients,
 				l1Contracts,
 				l1Topics,
@@ -1122,7 +1129,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			backend.l1Syncer = syncer.NewL1Syncer(
 				ctx,
-				backend.l1CacheDB,
+				backend.l1SyncerCache,
 				ethermanClients,
 				l1Contracts,
 				l1Topics,
@@ -1180,7 +1187,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			l1BlockSyncer := syncer.NewL1Syncer(
 				ctx,
-				backend.l1CacheDB,
+				backend.l1SyncerCache,
 				ethermanClients,
 				[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup},
 				[][]libcommon.Hash{{
@@ -1240,11 +1247,12 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				contracts.VerificationTopicEtrog,
 				contracts.VerificationValidiumTopicEtrog,
 				contracts.UpdateL1InfoTreeTopic,
+				contracts.UpdateL1InfoTreeV2Topic,
 			}}
 
 			backend.l1Syncer = syncer.NewL1Syncer(
 				ctx,
-				backend.l1CacheDB,
+				backend.l1SyncerCache,
 				ethermanClients,
 				l1Contracts,
 				l1Topics,
@@ -1289,7 +1297,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		backend.syncPruneOrder = stagedsync.DefaultPruneOrder
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 
@@ -2060,7 +2068,7 @@ func (s *Ethereum) Stop() error {
 		s.agg.Close()
 	}
 	s.chainDB.Close()
-	s.l1CacheDB.Close()
+	s.l1SyncerCache.Close()
 
 	s.gasTracker.Stop()
 
