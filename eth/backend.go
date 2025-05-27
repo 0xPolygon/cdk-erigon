@@ -127,6 +127,7 @@ import (
 	"github.com/erigontech/erigon/turbo/stages/headerdownload"
 	"github.com/erigontech/erigon/zk/contracts"
 	"github.com/erigontech/erigon/zk/datastream/client"
+	"github.com/erigontech/erigon/zk/datastream/nats"
 	"github.com/erigontech/erigon/zk/datastream/server"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
@@ -227,6 +228,8 @@ type Ethereum struct {
 	streamServer    server.StreamServer
 	l1Syncer        *syncer.L1Syncer
 	etherManClients []*etherman.Client
+
+	natsManager *nats.Manager
 
 	preStartTasks *PreStartTasks
 
@@ -1015,6 +1018,16 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			}
 		}
 
+		backend.natsManager = nats.NewManager(nats.Config{
+			Host:             "0.0.0.0", // Listen on all interfaces
+			Port:             4222,
+			ServerName:       fmt.Sprintf("erigon-nats-chain-%d", config.NetworkID),
+			ClusterName:      fmt.Sprintf("erigon-cluster-chain-%d", config.NetworkID),
+			JetStreamEnabled: true,
+			StorageDir:       filepath.Join(stack.Config().Dirs.DataDir, "nats-data"),
+			Debug:            config.LogLevel <= log.LvlDebug,
+		}, logger)
+
 		backend.preStartTasks.PurgeWitnessCache = config.WitnessCachePurge
 		backend.preStartTasks.PurgeBadTxs = config.BadTxPurge
 
@@ -1418,6 +1431,10 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 
 	go func() {
 		if err := cli.StartDataStream(s.streamServer); err != nil {
+			log.Error(err.Error())
+			return
+		}
+		if err := s.natsManager.Start(); err != nil {
 			log.Error(err.Error())
 			return
 		}
@@ -2025,6 +2042,8 @@ func (s *Ethereum) Stop() error {
 	s.chainDB.Close()
 
 	s.gasTracker.Stop()
+
+	s.natsManager.Stop()
 
 	if s.silkwormRPCDaemonService != nil {
 		if err := s.silkwormRPCDaemonService.Stop(); err != nil {
