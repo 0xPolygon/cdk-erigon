@@ -39,6 +39,7 @@ runs:
         sed -i '/zkevm.datastream-version:/d' ./templates/cdk-erigon/config.yml
         sed -i '$a\zkevm.honour-chainspec: true' ./templates/cdk-erigon/config.yml
         sed -i '$a\zkevm.initial-commitment: pmt' ./templates/cdk-erigon/config.yml
+        sed -i 's/"pragueTime": [0-9]\+/"pragueTime": 0/' ./templates/cdk-erigon/chainspec.json
 
     - name: Create params.yml overrides
       if: env.SKIP_ENCLAVE_SETUP != 'true'
@@ -51,6 +52,7 @@ runs:
 
     - name: Teardown existing enclave
       if: env.SKIP_ENCLAVE_SETUP == 'true'
+      shell: bash
       run: |
         kurtosis enclave stop cdk-v1 || true
         kurtosis enclave rm   cdk-v1 || true

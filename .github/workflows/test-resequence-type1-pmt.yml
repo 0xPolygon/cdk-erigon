@@ -2,8 +2,7 @@ name: Resequence type-1 test
 on:
   pull_request:
     branches:
-      - project/**
-      - fix/type-1-unwind-tests
+      - project/pp2**
     types:
       - opened
       - reopened
@@ -18,6 +17,9 @@ jobs:
   resequence-type1-test:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout cdk-erigon
+        uses: actions/checkout@v4
+
       - name: Setup kurtosis for type-1
         uses: ./.github/actions/setup-kurtosis-type1
 
