@@ -3,16 +3,13 @@ package l1infotree
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/net/context"
 	"sort"
-	"sync/atomic"
 	"time"
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core/types"
-	ethTypes "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/zk/contracts"
