@@ -355,6 +355,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.SequencerBatchCounterPercentage,
 	&utils.GetLogsTimeout,
 	&utils.GetLogsRetries,
+	&utils.OkPaySenderAccountsList,
+	&utils.OkPayBlockPriorityTxsLimit,
 
 	&utils.ACLPrintHistory,
 	&utils.InfoTreeUpdateInterval,

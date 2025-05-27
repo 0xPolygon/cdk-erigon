@@ -75,6 +75,9 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	if ctx.IsSet(utils.SequencerHaltOnBatchNumber.Name) {
 		ethCfg.Zk.SequencerHaltOnBatchNumber = ctx.Uint64(utils.SequencerHaltOnBatchNumber.Name)
 	}
+
+	// For OkPay
+	utils.SetApolloOkPayXLayer(ctx, &ethCfg.DeprecatedTxPool)
 }
 
 // setSequencerFlag sets the dynamic sequencer apollo flag
