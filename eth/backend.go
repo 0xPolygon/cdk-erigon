@@ -127,7 +127,7 @@ import (
 	"github.com/erigontech/erigon/turbo/stages/headerdownload"
 	"github.com/erigontech/erigon/zk/contracts"
 	"github.com/erigontech/erigon/zk/datastream/client"
-	"github.com/erigontech/erigon/zk/datastream/nats"
+	"github.com/erigontech/erigon/zk/datastream/natsstream"
 	"github.com/erigontech/erigon/zk/datastream/server"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
@@ -144,7 +144,7 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
-var dataStreamServerFactory = server.NewZkEVMDataStreamServerFactory()
+var dataStreamServerFactory server.DataStreamServerFactory = server.NewZkEVMDataStreamServerFactory()
 
 // Config contains the configuration options of the ETH protocol.
 // Deprecated: use ethconfig.Config instead.
@@ -229,7 +229,7 @@ type Ethereum struct {
 	l1Syncer        *syncer.L1Syncer
 	etherManClients []*etherman.Client
 
-	natsManager *nats.Manager
+	natsManager *natsstream.Manager
 
 	preStartTasks *PreStartTasks
 
@@ -991,6 +991,20 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			backend.config.GasPriceHistoryCount,
 		)
 
+		backend.natsManager = natsstream.NewManager(natsstream.Config{
+			Host:             "0.0.0.0", // Listen on all interfaces
+			Port:             4222,
+			ServerName:       fmt.Sprintf("erigon-nats-chain-%d", config.NetworkID),
+			ClusterName:      fmt.Sprintf("erigon-cluster-chain-%d", config.NetworkID),
+			JetStreamEnabled: true,
+			StorageDir:       filepath.Join(stack.Config().Dirs.DataDir, "nats-data"),
+			Debug:            config.LogLevel <= log.LvlDebug,
+		}, logger)
+
+		if err := backend.natsManager.Start(); err != nil {
+			log.Error(err.Error())
+		}
+
 		// zkevm: create a data stream server if we have the appropriate config for one.  This will be started on the call to Init
 		// alongside the http server
 		httpCfg := stack.Config().Http
@@ -1002,8 +1016,14 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				Outputs:     nil,
 			}
 
-			// todo [zkevm] read the stream version from config and figure out what system id is used for
-			backend.streamServer, err = dataStreamServerFactory.CreateStreamServer(uint16(httpCfg.DataStreamPort), 1, datastreamer.StreamType(1), file, httpCfg.DataStreamWriteTimeout, httpCfg.DataStreamInactivityTimeout, httpCfg.DataStreamInactivityCheckInterval, logConfig)
+			if backend.natsManager != nil {
+				dataStreamServerFactory = natsstream.NewNATSDataStreamServerFactory(
+					dataStreamServerFactory,
+					backend.natsManager,
+					logger)
+			}
+
+			backend.streamServer, err = dataStreamServerFactory.CreateStreamServer(uint16(httpCfg.DataStreamPort), 1, datastreamer.StreamType(1), file, httpCfg.DataStreamWriteTimeout, httpCfg.DataStreamInactivityTimeout, httpCfg.DataStreamInactivityCheckInterval, logConfig, backend.config.L2ChainId)
 			if err != nil {
 				return nil, err
 			}
@@ -1017,16 +1037,6 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.preStartTasks.WarmUpDataStream = true
 			}
 		}
-
-		backend.natsManager = nats.NewManager(nats.Config{
-			Host:             "0.0.0.0", // Listen on all interfaces
-			Port:             4222,
-			ServerName:       fmt.Sprintf("erigon-nats-chain-%d", config.NetworkID),
-			ClusterName:      fmt.Sprintf("erigon-cluster-chain-%d", config.NetworkID),
-			JetStreamEnabled: true,
-			StorageDir:       filepath.Join(stack.Config().Dirs.DataDir, "nats-data"),
-			Debug:            config.LogLevel <= log.LvlDebug,
-		}, logger)
 
 		backend.preStartTasks.PurgeWitnessCache = config.WitnessCachePurge
 		backend.preStartTasks.PurgeBadTxs = config.BadTxPurge
@@ -1431,10 +1441,6 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 
 	go func() {
 		if err := cli.StartDataStream(s.streamServer); err != nil {
-			log.Error(err.Error())
-			return
-		}
-		if err := s.natsManager.Start(); err != nil {
 			log.Error(err.Error())
 			return
 		}
