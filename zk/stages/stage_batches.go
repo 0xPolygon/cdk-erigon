@@ -228,7 +228,7 @@ func SpawnStageBatches(
 				return nil
 			}
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 
 	log.Debug(fmt.Sprintf("[%s] Highest block in db and datastream", logPrefix), "datastreamBlock", highestDSL2Block, "dbBlock", stageProgressBlockNo)
