@@ -48,7 +48,11 @@ wait_for_l1_batch() {
         if [ "$batch_type" = "virtual" ]; then
 
             current_batch=$(cast logs --rpc-url "$(kurtosis port print cdk-v1 el-1-geth-lighthouse rpc)" --address 0x1Fe038B54aeBf558638CA51C91bC8cCa06609e91 --from-block 0 --json | jq -r '.[] | select(.topics[0] == "0x3e54d0825ed78523037d00a81759237eb436ce774bd546993ee67a1b67b6e766") | .topics[1]' | tail -n 1 | sed 's/^0x//')
-            current_batch=$((16#$current_batch))
+            if [[ -z "$current_batch" ]]; then
+                echo "Error: Failed to get current virtual batch number" >&2
+            else
+                current_batch=$((16#$current_batch))
+            fi
         elif [ "$batch_type" = "verified" ]; then
             current_batch=$(cast rpc zkevm_verifiedBatchNumber --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc)" | sed 's/^"//;s/"$//')
         else
