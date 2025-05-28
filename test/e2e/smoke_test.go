@@ -1177,13 +1177,6 @@ func TestZKEVMRPC(t *testing.T) {
 
 	blockHash, blockNumber := setupTestEnvironment(t)
 
-	// Test zkevm_isBlockConsolidated
-	t.Run("ZKEVMIsBlockConsolidated", func(t *testing.T) {
-		isConsolidated, err := operations.ZKEVMIsBlockConsolidated(1) // Block #1
-		require.NoError(t, err)
-		log.Infof("ZKEVMIsBlockConsolidated result for block 1: %t", isConsolidated)
-	})
-
 	// Test zkevm_isBlockVirtualized
 	t.Run("ZKEVMIsBlockVirtualized", func(t *testing.T) {
 		isVirtualized, err := operations.ZKEVMIsBlockVirtualized(1) // Block #1
@@ -1191,25 +1184,11 @@ func TestZKEVMRPC(t *testing.T) {
 		log.Infof("ZKEVMIsBlockVirtualized result for block 1: %t", isVirtualized)
 	})
 
-	// Test zkevm_verifiedBatchNumber
-	t.Run("ZKEVMVerifiedBatchNumber", func(t *testing.T) {
-		verifiedBatchNum, err := operations.ZKEVMVerifiedBatchNumber()
-		require.NoError(t, err)
-		log.Infof("ZKEVMVerifiedBatchNumber result: %d", verifiedBatchNum)
-	})
-
 	// Test zkevm_virtualBatchNumber
 	t.Run("ZKEVMVirtualBatchNumber", func(t *testing.T) {
 		virtualBatchNum, err := operations.ZKEVMVirtualBatchNumber()
 		require.NoError(t, err)
 		log.Infof("ZKEVMVirtualBatchNumber result: %d", virtualBatchNum)
-	})
-
-	// Test zkevm_consolidatedBlockNumber
-	t.Run("ZKEVMConsolidatedBlockNumber", func(t *testing.T) {
-		consolidatedBlockNum, err := operations.ZKEVMConsolidatedBlockNumber()
-		require.NoError(t, err)
-		log.Infof("ZKEVMConsolidatedBlockNumber result: %d", consolidatedBlockNum)
 	})
 
 	// Test zkevm_getExitRootTable - already covered in debug tests but including here for completeness
@@ -1234,14 +1213,6 @@ func TestZKEVMRPC(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, dataStreamBlock, "Data stream block should not be nil")
 		log.Infof("ZKEVMGetLatestDataStreamBlock result type: %T", dataStreamBlock)
-	})
-
-	// Test zkevm_getBatchWitness
-	t.Run("ZKEVMGetBatchWitness", func(t *testing.T) {
-		witness, err := operations.ZKEVMGetBatchWitness(1, "trimmed") // Batch #1
-		require.NoError(t, err)
-		require.NotNil(t, witness, "Batch witness should not be nil")
-		log.Infof("ZKEVMGetBatchWitness result type: %T", witness)
 	})
 
 	// Test zkevm_estimateCounters

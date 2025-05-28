@@ -11,7 +11,6 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/log/v3"
@@ -37,15 +36,12 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
-	"github.com/ledgerwatch/erigon/zk/witness"
-	"github.com/ledgerwatch/erigon/zkevm/hex"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
 )
 
@@ -53,21 +49,13 @@ var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b
 
 // ZkEvmAPI is a collection of functions that are exposed in the
 type ZkEvmAPI interface {
-	ConsolidatedBlockNumber(ctx context.Context) (hexutil.Uint64, error)
-	IsBlockConsolidated(ctx context.Context, blockNumber rpc.BlockNumber) (bool, error)
 	IsBlockVirtualized(ctx context.Context, blockNumber rpc.BlockNumber) (bool, error)
 	BatchNumberByBlockNumber(ctx context.Context, blockNumber rpc.BlockNumber) (hexutil.Uint64, error)
 	BatchNumber(ctx context.Context) (hexutil.Uint64, error)
 	VirtualBatchNumber(ctx context.Context) (hexutil.Uint64, error)
-	VerifiedBatchNumber(ctx context.Context) (hexutil.Uint64, error)
 	GetBatchByNumber(ctx context.Context, batchNumber rpc.BlockNumber, fullTx *bool) (json.RawMessage, error)
 	GetFullBlockByNumber(ctx context.Context, number rpc.BlockNumber, fullTx bool) (types.Block, error)
 	GetFullBlockByHash(ctx context.Context, hash common.Hash, fullTx bool) (types.Block, error)
-	// GetBroadcastURI(ctx context.Context) (string, error)
-	GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, mode *WitnessMode, debug *bool) (hexutility.Bytes, error)
-	GetBlockRangeWitness(ctx context.Context, startBlockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, mode *WitnessMode, debug *bool) (hexutility.Bytes, error)
-	GetBatchWitness(ctx context.Context, batchNumber uint64, mode *WitnessMode) (interface{}, error)
-	GetProverInput(ctx context.Context, batchNumber uint64, mode *WitnessMode, debug *bool) (*legacy_executor_verifier.RpcPayload, error)
 	GetLatestGlobalExitRoot(ctx context.Context) (common.Hash, error)
 	GetExitRootsByGER(ctx context.Context, globalExitRoot common.Hash) (*ZkExitRoots, error)
 	GetL2BlockInfoTree(ctx context.Context, blockNum rpc.BlockNumberOrHash) (json.RawMessage, error)
@@ -84,8 +72,6 @@ type ZkEvmAPI interface {
 	GetLatestDataStreamBlock(ctx context.Context) (hexutil.Uint64, error)
 }
 
-const getBatchWitness = "getBatchWitness"
-
 // APIImpl is implementation of the ZkEvmAPI interface based on remote Db access
 type ZkEvmAPIImpl struct {
 	ethApi *APIImpl
@@ -95,22 +81,11 @@ type ZkEvmAPIImpl struct {
 	config           *ethconfig.Config
 	l1Syncer         *syncer.L1Syncer
 	l2SequencerUrl   string
-	semaphores       map[string]chan struct{}
 	datastreamServer server.DataStreamServer
 
 	// For X Layer, split db and ac
 	dbsmt kv.RoDB
 	cache *smt2.SmtCache
-}
-
-func (api *ZkEvmAPIImpl) initializeSemaphores(functionLimits map[string]int) {
-	api.semaphores = make(map[string]chan struct{})
-
-	for funcName, limit := range functionLimits {
-		if limit != 0 {
-			api.semaphores[funcName] = make(chan struct{}, limit)
-		}
-	}
 }
 
 // NewEthAPI returns ZkEvmAPIImpl instance
@@ -139,57 +114,7 @@ func NewZkEvmAPI(
 		cache: cache,
 	}
 
-	a.initializeSemaphores(map[string]int{
-		getBatchWitness: zkConfig.Zk.RpcGetBatchWitnessConcurrencyLimit,
-	})
-
 	return a
-}
-
-// ConsolidatedBlockNumber returns the latest consolidated block number
-// Once a batch is verified, it is connected to the blockchain, and the block number of the most recent block in that batch
-// becomes the "consolidated block number.”
-func (api *ZkEvmAPIImpl) ConsolidatedBlockNumber(ctx context.Context) (hexutil.Uint64, error) {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return hexutil.Uint64(0), err
-	}
-	defer tx.Rollback()
-
-	highestVerifiedBatchNo, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
-	if err != nil {
-		return hexutil.Uint64(0), err
-	}
-
-	blockNum, err := getLastBlockInBatchNumber(tx, highestVerifiedBatchNo)
-	if err != nil {
-		return hexutil.Uint64(0), err
-	}
-
-	return hexutil.Uint64(blockNum), nil
-}
-
-// IsBlockConsolidated returns true if the block is consolidated
-func (api *ZkEvmAPIImpl) IsBlockConsolidated(ctx context.Context, blockNumber rpc.BlockNumber) (bool, error) {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer tx.Rollback()
-
-	batchNum, err := getBatchNoByL2Block(tx, uint64(blockNumber.Int64()))
-	if errors.Is(err, hermez_db.ErrorNotStored) {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	}
-
-	highestVerifiedBatchNo, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
-	if err != nil {
-		return false, err
-	}
-
-	return batchNum <= highestVerifiedBatchNo, nil
 }
 
 // IsBlockVirtualized returns true if the block is virtualized (not confirmed on the L1 but exists in the L1 smart contract i.e. sequenced)
@@ -283,22 +208,6 @@ func (api *ZkEvmAPIImpl) VirtualBatchNumber(ctx context.Context) (hexutil.Uint64
 	// todo: what if this number is the same as the last verified batch number?  do we return 0?
 
 	return hexutil.Uint64(latestSequencedBatch.BatchNo), nil
-}
-
-// VerifiedBatchNumber returns the latest verified batch number
-// A batch is considered verified once its proof has been validated and accepted by the network.
-func (api *ZkEvmAPIImpl) VerifiedBatchNumber(ctx context.Context) (hexutil.Uint64, error) {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return hexutil.Uint64(0), err
-	}
-	defer tx.Rollback()
-
-	highestVerifiedBatchNo, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
-	if err != nil {
-		return hexutil.Uint64(0), err
-	}
-	return hexutil.Uint64(highestVerifiedBatchNo), nil
 }
 
 // GetBatchDataByNumbers returns the batch data for the given batch numbers
@@ -599,18 +508,6 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, rpcBatchNumber rp
 				batch.Closed = true
 			}
 		}
-	}
-
-	// verification - if we can't find one, maybe this batch was verified along with a higher batch number
-	ver, err := hermezDb.GetVerificationByBatchNoOrHighest(batchNo)
-	if err != nil {
-		return nil, err
-	}
-
-	if batchNo == 0 {
-		batch.VerifyBatchTxHash = &common.Hash{0}
-	} else if ver != nil {
-		batch.VerifyBatchTxHash = &ver.L1TxHash
 	}
 
 	itu, err := hermezDb.GetL1InfoTreeUpdateByGer(batchGer)
@@ -952,303 +849,6 @@ func (api *ZkEvmAPIImpl) populateBlockDetail(
 // 	return api.ethApi.ZkRpcUrl, nil
 // }
 
-func (api *ZkEvmAPIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, mode *WitnessMode, debug *bool) (hexutility.Bytes, error) {
-	checkedMode := WitnessModeNone
-	if mode != nil && *mode != WitnessModeFull && *mode != WitnessModeTrimmed {
-		return nil, errors.New("invalid mode, must be full or trimmed")
-	} else if mode != nil {
-		checkedMode = *mode
-	}
-
-	dbg := false
-	if debug != nil {
-		dbg = *debug
-	}
-	// For X Layer, split db and ac
-	return api.getBlockRangeWitness(ctx, api.db, api.dbsmt, blockNrOrHash, blockNrOrHash, dbg, checkedMode)
-}
-
-func (api *ZkEvmAPIImpl) GetBlockRangeWitness(ctx context.Context, startBlockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, mode *WitnessMode, debug *bool) (hexutility.Bytes, error) {
-	checkedMode := WitnessModeNone
-	if mode != nil && *mode != WitnessModeFull && *mode != WitnessModeTrimmed {
-		return nil, errors.New("invalid mode, must be full or trimmed")
-	} else if mode != nil {
-		checkedMode = *mode
-	}
-
-	dbg := false
-	if debug != nil {
-		dbg = *debug
-	}
-	// For X Layer, split db and ac
-	return api.getBlockRangeWitness(ctx, api.db, api.dbsmt, startBlockNrOrHash, endBlockNrOrHash, dbg, checkedMode)
-}
-
-func (api *ZkEvmAPIImpl) getBatchWitness(ctx context.Context, tx kv.Tx, txsmt kv.Tx, batchNum uint64, debug bool, mode WitnessMode) (hexutility.Bytes, error) {
-	// limit in-flight requests by name
-	semaphore := api.semaphores[getBatchWitness]
-	if semaphore != nil {
-		select {
-		case semaphore <- struct{}{}:
-			defer func() { <-semaphore }()
-		default:
-			return nil, fmt.Errorf("busy")
-		}
-	}
-
-	if api.ethApi.historyV3(tx) {
-		return nil, fmt.Errorf("not supported by Erigon3")
-	}
-	reader := hermez_db.NewHermezDbReader(tx)
-	badBatch, err := reader.GetInvalidBatch(batchNum)
-	if err != nil {
-		return nil, err
-	}
-
-	if !badBatch {
-		blockNumbers, err := reader.GetL2BlockNosByBatch(batchNum)
-		if err != nil {
-			return nil, err
-		}
-		if len(blockNumbers) == 0 {
-			return nil, fmt.Errorf("no blocks found for batch %d", batchNum)
-		}
-		var startBlock, endBlock uint64
-		for _, blockNumber := range blockNumbers {
-			if startBlock == 0 || blockNumber < startBlock {
-				startBlock = blockNumber
-			}
-			if blockNumber > endBlock {
-				endBlock = blockNumber
-			}
-		}
-
-		startBlockInt := rpc.BlockNumber(startBlock)
-		endBlockInt := rpc.BlockNumber(endBlock)
-
-		startBlockRpc := rpc.BlockNumberOrHash{BlockNumber: &startBlockInt}
-		endBlockNrOrHash := rpc.BlockNumberOrHash{BlockNumber: &endBlockInt}
-		// For X Layer, split db and ac
-		return api.getBlockRangeWitness(ctx, api.db, api.dbsmt, startBlockRpc, endBlockNrOrHash, debug, mode)
-	} else {
-		generator, fullWitness, err := api.buildGenerator(ctx, tx, mode)
-		if err != nil {
-			return nil, err
-		}
-
-		// For X Layer, split db and ac
-		return generator.GetWitnessByBadBatch(tx, txsmt, ctx, batchNum, debug, fullWitness)
-	}
-}
-
-func (api *ZkEvmAPIImpl) buildGenerator(ctx context.Context, tx kv.Tx, witnessMode WitnessMode) (*witness.Generator, bool, error) {
-	chainConfig, err := api.ethApi.chainConfig(ctx, tx)
-	if err != nil {
-		return nil, false, err
-	}
-
-	generator := witness.NewGenerator(
-		api.ethApi.dirs,
-		api.ethApi.historyV3(tx),
-		api.ethApi._agg,
-		api.ethApi._blockReader,
-		chainConfig,
-		api.config.Zk,
-		api.ethApi._engine,
-		api.config.WitnessContractInclusion,
-		api.config.WitnessUnwindLimit,
-	)
-
-	fullWitness := false
-	if witnessMode == WitnessModeNone {
-		fullWitness = api.config.WitnessFull
-	} else if witnessMode == WitnessModeFull {
-		fullWitness = true
-	}
-
-	return generator, fullWitness, nil
-}
-
-// Get witness for a range of blocks [startBlockNrOrHash, endBlockNrOrHash] (inclusive)
-func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, dbsmt kv.RoDB, startBlockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, debug bool, witnessMode WitnessMode) (hexutility.Bytes, error) {
-	tx, err := db.BeginRo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	if api.ethApi.historyV3(tx) {
-		return nil, fmt.Errorf("not supported by Erigon3")
-	}
-
-	// For X Layer, split db and ac
-	var txsmt kv.Tx = nil
-	if dbsmt != nil {
-		txsmt, err = dbsmt.BeginRo(ctx)
-		if err != nil {
-			return nil, err
-		}
-		defer txsmt.Rollback()
-	}
-
-	blockNr, _, _, err := rpchelper.GetCanonicalBlockNumber_zkevm(startBlockNrOrHash, tx, api.ethApi.filters) // DoCall cannot be executed on non-canonical blocks
-	if err != nil {
-		return nil, err
-	}
-
-	endBlockNr, _, _, err := rpchelper.GetCanonicalBlockNumber_zkevm(endBlockNrOrHash, tx, api.ethApi.filters) // DoCall cannot be executed on non-canonical blocks
-	if err != nil {
-		return nil, err
-	}
-
-	if blockNr > endBlockNr {
-		return nil, fmt.Errorf("start block number must be less than or equal to end block number, start=%d end=%d", blockNr, endBlockNr)
-	}
-
-	generator, fullWitness, err := api.buildGenerator(ctx, tx, witnessMode)
-	if err != nil {
-		return nil, err
-	}
-
-	// For X Layer, split db and ac
-	cache := make(map[string]map[string][]byte)
-	if api.cache != nil {
-		cache = api.cache.CascadeGetCurrentBatchSnapshotCache(endBlockNr)
-	}
-	return generator.GetWitnessByBlockRange(tx, txsmt, ctx, blockNr, endBlockNr, debug, fullWitness, cache)
-}
-
-type WitnessMode string
-
-const (
-	WitnessModeNone         WitnessMode = "none"
-	WitnessModeFull         WitnessMode = "full"          // if the node mode is "full witness" - will return witness from cache
-	WitnessModeTrimmed      WitnessMode = "trimmed"       // if the node mode is "partial witness" - will return witness from cache
-	WitnessModeFullRegen    WitnessMode = "full_regen"    // forces regenerate no matter the node mode
-	WitnessModeTrimmedRegen WitnessMode = "trimmed_regen" // forces regenerate no matter the node mode
-)
-
-func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64, mode *WitnessMode) (interface{}, error) {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	// For X Layer, split db and ac
-	var txsmt kv.Tx = nil
-	if api.dbsmt != nil {
-		txsmt, err = api.dbsmt.BeginRo(ctx)
-		if err != nil {
-			return nil, err
-		}
-		defer txsmt.Rollback()
-	}
-
-	hermezDb := hermez_db.NewHermezDbReader(tx)
-	badBatch, err := hermezDb.GetInvalidBatch(batchNumber)
-	if err != nil {
-		return nil, err
-	}
-
-	if badBatch && !sequencer.IsSequencer() {
-		// we won't have the details in our db if the batch is marked as invalid so we need to check this
-		// here
-		return api.sendGetBatchWitness(api.l2SequencerUrl, batchNumber, mode)
-	}
-
-	checkedMode := WitnessModeNone
-	if mode != nil && *mode != WitnessModeFull && *mode != WitnessModeTrimmed {
-		return nil, errors.New("invalid mode, must be full or trimmed")
-	} else if mode != nil {
-		checkedMode = *mode
-	}
-
-	rpcModeMatchesNodeMode :=
-		checkedMode == WitnessModeTrimmed && !api.config.WitnessFull
-	// we only want to check the cache if no special run mode has been supplied.
-	// or if requested mode matches the node mode
-	// otherwise regenerate it
-	if rpcModeMatchesNodeMode {
-		hermezDb := hermez_db.NewHermezDbReader(tx)
-		witnessBytes, err := hermezDb.GetWitnessCache(batchNumber)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(witnessBytes) != 0 {
-			return fmt.Sprintf("0x%x", witnessBytes), nil
-		}
-	}
-
-	return api.getBatchWitness(ctx, tx, txsmt, batchNumber, false, checkedMode)
-}
-
-func (api *ZkEvmAPIImpl) GetProverInput(ctx context.Context, batchNumber uint64, mode *WitnessMode, debug *bool) (*legacy_executor_verifier.RpcPayload, error) {
-	if !sequencer.IsSequencer() {
-		return nil, errors.New("method only supported from a sequencer node")
-	}
-
-	checkedMode := WitnessModeNone
-	if mode != nil && *mode != WitnessModeFull && *mode != WitnessModeTrimmed {
-		return nil, errors.New("invalid mode, must be full or trimmed")
-	} else if mode != nil {
-		checkedMode = *mode
-	}
-
-	useDebug := false
-	if debug != nil {
-		useDebug = *debug
-	}
-
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	hDb := hermez_db.NewHermezDbReader(tx)
-
-	blockNumbers, err := hDb.GetL2BlockNosByBatch(batchNumber)
-	if err != nil {
-		return nil, err
-	}
-
-	lastBlock, err := rawdb.ReadBlockByNumber(tx, blockNumbers[len(blockNumbers)-1])
-	if err != nil {
-		return nil, err
-	}
-
-	start := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(blockNumbers[0]))
-	end := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(blockNumbers[len(blockNumbers)-1]))
-
-	// For X Layer, split db and ac
-	rangeWitness, err := api.getBlockRangeWitness(ctx, api.db, api.dbsmt, start, end, useDebug, checkedMode)
-	if err != nil {
-		return nil, err
-	}
-
-	var oldAccInputHash common.Hash
-	if batchNumber > 0 {
-		oaih, err := api.getAccInputHash(ctx, hDb, batchNumber-1)
-		if err != nil {
-			return nil, err
-		}
-		oldAccInputHash = *oaih
-	} else {
-		oldAccInputHash = common.Hash{}
-	}
-
-	timestampLimit := lastBlock.Time()
-
-	return &legacy_executor_verifier.RpcPayload{
-		Witness:           hex.EncodeToHex(rangeWitness),
-		Coinbase:          api.config.AddressSequencer.String(),
-		OldAccInputHash:   oldAccInputHash.String(),
-		TimestampLimit:    timestampLimit,
-		ForcedBlockhashL1: "",
-	}, nil
-}
-
 func (api *ZkEvmAPIImpl) GetLatestGlobalExitRoot(ctx context.Context) (common.Hash, error) {
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
@@ -1338,15 +938,6 @@ func (api *ZkEvmAPIImpl) GetExitRootTable(ctx context.Context) ([]l1InfoTreeData
 	}
 
 	return result, nil
-}
-
-func (api *ZkEvmAPIImpl) sendGetBatchWitness(rpcUrl string, batchNumber uint64, mode *WitnessMode) (json.RawMessage, error) {
-	res, err := client.JSONRPCCall(rpcUrl, "zkevm_getBatchWitness", batchNumber, mode)
-	if err != nil {
-		return nil, err
-	}
-
-	return res.Result, nil
 }
 
 func getLastBlockInBatchNumber(tx kv.Tx, batchNumber uint64) (uint64, error) {
@@ -1592,7 +1183,6 @@ func populateBatchDetails(batch *types.Batch) (json.RawMessage, error) {
 	jBatch["rollupExitRoot"] = batch.RollupExitRoot
 	jBatch["localExitRoot"] = batch.LocalExitRoot
 	jBatch["sendSequencesTxHash"] = batch.SendSequencesTxHash
-	jBatch["verifyBatchTxHash"] = batch.VerifyBatchTxHash
 	jBatch["accInputHash"] = batch.AccInputHash
 
 	if batch.ForcedBatchNumber != nil {
