@@ -4,6 +4,7 @@ set -e  # Exit immediately if a command exits with a non-zero status
 set -o pipefail  # Capture errors in pipelines
 
 # Variables
+configPath=.
 dataPath="./datadir"
 datastreamPath="zk/tests/unwinds/datastream"
 datastreamZipFileName="./datastream-net8-upto-11318-101.zip"
@@ -78,7 +79,7 @@ dump_data() {
 echo "[$(date)] Running Erigon to BlockHeight: $firstStop"
 ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
-    --config="zk/tests/unwinds/config/dynamic-integration8.yaml" \
+    --config="$configPath/dynamic-integration8.yaml" \
     --debug.limit="$firstStop"
 
 dump_data "$firstStop" "sync to first stop"
@@ -87,7 +88,7 @@ dump_data "$firstStop" "sync to first stop"
 echo "[$(date)] Running Erigon to BlockHeight: $secondStop"
 ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
-    --config="zk/tests/unwinds/config/dynamic-integration8.yaml" \
+    --config="$configPath/dynamic-integration8.yaml" \
     --debug.limit="$secondStop"
 
 dump_data "$secondStop" "sync to second stop"
@@ -96,7 +97,7 @@ dump_data "$secondStop" "sync to second stop"
 echo "[$(date)] Unwinding to batch: $unwindBatch"
 go run ./cmd/integration state_stages_zkevm \
     --datadir="$dataPath/rpc-datadir" \
-    --config="zk/tests/unwinds/config/dynamic-integration8.yaml" \
+    --config="$configPath/dynamic-integration8.yaml" \
     --chain=dynamic-integration \
     --unwind-batch-no="$unwindBatch" || { echo "Failed to unwind"; exit 1; }
 
@@ -170,7 +171,7 @@ compare_dumps "$dataPath/${firstStop}" "$dataPath/${firstStop}-unwound" "Unwind 
 echo "[$(date)] Resyncing Erigon to second stop: $secondStop"
 ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
-    --config="zk/tests/unwinds/config/dynamic-integration8.yaml" \
+    --config="$configPath/dynamic-integration8.yaml" \
     --debug.limit="$secondStop"
 
 dump_data "${secondStop}-sync-again" "after resyncing to second stop"
