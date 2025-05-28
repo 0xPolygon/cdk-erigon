@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestEncodeL1LogKey(t *testing.T) {
+func TestDecodeL1LogKey(t *testing.T) {
 	tests := []struct {
 		name                string
 		data                []byte
@@ -17,7 +17,7 @@ func TestEncodeL1LogKey(t *testing.T) {
 		{
 			name: "valid data",
 			data: func() []byte {
-				buf := make([]byte, 16)
+				buf := make([]byte, 12)
 				binary.BigEndian.PutUint64(buf[:8], 123456789)
 				binary.BigEndian.PutUint32(buf[8:12], 99)
 				return buf
@@ -28,7 +28,7 @@ func TestEncodeL1LogKey(t *testing.T) {
 		},
 		{
 			name:                "zero data",
-			data:                make([]byte, 16),
+			data:                make([]byte, 12),
 			expectedBlockNumber: 0,
 			expectedLogIndex:    0,
 			expectError:         false,
@@ -50,7 +50,7 @@ func TestEncodeL1LogKey(t *testing.T) {
 		{
 			name: "max values",
 			data: func() []byte {
-				buf := make([]byte, 16)
+				buf := make([]byte, 12)
 				binary.BigEndian.PutUint64(buf[:8], 18446744073709551615) // Max uint64
 				binary.BigEndian.PutUint32(buf[8:12], 4294967295)         // Max uint32
 				return buf
@@ -83,7 +83,7 @@ func TestEncodeL1LogKey(t *testing.T) {
 	}
 }
 
-func TestDecodeL1LogKey(t *testing.T) {
+func TestEncodeL1LogKey(t *testing.T) {
 	tests := []struct {
 		name        string
 		blockNumber uint64
