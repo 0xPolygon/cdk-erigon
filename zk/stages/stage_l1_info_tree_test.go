@@ -37,8 +37,8 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 
 	l1CacheDb := memdb.NewTestDB(t)
 	l1CacheSyncer, err := syncer.NewL1SyncerCache(ctx, l1CacheDb)
-
 	assert.NoError(t, err)
+	defer l1CacheSyncer.Close()
 
 	hDB := hermez_db.NewHermezDb(tx)
 	err = hDB.WriteBlockBatch(0, 0)
@@ -84,6 +84,7 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 
 	l1InfoTreeLog := types.Log{
 		BlockNumber: latestBlockNumber.Uint64(),
+		Index:       0,
 		Address:     l1ContractAddresses[0],
 		Topics:      []common.Hash{contracts.UpdateL1InfoTreeTopic, mainnetExitRoot, rollupExitRoot},
 	}
@@ -91,6 +92,13 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 	EthermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
 
 	l1Syncer := syncer.NewL1Syncer(ctx, l1CacheSyncer, []syncer.IEtherman{EthermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
+
+	// write l1 tree logs for cache bus
+	for _, filteredLog := range filteredLogs {
+		err = l1Syncer.WriteL1TreeLogs(filteredLog)
+		assert.NoError(t, err)
+	}
+
 	updater := l1infotree.NewUpdater(&ethconfig.Zk{}, l1Syncer, l1infotree.NewInfoTreeL2RpcSyncer(ctx, &ethconfig.Zk{
 		L2RpcUrl: "http://127.0.0.1:8545",
 	}))

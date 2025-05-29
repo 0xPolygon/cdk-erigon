@@ -374,8 +374,11 @@ func TestGetBatchByNumber(t *testing.T) {
 
 	db := contractBackend.DB()
 	agg := contractBackend.Agg()
-	_, cacheDB := context.Background(), memdb.NewTestDB(t)
-	defer cacheDB.Close()
+
+	l1CacheDb := memdb.NewTestDB(t)
+	l1CacheSyncer, err := syncer.NewL1SyncerCache(ctx, l1CacheDb)
+	assert.NoError(err)
+	defer l1CacheSyncer.Close()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker, 1000, false)
@@ -386,7 +389,7 @@ func TestGetBatchByNumber(t *testing.T) {
 
 	l1Syncer := syncer.NewL1Syncer(
 		ctx,
-		cacheDB,
+		l1CacheSyncer,
 		[]syncer.IEtherman{EthermanMock},
 		[]common.Address{},
 		[][]common.Hash{},
@@ -657,8 +660,10 @@ func TestGetExitRootsByGER(t *testing.T) {
 	db := contractBackend.DB()
 	agg := contractBackend.Agg()
 
-	_, cacheDB := context.Background(), memdb.NewTestDB(t)
-	defer cacheDB.Close()
+	l1CacheDb := memdb.NewTestDB(t)
+	l1CacheSyncer, err := syncer.NewL1SyncerCache(ctx, l1CacheDb)
+	assert.NoError(err)
+	defer l1CacheSyncer.Close()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker, 1000, false)
@@ -669,7 +674,7 @@ func TestGetExitRootsByGER(t *testing.T) {
 
 	l1Syncer := syncer.NewL1Syncer(
 		ctx,
-		cacheDB,
+		l1CacheSyncer,
 		[]syncer.IEtherman{EthermanMock},
 		[]common.Address{},
 		[][]common.Hash{},
@@ -736,8 +741,10 @@ func TestLatestGlobalExitRoot(t *testing.T) {
 	db := contractBackend.DB()
 	agg := contractBackend.Agg()
 
-	_, cacheDB := context.Background(), memdb.NewTestDB(t)
-	defer cacheDB.Close()
+	l1CacheDb := memdb.NewTestDB(t)
+	l1CacheSyncer, err := syncer.NewL1SyncerCache(ctx, l1CacheDb)
+	assert.NoError(err)
+	defer l1CacheSyncer.Close()
 
 	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
 	ethImpl := NewEthAPI(baseApi, db, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker, 1000, false)
@@ -748,7 +755,7 @@ func TestLatestGlobalExitRoot(t *testing.T) {
 
 	l1Syncer := syncer.NewL1Syncer(
 		ctx,
-		cacheDB,
+		l1CacheSyncer,
 		[]syncer.IEtherman{EthermanMock},
 		[]common.Address{},
 		[][]common.Hash{},

@@ -2,9 +2,105 @@ package syncer
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/kv/memdb"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/stretchr/testify/assert"
+	"math/big"
 	"testing"
+	"time"
 )
+
+const mockBlockNumberInt = 21
+
+func TestL1Cache(t *testing.T) {
+	ctx := context.Background()
+	l1CacheDb := memdb.NewTestDB(t)
+	l1CacheSyncer, err := NewL1SyncerCache(ctx, l1CacheDb)
+	assert.NoError(t, err)
+	defer l1CacheSyncer.Close()
+
+	mockBlockParentHash := common.HexToHash("0x123456789")
+	mockBlockTime := uint64(time.Now().Unix())
+	mockBlockNumber := big.NewInt(mockBlockNumberInt)
+	mockBlockHeader := &types.Header{ParentHash: mockBlockParentHash, Number: mockBlockNumber, Time: mockBlockTime}
+
+	mockL1ContractAddresses := []common.Address{
+		common.HexToAddress("0x1"),
+		common.HexToAddress("0x2"),
+		common.HexToAddress("0x3"),
+	}
+	mockL1ContractTopics := [][]common.Hash{
+		[]common.Hash{common.HexToHash("0x1")},
+		[]common.Hash{common.HexToHash("0x2")},
+		[]common.Hash{common.HexToHash("0x3")},
+	}
+
+	mockMainnetExitRoot := common.HexToHash("0x111")
+	mockRollupExitRoot := common.HexToHash("0x222")
+
+	// writeL1BlockHeaderCache
+	err = l1CacheSyncer.writeL1BlockHeaderCache(mockBlockHeader)
+	assert.NoError(t, err)
+
+	// getL1BlockHeaderCache
+	resultHeader, err := l1CacheSyncer.getL1BlockHeaderCache(mockBlockNumberInt)
+
+	assert.NoError(t, err)
+
+	assert.Equal(t, mockBlockHeader.ParentHash, resultHeader.ParentHash)
+	assert.Equal(t, mockBlockHeader.Number, resultHeader.Number)
+	assert.Equal(t, mockBlockHeader.Time, resultHeader.Time)
+
+	l1InfoTreeLogs := []types.Log{
+		{
+			BlockNumber: mockBlockNumber.Uint64(),
+			Index:       0,
+			Address:     mockL1ContractAddresses[0],
+			Topics:      []common.Hash{mockL1ContractTopics[0][0], mockMainnetExitRoot, mockRollupExitRoot},
+		},
+		{
+			BlockNumber: mockBlockNumber.Uint64(),
+			Index:       1,
+			Address:     mockL1ContractAddresses[1],
+			Topics:      []common.Hash{mockL1ContractTopics[1][0], mockMainnetExitRoot, mockRollupExitRoot},
+		},
+		{
+			BlockNumber: mockBlockNumber.Uint64(),
+			Index:       2,
+			Address:     mockL1ContractAddresses[2],
+			Topics:      []common.Hash{mockL1ContractTopics[2][0], mockMainnetExitRoot, mockRollupExitRoot},
+		},
+	}
+
+	// writeL1TreeLogs
+	for index := range l1InfoTreeLogs {
+		err = l1CacheSyncer.writeL1TreeLogs(&l1InfoTreeLogs[index])
+		assert.NoError(t, err)
+	}
+
+	// getLastL1TreeLogBlockNumber
+	lastTreeLogBlockNumber, err := l1CacheSyncer.getLastL1TreeLogBlockNumber()
+	assert.NoError(t, err)
+	assert.Equal(t, mockBlockNumber.Uint64(), lastTreeLogBlockNumber)
+
+	logsCh := make(chan types.Log, 3)
+	l1CacheSyncer.getL1TreeLogs(0, logsCh)
+	index := 0
+	for logEntry := range logsCh {
+		assert.Equal(t, l1InfoTreeLogs[index].BlockNumber, logEntry.BlockNumber)
+		assert.Equal(t, l1InfoTreeLogs[index].Index, logEntry.Index)
+		assert.Equal(t, l1InfoTreeLogs[index].Address, logEntry.Address)
+		assert.Equal(t, l1InfoTreeLogs[index].Topics, logEntry.Topics)
+		index++
+	}
+
+	// getL1TreeLogs
+	err = l1CacheSyncer.clearTreeLogs()
+	assert.NoError(t, err)
+}
 
 func TestDecodeL1LogKey(t *testing.T) {
 	tests := []struct {

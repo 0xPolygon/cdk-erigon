@@ -195,6 +195,7 @@ func (c *L1Cache) getL1TreeLogs(startBlockNumber uint64, logsCh chan<- ethTypes.
 
 		logsCh <- logEntry
 	}
+
 	return
 }
 
