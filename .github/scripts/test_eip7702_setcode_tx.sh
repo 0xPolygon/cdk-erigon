@@ -24,7 +24,7 @@ EOF
   exit 1
 }
 
-RPC_URL="" PK_EOA="" PK_SENDER="" CONTRACT_FQN="" GAS=50000
+RPC_URL="" PK_EOA="" PK_SENDER="" CONTRACT_FQN="" GAS=100000
 declare -a CONSTRUCTOR_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -52,12 +52,12 @@ if (( ${#CONSTRUCTOR_ARGS[@]} > 0 )); then
   JSON_OUT=$(forge create "$CONTRACT_FQN" "${CONSTRUCTOR_ARGS[@]}" \
     --rpc-url "$RPC_URL" \
     --private-key "$PK_SENDER" \
-    --legacy --broadcast --json --evm-version "london")
+    --broadcast --json --evm-version "london")
 else
   JSON_OUT=$(forge create "$CONTRACT_FQN" \
     --rpc-url "$RPC_URL" \
     --private-key "$PK_SENDER" \
-    --legacy --broadcast --json --evm-version "london")
+    --broadcast --json --evm-version "london")
 fi
 
 TX_HASH=$(echo "$JSON_OUT" | jq -r '.txHash // .transactionHash')
@@ -72,7 +72,7 @@ echo "Contract at    : $CONTRACT_ADDR"
 # ──────────────────────────────────────────────────────────────────────────────
 
 echo "Sending set code TX..."
-SET_CODE_TX=$(cast send "$CONTRACT_ADDR" --rpc-url "$RPC_URL" --private-key "$PK_SENDER" --gas-limit 100000 --gas-price "$GAS" --auth "$(cast wallet sign-auth "$CONTRACT_ADDR" --private-key "$PK_EOA" --rpc-url "$RPC_URL")" --json)
+SET_CODE_TX=$(cast send "$CONTRACT_ADDR" --rpc-url "$RPC_URL" --private-key "$PK_SENDER" --gas-limit "$GAS" --auth "$(cast wallet sign-auth "$CONTRACT_ADDR" --private-key "$PK_EOA" --rpc-url "$RPC_URL")" --json)
 SET_CODE_TX_HASH=$(echo "$SET_CODE_TX" | jq -r '.txHash // .transactionHash')
 echo "SetCodeTx hash : $SET_CODE_TX_HASH"
 
