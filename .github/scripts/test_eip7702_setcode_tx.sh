@@ -5,109 +5,127 @@ usage() {
   cat <<EOF
 Usage: $0 \
   --rpc-url <url> \
-  --private-key-auth-list <hex> \
+  --private-key-eoa <hex> \
   --private-key-sender <hex> \
   --contract <path:ContractName> \
-  --value <uint> \
-  [--constructor-args <arg1,arg2,...>]
+  [--constructor-args <arg1,arg2,...>] \
+  [--gas <uint>] \
+  [--help]
 
 Options:
-  --rpc-url                   L2 RPC endpoint URL
-  --private-key-auth-list     Hex key for auth-list signing (0x...)
-  --private-key-sender        Hex key for tx sender (0x...)
-  --contract                  Fully-qualified contract (e.g., "contracts/storage.sol:Storage")
-  --value                     New uint256 value for setValue()
-  --constructor-args          Comma-separated constructor args (optional)
-  -h, --help                  Show this help and exit
+  --rpc-url             L2 RPC endpoint URL
+  --private-key-eoa     Hex key for auth-list signing (0x…)
+  --private-key-sender  Hex key for contract deployment & sponsor tx (0x…)
+  --contract            Fully-qualified contract (e.g. "contracts/Foo.sol:Foo")
+  --constructor-args    Comma-separated constructor args (optional)
+  --gas                 Gas limit for SetCodeTx (default: 50000)
+  -h, --help            Show this help and exit
 EOF
   exit 1
 }
 
-RPC_URL="" PRIVATE_KEY_AUTH_LIST="" PRIVATE_KEY_SENDER="" CONTRACT_FQN="" VALUE=""
+RPC_URL="" PK_EOA="" PK_SENDER="" CONTRACT_FQN="" GAS=50000
 declare -a CONSTRUCTOR_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --rpc-url)                RPC_URL="$2"; shift 2;;
-    --private-key-auth-list)  PRIVATE_KEY_AUTH_LIST="$2"; shift 2;;
-    --private-key-sender)     PRIVATE_KEY_SENDER="$2"; shift 2;;
-    --contract)               CONTRACT_FQN="$2"; shift 2;;
-    --value)                  VALUE="$2"; shift 2;;
-    --constructor-args)       IFS=',' read -r -a CONSTRUCTOR_ARGS <<<"$2"; shift 2;;
-    -h|--help)                usage;;
+    --rpc-url)             RPC_URL="$2"; shift 2;;
+    --private-key-eoa)     PK_EOA="$2"; shift 2;;
+    --private-key-sender)  PK_SENDER="$2"; shift 2;;
+    --contract)            CONTRACT_FQN="$2"; shift 2;;
+    --constructor-args)    IFS=',' read -r -a CONSTRUCTOR_ARGS <<<"$2"; shift 2;;
+    --gas)                 GAS="$2"; shift 2;;
+    -h|--help)             usage;;
     *) echo "Unknown option $1"; usage;;
   esac
 done
 
-if [[ -z "$RPC_URL" || -z "$PRIVATE_KEY_AUTH_LIST" || -z "$PRIVATE_KEY_SENDER" || -z "$CONTRACT_FQN" || -z "$VALUE" ]]; then
-  echo "Error: missing required flags"
-  usage
+if [[ -z "$RPC_URL" || -z "$PK_EOA" || -z "$PK_SENDER" || -z "$CONTRACT_FQN" ]]; then
+  echo "Error: missing required flags"; usage
 fi
 
-echo "Deploying ${CONTRACT_FQN}..."
+# ──────────────────────────────────────────────────────────────────────────────
+# 1) Deploy the contract with forge
+# ──────────────────────────────────────────────────────────────────────────────
+echo "Deploying $CONTRACT_FQN..."
 if (( ${#CONSTRUCTOR_ARGS[@]} > 0 )); then
   JSON_OUT=$(forge create "$CONTRACT_FQN" "${CONSTRUCTOR_ARGS[@]}" \
     --rpc-url "$RPC_URL" \
-    --private-key "$PRIVATE_KEY_SENDER" \
+    --private-key "$PK_SENDER" \
     --legacy --broadcast --json --evm-version "london")
 else
   JSON_OUT=$(forge create "$CONTRACT_FQN" \
     --rpc-url "$RPC_URL" \
-    --private-key "$PRIVATE_KEY_SENDER" \
+    --private-key "$PK_SENDER" \
     --legacy --broadcast --json --evm-version "london")
 fi
 
 TX_HASH=$(echo "$JSON_OUT" | jq -r '.txHash // .transactionHash')
-echo "Deploy transaction hash: $TX_HASH"
+echo "Deploy tx hash : $TX_HASH"
 
-wait_for_receipt() {
-  local tx_hash="$1"
-  while true; do
-    local r
-    r=$(cast rpc eth_getTransactionReceipt "$tx_hash" --rpc-url "$RPC_URL" 2>/dev/null) || sleep 1
-    [[ "$r" != "null" ]] && { echo "$r"; return; }
-  done
-}
+RECEIPT=$(cast receipt "$TX_HASH" --rpc-url "$RPC_URL" --json)
+CONTRACT_ADDR=$(echo "$RECEIPT" | jq -r '.contractAddress')
+echo "Contract at    : $CONTRACT_ADDR"
 
-RECEIPT=$(wait_for_receipt "$TX_HASH")
-CONTRACT_ADDRESS=$(echo "$RECEIPT" | jq -r '.contractAddress')
-echo "Contract deployed at: $CONTRACT_ADDRESS"
+# ──────────────────────────────────────────────────────────────────────────────
+# 2) Send the SetCodeTx
+# ──────────────────────────────────────────────────────────────────────────────
 
-echo "Signing authorization list for setValue()..."
-SIGNED_AUTH=$(
-  cast wallet sign-auth \
-    "$CONTRACT_ADDRESS" \
-    --private-key "$PRIVATE_KEY_AUTH_LIST" \
-    --rpc-url "$RPC_URL"
-)
-echo "Signed auth: $SIGNED_AUTH"
+echo "Sending set code TX..."
+SET_CODE_TX=$(cast send "$CONTRACT_ADDR" --rpc-url "$RPC_URL" --private-key "$PK_SENDER" --gas-limit 100000 --gas-price "$GAS" --auth "$(cast wallet sign-auth "$CONTRACT_ADDR" --private-key "$PK_EOA" --rpc-url "$RPC_URL")" --json)
+SET_CODE_TX_HASH=$(echo "$SET_CODE_TX" | jq -r '.txHash // .transactionHash')
+echo "SetCodeTx hash : $SET_CODE_TX_HASH"
 
-echo "Sending setValue($VALUE)..."
-SEND_OUT=$(cast send \
-  "$CONTRACT_ADDRESS" \
-  "setValue(uint256)" "$VALUE" \
-  --rpc-url "$RPC_URL" \
-  --private-key "$PRIVATE_KEY_SENDER" \
-  --gas-limit 100000 \
-  --auth "$SIGNED_AUTH" \
-  --json)
+SET_CODE_RECEIPT=$(cast receipt "$SET_CODE_TX_HASH" --rpc-url "$RPC_URL" --json)
 
-TX_HASH2=$(echo "$SEND_OUT" | jq -r '.transactionHash')
-echo "Transaction hash: $TX_HASH2"
-
-RECEIPT2=$(wait_for_receipt "$TX_HASH2")
-
-TX_TYPE=$(echo "$RECEIPT2" | jq -r '.type')
+TX_TYPE=$(echo "$SET_CODE_RECEIPT" | jq -r '.type')
 if [[ "$TX_TYPE" != "0x4" ]]; then
   echo "Error: unexpected tx type ($TX_TYPE), expected 4 for EIP-7702" >&2
   exit 1
 fi
 
-STATUS=$(echo "$RECEIPT2" | jq -r '.status')
+STATUS=$(echo "$SET_CODE_RECEIPT" | jq -r '.status')
 if [[ "$STATUS" -ne 1 ]]; then
   echo "Error: transaction failed (status=$STATUS)" >&2
   exit 1
 fi
 
-echo "Success! Tx was type=$TX_TYPE and completed with status=$STATUS."
-echo "EIP-7702 auth list was applied (type 4)."
+LOG_COUNT=$(echo "$SET_CODE_RECEIPT" | jq -r '.logs | length')
+if [[ "$LOG_COUNT" -ne 1 ]]; then
+  echo "Error: expected 1 log, got $LOG_COUNT" >&2
+  exit 1
+fi
+
+# check the log’s address matches the delegate contract
+LOG_ADDR=$(echo "$SET_CODE_RECEIPT" | jq -r '.logs[0].address')
+LOG_ADDR_LOWER=$(echo "$LOG_ADDR" | tr '[:upper:]' '[:lower:]')
+EXPECTED_LOWER=$(echo "$CONTRACT_ADDR" | tr '[:upper:]' '[:lower:]')
+if [ "$LOG_ADDR_LOWER" != "$EXPECTED_LOWER" ]; then
+  echo "Error: expected log address to be $CONTRACT_ADDR, got $LOG_ADDR" >&2
+  exit 1
+fi
+
+echo "Address in transaction log matches contract address. Log Address: $LOG_ADDR, Contract Address: $CONTRACT_ADDR"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 3) Check EOA has been set
+# ──────────────────────────────────────────────────────────────────────────────
+
+echo "Checking EOA has been set at $CONTRACT_ADDR..."
+EOA_ADDR=$(cast wallet address --private-key "$PK_EOA")
+RAW_CODE=$(cast rpc eth_getCode "$EOA_ADDR" latest --rpc-url "$RPC_URL")
+ONCHAIN_CODE=${RAW_CODE#\"}
+ONCHAIN_CODE=${ONCHAIN_CODE%\"}
+
+# A prefix is added to the code to indicate it is a delegated designation
+# var DelegatedDesignationPrefix = []byte{0xef, 0x01, 0x00}
+EXPECTED_CODE=$(printf '0xef0100%s' "${CONTRACT_ADDR#0x}")
+
+if [[ "$ONCHAIN_CODE" != "$EXPECTED_CODE" ]]; then
+  echo "Error: unexpected code at $EOA_ADDR:" >&2
+  echo "  got:  $ONCHAIN_CODE" >&2
+  echo "  want: $EXPECTED_CODE" >&2
+  exit 1
+fi
+
+echo "Verified: EOA ($EOA_ADDR) now delegates to $CONTRACT_ADDR."
