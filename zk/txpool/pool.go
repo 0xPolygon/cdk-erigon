@@ -2534,10 +2534,6 @@ func (mt *metaTx) better(than *metaTx, pendingBaseFee uint64) bool {
 		thanSubPool |= EnoughFeeCapBlock
 	}
 
-	if mt.Tx.SenderID == than.Tx.SenderID && mt.Tx.Nonce != than.Tx.Nonce {
-		return mt.Tx.Nonce < than.Tx.Nonce
-	}
-
 	if subPool != thanSubPool {
 		return subPool > thanSubPool
 	}
