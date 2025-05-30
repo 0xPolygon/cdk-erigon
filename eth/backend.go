@@ -41,7 +41,6 @@ import (
 
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
-	"github.com/ledgerwatch/erigon/zk/txpool"
 
 	"github.com/erigontech/mdbx-go/mdbx"
 	lru "github.com/hashicorp/golang-lru/arc/v2"
@@ -134,13 +133,11 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/l1_cache"
 	"github.com/ledgerwatch/erigon/zk/l1infotree"
-	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	txpool2 "github.com/ledgerwatch/erigon/zk/txpool"
 	"github.com/ledgerwatch/erigon/zk/txpool/txpooluitl"
 	"github.com/ledgerwatch/erigon/zk/utils"
-	"github.com/ledgerwatch/erigon/zk/witness"
 	"github.com/ledgerwatch/erigon/zkevm/etherman"
 )
 
@@ -246,7 +243,6 @@ type Ethereum struct {
 	smtFlushCtx    context.Context
 	smtFlushCancel context.CancelFunc
 	smtFlushDoneCh chan struct{}
-	verifier       *legacy_executor_verifier.LegacyExecutorVerifier
 }
 
 func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {
@@ -1190,46 +1186,6 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		if isSequencer {
 			// if we are sequencing transactions, we do the sequencing loop...
-			witnessGenerator := witness.NewGenerator(
-				config.Dirs,
-				config.HistoryV3,
-				backend.agg,
-				backend.blockReader,
-				backend.chainConfig,
-				backend.config.Zk,
-				backend.engine,
-				backend.config.WitnessContractInclusion,
-				backend.config.WitnessUnwindLimit,
-			)
-
-			var legacyExecutors []*legacy_executor_verifier.Executor = make([]*legacy_executor_verifier.Executor, 0, len(cfg.ExecutorUrls))
-			if len(cfg.ExecutorUrls) > 0 && cfg.ExecutorUrls[0] != "" {
-				levCfg := legacy_executor_verifier.Config{
-					GrpcUrls:              cfg.ExecutorUrls,
-					Timeout:               cfg.ExecutorRequestTimeout,
-					MaxConcurrentRequests: cfg.ExecutorMaxConcurrentRequests,
-					OutputLocation:        cfg.ExecutorPayloadOutput,
-				}
-				executors := legacy_executor_verifier.NewExecutors(levCfg)
-				for _, e := range executors {
-					legacyExecutors = append(legacyExecutors, e)
-				}
-			}
-
-			// For X Layer, split db and ac
-			backend.verifier = legacy_executor_verifier.NewLegacyExecutorVerifier(
-				*cfg.Zk,
-				legacyExecutors,
-				backend.chainDB,
-				backend.smtDB,
-				witnessGenerator,
-				dataStreamServer,
-			)
-
-			if cfg.Zk.Limbo {
-				limboSubPoolProcessor := txpool.NewLimboSubPoolProcessor(ctx, cfg.Zk, backend.chainConfig, backend.chainDB, backend.txPool2, backend.verifier)
-				limboSubPoolProcessor.StartWork()
-			}
 
 			// we need to make sure the pool is always aware of the latest block for when
 			// we switch context from being an RPC node to a sequencer
@@ -1267,7 +1223,6 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				l1BlockSyncer,
 				backend.txPool2,
 				backend.txPool2DB,
-				backend.verifier,
 				l1InfoTreeUpdater,
 				hook,
 			)
@@ -1381,10 +1336,7 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 	var err error
 
 	s.stagedSync = stagedsync.New(s.config.Sync, s.syncStages, s.syncUnwindOrder, s.syncPruneOrder, s.logger)
-	// For X Layer, ac
-	if s.verifier != nil {
-		s.verifier.SetSmtCache(s.stagedSync.GetCache())
-	}
+	// Legacy verifier code removed
 
 	if chainConfig.Bor == nil {
 		s.sentriesClient.Hd.StartPoSDownloader(s.sentryCtx, s.sentriesClient.SendHeaderRequest, s.sentriesClient.Penalize)

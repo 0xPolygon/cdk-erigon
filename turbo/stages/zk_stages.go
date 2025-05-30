@@ -17,7 +17,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync/freezeblocks"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/l1infotree"
-	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	"github.com/ledgerwatch/erigon/zk/txpool"
@@ -109,7 +108,6 @@ func NewSequencerZkStages(ctx context.Context,
 	l1BlockSyncer *syncer.L1Syncer,
 	txPool *txpool.TxPool,
 	txPoolDb kv.RwDB,
-	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
 	infoTreeUpdater *l1infotree.Updater,
 	hook *Hook,
 ) []*stagedsync.Stage {
@@ -149,7 +147,6 @@ func NewSequencerZkStages(ctx context.Context,
 			&cfg.Miner,
 			txPool,
 			txPoolDb,
-			verifier,
 			uint16(cfg.YieldSize),
 			infoTreeUpdater,
 			hook,

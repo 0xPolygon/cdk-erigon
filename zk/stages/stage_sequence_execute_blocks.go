@@ -11,7 +11,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
@@ -75,7 +74,6 @@ func doFinishBlockAndUpdateState(
 	l1BlockHash common.Hash,
 	l1TreeUpdateIndex uint64,
 	infoTreeIndexProgress uint64,
-	batchCounters *vm.BatchCounterCollector,
 ) (*types.Block, error) {
 	thisBlockNumber := header.Number.Uint64()
 
@@ -83,7 +81,7 @@ func doFinishBlockAndUpdateState(
 		batchContext.cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
 	}
 
-	block, err := finaliseBlock(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters)
+	block, err := finaliseBlock(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +111,6 @@ func finaliseBlock(
 	l1BlockHash common.Hash,
 	l1TreeUpdateIndex uint64,
 	infoTreeIndexProgress uint64,
-	batchCounters *vm.BatchCounterCollector,
 ) (*types.Block, error) {
 	thisBlockNumber := newHeader.Number.Uint64()
 	if err := batchContext.sdb.hermezDb.WriteBlockL1InfoTreeIndex(thisBlockNumber, l1TreeUpdateIndex); err != nil {
@@ -246,11 +243,7 @@ func finaliseBlock(
 	// For X Layer
 	metrics.GetLogStatistics().CumulativeTiming(metrics.FinaliseBlockWriteTiming, time.Since(doFinStart))
 
-	// write batch counters
-	err = batchContext.sdb.hermezDb.WriteBatchCounters(newNum.Uint64(), batchCounters.CombineCollectorsNoChanges().UsedAsArray())
-	if err != nil {
-		return nil, err
-	}
+	// Batch counters writing removed
 
 	// this is actually account + storage indices stages
 	quitCh := batchContext.ctx.Done()
