@@ -1,0 +1,61 @@
+datadir: /home/erigon/.local/share/erigon
+chain: dynamic-polygonzkevm
+http: true
+private.api.addr: localhost:9091
+zkevm.l2-chain-id: 1101
+zkevm.l2-sequencer-rpc-url: http://polygonzkevm-seq:8545
+zkevm.l2-datastreamer-url: polygonzkevm-seq:6900
+zkevm.l1-chain-id: 1337
+zkevm.l1-rpc-url: http://xlayer-mock-l1-network:8545
+zkevm.l1-highest-block-type: latest
+
+zkevm.address-sequencer: "0x5b06837A43bdC3dD9F114558DAf4B26ed49842Ed"
+zkevm.address-zkevm: "0xcfF753853f33864E92D6C9d25b79AA968853D979"
+zkevm.address-admin: "0x8943545177806ED17B9F23F0a21ee5948eCaa776"
+zkevm.address-rollup: "0xE96dBF374555C6993618906629988d39184716B3"
+zkevm.address-ger-manager: "0xB8cedD4B9eF683f0887C44a6E4312dC7A6e2fcdB"
+
+zkevm.l1-rollup-id: 2
+zkevm.l1-first-block: 156
+zkevm.l1-block-range: 10
+zkevm.l1-query-delay: 6000
+zkevm.rpc-ratelimit: 300
+zkevm.datastream-version: 2
+
+log.console.verbosity: info
+
+zkevm.data-stream-host: "localhost"
+zkevm.data-stream-port: 6900
+zkevm.default-gas-price: 1000000000
+zkevm.max-gas-price: 0
+zkevm.gas-price-factor: 0.000001
+externalcl: true
+http.api: [eth, debug, net, trace, web3, erigon, txpool, zkevm]
+http.addr: 0.0.0.0
+http.port: 8545
+http.vhosts: any
+http.corsdomain: any
+http.timeouts.read: "10s"
+http.timeouts.write: "10s"
+http.timeouts.idle: "10s"
+# http.apikeys: |
+#   {"project":"Biconomy","key":"45543e0adc5dd3e316044909d32501a5","timeout":"2030-12-31","methods":["eth_syncing"],"count":10000,"bucket":1}
+
+ws: true
+
+metrics: true
+metrics.addr: "0.0.0.0"
+metrics.port: 9095
+
+db.read.concurrency: 20000
+txpool.globalslots: 100000
+networkid: 1101
+
+# zkevm.pool-manager-url: http://xlayer-pool-manager:8545
+
+#http.apikeys: |
+#  {"project":"project1","key":"944cd2a6939eb23053289d9b91d6c498","timeout":"2033-12-12","methods":["eth_syncing"],"count":5,"bucket":1}
+
+pprof: true
+pprof.port: 6060
+pprof.addr: 0.0.0.0
