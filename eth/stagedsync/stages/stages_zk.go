@@ -20,9 +20,9 @@ var (
 	// ZK stages
 	L1CombinedSyncer SyncStage = "L1CombinedSyncer"
 	// L1Syncer Deprecated
-	L1Syncer SyncStage = "L1Syncer"
+	// L1Syncer SyncStage = "L1Syncer"
 	// L1SequencerSyncer Deprecated
-	L1SequencerSyncer           SyncStage = "L1SequencerSyncer"
+	// L1SequencerSyncer           SyncStage = "L1SequencerSyncer"
 	L1VerificationsBatchNo      SyncStage = "L1VerificationsBatchNo"
 	Batches                     SyncStage = "Batches"
 	HighestHashableL2BlockNo    SyncStage = "HighestHashableL2BlockNo"

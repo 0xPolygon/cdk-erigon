@@ -18,10 +18,10 @@ var resetL1Sequences = Migration{
 			return err
 		}
 		defer tx.Rollback()
-		tx.ClearBucket(kv.L1SEQUENCES)
+		_ = tx.ClearBucket(kv.L1SEQUENCES)
 
 		// already checked
-		if err := stages.SaveStageProgress(tx, stages.L1Syncer, 0); err != nil {
+		if err := stages.SaveStageProgress(tx, stages.L1CombinedSyncer, 0); err != nil {
 			return fmt.Errorf("failed to get highest checked block, %w", err)
 		}
 

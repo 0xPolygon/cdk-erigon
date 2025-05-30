@@ -27,6 +27,10 @@ import (
 	"github.com/erigontech/erigon/rpc"
 )
 
+func TestLogsVerificationResult(t *testing.T) {
+
+}
+
 func TestSpawnStageL1Syncer(t *testing.T) {
 	// Arrange
 	ctx, db1 := context.Background(), memdb.NewTestDB(t)
@@ -53,7 +57,7 @@ func TestSpawnStageL1Syncer(t *testing.T) {
 	require.NoError(t, err)
 	err = hDB.WriteBlockBatch(l2BlockNumber, verifiedBatchNumber)
 	require.NoError(t, err)
-	err = stages.SaveStageProgress(tx, stages.L1Syncer, 0)
+	err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, 0)
 	require.NoError(t, err)
 	err = stages.SaveStageProgress(tx, stages.IntermediateHashes, l2BlockNumber-1)
 	require.NoError(t, err)
@@ -87,7 +91,7 @@ func TestSpawnStageL1Syncer(t *testing.T) {
 	err = rawdb.WriteCanonicalHash(tx, genesisBlock.Hash(), genesisBlock.NumberU64())
 	require.NoError(t, err)
 
-	s := &stagedsync.StageState{ID: stages.L1Syncer, BlockNumber: 0}
+	s := &stagedsync.StageState{ID: stages.L1CombinedSyncer, BlockNumber: 0}
 	u := &stagedsync.Sync{}
 
 	mockCtrl := gomock.NewController(t)

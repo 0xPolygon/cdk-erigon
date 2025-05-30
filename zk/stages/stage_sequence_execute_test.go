@@ -48,8 +48,9 @@ func TestSpawnSequencingStage(t *testing.T) {
 
 	l1CacheDb := memdb.NewTestDB(t)
 	l1CacheSyncer, err := syncer.NewL1SyncerCache(ctx, l1CacheDb)
-
 	assert.NoError(t, err)
+
+	defer l1CacheSyncer.Close()
 
 	chainID := *uint256.NewInt(1)
 	forkID := uint64(11)
@@ -81,7 +82,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 	err = stages.SaveStageProgress(tx, stages.Execution, latestL1BlockNumber.Uint64())
 	require.NoError(t, err)
 
-	hDB.WriteL1InfoTreeUpdate(&zkTypes.L1InfoTreeUpdate{
+	err = hDB.WriteL1InfoTreeUpdate(&zkTypes.L1InfoTreeUpdate{
 		Index:           1,
 		GER:             common.HexToHash("0x1"),
 		MainnetExitRoot: common.HexToHash("0x2"),
@@ -90,6 +91,8 @@ func TestSpawnSequencingStage(t *testing.T) {
 		Timestamp:       100,
 		BlockNumber:     latestL2BlockNumber.Uint64(),
 	})
+
+	assert.NoError(t, err)
 
 	latestL2BlockParentHash := common.HexToHash("0x123456789")
 	latestL2BlockTime := uint64(time.Now().Unix())
@@ -127,6 +130,8 @@ func TestSpawnSequencingStage(t *testing.T) {
 	latestL1Block := types.NewBlockWithHeader(latestL1BlockHeader)
 
 	ethermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestL1Block, nil).AnyTimes()
+
+	// ethermanMock.EXPECT().FilterLogs(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 	l1Syncer := syncer.NewL1Syncer(ctx, l1CacheSyncer, []syncer.IEtherman{ethermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
 	updater := l1infotree.NewUpdater(&ethconfig.Zk{}, l1Syncer, l1infotree.NewInfoTreeL2RpcSyncer(ctx, &ethconfig.Zk{}))

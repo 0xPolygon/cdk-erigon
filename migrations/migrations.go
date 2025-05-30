@@ -42,8 +42,9 @@ var migrations = map[kv.Label][]Migration{
 		countersToArray,
 		resetL1Sequences,
 	},
-	kv.TxPoolDB: {},
-	kv.SentryDB: {},
+	kv.L1CacheDB: {},
+	kv.TxPoolDB:  {},
+	kv.SentryDB:  {},
 }
 
 type Callback func(tx kv.RwTx, progress []byte, isDone bool) error

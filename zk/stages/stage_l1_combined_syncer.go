@@ -194,17 +194,18 @@ func SpawnStageL1CombinedSyncer(
 
 	lastCheckedL1BlockCounter.Set(float64(latestCheckedBlock))
 
-	if result.HighestWrittenL1BlockNumber() > l1BlockProgress {
-		log.Info(fmt.Sprintf(
-			"[%s] Saving L1 syncer progress. latestCheckedBlock: %d, newVerificationsCount: %d, newSequencesCount: %d, highestWrittenL1BlockNo: %d",
-			logPrefix,
-			latestCheckedBlock,
-			result.VerificationCount(),
-			result.SequenceCount(),
-			result.HighestWrittenL1BlockNumber(),
-		),
-		)
+	log.Info(fmt.Sprintf(
+		"[%s] Saving L1 syncer progress. latestCheckedBlock: %d, l1BlockProgress: %d, newVerificationsCount: %d, newSequencesCount: %d, highestWrittenL1BlockNo: %d",
+		logPrefix,
+		latestCheckedBlock,
+		l1BlockProgress,
+		result.VerificationCount(),
+		result.SequenceCount(),
+		result.HighestWrittenL1BlockNumber(),
+	),
+	)
 
+	if result.HighestWrittenL1BlockNumber() > l1BlockProgress {
 		if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, result.HighestWrittenL1BlockNumber()); err != nil {
 			return fmt.Errorf("SaveStageProgress: %w", err)
 		}
@@ -223,18 +224,13 @@ func SpawnStageL1CombinedSyncer(
 			// do nothing in hope the node will recover if it isn't a stateroot mismatch
 		}
 
-		// For syncer only
-		// TODO: Combine
-		/*if cfg.IsSequencer() {
-			if l1BlockProgress >= cfg.zkCfg.L1FirstBlock {
-				// do not save progress if progress less than L1FirstBlock
-				if err = stages.SaveStageProgress(tx, stages.L1SequencerSync, l1BlockProgress); err != nil {
-					return err
-				}
-			}
-		}*/
-
 	} else {
+		if l1BlockProgress >= cfg.zkCfg.L1FirstBlock {
+			// do not save progress if progress less than L1FirstBlock
+			if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, l1BlockProgress); err != nil {
+				return err
+			}
+		}
 		log.Info(fmt.Sprintf("[%s] No new L1 blocks to sync", logPrefix))
 	}
 

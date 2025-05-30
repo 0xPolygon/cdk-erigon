@@ -28,8 +28,6 @@ var SyncStages = map[string]SyncStage{
 
 var SyncStagesZk = map[string]SyncStage{
 	"l1_combined_syncer":             L1CombinedSyncer,
-	"l1_syncer":                      L1Syncer,
-	"l1_sequencer_sender":            L1SequencerSyncer,
 	"l1_info_tree":                   L1InfoTree,
 	"l1_block_sync":                  L1BlockSync,
 	"l1_verification_batch_no":       L1VerificationsBatchNo,

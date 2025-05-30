@@ -168,10 +168,10 @@ func (s *L1Syncer) StopSyncer() {
 }
 
 // RunQueryBlocksOnce performs a one-time query of blockchain logs between the last checked block and the latest block.
-func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error) {
+func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, startBlockNumber uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error) {
 	s.StartSync()
 
-	s.lastCheckedL1Block.Store(lastCheckedBlock)
+	// s.lastCheckedL1Block.Store(startBlockNumber)
 
 	defer func() {
 		log.Info(fmt.Sprintf("[%s] Stopping L1 RunQueryBlocksOnce syncer", logPrefix))
@@ -190,7 +190,7 @@ func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, lastCheckedBlock uint64,
 		return
 	}
 
-	log.Info(fmt.Sprintf("[%s] RunQueryBlocksOnce from %d -> %d", logPrefix, s.lastCheckedL1Block.Load(), latestL1Block))
+	log.Info(fmt.Sprintf("[%s] RunQueryBlocksOnce from %d -> %d", logPrefix, startBlockNumber, latestL1Block))
 
 	if latestL1Block <= s.lastCheckedL1Block.Load() {
 		return
@@ -200,7 +200,7 @@ func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, lastCheckedBlock uint64,
 
 	status := make(chan uint8)
 
-	go s.queryBlocks(logPrefix, lastCheckedBlock, latestL1Block, logsCh, errCh, status)
+	go s.queryBlocks(logPrefix, startBlockNumber, latestL1Block, logsCh, errCh, status)
 
 	statusCode := <-status
 
@@ -218,7 +218,7 @@ func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, lastCheckedBlock uint64,
 
 // RunQueryBlocks
 // It prevents multiple simultaneous executions and manages synchronization states across the process lifecycle.
-func (s *L1Syncer) RunQueryBlocks(logPrefix string, lastCheckedBlock uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error) {
+func (s *L1Syncer) RunQueryBlocks(logPrefix string, startBlockNumber uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error) {
 	//if already started, don't start another thread
 	if s.IsSyncStarted() {
 		return
@@ -226,7 +226,7 @@ func (s *L1Syncer) RunQueryBlocks(logPrefix string, lastCheckedBlock uint64, log
 
 	s.StartSync()
 
-	s.lastCheckedL1Block.Store(lastCheckedBlock)
+	//	s.lastCheckedL1Block.Store(startBlockNumber)
 
 	//start a thread to check for new l1 block with interval
 	go func() {
@@ -257,13 +257,13 @@ func (s *L1Syncer) RunQueryBlocks(logPrefix string, lastCheckedBlock uint64, log
 
 				status := make(chan uint8)
 
-				go s.queryBlocks(logPrefix, lastCheckedBlock, latestL1Block, logsCh, errCh, status)
+				go s.queryBlocks(logPrefix, startBlockNumber, latestL1Block, logsCh, errCh, status)
 
 				statusCode := <-status
 
 				if statusCode == statusCodeNoError {
 					s.lastCheckedL1Block.Store(latestL1Block)
-					lastCheckedBlock = latestL1Block
+					startBlockNumber = latestL1Block
 				}
 
 				close(status)
