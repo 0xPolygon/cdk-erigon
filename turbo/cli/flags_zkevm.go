@@ -231,6 +231,8 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L2DataStreamerMaxEntryChan:             ctx.Uint64(utils.L2DataStreamerMaxEntryChanFlag.Name),
 		L2DataStreamerUseTLS:                   ctx.Bool(utils.L2DataStreamerUseTLSFlag.Name),
 		L2DataStreamerTimeout:                  l2DataStreamTimeout,
+		L2NatsHost:                             ctx.String(utils.L2NatsHostFlag.Name),
+		L2NatsPort:                             ctx.Int(utils.L2NatsPortFlag.Name),
 		L2ShortCircuitToVerifiedBatch:          l2ShortCircuitToVerifiedBatchVal,
 		L1SyncStartBlock:                       ctx.Uint64(utils.L1SyncStartBlock.Name),
 		BlobRecovery:                           ctx.Bool(utils.BlobRecovery.Name),

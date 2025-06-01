@@ -17,14 +17,19 @@
 package natsstream
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/erigontech/erigon/zk/datastream/types"
 
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // Config contains configuration parameters for the NATS server
@@ -61,6 +66,9 @@ type Config struct {
 
 	// Debug enables debug logging
 	Debug bool
+
+	// ChainId is the blockchain chain ID to use for streams
+	ChainId uint64
 }
 
 // DefaultConfig returns default configuration values
@@ -77,6 +85,7 @@ func DefaultConfig() Config {
 		MaxMemory:        1 * 1024 * 1024 * 1024,  // 1GB
 		MaxStorage:       10 * 1024 * 1024 * 1024, // 10GB
 		Debug:            false,
+		ChainId:          0,
 	}
 }
 
@@ -87,6 +96,18 @@ type Manager struct {
 	logger log.Logger
 	lock   sync.RWMutex
 	url    string
+
+	// JetStream singleton components
+	js     jetstream.JetStream
+	jsOnce sync.Once
+	jsErr  error
+	jsLock sync.RWMutex
+
+	// Stream management
+	mainStream      jetstream.Stream
+	streamsInit     sync.Once
+	streamsInitErr  error
+	streamsInitLock sync.RWMutex
 }
 
 // NewManager creates a new NATS server manager
@@ -180,6 +201,19 @@ func (m *Manager) Stop() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
+	// Reset JetStream reference
+	m.jsLock.Lock()
+	m.js = nil
+	m.jsErr = nil
+	m.jsOnce = sync.Once{} // Reset the once so it can be initialized again after restart
+	m.jsLock.Unlock()
+
+	// Reset streams
+	m.streamsInitLock.Lock()
+	m.mainStream = nil
+	m.streamsInit = sync.Once{}
+	m.streamsInitLock.Unlock()
+
 	if m.server == nil {
 		return
 	}
@@ -224,4 +258,174 @@ func (m *Manager) IsRunning() bool {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	return m.server != nil
+}
+
+// GetJetStream returns or creates a singleton JetStream instance
+func (m *Manager) getJetStream() (jetstream.JetStream, error) {
+	// Fast path with read lock
+	m.jsLock.RLock()
+	if m.js != nil {
+		js := m.js
+		m.jsLock.RUnlock()
+		return js, nil
+	}
+	m.jsLock.RUnlock()
+
+	// Initialize JetStream once if not already created
+	m.jsOnce.Do(func() {
+		m.jsLock.Lock()
+		defer m.jsLock.Unlock()
+
+		// Double-check under write lock
+		if m.js == nil {
+			// Connect to NATS
+			conn, err := m.Connect()
+			if err != nil {
+				m.jsErr = fmt.Errorf("failed to connect to NATS: %w", err)
+				return
+			}
+
+			// Create JetStream context
+			js, err := jetstream.New(conn)
+			if err != nil {
+				m.jsErr = fmt.Errorf("failed to create JetStream context: %w", err)
+				conn.Close()
+				return
+			}
+
+			m.js = js
+			m.logger.Info("JetStream singleton initialized successfully")
+		}
+	})
+
+	m.jsLock.RLock()
+	defer m.jsLock.RUnlock()
+	return m.js, m.jsErr
+}
+
+// InitStreams initializes the streams for the configured chain ID
+// Since we only support one chain ID per service instance, this only needs to be called once
+func (m *Manager) InitStreams() error {
+	m.streamsInitLock.Lock()
+	defer m.streamsInitLock.Unlock()
+
+	// Check if chain ID is set
+	if m.config.ChainId == 0 {
+		return fmt.Errorf("chain ID not set in manager config")
+	}
+
+	m.streamsInit.Do(func() {
+		chainId := m.config.ChainId
+
+		// Get JetStream
+		js, err := m.getJetStream()
+		if err != nil {
+			m.streamsInitErr = fmt.Errorf("failed to get JetStream: %w", err)
+			return
+		}
+
+		// Initialize main stream
+		mainStreamName := fmt.Sprintf("DATASTREAM_%d", chainId)
+		mainStream, err := js.Stream(context.Background(), mainStreamName)
+		if err == nil {
+			m.mainStream = mainStream
+			m.logger.Info("Using existing main stream", "name", mainStreamName)
+		} else {
+			// Create main stream
+			mainStream, err = js.CreateStream(context.Background(), jetstream.StreamConfig{
+				Name:     mainStreamName,
+				Subjects: []string{"datastream.>"},
+				Storage:  jetstream.FileStorage,
+			})
+			if err != nil {
+				m.streamsInitErr = fmt.Errorf("failed to create main stream: %w", err)
+				return
+			}
+			m.mainStream = mainStream
+			m.logger.Info("Created new main stream", "name", mainStreamName)
+		}
+	})
+
+	return m.streamsInitErr
+}
+
+// GetOrCreateDataStream returns the JetStream instance
+func (m *Manager) GetOrCreateDataStream() (jetstream.JetStream, error) {
+	// Check if we have a chainId set
+	if m.config.ChainId == 0 {
+		return nil, fmt.Errorf("chain ID not set in manager config")
+	}
+
+	// Make sure streams are initialized
+	err := m.InitStreams()
+	if err != nil {
+		return nil, err
+	}
+
+	// Return the JetStream instance
+	return m.getJetStream()
+}
+
+// PublishMsg publishes a message to the main stream
+func (m *Manager) PublishMsg(msgFactory func() *nats.Msg) error {
+	stream, err := m.GetOrCreateDataStream()
+	if err != nil {
+		return err
+	}
+
+	_, err = stream.PublishMsg(context.Background(), msgFactory())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// PublishEntry adds an entry to the stream
+func (m *Manager) PublishEntry(entryType types.EntryType, data []byte) error {
+	// Check if we have a chainId set
+	if m.config.ChainId == 0 {
+		return fmt.Errorf("chain ID not set in manager config")
+	}
+
+	err := m.PublishMsg(func() *nats.Msg {
+		return &nats.Msg{
+			Subject: "datastream.entry",
+			Data:    data,
+			Header: nats.Header{
+				"EntryType": []string{strconv.Itoa(int(entryType))},
+			},
+		}
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to publish entry to stream: %w", err)
+	}
+
+	return nil
+}
+
+// PublishBookmark adds a bookmark to the stream
+func (m *Manager) PublishBookmark(bookmark []byte, entryNum uint64) error {
+	// Check if we have a chainId set
+	if m.config.ChainId == 0 {
+		return fmt.Errorf("chain ID not set in manager config")
+	}
+
+	err := m.PublishMsg(func() *nats.Msg {
+		return &nats.Msg{
+			Subject: "datastream.entry",
+			Data:    bookmark,
+			Header: nats.Header{
+				"EntryType": []string{"176"}, // BookmarkEntryType
+				"EntryNum":  []string{strconv.FormatUint(entryNum, 10)},
+			},
+		}
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to publish bookmark to stream: %w", err)
+	}
+
+	return nil
 }

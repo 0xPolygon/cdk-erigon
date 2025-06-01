@@ -15,6 +15,8 @@ type Zk struct {
 	L2DataStreamerMaxEntryChan             uint64
 	L2DataStreamerUseTLS                   bool
 	L2DataStreamerTimeout                  time.Duration
+	L2NatsHost                             string
+	L2NatsPort                             int
 	L2ShortCircuitToVerifiedBatch          bool
 	L1SyncStartBlock                       uint64
 	BlobRecovery                           bool

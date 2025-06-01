@@ -2,6 +2,7 @@ package natsstream
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -289,4 +290,118 @@ func TestManager_StartStop(t *testing.T) {
 		manager.Stop()
 		assert.False(t, manager.IsRunning())
 	}
+}
+
+func TestManager_ChainStreamOperations(t *testing.T) {
+	// Create a logger for testing
+	logger := log.New()
+	logger.SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StderrHandler))
+
+	// Create a temporary directory for NATS storage
+	tempDir, err := os.MkdirTemp("", "nats-chain-stream")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// Create config with JetStream enabled and specific chain ID
+	config := DefaultConfig()
+	config.Port = -1 // Use random port
+	config.ServerName = "chain-stream-server"
+	config.HTTPPort = 0 // Disable HTTP monitoring for tests
+	config.JetStreamEnabled = true
+	config.StorageDir = tempDir
+	config.ChainId = 12345 // Set a specific chain ID
+
+	// Create manager
+	manager := NewManager(config, logger)
+
+	// Start the server
+	err = manager.Start()
+	require.NoError(t, err)
+	defer manager.Stop()
+
+	// Test 1: InitStreams should create streams with chain ID in the name
+	err = manager.InitStreams()
+	require.NoError(t, err, "Failed to initialize streams")
+
+	// Connect to verify stream was created correctly
+	nc, err := manager.Connect()
+	require.NoError(t, err)
+	defer nc.Close()
+
+	js, err := jetstream.New(nc)
+	require.NoError(t, err)
+
+	// The stream name should include the chain ID
+	expectedStreamName := fmt.Sprintf("DATASTREAM_%d", config.ChainId)
+
+	// Verify stream exists and has correct configuration
+	ctx := context.Background()
+	stream, err := js.Stream(ctx, expectedStreamName)
+	require.NoError(t, err, "Stream with chain ID was not created")
+
+	// Check stream configuration
+	info, err := stream.Info(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, expectedStreamName, info.Config.Name, "Stream name doesn't match expected format with chain ID")
+	assert.Contains(t, info.Config.Subjects, "datastream.>",
+		"Stream subjects don't include chain ID pattern")
+
+	// Test 2: GetOrCreateDataStream should return a JetStream instance that can publish
+	dataStream, err := manager.GetOrCreateDataStream()
+	require.NoError(t, err, "Failed to get data stream")
+	assert.NotNil(t, dataStream, "Data stream should not be nil")
+
+	// Test 3: Direct publishing to the stream to verify it works
+	messageReceived := make(chan bool)
+
+	// Create a consumer on the stream
+	consumer, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+		Durable:       "test_consumer",
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		DeliverPolicy: jetstream.DeliverAllPolicy,
+	})
+	require.NoError(t, err)
+
+	// Create subscription to receive messages
+	sub, err := consumer.Consume(func(msg jetstream.Msg) {
+		// Just ack and signal receipt
+		err := msg.Ack()
+		assert.NoError(t, err)
+		messageReceived <- true
+	})
+	require.NoError(t, err)
+	defer sub.Stop()
+
+	// Publish a test message directly to the stream with proper subject
+	_, err = js.Publish(ctx, fmt.Sprintf("datastream.%d.test", config.ChainId), []byte("test message"))
+	require.NoError(t, err, "Failed to directly publish to stream")
+
+	// Wait for the message to be received
+	select {
+	case <-messageReceived:
+		// Test passed
+	case <-time.After(5 * time.Second):
+		t.Fatal("Timed out waiting for message")
+	}
+
+	// Test 4: Error handling - Invalid chain ID
+	// Create a new manager with zero chain ID
+	invalidConfig := DefaultConfig()
+	invalidConfig.Port = -1
+	invalidConfig.ChainId = 0 // Invalid chain ID
+	invalidManager := NewManager(invalidConfig, logger)
+
+	err = invalidManager.Start()
+	require.NoError(t, err)
+	defer invalidManager.Stop()
+
+	// Attempt to initialize streams, which should fail due to missing chain ID
+	err = invalidManager.InitStreams()
+	assert.Error(t, err, "InitStreams should fail with zero chain ID")
+	assert.Contains(t, err.Error(), "chain ID not set",
+		"Error message should indicate chain ID issue")
+
+	// Attempt to get data stream, which should also fail
+	_, err = invalidManager.GetOrCreateDataStream()
+	assert.Error(t, err, "GetOrCreateDataStream should fail with zero chain ID")
 }

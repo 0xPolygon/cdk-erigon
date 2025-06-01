@@ -457,6 +457,16 @@ var (
 		Usage: "The time to wait for data to arrive from the stream before reporting an error (0s doesn't check)",
 		Value: "3s",
 	}
+	L2NatsHostFlag = cli.StringFlag{
+		Name:  "zkevm.l2-nats-host",
+		Usage: "address to expose nats endpoint",
+		Value: "",
+	}
+	L2NatsPortFlag = cli.StringFlag{
+		Name:  "zkevm.l2-nats-port",
+		Usage: "port to expose nats endpoint",
+		Value: "",
+	}
 	L2ShortCircuitToVerifiedBatchFlag = cli.BoolFlag{
 		Name:  "zkevm.l2-short-circuit-to-verified-batch",
 		Usage: "Short circuit block execution up to the batch after the latest verified batch (default: true). When disabled, the sequencer will execute all downloaded batches",

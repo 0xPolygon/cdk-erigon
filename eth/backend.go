@@ -991,15 +991,18 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			backend.config.GasPriceHistoryCount,
 		)
 
-		backend.natsManager = natsstream.NewManager(natsstream.Config{
-			Host:             "0.0.0.0", // Listen on all interfaces
-			Port:             4222,
+		natsConfig := natsstream.Config{
+			Host:             config.L2NatsHost,
+			Port:             config.L2NatsPort,
 			ServerName:       fmt.Sprintf("erigon-nats-chain-%d", config.NetworkID),
 			ClusterName:      fmt.Sprintf("erigon-cluster-chain-%d", config.NetworkID),
 			JetStreamEnabled: true,
 			StorageDir:       filepath.Join(stack.Config().Dirs.DataDir, "nats-data"),
 			Debug:            config.LogLevel <= log.LvlDebug,
-		}, logger)
+			ChainId:          config.NetworkID,
+		}
+
+		backend.natsManager = natsstream.NewManager(natsConfig, logger)
 
 		if err := backend.natsManager.Start(); err != nil {
 			log.Error(err.Error())
