@@ -1,4 +1,4 @@
-name: Unwinds tests
+name: Unwinds tests type-1 PMT
 on:
   pull_request:
     branches:

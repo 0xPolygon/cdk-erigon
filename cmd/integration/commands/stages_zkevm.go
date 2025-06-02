@@ -53,6 +53,10 @@ func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *
 	var genesis *types.Genesis
 
 	zkCfg, err := loadZkConfig(config)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to load eth config from %s: %v", config, err))
+	}
+
 	if strings.HasPrefix(chain, "dynamic") {
 		if config == "" {
 			panic("Config file is required for dynamic chain")
@@ -67,9 +71,6 @@ func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *
 		genesis.GasLimit = dConf.GasLimit
 		genesis.Difficulty = big.NewInt(dConf.Difficulty)
 
-		if err != nil {
-			panic(fmt.Sprintf("Failed to load eth config from %s: %v", config, err))
-		}
 		if !zkCfg.Commitment.IsValid() {
 			panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", zkCfg.Commitment, ethconfig.ValidCommitments()))
 		}
