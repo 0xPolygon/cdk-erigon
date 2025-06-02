@@ -35,7 +35,6 @@ type Zk struct {
 	L1CacheEnabled                         bool
 	L1CachePort                            uint
 	RpcRateLimits                          int
-	RpcGetBatchWitnessConcurrencyLimit     int
 	DatastreamVersion                      int
 	SequencerBlockSingleBlockVerify        bool
 	SequencerBlockSealTime                 time.Duration
@@ -102,11 +101,6 @@ type Zk struct {
 	InfoTreeUpdateInterval         time.Duration
 	BadBatches                     []uint64
 	SealBatchImmediatelyOnOverflow bool
-	MockWitnessGeneration          bool
-	WitnessCacheEnabled            bool
-	WitnessCachePurge              bool
-	WitnessCacheBatchAheadOffset   uint64
-	WitnessCacheBatchBehindOffset  uint64
 	WitnessContractInclusion       []common.Address
 	BadTxAllowance                 uint64
 	RejectLowGasPriceTransactions  bool

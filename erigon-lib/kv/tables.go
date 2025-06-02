@@ -542,7 +542,6 @@ const (
 	DISCARDED_TRANSACTIONS_BY_HASH    = "discarded_transactions_by_hash"  // mapping txHash -> blockNum
 	TablePoolLimbo                    = "PoolLimbo"
 	BATCH_ENDS                        = "batch_ends"
-	WITNESS_CACHE                     = "witness_cache"
 	BAD_TX_HASHES                     = "bad_tx_hashes"
 	//Diagnostics tables
 	DiagSystemInfo = "DiagSystemInfo"
@@ -784,7 +783,6 @@ var ChaindataTablesInitial = []string{
 	DISCARDED_TRANSACTIONS_BY_HASH,
 	TablePoolLimbo,
 	BATCH_ENDS,
-	WITNESS_CACHE,
 	BAD_TX_HASHES,
 }
 

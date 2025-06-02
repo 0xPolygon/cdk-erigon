@@ -234,7 +234,6 @@ func DefaultZkStages(
 	exec stages.ExecuteBlockCfg,
 	hashState stages.HashStateCfg,
 	zkInterHashesCfg ZkInterHashesCfg,
-	stageWitnessCfg WitnessCfg,
 	history stages.HistoryCfg,
 	logIndex stages.LogIndexCfg,
 	callTraces stages.CallTracesCfg,
@@ -441,21 +440,6 @@ func DefaultZkStages(
 			},
 			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
 				return nil
-			},
-		},
-		{
-			ID:          stages2.Witness,
-			Description: "Generate witness caches for each block",
-			Disabled:    false,
-			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
-				// For X Layer, split db and ac
-				return SpawnStageWitness(s, u, ctx, txc.Tx, txc.TxSmt, stageWitnessCfg)
-			},
-			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
-				return UnwindWitnessStage(u, txc.Tx, stageWitnessCfg, ctx)
-			},
-			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
-				return PruneWitnessStage(p, tx, stageWitnessCfg, ctx)
 			},
 		},
 		{

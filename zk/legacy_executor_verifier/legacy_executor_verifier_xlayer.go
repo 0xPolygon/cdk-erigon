@@ -2,16 +2,13 @@ package legacy_executor_verifier
 
 import (
 	"context"
-	"encoding/hex"
 	"strconv"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/smt"
-	"github.com/ledgerwatch/log/v3"
 )
 
 func minUint64(a, b uint64) uint64 {
@@ -63,24 +60,6 @@ func (v *LegacyExecutorVerifier) VerifyWithMockExecutor(request *VerifierRequest
 			return verifierBundle, err
 		}
 
-		// For X Layer, split db and ac
-		latestBlock, err := stages.GetStageProgress(tx, stages.Execution)
-		if err != nil {
-			return nil, err
-		}
-
-		block := minUint64(latestBlock, blockNumbers[len(blockNumbers)-1])
-		cache := map[string]map[string][]byte{}
-		if v.cache != nil {
-			cache = v.cache.CascadeGetCurrentBatchSnapshotCache(block)
-		}
-		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, txsmt, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull, cache)
-		if err != nil {
-			return verifierBundle, err
-		}
-
-		log.Debug("witness generated", "data", hex.EncodeToString(witness))
-
 		// now we need to figure out the timestamp limit for this payload.  It must be:
 		// timestampLimit >= currentTimestamp (from batch pre-state) + deltaTimestamp
 		// so to ensure we have a good value we can take the timestamp of the last block in the batch
@@ -94,7 +73,7 @@ func (v *LegacyExecutorVerifier) VerifyWithMockExecutor(request *VerifierRequest
 		oldAccInputHash := common.HexToHash("0x0")
 		timestampLimit := lastBlock.Time()
 		_ = &Payload{
-			Witness:                 witness,
+			Witness:                 nil,
 			DataStream:              streamBytes,
 			Coinbase:                v.cfg.AddressSequencer.String(),
 			OldAccInputHash:         oldAccInputHash.Bytes(),
@@ -114,7 +93,7 @@ func (v *LegacyExecutorVerifier) VerifyWithMockExecutor(request *VerifierRequest
 		verifierBundle.Response = &VerifierResponse{
 			Valid:            true,
 			OriginalCounters: request.Counters,
-			Witness:          witness,
+			Witness:          nil,
 			ExecutorResponse: nil,
 			Error:            nil,
 		}

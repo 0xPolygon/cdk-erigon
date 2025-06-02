@@ -10,6 +10,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
+	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/urfave/cli/v2"
 )
 
@@ -76,6 +77,12 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		}
 		cfg.XLayer.Apollo.NamespaceName = strings.Join(ns, ",")
 	}
+
+	// Since witness generation has been removed, sequencer must use mock executor
+	if sequencer.IsSequencer() && !cfg.XLayer.ExecutorMock {
+		panic("Witness generation has been removed, sequencer must use mock executor (--zkevm.executor-mock)")
+	}
+
 }
 
 func ApplyFlagsForNodeXLayerConfig(ctx *cli.Context, cfg *nodecfg.Config) {

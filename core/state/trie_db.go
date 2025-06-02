@@ -827,18 +827,6 @@ func (tsw *TrieStateWriter) WriteHistory() error {
 	return nil
 }
 
-func (tds *TrieDbState) makeBlockWitnessForPrefix(prefix []byte, trace bool, rl trie.RetainDecider, isBinary bool) (*trie.Witness, error) {
-	tds.tMu.Lock()
-	defer tds.tMu.Unlock()
-
-	t := tds.t
-	// if isBinary {
-	// 	t = trie.HexToBin(tds.t).Trie()
-	// }
-
-	return t.ExtractWitnessForPrefix(prefix, trace, rl)
-}
-
 func (tds *TrieDbState) makeBlockWitness(trace bool, rl trie.RetainDecider, isBinary bool) (*trie.Witness, error) {
 	tds.tMu.Lock()
 	defer tds.tMu.Unlock()
