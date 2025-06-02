@@ -150,11 +150,12 @@ else
   echo "FAILED: expected $EXPECTED_INCREASE, got $RECIPIENT_BALANCE_AFTER"; exit 1
 fi
 
-echo -n "Verifying code removed... "
-if [[ "$(cast rpc eth_getCode "$CONTRACT_ADDRESS" latest --rpc-url "$RPC_URL")" == "0x" ]]; then
-  echo "CLEARED";
+echo -n "Verifying code not removed... "
+code=$(cast rpc eth_getCode "$CONTRACT_ADDRESS" latest --rpc-url "$RPC_URL")
+if [[ "$code" == "0x" ]]; then
+  echo "CODE CLEARED - UNEXPECTED"; exit 1
 else
-  echo "STILL EXISTS"; exit 1
+  echo "CODE STILL EXISTS - EXPECTED";
 fi
 
 echo "--------------END OF TEST--------------"
