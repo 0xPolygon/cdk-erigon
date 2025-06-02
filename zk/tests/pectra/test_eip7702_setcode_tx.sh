@@ -129,3 +129,46 @@ if [[ "$ONCHAIN_CODE" != "$EXPECTED_CODE" ]]; then
 fi
 
 echo "Verified: EOA ($EOA_ADDR) now delegates to $CONTRACT_ADDR."
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 4) Check that we can call a contract's function using the EOA
+# ─────────────────────────────────────────────────────────────────────────────
+echo "Calling setStored(uint256) on the contract using the EOA..."
+SET_VALUE=777
+SET_VALUE_STATUS=$(cast send "$EOA_ADDR" "setStored(uint256)" $SET_VALUE --rpc-url "$RPC_URL" --private-key "$PK_EOA" --gas-limit 50000 --json | jq -r '.status')
+
+if [[ "$SET_VALUE_STATUS" -ne 1 ]]; then
+  echo "Error: setStored(uint256) failed with status $SET_VALUE_RES" >&2
+  exit 1
+fi
+
+echo "Successfully called setStored(uint256) on the contract using the EOA."
+
+VALUE=$(cast call "$EOA_ADDR" "stored()(uint256)" --rpc-url "$RPC_URL")
+
+if [[ "$VALUE" != "$SET_VALUE" ]]; then
+  echo "Error: expected stored() to return $SET_VALUE, got $VALUE" >&2
+  exit 1
+fi
+echo "Successfully called getStored() on the contract using the EOA. Value: $VALUE"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 5) Call the contract's function with event and check the log
+# ─────────────────────────────────────────────────────────────────────────────
+echo "Calling fallback() on the contract with event..."
+EVENT_SIGNATURE=$(cast send "$EOA_ADDR" "fallback()" --rpc-url "$RPC_URL" --private-key "$PK_EOA" --gas-limit 50000 --json | jq -r '.logs[0].topics[0]')
+
+# check that the log has the expected event signature
+EXPECTED_EVENT_SIG=$(cast keccak "FallbackCalled(address,uint256,bytes)")
+if [[ "$EVENT_SIGNATURE" != "$EXPECTED_EVENT_SIG" ]]; then
+  echo "Error: unexpected event signature in log:" >&2
+  echo "  got: $EVENT_SIGNATURE" >&2
+  echo "  want: $EXPECTED_EVENT_SIG" >&2
+  exit 1
+fi
+
+echo "Successfully called fallback() on the contract with event. Event signature: $EVENT_SIGNATURE"
+
+echo "All EIP7702 tests passed successfully!"
+
+
