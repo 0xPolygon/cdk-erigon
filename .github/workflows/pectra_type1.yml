@@ -1,8 +1,5 @@
 name: Pectra type1 test
 on:
-  push:
-    branches:
-      - project/pp2
   pull_request:
     branches:
       - project/pp2

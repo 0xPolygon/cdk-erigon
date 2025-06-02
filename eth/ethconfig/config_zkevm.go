@@ -51,6 +51,7 @@ type Zk struct {
 	SequencerResequenceReuseL1InfoIndex    bool
 	SequencerDecodedTxCacheSize            int
 	SequencerDecodedTxCacheTTL             time.Duration
+	SequencerResequenceInfoTreeOffset      *L1InfoTreeOffset
 	ExecutorUrls                           []string
 	ExecutorStrictMode                     bool
 	ExecutorRequestTimeout                 time.Duration
@@ -117,6 +118,7 @@ type Zk struct {
 	WitnessCacheBatchAheadOffset   uint64
 	WitnessCacheBatchBehindOffset  uint64
 	WitnessContractInclusion       []common.Address
+	AlwaysGenerateBatchL2Data      bool
 	RejectLowGasPriceTransactions  bool
 	RejectLowGasPriceTolerance     float64
 	LogLevel                       log.Lvl
@@ -126,8 +128,8 @@ type Zk struct {
 	L2InfoTreeUpdatesBatchSize     uint64
 	L2InfoTreeUpdatesEnabled       bool
 
-	Commitment      Commitment
-	HonourChainspec bool
+	Commitment      Commitment `yaml:"zkevm.initial-commitment"`
+	HonourChainspec bool       `yaml:"zkevm.honour-chainspec"`
 }
 
 type Commitment string
@@ -145,7 +147,7 @@ func (c Commitment) IsValid() bool {
 	return false
 }
 
-func (c Commitment) ValidCommitments() []Commitment {
+func ValidCommitments() []Commitment {
 	return []Commitment{CommitmentPMT, CommitmentSMT}
 }
 
@@ -153,7 +155,9 @@ func (c Commitment) IsType1() bool {
 	return c == CommitmentPMT
 }
 
-var DefaultZkConfig = &Zk{}
+var DefaultZkConfig = &Zk{
+	Commitment: CommitmentSMT,
+}
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
 	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && !c.HasExecutors())
@@ -182,4 +186,10 @@ func (c *Zk) UsingSMT() bool {
 
 func (c *Zk) UsingPMT() bool {
 	return c.Commitment == CommitmentPMT
+}
+
+type L1InfoTreeOffset struct {
+	Index           uint64
+	Offset          int64
+	ExpectedGerHash common.Hash
 }
