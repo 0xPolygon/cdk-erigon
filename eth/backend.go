@@ -1107,11 +1107,18 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				cfg.AddressGerManager,
 			}
 			l1Topics := [][]libcommon.Hash{{
-				contracts.InitialSequenceBatchesTopic,
-				contracts.AddNewRollupTypeTopic,
-				contracts.AddNewRollupTypeTopicBanana,
-				contracts.CreateNewRollupTopic,
-				contracts.UpdateRollupTopic,
+				contracts.InitialSequenceBatchesTopic, //
+				contracts.AddNewRollupTypeTopic,       //
+				contracts.AddNewRollupTypeTopicBanana, //
+				contracts.CreateNewRollupTopic,        //
+				contracts.UpdateRollupTopic,           //
+
+				contracts.SequenceBatchesTopicPreEtrog,
+				contracts.SequenceBatchesTopicEtrog,
+				contracts.RollbackBatchesTopic,
+				contracts.VerificationTopicPreEtrog,
+				contracts.VerificationTopicEtrog,
+				contracts.VerificationValidiumTopicEtrog,
 				contracts.UpdateL1InfoTreeTopic,
 				contracts.UpdateL1InfoTreeV2Topic,
 			}}
