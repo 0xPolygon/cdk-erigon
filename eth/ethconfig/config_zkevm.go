@@ -128,8 +128,8 @@ type Zk struct {
 	L2InfoTreeUpdatesBatchSize     uint64
 	L2InfoTreeUpdatesEnabled       bool
 
-	Commitment      Commitment
-	HonourChainspec bool
+	Commitment      Commitment `yaml:"zkevm.initial-commitment"`
+	HonourChainspec bool       `yaml:"zkevm.honour-chainspec"`
 }
 
 type Commitment string
@@ -147,7 +147,7 @@ func (c Commitment) IsValid() bool {
 	return false
 }
 
-func (c Commitment) ValidCommitments() []Commitment {
+func ValidCommitments() []Commitment {
 	return []Commitment{CommitmentPMT, CommitmentSMT}
 }
 
@@ -155,7 +155,9 @@ func (c Commitment) IsType1() bool {
 	return c == CommitmentPMT
 }
 
-var DefaultZkConfig = &Zk{}
+var DefaultZkConfig = &Zk{
+	Commitment: CommitmentSMT,
+}
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
 	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && !c.HasExecutors())

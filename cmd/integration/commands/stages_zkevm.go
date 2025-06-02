@@ -2,7 +2,9 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"math/big"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -28,7 +30,20 @@ import (
 	stages2 "github.com/erigontech/erigon/turbo/stages"
 	"github.com/erigontech/erigon/zk/sequencer"
 	stages3 "github.com/erigontech/erigon/zk/stages"
+	"gopkg.in/yaml.v3"
 )
+
+func loadZkConfig(path string) (*ethconfig.Zk, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	cfg := ethconfig.DefaultZkConfig
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
 
 func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *stagedsync.Sync) {
 	historyV3, pm := kvcfg.HistoryV3.FromDB(db), fromdb.PruneMode(db)
@@ -37,6 +52,7 @@ func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *
 
 	var genesis *types.Genesis
 
+	zkCfg, err := loadZkConfig(config)
 	if strings.HasPrefix(chain, "dynamic") {
 		if config == "" {
 			panic("Config file is required for dynamic chain")
@@ -50,6 +66,16 @@ func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *
 		genesis.Timestamp = dConf.Timestamp
 		genesis.GasLimit = dConf.GasLimit
 		genesis.Difficulty = big.NewInt(dConf.Difficulty)
+
+		if err != nil {
+			panic(fmt.Sprintf("Failed to load eth config from %s: %v", config, err))
+		}
+		if !zkCfg.Commitment.IsValid() {
+			panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", zkCfg.Commitment, ethconfig.ValidCommitments()))
+		}
+
+		genesis.Type1 = zkCfg.Commitment.IsType1()
+		genesis.HonourChainspec = zkCfg.HonourChainspec
 	} else {
 		genesis = core.GenesisBlockByChainName(chain)
 	}
@@ -68,8 +94,9 @@ func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *
 	cfg.Prune = pm
 	cfg.BatchSize = batchSize
 	cfg.DeprecatedTxPool.Disable = true
-	cfg.Genesis = core.GenesisBlockByChainName(chain)
+	cfg.Genesis = genesis
 	cfg.Dirs = datadir.New(datadirCli)
+	cfg.Zk = zkCfg
 
 	logger := log.New()
 	br, _ := blocksIO(db, logger)

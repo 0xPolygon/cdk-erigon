@@ -2458,7 +2458,7 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 		genesis.HonourChainspec = ctx.Bool(HonourChainspec.Name)
 		commitment := ethconfig.Commitment(ctx.String(Commitment.Name))
 		if !commitment.IsValid() {
-			panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(Commitment.Name), commitment.ValidCommitments()))
+			panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(Commitment.Name), ethconfig.ValidCommitments()))
 		}
 		genesis.Type1 = commitment.IsType1()
 

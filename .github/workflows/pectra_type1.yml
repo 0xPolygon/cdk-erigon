@@ -2,7 +2,7 @@ name: Pectra type1 test
 on:
   pull_request:
     branches:
-      - project/pp2**
+      - project/pp2
     types:
       - opened
       - reopened

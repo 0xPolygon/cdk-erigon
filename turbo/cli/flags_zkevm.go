@@ -180,7 +180,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 
 	commitment := ethconfig.Commitment(ctx.String(utils.Commitment.Name))
 	if !commitment.IsValid() {
-		panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(utils.Commitment.Name), commitment.ValidCommitments()))
+		panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(utils.Commitment.Name), ethconfig.ValidCommitments()))
 	}
 
 	var l1InfoTreeOffset *ethconfig.L1InfoTreeOffset

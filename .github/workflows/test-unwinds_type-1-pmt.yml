@@ -2,7 +2,7 @@ name: Unwinds tests
 on:
   pull_request:
     branches:
-      - project/pp2**
+      - project/pp2
   workflow_dispatch:
 
 jobs:
@@ -33,16 +33,16 @@ jobs:
           cd ./cdk-erigon
           cp ./zk/tests/unwinds/config-shared/dynamic-integration-allocs.json ./
           cp ./zk/tests/unwinds/config-shared/dynamic-integration-conf.json ./
-          cp ./zk/tests/unwinds/config-type-1/dynamic-integration-chainspec.json ./
-          cp ./zk/tests/unwinds/config-type-1/dynamic-integration8.yaml ./
-
-      - name: Prepare data stream
-        run: |
-          cd ./cdk-erigon/zk/tests/unwinds/datastream
-          tar -xzf ./datastream-net8-upto-11318-101.zip ./
+          cp ./zk/tests/unwinds/config-type1-normalcy-pmt-pectra/dynamic-integration8.yaml ./
+          cp ./zk/tests/unwinds/config-type1-normalcy-pmt-pectra/dynamic-integration-chainspec.json ./
 
       - name: Run tests
         run: |
           cd ./cdk-erigon
           chmod +x ./zk/tests/unwinds/unwind.sh
-          ./zk/tests/unwinds/unwind.sh
+          dsDir=dynamic-integration8-normalcy-pmt-prague
+          dsFile=dynamic-integration8-normalcy-pmt-prague.tar.gz
+          firstStop=505
+          secondStop=1000
+          unwindToBatch=127
+          ./zk/tests/unwinds/unwind.sh $dsDir $dsFile $firstStop $secondStop $unwindToBatch

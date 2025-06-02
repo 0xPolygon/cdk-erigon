@@ -7,12 +7,14 @@ set -o pipefail  # Capture errors in pipelines
 configPath=.
 dataPath="./datadir"
 datastreamPath="zk/tests/unwinds/datastream"
-datastreamZipFileName="./datastream-net8-upto-11318-101.zip"
-firstStop=11203
-secondStop=11315
-unwindBatch=70
+datastreamDir=$1
+datastreamZipFileName=$2
+firstStop=$3
+secondStop=$4
+unwindBatch=$5
 datastreamPort=6900
 logFile="script.log"
+chainName=$(yq '.chain' "$configPath/dynamic-integration8.yaml")
 
 # Redirect stdout to log file and keep stderr to console
 exec > >(tee -i "$logFile")  # Redirect stdout to log file
@@ -20,18 +22,19 @@ exec 2> >(tee -a "$logFile" >&2)  # Redirect stderr to log file and keep it on c
 
 # Cleanup function
 cleanup() {
-    echo "[$(date)] Cleaning up..."
+    echo "[$(date)] Cleaning up..." >&2
     if [[ -n "$dspid" ]]; then
         echo "[$(date)] Killing process with PID $dspid on port $datastreamPort"
         kill -9 "$dspid" || echo "[$(date)] No process to kill on port $datastreamPort"
     fi
 
     echo "[$(date)] Cleaning data directories"
-    #rm -rf "$dataPath"
+    rm -rf "$dataPath"
 
     echo "[$(date)] Total execution time: $SECONDS seconds"
 }
 trap cleanup EXIT
+trap 'cleanup; exit 1' SIGINT SIGTERM
 
 # Kill existing datastream server if running
 echo "[$(date)] Checking for existing datastream server on port $datastreamPort..."
@@ -56,7 +59,7 @@ rm -rf "$dataPath"
 
 # Start datastream server
 echo "[$(date)] Starting datastream server..."
-go run ./zk/debug_tools/datastream-host --file="$(pwd)/zk/tests/unwinds/datastream/hermez-dynamic-integration8-datastream/data-stream.bin" &
+go run ./zk/debug_tools/datastream-host --file="$(pwd)/$datastreamPath/$datastreamDir/data-stream.bin" &
 dspid=$!
 echo "[$(date)] Datastream server PID: $dspid"
 
@@ -76,20 +79,24 @@ dump_data() {
 }
 
 # Run Erigon to first stop
-echo "[$(date)] Running Erigon to BlockHeight: $firstStop"
-./build/bin/cdk-erigon \
+echo "[$(date)] Running Erigon to first stop, BlockHeight: $firstStop"
+timeout 300 ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
     --config="$configPath/dynamic-integration8.yaml" \
     --debug.limit="$firstStop"
 
+echo "[$(date)] Completed running Erigon to first stop"
+
 dump_data "$firstStop" "sync to first stop"
 
 # Run Erigon to second stop
-echo "[$(date)] Running Erigon to BlockHeight: $secondStop"
-./build/bin/cdk-erigon \
+echo "[$(date)] Running Erigon to second stop, BlockHeight: $secondStop"
+timeout 300 ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
     --config="$configPath/dynamic-integration8.yaml" \
     --debug.limit="$secondStop"
+
+echo "[$(date)] Completed running Erigon to second stop"
 
 dump_data "$secondStop" "sync to second stop"
 
@@ -98,8 +105,10 @@ echo "[$(date)] Unwinding to batch: $unwindBatch"
 go run ./cmd/integration state_stages_zkevm \
     --datadir="$dataPath/rpc-datadir" \
     --config="$configPath/dynamic-integration8.yaml" \
-    --chain=dynamic-integration \
+    --chain=$chainName \
     --unwind-batch-no="$unwindBatch" || { echo "Failed to unwind"; exit 1; }
+
+echo "[$(date)] Completed unwinding to batch: $unwindBatch"
 
 dump_data "${firstStop}-unwound" "after unwind"
 
@@ -169,10 +178,12 @@ compare_dumps "$dataPath/${firstStop}" "$dataPath/${firstStop}-unwound" "Unwind 
 
 # Resync to second stop
 echo "[$(date)] Resyncing Erigon to second stop: $secondStop"
-./build/bin/cdk-erigon \
+timeout 300 ./build/bin/cdk-erigon \
     --datadir="$dataPath/rpc-datadir" \
     --config="$configPath/dynamic-integration8.yaml" \
     --debug.limit="$secondStop"
+
+echo "[$(date)] Completed resyncing to second stop"
 
 dump_data "${secondStop}-sync-again" "after resyncing to second stop"
 
