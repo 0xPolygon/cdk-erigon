@@ -17,7 +17,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync/freezeblocks"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/l1infotree"
-	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	"github.com/ledgerwatch/erigon/zk/txpool"
@@ -82,7 +81,6 @@ func NewDefaultZkStages(ctx context.Context,
 		stagedsync.StageHashStateCfg(db, dirs, cfg.HistoryV3, agg),
 		// For X Layer, split db and ac
 		zkStages.StageZkInterHashesCfg(db, dbsmt, true, true, false, dirs.Tmp, blockReader, controlServer.Hd, cfg.HistoryV3, agg, cfg.Zk),
-		zkStages.StageWitnessCfg(db, dbsmt, cfg.Zk, controlServer.ChainConfig, engine, blockReader, agg, cfg.HistoryV3, dirs, cfg.WitnessContractInclusion, cfg.WitnessUnwindLimit),
 		stagedsync.StageHistoryCfg(db, cfg.Prune, dirs.Tmp),
 		stagedsync.StageLogIndexCfg(db, cfg.Prune, dirs.Tmp, cfg.Genesis.Config.NoPruneContracts),
 		stagedsync.StageCallTracesCfg(db, cfg.Prune, 0, dirs.Tmp),
@@ -109,7 +107,6 @@ func NewSequencerZkStages(ctx context.Context,
 	l1BlockSyncer *syncer.L1Syncer,
 	txPool *txpool.TxPool,
 	txPoolDb kv.RwDB,
-	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
 	infoTreeUpdater *l1infotree.Updater,
 	hook *Hook,
 ) []*stagedsync.Stage {
@@ -149,7 +146,6 @@ func NewSequencerZkStages(ctx context.Context,
 			&cfg.Miner,
 			txPool,
 			txPoolDb,
-			verifier,
 			uint16(cfg.YieldSize),
 			infoTreeUpdater,
 			hook,

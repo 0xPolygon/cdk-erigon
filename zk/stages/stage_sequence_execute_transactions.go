@@ -205,41 +205,15 @@ func attemptAddTransaction(
 	cfg SequenceBlockCfg,
 	sdb *stageDb,
 	ibs *state.IntraBlockState,
-	batchCounters *vm.BatchCounterCollector,
 	blockContext *evmtypes.BlockContext,
 	header *types.Header,
 	transaction types.Transaction,
 	effectiveGasPrice uint8,
 	l1Recovery bool,
 	forkId, l1InfoIndex uint64,
-	blockDataSizeChecker *BlockDataChecker,
 	ethBlockGasPool *core.GasPool,
-) (*types.Receipt, *core.ExecutionResult, *vm.TransactionCounter, overflowType, error) {
-	var batchDataOverflow, overflow bool
-	var err error
-
-	txCounters := vm.NewTransactionCounter(transaction, sdb.smt.GetDepth(), uint16(forkId), cfg.zk.VirtualCountersSmtReduction, cfg.zk.ShouldCountersBeUnlimited(l1Recovery))
-	overflow, err = batchCounters.AddNewTransactionCounters(txCounters)
-
-	// run this only once the first time, do not add it on rerun
-	if blockDataSizeChecker != nil {
-		txL2Data, err := txCounters.GetL2DataCache()
-		if err != nil {
-			return nil, nil, txCounters, overflowNone, err
-		}
-		batchDataOverflow = blockDataSizeChecker.AddTransactionData(txL2Data)
-		if batchDataOverflow {
-			log.Info("BatchL2Data limit reached. Not adding last transaction", "txHash", transaction.Hash())
-		}
-	}
-	if err != nil {
-		return nil, nil, txCounters, overflowNone, err
-	}
-	anyOverflow := overflow || batchDataOverflow
-	if anyOverflow && !l1Recovery {
-		log.Debug("Transaction preexecute overflow detected", "txHash", transaction.Hash(), "counters", batchCounters.CombineCollectorsNoChanges().UsedAsString())
-		return nil, nil, txCounters, overflowCounters, nil
-	}
+) (*types.Receipt, *core.ExecutionResult, overflowType, error) {
+	// Batch data size checking removed along with counters
 
 	// if not normalcy we want to create a gas pool per transaction (zkevm block gas limit is infinite), if normalcy create a pool per block.
 	var gasPool *core.GasPool
@@ -249,10 +223,8 @@ func attemptAddTransaction(
 		gasPool = ethBlockGasPool
 	}
 
-	// set the counter collector on the config so that we can gather info during the execution
-	cfg.zkVmConfig.CounterCollector = txCounters.ExecutionCounters()
-
-	// TODO: possibly inject zero tracer here!
+	// Remove counter collector from config since we're not using counters
+	cfg.zkVmConfig.CounterCollector = nil
 
 	snapshot := ibs.Snapshot()
 	ibs.Init(transaction.Hash(), common.Hash{}, 0)
@@ -291,44 +263,29 @@ func attemptAddTransaction(
 	if err != nil {
 		if errors.Is(err, core.ErrGasLimitReached) {
 			log.Debug("Transaction gas limit reached", "txHash", transaction.Hash())
-			return nil, nil, txCounters, overflowGas, nil
+			return nil, nil, overflowGas, nil
 		}
-		return nil, nil, txCounters, overflowNone, err
+		return nil, nil, overflowNone, err
 	}
 
-	if err = txCounters.ProcessTx(ibs, execResult.ReturnData); err != nil {
-		return nil, nil, txCounters, overflowNone, err
-	}
-
-	batchCounters.UpdateExecutionAndProcessingCountersCache(txCounters)
-	// now that we have executed we can check again for an overflow
-	if overflow, err = batchCounters.CheckForOverflow(l1InfoIndex != 0); err != nil {
-		return nil, nil, txCounters, overflowNone, err
-	}
-
-	counters := batchCounters.CombineCollectorsNoChanges().UsedAsString()
-	if overflow {
-		log.Debug("Transaction overflow detected", "txHash", transaction.Hash(), "coutners", counters)
-		ibs.RevertToSnapshot(snapshot)
-		return nil, nil, txCounters, overflowCounters, nil
-	}
 	if gasUsed > header.GasLimit {
 		log.Debug("Transaction overflows block gas limit", "txHash", transaction.Hash(), "txGas", receipt.GasUsed, "blockGasUsed", header.GasUsed)
 		ibs.RevertToSnapshot(snapshot)
-		return nil, nil, txCounters, overflowGas, nil
+		return nil, nil, overflowGas, nil
 	}
-	log.Debug("Transaction added", "txHash", transaction.Hash(), "coutners", counters)
 
-	// add the gas only if not reverted. This should not be moved above the overflow check
+	log.Debug("Transaction added", "txHash", transaction.Hash())
+
+	// add the gas only if not reverted
 	header.GasUsed = gasUsed
 
 	// we need to keep hold of the effective percentage used
 	// todo [zkevm] for now we're hard coding to the max value but we need to calc this properly
 	if err = sdb.hermezDb.WriteEffectiveGasPricePercentage(transaction.Hash(), effectiveGasPrice); err != nil {
-		return nil, nil, txCounters, overflowNone, err
+		return nil, nil, overflowNone, err
 	}
 
 	ibs.FinalizeTx(evm.ChainRules(), noop)
 
-	return receipt, execResult, txCounters, overflowNone, nil
+	return receipt, execResult, overflowNone, nil
 }

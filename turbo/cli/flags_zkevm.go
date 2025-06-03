@@ -132,10 +132,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		badBatches = append(badBatches, val)
 	}
 
-	// witness cache flags
-	// if dicabled, set limit to 0 and only check for it to be 0 or not
-	witnessCacheEnabled := ctx.Bool(utils.WitnessCacheEnable.Name)
-	witnessCachePurge := ctx.Bool(utils.WitnessCachePurge.Name)
 	var witnessInclusion []libcommon.Address
 	for _, s := range strings.Split(ctx.String(utils.WitnessContractInclusion.Name), ",") {
 		if s == "" {
@@ -173,7 +169,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L1FinalizedBlockRequirement:            ctx.Uint64(utils.L1FinalizedBlockRequirementFlag.Name),
 		L1ContractAddressCheck:                 ctx.Bool(utils.L1ContractAddressCheckFlag.Name),
 		L1ContractAddressRetrieve:              ctx.Bool(utils.L1ContractAddressRetrieveFlag.Name),
-		RpcGetBatchWitnessConcurrencyLimit:     ctx.Int(utils.RpcGetBatchWitnessConcurrencyLimitFlag.Name),
 		DatastreamVersion:                      ctx.Int(utils.DatastreamVersionFlag.Name),
 		RebuildTreeAfter:                       ctx.Uint64(utils.RebuildTreeAfterFlag.Name),
 		IncrementTreeAlways:                    ctx.Bool(utils.IncrementTreeAlways.Name),
@@ -228,11 +223,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		ACLPrintHistory:                        ctx.Int(utils.ACLPrintHistory.Name),
 		InfoTreeUpdateInterval:                 ctx.Duration(utils.InfoTreeUpdateInterval.Name),
 		SealBatchImmediatelyOnOverflow:         ctx.Bool(utils.SealBatchImmediatelyOnOverflow.Name),
-		MockWitnessGeneration:                  ctx.Bool(utils.MockWitnessGeneration.Name),
-		WitnessCacheEnabled:                    witnessCacheEnabled,
-		WitnessCachePurge:                      witnessCachePurge,
-		WitnessCacheBatchAheadOffset:           ctx.Uint64(utils.WitnessCacheBatchAheadOffset.Name),
-		WitnessCacheBatchBehindOffset:          ctx.Uint64(utils.WitnessCacheBatchBehindOffset.Name),
 		WitnessContractInclusion:               witnessInclusion,
 		BadTxAllowance:                         ctx.Uint64(utils.BadTxAllowance.Name),
 		GasPriceCheckFrequency:                 ctx.Duration(utils.GasPriceCheckFrequency.Name),
@@ -281,7 +271,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.L1RpcUrlFlag.Name, cfg.L1RpcUrl)
 	checkFlag(utils.L1MaticContractAddressFlag.Name, cfg.L1MaticContractAddress.Hex())
 	checkFlag(utils.L1FirstBlockFlag.Name, cfg.L1FirstBlock)
-	checkFlag(utils.RpcGetBatchWitnessConcurrencyLimitFlag.Name, cfg.RpcGetBatchWitnessConcurrencyLimit)
 	checkFlag(utils.RebuildTreeAfterFlag.Name, cfg.RebuildTreeAfter)
 	checkFlag(utils.L1BlockRangeFlag.Name, cfg.L1BlockRange)
 	checkFlag(utils.L1QueryDelayFlag.Name, cfg.L1QueryDelay)

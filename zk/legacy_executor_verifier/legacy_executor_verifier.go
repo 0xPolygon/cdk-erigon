@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier/proto/github.com/0xPolygonHermez/zkevm-node/state/runtime/executor"
@@ -123,8 +121,7 @@ type LegacyExecutorVerifier struct {
 	executorNumber         int
 	cancelAllVerifications atomic.Bool
 
-	streamServer     server.DataStreamServer
-	WitnessGenerator WitnessGenerator
+	streamServer server.DataStreamServer
 
 	promises    []*Promise[*VerifierBundle]
 	mtxPromises *sync.Mutex
@@ -139,7 +136,6 @@ func NewLegacyExecutorVerifier(
 	executors []*Executor,
 	db kv.RwDB,
 	dbsmt kv.RwDB,
-	witnessGenerator WitnessGenerator,
 	streamServer server.DataStreamServer,
 ) *LegacyExecutorVerifier {
 	return &LegacyExecutorVerifier{
@@ -149,7 +145,6 @@ func NewLegacyExecutorVerifier(
 		executorNumber:         0,
 		cancelAllVerifications: atomic.Bool{},
 		streamServer:           streamServer,
-		WitnessGenerator:       witnessGenerator,
 		promises:               make([]*Promise[*VerifierBundle], 0),
 		mtxPromises:            &sync.Mutex{},
 		// For X Layer, split db and ac
@@ -258,33 +253,6 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest) *Promise[
 			return verifierBundle, err
 		}
 
-		// For X Layer, split db and ac
-		var txsmt kv.Tx = nil
-		if v.dbsmt != nil {
-			txsmt, err = v.dbsmt.BeginRo(innerCtx)
-			if err != nil {
-				return verifierBundle, err
-			}
-			defer txsmt.Rollback()
-		}
-
-		latestBlock, err := stages.GetStageProgress(tx, stages.Execution)
-		if err != nil {
-			return nil, err
-		}
-
-		block := minUint64(latestBlock, blockNumbers[len(blockNumbers)-1])
-		cache := map[string]map[string][]byte{}
-		if v.cache != nil {
-			cache = v.cache.CascadeGetCurrentBatchSnapshotCache(block)
-		}
-		witness, err := v.WitnessGenerator.GetWitnessByBlockRange(tx, txsmt, innerCtx, blockNumbers[0], blockNumbers[len(blockNumbers)-1], false, v.cfg.WitnessFull, cache)
-		if err != nil {
-			return verifierBundle, err
-		}
-
-		log.Debug("witness generated", "data", hex.EncodeToString(witness))
-
 		// now we need to figure out the timestamp limit for this payload.  It must be:
 		// timestampLimit >= currentTimestamp (from batch pre-state) + deltaTimestamp
 		// so to ensure we have a good value we can take the timestamp of the last block in the batch
@@ -298,7 +266,7 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest) *Promise[
 		oldAccInputHash := common.HexToHash("0x0")
 		timestampLimit := lastBlock.Time()
 		payload := &Payload{
-			Witness:                 witness,
+			Witness:                 nil,
 			DataStream:              streamBytes,
 			Coinbase:                v.cfg.AddressSequencer.String(),
 			OldAccInputHash:         oldAccInputHash.Bytes(),
@@ -347,7 +315,7 @@ func (v *LegacyExecutorVerifier) VerifyAsync(request *VerifierRequest) *Promise[
 
 		verifierBundle.Response = &VerifierResponse{
 			Valid:            ok,
-			Witness:          witness,
+			Witness:          nil,
 			ExecutorResponse: executorResponse,
 			Error:            executorErr,
 		}

@@ -643,11 +643,6 @@ var (
 		Usage: "RPC rate limit in requests per second.",
 		Value: 0,
 	}
-	RpcGetBatchWitnessConcurrencyLimitFlag = cli.IntFlag{
-		Name:  "zkevm.rpc-get-batch-witness-concurrency-limit",
-		Usage: "The maximum number of concurrent requests to the executor for getBatchWitness.",
-		Value: 1,
-	}
 	DatastreamVersionFlag = cli.IntFlag{
 		Name:  "zkevm.datastream-version",
 		Usage: "Stream version indicator 1: PreBigEndian, 2: BigEndian.",
@@ -808,31 +803,6 @@ var (
 		Name:  "zkevm.seal-batch-immediately-on-overflow",
 		Usage: "Seal the batch immediately when detecting a counter overflow",
 		Value: false,
-	}
-	MockWitnessGeneration = cli.BoolFlag{
-		Name:  "zkevm.mock-witness-generation",
-		Usage: "Mock the witness generation",
-		Value: false,
-	}
-	WitnessCacheEnable = cli.BoolFlag{
-		Name:  "zkevm.witness-cache-enable",
-		Usage: "Enable witness cache",
-		Value: false,
-	}
-	WitnessCachePurge = cli.BoolFlag{
-		Name:  "zkevm.witness-cache-purge",
-		Usage: "Purge the witness cache on startup. Default false.",
-		Value: false,
-	}
-	WitnessCacheBatchAheadOffset = cli.UintFlag{
-		Name:  "zkevm.witness-cache-batch-ahead-offset",
-		Usage: "How many batches ahead of the highest verified batch to cache. Default 0.",
-		Value: 0,
-	}
-	WitnessCacheBatchBehindOffset = cli.UintFlag{
-		Name:  "zkevm.witness-cache-batch-behind-offset",
-		Usage: "How many batches behind the highest verified batch to cache. Default 5.",
-		Value: 5,
 	}
 	WitnessContractInclusion = cli.StringFlag{
 		Name:  "zkevm.witness-contract-inclusion",

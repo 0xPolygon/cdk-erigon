@@ -134,10 +134,7 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 	if err = hermezDb.DeleteForkIds(fromBatchForForkIdDeletion, toBatch); err != nil {
 		return fmt.Errorf("truncate fork id error: %v", err)
 	}
-	// only seq
-	if err = hermezDb.DeleteBatchCounters(u.UnwindPoint+1, s.BlockNumber); err != nil {
-		return fmt.Errorf("truncate block batches error: %v", err)
-	}
+	// DeleteBatchCounters removed as counters are no longer used
 
 	return nil
 }

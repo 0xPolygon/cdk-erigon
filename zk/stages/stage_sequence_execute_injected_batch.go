@@ -13,7 +13,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
@@ -104,10 +103,9 @@ func processInjectedInitialBatch(
 		executionResults: []*core.ExecutionResult{execResult},
 		effectiveGases:   []uint8{effectiveGas},
 	}
-	batchCounters := vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(batchState.forkId), batchContext.cfg.zk.VirtualCountersSmtReduction,
-		batchContext.cfg.zk.ShouldCountersBeUnlimited(batchState.isL1Recovery()), nil)
+	// Batch counters removed
 
-	if _, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injectedBatch.LastGlobalExitRoot, injectedBatch.L1ParentHash, 0, 0, batchCounters); err != nil {
+	if _, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injectedBatch.LastGlobalExitRoot, injectedBatch.L1ParentHash, 0, 0); err != nil {
 		return err
 	}
 
@@ -134,13 +132,11 @@ func handleInjectedBatch(
 		return nil, nil, nil, 0, errors.New("expected 1 transaction in the injected batch")
 	}
 
-	batchCounters := vm.NewBatchCounterCollector(batchContext.sdb.smt.GetDepth(), uint16(forkId), batchContext.cfg.zk.VirtualCountersSmtReduction, batchContext.cfg.zk.ShouldCountersBeUnlimited(false), nil)
-
 	ethBlockGasPool := new(core.GasPool).AddGas(transactionGasLimit) // used only in normalcy mode in stage sequencer to create a pool at block level
 
 	// process the tx and we can ignore the counters as an overflow at this stage means no network anyway
 	effectiveGas := DeriveEffectiveGasPrice(*batchContext.cfg, decodedBlocks[0].Transactions[0])
-	receipt, execResult, _, _, err := attemptAddTransaction(*batchContext.cfg, batchContext.sdb, ibs, batchCounters, blockContext, header, decodedBlocks[0].Transactions[0], effectiveGas, false, forkId, 0 /* use 0 for l1InfoIndex in injected batch */, nil, ethBlockGasPool)
+	receipt, execResult, _, err := attemptAddTransaction(*batchContext.cfg, batchContext.sdb, ibs, blockContext, header, decodedBlocks[0].Transactions[0], effectiveGas, false, forkId, 0 /* use 0 for l1InfoIndex in injected batch */, ethBlockGasPool)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
