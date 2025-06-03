@@ -9,9 +9,9 @@ import (
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/kv/mdbx"
+	"github.com/erigontech/erigon/zk/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/erigontech/erigon/zk/types"
 )
 
 type IHermezDb interface {
@@ -619,6 +619,92 @@ func TestDeleteForkId(t *testing.T) {
 				assert.True(t, found)
 				assert.Equal(t, remainingForkInterval.FromBatchNumber, forkInterval.FromBatchNumber)
 				assert.Equal(t, remainingForkInterval.ToBatchNumber, forkInterval.ToBatchNumber)
+			}
+		})
+	}
+}
+
+func TestDeleteForkIdBlkNum(t *testing.T) {
+	type forkInterval struct {
+		ForkId    uint64
+		BlkNumber uint64
+	}
+	forkIntervals := []forkInterval{
+		{4, 1},
+		{5, 11},
+		{6, 21},
+		{7, 31},
+		{8, 41},
+		{9, 51},
+		{10, 61},
+	}
+
+	testCases := []struct {
+		name                     string
+		fromBlkToDelete          uint64
+		toBlkToDelete            uint64
+		expectedRemainingForkIds []forkInterval
+	}{
+		{"delete last fork id", 61, 70, []forkInterval{
+			{4, 1},
+			{5, 11},
+			{6, 21},
+			{7, 31},
+			{8, 41},
+			{9, 51},
+		}},
+		{"delete fork id for block that don't exist", 80, 90, []forkInterval{
+			{4, 1},
+			{5, 11},
+			{6, 21},
+			{7, 31},
+			{8, 41},
+			{9, 51},
+			{10, 61},
+		}},
+		{"delete fork id for blocks that cross multiple forks from some point until the last one - unwind", 27, 70, []forkInterval{
+			{4, 1},
+			{5, 11},
+			{6, 21},
+		}},
+		{"delete fork id for blocks that cross multiple forks from zero to some point - prune", 0, 36, []forkInterval{
+			{7, 37},
+			{8, 41},
+			{9, 51},
+			{10, 61},
+		}},
+		{"delete fork id for blocks that cross multiple forks from some point after the beginning to some point before the end - hole", 23, 42, []forkInterval{
+			{4, 1},
+			{5, 11},
+			{6, 21},
+			{8, 43},
+			{9, 51},
+			{10, 61},
+		}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tx, cleanup := GetDbTx()
+			defer cleanup()
+			db := NewHermezDb(tx)
+
+			for _, forkInterval := range forkIntervals {
+				db.WriteForkIdBlockOnce(forkInterval.ForkId, forkInterval.BlkNumber)
+			}
+
+			// function under test
+			err := db.DeleteForkIdBlock(tc.fromBlkToDelete, tc.toBlkToDelete)
+			require.NoError(t, err)
+
+			// check the result
+			forkIdBlkNumMap, err := db.GetAllForkBlocks()
+			require.NoError(t, err)
+
+			assert.Equal(t, len(tc.expectedRemainingForkIds), len(forkIdBlkNumMap), "Number of remaining fork IDs does not match expected")
+
+			for _, forkInterval := range tc.expectedRemainingForkIds {
+				assert.Equal(t, forkInterval.BlkNumber, forkIdBlkNumMap[forkInterval.ForkId])
 			}
 		})
 	}
