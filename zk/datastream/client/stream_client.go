@@ -15,6 +15,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -359,6 +360,7 @@ func (c *StreamClient) GetHeader() (*types.HeaderEntry, error) {
 	}
 
 	c.header = h
+	log.Info("[Datastream client] getHeader", "header", c.header)
 
 	return h, nil
 }
@@ -521,6 +523,8 @@ func (c *StreamClient) afterStartCommand() (*types.ResultEntry, error) {
 // reads all entries from the server and sends them to a channel
 // sends the parsed FullL2Blocks with transactions to a channel
 func (c *StreamClient) readAllFullL2BlocksToChannel() (err error) {
+	log.Info("[Datastream client] reading full L2 blocks to channel", "header_totalEntries", c.header.TotalEntries)
+
 	readNewProto := true
 	entryNum := uint64(0)
 	parsedProto := interface{}(nil)
@@ -574,7 +578,7 @@ LOOP:
 			time.Sleep(10 * time.Microsecond)
 		}
 
-		if c.header.TotalEntries < entryNum {
+		if c.header.TotalEntries <= entryNum+1 {
 			log.Trace("[Datastream client] reached the current end of the stream", "header_totalEntries", c.header.TotalEntries, "entryNum", entryNum)
 
 			// For X Layer, fix ds receive issue
@@ -747,6 +751,18 @@ func ReadParsedProto(iterator FileEntryIterator) (
 
 		l2Block.L2Txs = txs
 		parsedEntry = l2Block
+
+		utils.LogTrace(
+			"",                            // txhash
+			utils.ServiceNameRPC,          // serviceName
+			utils.StepRPCReceiveBlock.ID,  // processId
+			utils.StepRPCReceiveBlock.Key, // processWord
+			l2Block.L2BlockNumber,         // blockHeight
+			l2Block.L2Blockhash.String(),  // blockHash
+			uint64(l2Block.Timestamp),     // blockTime
+			-1,                            // transactionType
+		)
+
 		return
 	case types.EntryTypeL2BlockEnd:
 		log.Debug(fmt.Sprintf("retrieved EntryTypeL2BlockEnd: %+v", file))
@@ -832,6 +848,10 @@ func (c *StreamClient) readHeaderEntry() (h *types.HeaderEntry, err error) {
 	}
 
 	headLength := binary.BigEndian.Uint32(binaryHeader[1:5])
+	if headLength != types.HeaderSize && headLength != types.HeaderSizePreEtrog {
+		return h, fmt.Errorf("read header bytes error, unexpected header size: %d", headLength)
+	}
+
 	if headLength == types.HeaderSize {
 		// Read the rest of fixed size fields
 		buffer, err := c.readBuffer(types.HeaderSize - types.HeaderSizePreEtrog)

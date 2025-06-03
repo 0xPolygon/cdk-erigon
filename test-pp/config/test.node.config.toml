@@ -1,0 +1,6 @@
+[Etherman]
+URL = "http://xlayer-mock-l1-network:8545"
+ForkIDChunkSize = 100
+MultiGasProvider = false
+[Etherscan]
+ApiKey = ""

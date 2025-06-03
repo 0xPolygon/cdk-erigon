@@ -416,7 +416,11 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 			FreeGasExAddrs:       ethCfg.DeprecatedTxPool.FreeGasExAddrs,
 			FreeGasCountPerAddr:  ethCfg.DeprecatedTxPool.FreeGasCountPerAddr,
 			FreeGasLimit:         ethCfg.DeprecatedTxPool.FreeGasLimit,
-			EnableFreeGasList:    ethCfg.DeprecatedTxPool.EnableFreeGasList},
+			EnableFreeGasList:    ethCfg.DeprecatedTxPool.EnableFreeGasList,
+			// For OkPay
+			OkPaySenderAccountsList:    ethCfg.DeprecatedTxPool.OkPaySenderAccountsList,
+			OkPayBlockPriorityTxsLimit: ethCfg.DeprecatedTxPool.OkPayBlockPriorityTxsLimit,
+		},
 		freeGasAddrs: map[string]bool{},
 	}
 	tp.setFreeGasList(ethCfg.DeprecatedTxPool.FreeGasList)
@@ -717,12 +721,14 @@ func (p *TxPool) ResetYieldedStatus() {
 }
 
 func (p *TxPool) YieldBest(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, error) {
-	return p.best(n, txs, tx, onTopOf, availableGas, availableBlobGas, toSkip)
+	// For X Layer
+	return p.bestForXLayer(n, txs, tx, onTopOf, availableGas, availableBlobGas, toSkip)
 }
 
 func (p *TxPool) PeekBest(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64) (bool, error) {
 	set := mapset.NewThreadUnsafeSet[[32]byte]()
-	onTime, _, err := p.best(n, txs, tx, onTopOf, availableGas, availableBlobGas, set)
+	// For X Layer
+	onTime, _, err := p.bestForXLayer(n, txs, tx, onTopOf, availableGas, availableBlobGas, set)
 	return onTime, err
 }
 
@@ -2529,10 +2535,6 @@ func (mt *metaTx) better(than *metaTx, pendingBaseFee uint64) bool {
 	thanDifference.SubUint64(&than.minFeeCap, pendingBaseFee)
 	if thanDifference.Sign() >= 0 {
 		thanSubPool |= EnoughFeeCapBlock
-	}
-
-	if mt.Tx.SenderID == than.Tx.SenderID && mt.Tx.Nonce != than.Tx.Nonce {
-		return mt.Tx.Nonce < than.Tx.Nonce
 	}
 
 	if subPool != thanSubPool {

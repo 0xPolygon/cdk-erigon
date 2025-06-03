@@ -84,3 +84,6 @@ pprof.port: 6060
 pprof.addr: 0.0.0.0
 
 zkevm.standalone-smt-db: true  # true: enalbe split smt db, false: not split
+
+zkevm.enable-trace-log: true
+zkevm.trace-log-path: /home/erigon/data/logs/trace.log

@@ -170,6 +170,17 @@ Loop:
 
 		logger.AddBlock(uint64(block.Transactions().Len()), stageProgress, currentStateGas, blockNum)
 
+		utils.LogTrace(
+			"",                           // txhash
+			utils.ServiceNameRPC,         // serviceName
+			utils.StepRPCFinishBlock.ID,  // processId
+			utils.StepRPCFinishBlock.Key, // processWord
+			blockNum,                     // blockHeight
+			prevBlockHash.Hex(),          // blockHash
+			header.Time,                  // blockTime
+			-1,                           // transactionType
+		)
+
 		// should update progress
 		if batch.BatchSize() >= int(cfg.batchSize) {
 			log.Info("Committed State", "gas reached", currentStateGas, "gasTarget", gasState)

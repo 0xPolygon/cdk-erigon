@@ -19,15 +19,14 @@ cp "$CONFIG_FILE" "$TEMP_FILE"
 # Remove existing configurations
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS version
-    sed -i '' '/^zkevm.executor-urls:/d; /^zkevm.executor-strict:/d; /^zkevm.witness-full:/d; /^zkevm.executor-mock:/d; /^zkevm.sequencer-block-seal-time:/d' "$TEMP_FILE"
+    sed -i '' '/^zkevm.executor-urls:/d; /^zkevm.executor-strict:/d; /^zkevm.witness-full:/d; /^zkevm.executor-mock:/d;' "$TEMP_FILE"
 else
     # Linux version
-    sed -i '/^zkevm.executor-urls:/d; /^zkevm.executor-strict:/d; /^zkevm.witness-full:/d; /^zkevm.executor-mock:/d; /^zkevm.sequencer-block-seal-time:/d' "$TEMP_FILE"
+    sed -i '/^zkevm.executor-urls:/d; /^zkevm.executor-strict:/d; /^zkevm.witness-full:/d; /^zkevm.executor-mock:/d;' "$TEMP_FILE"
 fi
 
 # Add new configurations
 cat << EOF >> "$TEMP_FILE"
-zkevm.sequencer-block-seal-time: "5s"
 zkevm.executor-urls: "xlayer-executor:50071"
 zkevm.executor-strict: true
 zkevm.witness-full: false

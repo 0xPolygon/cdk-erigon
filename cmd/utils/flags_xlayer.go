@@ -108,6 +108,15 @@ var (
 		Usage: "EnableTimsort enable timsort to instead of built-in sorting",
 		Value: false,
 	}
+	// OkPay
+	OkPaySenderAccountsList = cli.StringFlag{
+		Name:  "okpay.sender-accounts-list",
+		Usage: "List of OkPay sender accounts",
+	}
+	OkPayBlockPriorityTxsLimit = cli.Uint64Flag{
+		Name:  "okpay.block-priority-txs-limit",
+		Usage: "Max number of OkPay txs that we will prioritize per block",
+	}
 	// Gas Pricer
 	GpoTypeFlag = cli.StringFlag{
 		Name:  "gpo.type",
@@ -323,6 +332,16 @@ var (
 		Usage: "Retries for getLogs",
 		Value: 1,
 	}
+	TraceLogPath = cli.StringFlag{
+		Name:  "zkevm.trace-log-path",
+		Usage: "Path of trace.log for Monitoring Xlayer",
+		Value: "/home/erigon/data/logs/trace.log",
+	}
+	EnableTraceLog = cli.BoolFlag{
+		Name:  "zkevm.enable-trace-log",
+		Usage: "Enable full trace log",
+		Value: true,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {
@@ -382,6 +401,20 @@ func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {
 	// Default price check
 	if cfg.Default == nil || cfg.Default.Int64() <= 0 {
 		cfg.Default = new(big.Int).Set(gaspricecfg.DefaultXLayerPrice)
+	}
+}
+
+func setOkPayXLayer(ctx *cli.Context, cfg *ethconfig.DeprecatedTxPoolConfig) {
+	if ctx.IsSet(OkPayBlockPriorityTxsLimit.Name) {
+		cfg.OkPayBlockPriorityTxsLimit = ctx.Uint64(OkPayBlockPriorityTxsLimit.Name)
+	}
+	if ctx.IsSet(OkPaySenderAccountsList.Name) {
+		addrHexes := libcommon.CliString2Array(ctx.String(OkPaySenderAccountsList.Name))
+		cfg.OkPaySenderAccountsList = *libcommon.NewOrderedListOfAddresses(len(addrHexes))
+		for _, senderHex := range addrHexes {
+			cfg.OkPaySenderAccountsList.Add(libcommon.HexToAddress(senderHex))
+		}
+		cfg.OkPaySenderAccountsList.Sort()
 	}
 }
 
@@ -449,6 +482,9 @@ func setTxPoolXLayer(ctx *cli.Context, cfg *ethconfig.DeprecatedTxPoolConfig) {
 	if ctx.IsSet(TxPoolEnableTimsort.Name) {
 		cfg.EnableTimsort = ctx.Bool(TxPoolEnableTimsort.Name)
 	}
+
+	// For OkPay
+	setOkPayXLayer(ctx, cfg)
 }
 
 // SetApolloGPOXLayer is a public wrapper function to internally call setGPO
@@ -459,6 +495,11 @@ func SetApolloGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {
 // SetApolloPoolXLayer is a public wrapper function to internally call setTxPool
 func SetApolloPoolXLayer(ctx *cli.Context, fullCfg *ethconfig.Config) {
 	setTxPool(ctx, fullCfg)
+}
+
+// SetApolloOkPayXLayer is a public wrapper function to internally call setOkPayXLayer
+func SetApolloOkPayXLayer(ctx *cli.Context, cfg *ethconfig.DeprecatedTxPoolConfig) {
+	setOkPayXLayer(ctx, cfg)
 }
 
 // CheckAddressExists check if the address exists in the address map

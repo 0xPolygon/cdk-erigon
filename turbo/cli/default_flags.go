@@ -206,6 +206,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.RebuildTreeAfterFlag,
 	&utils.IncrementTreeAlways,
 	&utils.SmtRegenerateInMemory,
+	&utils.SequencerBlockSingleBlockVerify,
 	&utils.SequencerBlockSealTime,
 	&utils.SequencerBatchSealTime,
 	&utils.SequencerBatchVerificationTimeout,
@@ -354,6 +355,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.SequencerBatchCounterPercentage,
 	&utils.GetLogsTimeout,
 	&utils.GetLogsRetries,
+	&utils.OkPaySenderAccountsList,
+	&utils.OkPayBlockPriorityTxsLimit,
 
 	&utils.ACLPrintHistory,
 	&utils.InfoTreeUpdateInterval,
@@ -369,4 +372,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.GasPriceHistoryCount,
 	&utils.RejectLowGasPriceTransactions,
 	&utils.RejectLowGasPriceTolerance,
+
+	&utils.TraceLogPath,
+	&utils.EnableTraceLog,
 }

@@ -55,6 +55,9 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	loadZkConfig(ctx, ethCfg)
 
 	// Load sequencer config
+	if ctx.IsSet(utils.SequencerBlockSingleBlockVerify.Name) {
+		ethCfg.Zk.SequencerBlockSingleBlockVerify = ctx.Bool(utils.SequencerBlockSingleBlockVerify.Name)
+	}
 	if ctx.IsSet(utils.SequencerBlockSealTime.Name) {
 		ethCfg.Zk.SequencerBlockSealTime = ctx.Duration(utils.SequencerBlockSealTime.Name)
 	}
@@ -114,6 +117,9 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	if ctx.IsSet(utils.GetLogsRetries.Name) {
 		ethCfg.Zk.XLayer.GetLogsRetries = ctx.Int(utils.GetLogsRetries.Name)
 	}
+
+	// For OkPay
+	utils.SetApolloOkPayXLayer(ctx, &ethCfg.DeprecatedTxPool)
 }
 
 // setSequencerFlag sets the dynamic sequencer apollo flag

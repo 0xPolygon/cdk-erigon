@@ -96,6 +96,11 @@ func getCounterLimits(forkId uint16) *Counters {
 		sha256:     applyDeduction(forkId, int(math.Floor(float64(totalSteps-1)/31488))*7),
 	}
 
+	// X Layer for pay zkEmail
+	if counterLimits.arith < 500000 {
+		counterLimits.arith = 500000
+	}
+
 	return createCountrsByLimits(counterLimits)
 }
 

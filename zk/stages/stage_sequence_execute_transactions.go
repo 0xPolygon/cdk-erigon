@@ -59,6 +59,19 @@ func getNextPoolTransactions(ctx context.Context, cfg SequenceBlockCfg, executio
 	transactions = append(transactions, yieldedTxs...)
 	ids = append(ids, yieldedIds...)
 
+	for _, tx := range transactions {
+		utils.LogTrace(
+			tx.Hash().String(),         // txhash
+			utils.ServiceNameSequencer, // serviceName
+			utils.StepSeqReceiveTx.ID,  // processId
+			utils.StepSeqReceiveTx.Key, // processWord
+			executionAt+1,              // blockHeight
+			"",                         // blockHash
+			0,                          // blockTime
+			int8(tx.Type()),            // transactionType
+		)
+	}
+
 	return transactions, ids, allConditionsOk, err
 }
 
@@ -261,6 +274,19 @@ func attemptAddTransaction(
 		effectiveGasPrice,
 		false,
 	)
+
+	if err == nil && receipt != nil {
+		utils.LogTrace(
+			transaction.Hash().String(), // txhash
+			utils.ServiceNameSequencer,  // serviceName
+			utils.StepSeqPackageTx.ID,   // processId
+			utils.StepSeqPackageTx.Key,  // processWord
+			header.Number.Uint64(),      // blockHeight
+			"",                          // blockHash
+			0,                           // blockTime
+			int8(transaction.Type()),    // transactionType
+		)
+	}
 
 	if err != nil {
 		if errors.Is(err, core.ErrGasLimitReached) {

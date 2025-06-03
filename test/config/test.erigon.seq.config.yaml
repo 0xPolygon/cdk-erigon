@@ -29,6 +29,7 @@ zkevm.executor-strict: false
 zkevm.witness-full: false
 zkevm.executor-mock: true
 
+zkevm.sequencer-block-single-block-verify: true
 zkevm.sequencer-block-seal-time: "1s"
 zkevm.sequencer-max-block-seal-time: "3s"
 zkevm.sequencer-batch-seal-time: "10s"
@@ -111,3 +112,6 @@ zkevm.enable-async-commit: true
 txpool.enabletimsort: true
 zkevm.bulk-add-txs: true
 zkevm.enable-add-tx-notify: true
+
+zkevm.enable-trace-log: true
+zkevm.trace-log-path: /home/erigon/data/logs/trace.log
