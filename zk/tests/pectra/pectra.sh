@@ -1,7 +1,19 @@
 #!/bin/bash
 
-RPC_URL=$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)
+RPC_URL=$1
 PRIVATE_KEY="0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625"
+RUNDIR=$(dirname "$0")
+CONTRACTS_DIR="$RUNDIR/../../debug_tools/test-contracts/contracts"
+
+run() {
+    local func_name=$1
+    shift  # shift off the function name, leave only the arguments
+    echo "--------------- Starting $func_name ---------------"
+    $func_name "$@"
+    local result=$?
+    echo "--------------- Completed $func_name ---------------"
+    return $result
+}
 
 # ------------------------------------
 # EIP-7516: https://eips.ethereum.org/EIPS/eip-7516
@@ -70,9 +82,52 @@ testCalldataCostEIP7623() {
     fi
 }
 
+# ------------------------------------
+# EIP-6780: https://eips.ethereum.org/EIPS/eip-6780 Do not delete the contract
+# EIP-4758: https://eips.ethereum.org/EIPS/eip-4758 Call SENDALL instead
+# ------------------------------------
+testSendAllEIP4758EIP6780() {
+    local RPC_URL=$1
+    local RECIPIENT=0x0123456789abcdef0123456789abcdef01234567
+    $RUNDIR/test_selfdestruct.sh --rpc-url $RPC_URL --private-key $PRIVATE_KEY --recipient $RECIPIENT --contract $CONTRACTS_DIR/selfdestruct.sol:SelfDestruct
+    return $?
+}
 
-echo "Testing BlobBasefee..."
-testBlobBaseFeeEIP7516 "$RPC_URL"
+# ------------------------------------
+# EIP7702: https://eips.ethereum.org/EIPS/eip-7702
+# ------------------------------------
+testSetCodeTxEIP7702() {
+    local RPC_URL=$1
+    local SPONSOR_WALLET=$(cast wallet new)
+    local SPONSOR_PKEY=$(echo "$SPONSOR_WALLET" | grep "Private key" | awk '{print $3}')
+    local SPONSOR_ADDRESS=$(echo "$SPONSOR_WALLET" | grep "Address" | awk '{print $2}')
 
-echo "Testing Calldata cost..."
-testCalldataCostEIP7623 "$RPC_URL"
+    echo "Funding sender account..."
+    STATUS=$(cast send --legacy --value 0.1ether --json --private-key $PRIVATE_KEY -r $RPC_URL $SPONSOR_ADDRESS | jq -r '.status')
+    echo "Funding status: $STATUS"
+    if [ "$STATUS" != "0x1" ]; then
+        echo "Failed to fund sender account: $STATUS"
+        exit 1
+    fi
+
+    echo "Sender account funded successfully."
+    $RUNDIR/test_eip7702_setcode_tx.sh --rpc-url $RPC_URL --private-key-eoa $PRIVATE_KEY --private-key-sender $SPONSOR_PKEY --contract $CONTRACTS_DIR/delegate.sol:Delegate --gas 100_000
+    return $?
+}
+
+# ------------------------------------
+# EIP 4844: https://eips.ethereum.org/EIPS/eip-4844 Point eval precompile only (L2 does not support blobs)
+# ------------------------------------
+testPointEvalPrecompileEIP4844() {
+    local RPC_URL=$1
+    $RUNDIR/test_precompile_prague_pointeval.sh --rpc-url $RPC_URL
+    return $?
+}
+
+
+run testBlobBaseFeeEIP7516 "$RPC_URL"
+run testCalldataCostEIP7623 "$RPC_URL"
+run testSendAllEIP4758EIP6780 "$RPC_URL"
+run testSetCodeTxEIP7702 "$RPC_URL"
+run testPointEvalPrecompileEIP4844 "$RPC_URL"
+

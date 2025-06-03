@@ -28,7 +28,9 @@ jobs:
 
       - name: Test pectra type1
         working-directory:  ${{ github.workspace }}
-        run: ./zk/tests/pectra/pectra.sh
+        run: |
+          RPC_URL=$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)
+          ./zk/tests/pectra/pectra.sh $RPC_URL
 
       - name: Prepare logs
         working-directory: ./kurtosis-cdk
