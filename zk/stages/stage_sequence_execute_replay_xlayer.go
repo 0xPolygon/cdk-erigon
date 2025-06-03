@@ -126,14 +126,6 @@ func replay(
 					}()
 				}
 			} else {
-				if cfg.zk.XLayer.EnableAsyncCommit {
-					s.FlushSmtCacheSignalInc()
-					go func() {
-						defer s.FlushSmtCacheDone()
-
-						s.ResetCurrentBatchCache(s.BlockNumber)
-					}()
-				}
 				return err
 			}
 			subBatchCount += 1

@@ -113,17 +113,6 @@ func SpawnSequencingStage(
 			// enable split smt db
 			_ = s.FlushSmtCache(cfg.zk.XLayer.StandaloneSMTDatabase, false)
 		}()
-	} else {
-		// For X Layer, split db and ac
-		if !cfg.zk.XLayer.EnableAsyncCommit {
-			return err
-		}
-
-		s.FlushSmtCacheSignalInc()
-		go func() {
-			defer s.FlushSmtCacheDone()
-			s.ResetCurrentBatchCache(s.BlockNumber)
-		}()
 	}
 
 	return err
@@ -156,7 +145,26 @@ func sequencingBatchStep(
 	if err != nil {
 		return err
 	}
-	defer sdb.Rollback()
+	defer func() {
+		sdb.Rollback()
+
+		if err != nil {
+			if !cfg.zk.XLayer.EnableAsyncCommit {
+				return
+			}
+
+			executionAt, _ := s.ExecutionAt(sdb.tx)
+			if err != nil {
+				return
+			}
+
+			s.FlushSmtCacheSignalInc()
+			go func() {
+				defer s.FlushSmtCacheDone()
+				s.ResetCurrentBatchCache(executionAt + 1)
+			}()
+		}
+	}()
 
 	if sdb.supportAC {
 		// For X Layer, split db and ac
