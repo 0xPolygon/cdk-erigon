@@ -139,13 +139,6 @@ func WaitGRPCHealthy(address string) error {
 	})
 }
 
-// WaitL2BlockToBeConsolidated waits until a L2 Block has been consolidated or the given timeout expires.
-func WaitL2BlockToBeConsolidated(l2Block *big.Int, timeout time.Duration) error {
-	return Poll(DefaultInterval, timeout, func() (bool, error) {
-		return l2BlockConsolidationCondition(l2Block)
-	})
-}
-
 // WaitL2BlockToBeVirtualized waits until a L2 Block has been virtualized or the given timeout expires.
 func WaitL2BlockToBeVirtualized(l2Block *big.Int, timeout time.Duration) error {
 	return Poll(DefaultInterval, timeout, func() (bool, error) {
@@ -259,24 +252,6 @@ func grpcHealthyCondition(address string) (bool, error) {
 	done := state.Status == grpc_health_v1.HealthCheckResponse_SERVING
 
 	return done, nil
-}
-
-// l2BlockConsolidationCondition
-func l2BlockConsolidationCondition(l2Block *big.Int) (bool, error) {
-	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "zkevm_isBlockConsolidated", hex.EncodeBig(l2Block))
-	if err != nil {
-		return false, err
-	}
-	if response.Error != nil {
-		return false, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
-	}
-	var result bool
-	err = json.Unmarshal(response.Result, &result)
-	log.Infof("Block %v is consolidated: %v", l2Block.String(), result)
-	if err != nil {
-		return false, err
-	}
-	return result, nil
 }
 
 // l2BlockVirtualizationCondition

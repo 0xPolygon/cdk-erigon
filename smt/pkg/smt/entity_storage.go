@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/dgravesa/go-parallel/parallel"
-	"github.com/ledgerwatch/erigon-lib/common"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
@@ -39,7 +38,7 @@ func (s *SMT) SetAccountBalance(ethAddr string, balance *big.Int) (*big.Int, err
 		return nil, err
 	}
 
-	ks := utils.EncodeKeySource(utils.KEY_BALANCE, utils.ConvertHexToAddress(ethAddr), common.Hash{})
+	ks := utils.EncodeKeySource(utils.KEY_BALANCE, utils.ConvertHexToAddress(ethAddr), libcommon.Hash{})
 	err = s.Db.InsertKeySource(keyBalance, ks)
 	if err != nil {
 		return nil, err
@@ -57,7 +56,7 @@ func (s *SMT) SetAccountNonce(ethAddr string, nonce *big.Int) (*big.Int, error) 
 		return nil, err
 	}
 
-	ks := utils.EncodeKeySource(utils.KEY_NONCE, utils.ConvertHexToAddress(ethAddr), common.Hash{})
+	ks := utils.EncodeKeySource(utils.KEY_NONCE, utils.ConvertHexToAddress(ethAddr), libcommon.Hash{})
 	err = s.Db.InsertKeySource(keyNonce, ks)
 	if err != nil {
 		return nil, err
@@ -91,7 +90,7 @@ func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 		return err
 	}
 
-	ks := utils.EncodeKeySource(utils.SC_CODE, utils.ConvertHexToAddress(ethAddr), common.Hash{})
+	ks := utils.EncodeKeySource(utils.SC_CODE, utils.ConvertHexToAddress(ethAddr), libcommon.Hash{})
 
 	err = s.Db.InsertKeySource(keyContractCode, ks)
 
@@ -104,7 +103,7 @@ func (s *SMT) SetContractBytecode(ethAddr string, bytecode string) error {
 		return err
 	}
 
-	ks = utils.EncodeKeySource(utils.SC_LENGTH, utils.ConvertHexToAddress(ethAddr), common.Hash{})
+	ks = utils.EncodeKeySource(utils.SC_LENGTH, utils.ConvertHexToAddress(ethAddr), libcommon.Hash{})
 
 	return s.Db.InsertKeySource(keyContractLength, ks)
 }
@@ -248,7 +247,7 @@ func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[l
 			return nil, nil, err
 		}
 		if !isDelete {
-			if err = s.InsertKeySource(&keyBalance, utils.KEY_BALANCE, &addr, &common.Hash{}); err != nil {
+			if err = s.InsertKeySource(&keyBalance, utils.KEY_BALANCE, &addr, &libcommon.Hash{}); err != nil {
 				return nil, nil, err
 			}
 		} else {
@@ -263,7 +262,7 @@ func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[l
 			return nil, nil, err
 		}
 		if !isDelete {
-			if err = s.InsertKeySource(&keyNonce, utils.KEY_NONCE, &addr, &common.Hash{}); err != nil {
+			if err = s.InsertKeySource(&keyNonce, utils.KEY_NONCE, &addr, &libcommon.Hash{}); err != nil {
 				return nil, nil, err
 			}
 		} else {
@@ -294,7 +293,7 @@ func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[l
 			return nil, nil, err
 		}
 		if !isDelete {
-			if err = s.InsertKeySource(&keyContractCode, utils.SC_CODE, &addr, &common.Hash{}); err != nil {
+			if err = s.InsertKeySource(&keyContractCode, utils.SC_CODE, &addr, &libcommon.Hash{}); err != nil {
 				return nil, nil, err
 			}
 		} else {
@@ -308,7 +307,7 @@ func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[l
 			return nil, nil, err
 		}
 		if !isDelete {
-			if err = s.InsertKeySource(&keyContractLength, utils.SC_LENGTH, &addr, &common.Hash{}); err != nil {
+			if err = s.InsertKeySource(&keyContractLength, utils.SC_LENGTH, &addr, &libcommon.Hash{}); err != nil {
 				return nil, nil, err
 			}
 		} else {
@@ -337,7 +336,7 @@ func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[l
 			}
 			if !isDelete {
 				sp, _ := utils.StrValToBigInt(k)
-				hash := common.BigToHash(sp)
+				hash := libcommon.BigToHash(sp)
 				if err = s.InsertKeySource(&keyStoragePosition, utils.SC_STORAGE, &addr, &hash); err != nil {
 					return nil, nil, err
 				}

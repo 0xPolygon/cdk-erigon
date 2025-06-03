@@ -333,25 +333,6 @@ func TxPoolStatus() (interface{}, error) {
 	return result, nil
 }
 
-// ZKEVMIsBlockConsolidated checks if a block is consolidated
-func ZKEVMIsBlockConsolidated(blockNumber uint64) (bool, error) {
-	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "zkevm_isBlockConsolidated", blockNumber)
-	if err != nil {
-		return false, err
-	}
-	if response.Error != nil {
-		return false, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
-	}
-
-	var result bool
-	err = json.Unmarshal(response.Result, &result)
-	if err != nil {
-		return false, err
-	}
-
-	return result, nil
-}
-
 // ZKEVMIsBlockVirtualized checks if a block is virtualized
 func ZKEVMIsBlockVirtualized(blockNumber uint64) (bool, error) {
 	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "zkevm_isBlockVirtualized", blockNumber)
@@ -371,35 +352,9 @@ func ZKEVMIsBlockVirtualized(blockNumber uint64) (bool, error) {
 	return result, nil
 }
 
-// ZKEVMVerifiedBatchNumber returns the number of the latest verified batch
-func ZKEVMVerifiedBatchNumber() (uint64, error) {
-	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "zkevm_verifiedBatchNumber")
-	if err != nil {
-		return 0, err
-	}
-	if response.Error != nil {
-		return 0, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
-	}
-
-	return transHexToUint64(response.Result)
-}
-
 // ZKEVMVirtualBatchNumber returns the number of the latest virtual batch
 func ZKEVMVirtualBatchNumber() (uint64, error) {
 	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "zkevm_virtualBatchNumber")
-	if err != nil {
-		return 0, err
-	}
-	if response.Error != nil {
-		return 0, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
-	}
-
-	return transHexToUint64(response.Result)
-}
-
-// ZKEVMConsolidatedBlockNumber returns the number of the latest consolidated block
-func ZKEVMConsolidatedBlockNumber() (uint64, error) {
-	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "zkevm_consolidatedBlockNumber")
 	if err != nil {
 		return 0, err
 	}

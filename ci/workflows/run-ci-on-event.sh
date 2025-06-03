@@ -159,4 +159,4 @@ for task in "${!tasks_status[@]}"; do
     fi
 done
 
-echo "All tasks completed. Logs are in ${GREEN}$LOGSDIR${NC}."
+echo -e "All tasks completed. Logs are in ${GREEN}$LOGSDIR${NC}."

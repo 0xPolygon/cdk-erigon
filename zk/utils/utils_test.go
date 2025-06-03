@@ -1,19 +1,48 @@
 package utils
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	constants "github.com/ledgerwatch/erigon-lib/chain"
+	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/stretchr/testify/assert"
 )
 
-type SimpleForkReader struct {
-	BlockForks map[constants.ForkId]uint64
+// X Layer: updated tests to be more realistic (test via hermez_db/db.go)
+// Taken from hermez_db/db_test.go.
+func GetDbTx() (tx kv.RwTx, cleanup func()) {
+	dbi, err := mdbx.NewTemporaryMdbx(context.Background(), "")
+	if err != nil {
+		panic(err)
+	}
+	tx, err = dbi.BeginRw(context.Background())
+	if err != nil {
+		panic(err)
+	}
+
+	err = hermez_db.CreateHermezBuckets(tx)
+	if err != nil {
+		panic(err)
+	}
+
+	return tx, func() {
+		tx.Rollback()
+		dbi.Close()
+	}
 }
 
-func (s *SimpleForkReader) GetForkIdBlock(forkId uint64) (uint64, bool, error) {
-	found, ok := s.BlockForks[constants.ForkId(forkId)]
-	return found, ok, nil
+func NewTestHermezDb(blockForks map[constants.ForkId]uint64) (reader *hermez_db.HermezDbReader, cleanup func()) {
+	tx, cleanup := GetDbTx()
+	hdb := hermez_db.NewHermezDb(tx)
+	for forkId, blockNum := range blockForks {
+		err := hdb.WriteForkIdBlockOnce(uint64(forkId), blockNum)
+		assert.NoError(nil, err, "should write forkId block without error")
+	}
+	return hdb.HermezDbReader, cleanup
 }
 
 type TestConfig struct {
@@ -81,14 +110,19 @@ func TestUpdateZkEVMBlockCfg(t *testing.T) {
 	}
 
 	for _, scenario := range scenarios {
-		t.Run(scenario.name, func(t *testing.T) {
-			cfg := NewTestConfig()
-			reader := &SimpleForkReader{BlockForks: scenario.blockForks}
+		// t.Run(scenario.name, func(t *testing.T) {
+		fmt.Printf("Running scenario: %s\n", scenario.name)
 
-			err := UpdateZkEVMBlockCfg(cfg, reader, "TestPrefix")
-			assert.NoError(t, err, "should not return an error")
+		cfg := NewTestConfig()
+		reader, cleanup := NewTestHermezDb(scenario.blockForks)
 
-			assert.Equal(t, scenario.expectedCalls, cfg.setCalls, "SetForkIdBlock calls mismatch")
-		})
+		err := UpdateZkEVMBlockCfg(cfg, reader, "TestPrefix")
+		assert.NoError(t, err, "should not return an error")
+
+		assert.Equal(t, scenario.expectedCalls, cfg.setCalls, "SetForkIdBlock calls mismatch")
+
+		hermez_db.ClearForkIdBlockMap()
+		cleanup()
+		// })
 	}
 }

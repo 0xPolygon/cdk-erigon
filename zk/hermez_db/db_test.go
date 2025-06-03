@@ -622,3 +622,92 @@ func TestDeleteForkId(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteForkIdBlkNum(t *testing.T) {
+	type forkInterval struct {
+		ForkId        uint64
+		FromBlkNumber uint64
+	}
+	forkIntervals := []forkInterval{
+		{4, 1},
+		{5, 11},
+		{6, 21},
+		{7, 31},
+		{8, 41},
+		{9, 51},
+		{10, 61},
+	}
+
+	testCases := []struct {
+		name                     string
+		fromBlkToDelete          uint64
+		toBlkToDelete            uint64
+		expectedRemainingForkIds []forkInterval
+	}{
+		{"delete last fork id", 61, 70, []forkInterval{
+			{4, 1},
+			{5, 11},
+			{6, 21},
+			{7, 31},
+			{8, 41},
+			{9, 51},
+		}},
+		{"delete fork id for block that don't exist", 80, 90, []forkInterval{
+			{4, 1},
+			{5, 11},
+			{6, 21},
+			{7, 31},
+			{8, 41},
+			{9, 51},
+			{10, 61},
+		}},
+		{"delete fork id for blocks that cross multiple forks from some point until the last one - unwind", 27, 70, []forkInterval{
+			{4, 1},
+			{5, 11},
+			{6, 21},
+		}},
+		{"delete fork id for blocks that cross multiple forks from zero to some point - prune", 0, 36, []forkInterval{
+			{4, 37},
+			{5, 37},
+			{6, 37},
+			{7, 37},
+			{8, 41},
+			{9, 51},
+			{10, 61},
+		}},
+		{"delete fork id for blocks that cross multiple forks from some point after the beginning to some point before the end - hole", 23, 42, []forkInterval{
+			{4, 1},
+			{5, 11},
+			{6, 21},
+			{7, 43},
+			{8, 43},
+			{9, 51},
+			{10, 61},
+		}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tx, cleanup := GetDbTx()
+			defer cleanup()
+			db := NewHermezDb(tx)
+			ClearForkIdBlockMap()
+
+			for _, forkInterval := range forkIntervals {
+				db.WriteForkIdBlockOnce(forkInterval.ForkId, forkInterval.FromBlkNumber)
+			}
+
+			err := db.DeleteForkIdBlock(tc.fromBlkToDelete, tc.toBlkToDelete)
+			require.NoError(t, err)
+
+			forkIdBlkNumMap, err := db.GetAllForkIdBlock()
+			require.NoError(t, err)
+
+			assert.Equal(t, len(tc.expectedRemainingForkIds), len(forkIdBlkNumMap), "Number of remaining fork IDs does not match expected")
+
+			for _, forkInterval := range tc.expectedRemainingForkIds {
+				assert.Equal(t, forkInterval.FromBlkNumber, forkIdBlkNumMap[forkInterval.ForkId])
+			}
+		})
+	}
+}

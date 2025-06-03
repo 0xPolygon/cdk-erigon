@@ -12,7 +12,6 @@ import (
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/ethclient"
 	"github.com/ledgerwatch/erigon/zkevm/log"
-	"google.golang.org/grpc/balancer/grpclb/state"
 )
 
 // Public shared
@@ -40,15 +39,6 @@ const (
 	DefaultL2NewAcc2Address    = "0xAed6892D56AAB5DA8FBcd85b924C3bE63c74Cc29"
 	DefaultL2NewAcc2PrivateKey = "bc362a16d3dedd6cdba639eb8fa91b2f6d9f929eb490ca2e5a748ba041c6a131"
 )
-
-// Manager controls operations and has knowledge about how to set up and tear
-// down a functional environment.
-type Manager struct {
-	ctx context.Context
-
-	st   *state.State
-	wait *Wait
-}
 
 // ApplyL1Txs sends the given L1 txs, waits for them to be consolidated and checks the final state.
 func ApplyL1Txs(ctx context.Context, txs []*types.Transaction, auth *bind.TransactOpts, client *ethclient.Client) error {
@@ -119,13 +109,6 @@ func ApplyL2Txs(ctx context.Context, txs []*types.Transaction, auth *bind.Transa
 		}
 		if confirmationLevel == VirtualConfirmationLevel {
 			continue
-		}
-
-		// wait for l2 block number to be consolidated
-		log.Infof("waiting for the block number %v to be consolidated", receipt.BlockNumber.String())
-		err = WaitL2BlockToBeConsolidated(receipt.BlockNumber, 4*time.Minute) //nolint:gomnd
-		if err != nil {
-			return nil, err
 		}
 	}
 

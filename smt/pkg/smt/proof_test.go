@@ -3,19 +3,90 @@ package smt_test
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv/memdb"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
+	"github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"github.com/ledgerwatch/erigon/smt/pkg/utils"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 )
+
+func prepareSMT(t *testing.T) (*smt.SMT, *trie.RetainList) {
+	t.Helper()
+
+	contract := libcommon.HexToAddress("0x71dd1027069078091B3ca48093B00E4735B20624")
+	balance := uint256.NewInt(1000000000)
+	sKey := libcommon.HexToHash("0x5")
+	sVal := uint256.NewInt(0xdeadbeef)
+
+	_, tx := memdb.NewTestTx(t)
+
+	tds := state.NewTrieDbState(libcommon.Hash{}, tx, 0, state.NewPlainStateReader(tx))
+
+	w := tds.NewTrieStateWriter()
+
+	intraBlockState := state.New(tds)
+
+	tds.StartNewBuffer()
+
+	tds.SetResolveReads(false)
+
+	intraBlockState.CreateAccount(contract, true)
+
+	code := []byte{0x01, 0x02, 0x03, 0x04}
+	intraBlockState.SetCode(contract, code)
+	intraBlockState.AddBalance(contract, balance)
+	intraBlockState.SetState(contract, &sKey, *sVal)
+
+	err := intraBlockState.FinalizeTx(&chain.Rules{}, tds.NewTrieStateWriter())
+	require.NoError(t, err, "error finalising 1st tx")
+
+	err = intraBlockState.CommitBlock(&chain.Rules{}, w)
+	require.NoError(t, err, "error committing block")
+
+	inclusions := make(map[libcommon.Address][]libcommon.Hash)
+	rl, err := tds.ResolveSMTRetainList(inclusions)
+	require.NoError(t, err, "error resolving state trie")
+
+	memdb := db.NewMemDb()
+
+	smtTrie := smt.NewSMT(memdb, false)
+
+	_, err = smtTrie.SetAccountState(contract.String(), balance.ToBig(), uint256.NewInt(1).ToBig())
+	require.NoError(t, err)
+
+	err = smtTrie.SetContractBytecode(contract.String(), hex.EncodeToString(code))
+	require.NoError(t, err)
+
+	err = memdb.AddCode(code)
+	require.NoError(t, err, "error adding code to memdb")
+
+	storage := make(map[string]string, 0)
+
+	for i := 0; i < 100; i++ {
+		k := libcommon.HexToHash(fmt.Sprintf("0x%d", i)).String()
+		storage[k] = k
+	}
+
+	storage[sKey.String()] = sVal.String()
+
+	_, err = smtTrie.SetContractStorage(contract.String(), storage, nil)
+	require.NoError(t, err)
+
+	return smtTrie, rl
+}
 
 func TestFilterProofs(t *testing.T) {
 	tests := []struct {

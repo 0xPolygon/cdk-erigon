@@ -223,7 +223,7 @@ func ReadReceipts_zkEvm(db kv.Tx, block *types.Block, senders []libcommon.Addres
 
 	//[hack] there was a cumulativeGasUsed bug priod to forkid8, so we need to check for it
 	hermezDb := hermez_db.NewHermezDbReader(db)
-	forkBlocks, err := hermezDb.GetAllForkBlocks()
+	forkBlocks, err := hermezDb.GetAllForkIdBlock()
 	if err != nil {
 		log.Error("Failed to get fork blocks", "err", err, "stack", dbg.Stack())
 		return nil

@@ -8,14 +8,14 @@ get_latest_l2_batch() {
 
     local latest_batch
     latest_batch=$(cast rpc zkevm_batchNumberByBlockNumber "$latest_block" --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)" | sed 's/^"//;s/"$//')
-    
+
     if [[ -z "$latest_batch" ]]; then
         echo "Error: Failed to get latest batch number" >&2
         return 1
     fi
-    
+
     latest_batch_dec=$((latest_batch))
-    
+
     echo "$latest_batch_dec"
 }
 
@@ -48,10 +48,10 @@ wait_for_l1_batch() {
         fi
 
         if [ "$batch_type" = "virtual" ]; then
-
             current_batch=$(cast logs --rpc-url "$(kurtosis port print cdk-v1 el-1-geth-lighthouse rpc)" --address 0x1Fe038B54aeBf558638CA51C91bC8cCa06609e91 --from-block 0 --json | jq -r '.[] | select(.topics[0] == "0x3e54d0825ed78523037d00a81759237eb436ce774bd546993ee67a1b67b6e766") | .topics[1]' | tail -n 1 | sed 's/^0x//')
             current_batch=$((16#$current_batch))
         elif [ "$batch_type" = "verified" ]; then
+            # TODO: zkevm_verifiedBatchNumber API was removed. This test needs to be re-designed.
             current_batch=$(cast rpc zkevm_verifiedBatchNumber --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc)" | sed 's/^"//;s/"$//')
         else
             echo "Invalid batch type. Use 'virtual' or 'verified'."

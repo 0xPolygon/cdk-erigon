@@ -77,6 +77,7 @@ func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string, l2ShortCircuitToV
 
 type ForkReader interface {
 	GetForkIdBlock(forkId uint64) (uint64, bool, error)
+	GetAllForkIdBlock() (map[uint64]uint64, error)
 }
 
 type ForkConfigWriter interface {
@@ -88,31 +89,17 @@ type DbReader interface {
 }
 
 func UpdateZkEVMBlockCfg(cfg ForkConfigWriter, hermezDb ForkReader, logPrefix string) error {
-	var lastSetBlockNum uint64 = 0
-	var foundAny bool = false
-
-	for _, forkId := range chain.ForkIdsOrdered {
-		blockNum, found, err := hermezDb.GetForkIdBlock(uint64(forkId))
-		if err != nil {
-			return err
-		}
-
-		if found {
-			lastSetBlockNum = blockNum
-			foundAny = true
-		} else if !foundAny {
-			log.Trace(fmt.Sprintf("[%s] No block number found for fork id %v and no previous block number set", logPrefix, forkId))
-			continue
-		} else {
-			log.Trace(fmt.Sprintf("[%s] No block number found for fork id %v, using last set block number: %v", logPrefix, forkId, lastSetBlockNum))
-		}
-
-		if err := cfg.SetForkIdBlock(forkId, lastSetBlockNum); err != nil {
-			log.Error(fmt.Sprintf("[%s] Error setting fork id %v to block %v", logPrefix, forkId, lastSetBlockNum))
+	// X Layer optimization - get all fork blocks at once (using cache)
+	fid, err := hermezDb.GetAllForkIdBlock()
+	if err != nil {
+		return err
+	}
+	for forkId, blockNum := range fid {
+		if err := cfg.SetForkIdBlock(chain.ForkId(forkId), blockNum); err != nil {
+			log.Error(fmt.Sprintf("[%s] Error setting fork id %v to block %v", logPrefix, forkId, blockNum))
 			return err
 		}
 	}
-
 	return nil
 }
 

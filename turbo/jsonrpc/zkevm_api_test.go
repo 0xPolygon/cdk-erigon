@@ -52,12 +52,7 @@ var (
 		},
 		GasLimit: 10000000,
 	}
-	chainID = big.NewInt(1337)
-	ctx     = context.Background()
-
-	addr1BalanceCheck = "70a08231" + "000000000000000000000000" + address1.Hex()[2:]
-	addr2BalanceCheck = "70a08231" + "000000000000000000000000" + address2.Hex()[2:]
-	transferAddr2     = "70a08231" + "000000000000000000000000" + address1.Hex()[2:] + "0000000000000000000000000000000000000000000000000000000000000064"
+	ctx = context.Background()
 )
 
 type mockL1GasPriceTracker struct {
@@ -72,83 +67,6 @@ func (t *mockL1GasPriceTracker) GetLowestPrice() *big.Int {
 }
 
 var defaultL1GasPriceTracker = &mockL1GasPriceTracker{}
-
-func TestLatestConsolidatedBlockNumber(t *testing.T) {
-	assert := assert.New(t)
-	////////////////
-	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
-	defer contractBackend.Close()
-	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
-	contractBackend.Commit()
-	///////////
-
-	db := contractBackend.DB()
-	dbsmt := contractBackend.DBSMT()
-	agg := contractBackend.Agg()
-
-	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, dbsmt, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker, 1000)
-	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, dbsmt, 100_000, &ethconfig.Defaults, l1Syncer, "", nil, nil)
-	tx, err := db.BeginRw(ctx)
-	assert.NoError(err)
-	hDB := hermez_db.NewHermezDb(tx)
-	for i := 1; i <= 10; i++ {
-		hDB.WriteBlockBatch(uint64(i), 1)
-	}
-	err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, 1)
-	assert.NoError(err)
-	tx.Commit()
-	blockNumber, err := zkEvmImpl.ConsolidatedBlockNumber(ctx)
-	assert.NoError(err)
-	t.Log("blockNumber: ", blockNumber)
-
-	var expectedL2BlockNumber hexutil.Uint64 = 10
-	assert.Equal(expectedL2BlockNumber, blockNumber)
-}
-
-func TestIsBlockConsolidated(t *testing.T) {
-	assert := assert.New(t)
-	////////////////
-	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
-	defer contractBackend.Close()
-	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
-	contractBackend.Commit()
-	///////////
-
-	db := contractBackend.DB()
-	dbsmt := contractBackend.DBSMT()
-	agg := contractBackend.Agg()
-
-	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, dbsmt, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker, 1000)
-	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, dbsmt, 100_000, &ethconfig.Defaults, l1Syncer, "", nil, nil)
-	isConsolidated, err := zkEvmImpl.IsBlockConsolidated(ctx, 11)
-	assert.NoError(err)
-	t.Logf("blockNumber: 11 -> %v", isConsolidated)
-	assert.False(isConsolidated)
-	tx, err := db.BeginRw(ctx)
-	assert.NoError(err)
-	hDB := hermez_db.NewHermezDb(tx)
-	for i := 1; i <= 10; i++ {
-		err := hDB.WriteBlockBatch(uint64(i), 1)
-		assert.NoError(err)
-	}
-	err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, 1)
-	assert.NoError(err)
-	tx.Commit()
-	for i := 1; i <= 10; i++ {
-		isConsolidated, err := zkEvmImpl.IsBlockConsolidated(ctx, rpc.BlockNumber(i))
-		assert.NoError(err)
-		t.Logf("blockNumber: %d -> %v", i, isConsolidated)
-		assert.True(isConsolidated)
-	}
-	isConsolidated, err = zkEvmImpl.IsBlockConsolidated(ctx, 11)
-	assert.NoError(err)
-	t.Logf("blockNumber: 11 -> %v", isConsolidated)
-	assert.False(isConsolidated)
-}
 
 func TestIsBlockVirtualized(t *testing.T) {
 	assert := assert.New(t)
@@ -216,7 +134,7 @@ func TestBatchNumberByBlockNumber(t *testing.T) {
 	ethImpl := NewEthAPI(baseApi, db, dbsmt, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker, 1000)
 	var l1Syncer *syncer.L1Syncer
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, dbsmt, 100_000, &ethconfig.Defaults, l1Syncer, "", nil, nil)
-	batchNumber, err := zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(10))
+	_, err := zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(10))
 	assert.Error(err)
 	tx, err := db.BeginRw(ctx)
 	assert.NoError(err)
@@ -248,9 +166,9 @@ func TestBatchNumberByBlockNumber(t *testing.T) {
 			panic("batch out of range")
 		}
 	}
-	batchNumber, err = zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(40))
+	_, err = zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(40))
 	assert.Error(err)
-	batchNumber, err = zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(50))
+	batchNumber, err := zkEvmImpl.BatchNumberByBlockNumber(ctx, rpc.BlockNumber(50))
 	assert.Error(err)
 	t.Log("batchNumber", batchNumber)
 }
@@ -329,44 +247,6 @@ func TestVirtualBatchNumber(t *testing.T) {
 	virtualBatchNumber, err := zkEvmImpl.VirtualBatchNumber(ctx)
 	assert.NoError(err)
 	assert.Equal(hexutil.Uint64(7), virtualBatchNumber)
-}
-
-func TestVerifiedBatchNumber(t *testing.T) {
-	assert := assert.New(t)
-	////////////////
-	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
-	defer contractBackend.Close()
-	stateCache := kvcache.New(kvcache.DefaultCoherentConfig)
-	contractBackend.Commit()
-	///////////
-
-	db := contractBackend.DB()
-	dbsmt := contractBackend.DBSMT()
-	agg := contractBackend.Agg()
-
-	baseApi := NewBaseApi(nil, stateCache, contractBackend.BlockReader(), agg, false, rpccfg.DefaultEvmCallTimeout, contractBackend.Engine(), datadir.New(t.TempDir()))
-	ethImpl := NewEthAPI(baseApi, db, dbsmt, nil, nil, nil, 5000000, 100_000, 100_000, &ethconfig.Defaults, false, 100, 100, log.New(), defaultL1GasPriceTracker, 1000)
-	var l1Syncer *syncer.L1Syncer
-	zkEvmImpl := NewZkEvmAPI(ethImpl, db, dbsmt, 100_000, &ethconfig.Defaults, l1Syncer, "", nil, nil)
-	tx, err := db.BeginRw(ctx)
-	assert.NoError(err)
-	hDB := hermez_db.NewHermezDb(tx)
-	for i := 1; i <= 10; i++ {
-		err := hDB.WriteBlockBatch(uint64(i), uint64(i))
-		assert.NoError(err)
-	}
-	err = hDB.WriteSequence(4, 4, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba85"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e0"), common.HexToHash("0x0"))
-	assert.NoError(err)
-	err = hDB.WriteSequence(7, 7, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba86"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e1"), common.HexToHash("0x0"))
-	assert.NoError(err)
-	for i := 1; i <= 4; i++ {
-		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
-		assert.NoError(err)
-	}
-	tx.Commit()
-	verifiedBatchNumber, err := zkEvmImpl.VerifiedBatchNumber(ctx)
-	assert.NoError(err)
-	assert.Equal(hexutil.Uint64(4), verifiedBatchNumber)
 }
 
 func TestGetBatchByNumber(t *testing.T) {

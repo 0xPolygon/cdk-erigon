@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -79,26 +80,68 @@ func BenchmarkConvertHexToBigInt(b *testing.B) {
 
 		}
 	})
-	b.Run("New", func(b *testing.B) {
-		b.ReportAllocs()
-		for n := 0; n < b.N; n++ {
-			ConvertHexToBigInt("0x9257c9a31308a7cb046aba1a95679dd7e3ad695b6900e84a6470b401b1ea416e")
-		}
-	})
 }
 
-func BenchmarkHashContractBytecode(b *testing.B) {
-	str := strings.Repeat("e", 1000)
-	b.Run("1", func(b *testing.B) {
-		for n := 0; n < b.N; n++ {
-			HashContractBytecode(str)
+func TestHashContractBytecodeBigInt(t *testing.T) {
+	cases := []string{
+		"0x123456789abcdef",
+		"0x1",
+		"0x123456789abcdef123456789abcdef123456789abcdef123456789ab123456789abcdef123456789abcdef123456789abcdef123456789ab",
+		"0x123456789abcdef123456789abcdef123456789abcdef123456789ab123456789abcdef123456789abcdef123456789abcdef123456789",
+		strings.Repeat("e", 1000),
+	}
+	for _, s := range cases {
+		expect := HashContractBytecodeBigIntV1(s)
+		actual := HashContractBytecodeBigInt(s)
+		if expect.Cmp(actual) != 0 {
+			t.Errorf("HashContractBytecodeBigInt(%s) = %v, want %v", s, actual, expect)
 		}
-	})
-	b.Run("2", func(b *testing.B) {
-		for n := 0; n < b.N; n++ {
-			HashContractBytecodeBigInt(str)
-		}
-	})
+	}
+}
+
+// for input strings of even size
+func runTestHashContractBytecodeConsistencyEven(size int, t *testing.T) {
+	data := make([]byte, size)
+	rand.Read(data)
+	strData := hex.EncodeToString(data)
+	if !strings.HasPrefix(strData, "0x") {
+		strData = "0x" + strData
+	}
+	h1 := HashContractBytecodeBigIntV1(strings.ToLower(strData))
+	h2 := HashContractBytecodeBigInt(strData)
+	if h1.Cmp(h2) != 0 {
+		t.Errorf("(lower case) Expected %v, but got %v", h1, h2)
+	}
+	h3 := HashContractBytecodeBigInt(strings.ToUpper(strData[2:]))
+	if h1.Cmp(h3) != 0 {
+		t.Errorf("(upper case) Expected %v, but got %v", h1, h3)
+	}
+}
+
+// for input strings of odd size
+func runTestHashContractBytecodeConsistencyOdd(size int, t *testing.T) {
+	data := make([]byte, size)
+	rand.Read(data)
+	strData := hex.EncodeToString(data)
+	strData = strData[:len(strData)-1]
+	h1 := HashContractBytecodeBigIntV1(strings.ToLower(strData))
+	h2 := HashContractBytecodeBigInt(strData)
+	if h1.Cmp(h2) != 0 {
+		t.Errorf("(lower case) Expected %v, but got %v", h1, h2)
+	}
+	h3 := HashContractBytecodeBigInt(strings.ToUpper(strData))
+	if h1.Cmp(h3) != 0 {
+		t.Errorf("(upper case) Expected %v, but got %v", h1, h3)
+	}
+}
+
+func TestHashContractBytecodeConsistency(t *testing.T) {
+	runTestHashContractBytecodeConsistencyEven(1234, t)
+	runTestHashContractBytecodeConsistencyEven(37, t)
+	runTestHashContractBytecodeConsistencyEven(111, t) // edge case, the actual size is divisible by 56*2
+	runTestHashContractBytecodeConsistencyOdd(37, t)
+	runTestHashContractBytecodeConsistencyOdd(1, t)
+	runTestHashContractBytecodeConsistencyOdd(111, t) // edge case, the actual size is divisible by 56*2
 }
 
 func TestConvertBigIntToHex(t *testing.T) {
