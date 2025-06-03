@@ -2,6 +2,11 @@
 
 cdk-erigon is a fork of Erigon, currently in Alpha, optimized for syncing with the Polygon Hermez zkEVM network.
 
+
+## Gateway Documentation
+
+Please visit https://docs.gateway.fm/cdk-erigon/what-is-cdk-erigon/ for comprehensive documentation of the cdk-erigon stack.
+
 ***
 ## Release Roadmap
 - **v1.1.x**: RPC (full support)
@@ -62,7 +67,7 @@ Please install:
 
 Using the Makefile command: `make build-libs` will install these for the relevant architecture.
 
-Due to dependency requirements Go 1.21 is required to build.
+Due to dependency requirements Go 1.24 is required to build.
 
 ## L1 Interaction
 In order to retrieve data from the L1, the L1 syncer must be configured to know how to request the highest block, this can be configured by flag:
@@ -85,7 +90,7 @@ The node can cache witnesses for batches to speed up the RPC endpoint `zkevm_get
 ## Sequencer
 
 Enable Sequencer: `CDK_ERIGON_SEQUENCER=1 ./build/bin/cdk-erigon <flags>`
-[Golang version >= 1.21](https://golang.org/doc/install); GCC 10+ or Clang; On Linux: kernel > v4
+[Golang version >= 1.24](https://golang.org/doc/install); GCC 10+ or Clang; On Linux: kernel > v4
 
 ### Special mode - L1 recovery
 The sequencer supports a special recovery mode which allows it to continue the chain using data from the L1.  To enable
