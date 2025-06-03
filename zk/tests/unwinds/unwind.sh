@@ -91,10 +91,12 @@ if [ "$SPLIT_DB" = "split-db" ]; then
     echo "Will use split-db"
     printf "\n" >> "$CONFIG_FILE"
     echo "zkevm.standalone-smt-db: true" >> "$CONFIG_FILE"
+    echo "zkevm.enable-trace-log: false" >> "$CONFIG_FILE"
 else
     echo "Will not use split-db"
     printf "\n" >> "$CONFIG_FILE"
     echo "zkevm.standalone-smt-db: false" >> "$CONFIG_FILE"
+    echo "zkevm.enable-trace-log: false" >> "$CONFIG_FILE"
 fi
 
 # Run Erigon to first stop

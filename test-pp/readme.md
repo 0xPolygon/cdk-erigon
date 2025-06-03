@@ -34,3 +34,10 @@ curl http://127.0.0.1:9092/debug/metrics
 
 # true cpu
 https://github.com/okx/xlayer-erigon/commit/63578ebaa015fa39625c9f6bc121d18275b3688a
+
+# How to run multi L2 case
+```
+# this command will generate a polygonzkevm chain as the second L2
+make multi-run
+./2-to-2.sh
+```

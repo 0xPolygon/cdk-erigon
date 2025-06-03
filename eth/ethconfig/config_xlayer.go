@@ -11,6 +11,7 @@ type XLayerConfig struct {
 	Apollo        ApolloClientConfig
 	Nacos         NacosConfig
 	EnableInnerTx bool
+	ApolloChanged []string
 	// Sequencer
 	SequencerBatchSleepDuration time.Duration
 	StandaloneSMTDatabase       bool
@@ -47,6 +48,8 @@ type XLayerConfig struct {
 
 	TraceLogPath   string
 	EnableTraceLog bool
+
+	SequencerBatchCounterPercentage int
 }
 
 var DefaultXLayerConfig = XLayerConfig{}

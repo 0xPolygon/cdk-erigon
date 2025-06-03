@@ -37,6 +37,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/disk"
 	"github.com/ledgerwatch/erigon-lib/common/mem"
 	"github.com/ledgerwatch/erigon-lib/diagnostics"
+	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	"github.com/ledgerwatch/erigon/zk/nacos"
 
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
@@ -242,6 +243,12 @@ type Ethereum struct {
 	smtFlushCtx    context.Context
 	smtFlushCancel context.CancelFunc
 	smtFlushDoneCh chan struct{}
+	verifier       *legacy_executor_verifier.LegacyExecutorVerifier
+
+	// For X Layer, apollo
+	seqVerSyncer     *syncer.L1Syncer
+	l1InfoTreeSyncer *syncer.L1Syncer
+	l1BlockSyncer    *syncer.L1Syncer
 }
 
 func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {
@@ -1145,6 +1152,9 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			cfg.Zk.XLayer.GetLogsRetries,
 		)
 
+		// For X Layer, apollo
+		backend.seqVerSyncer = seqVerSyncer
+
 		backend.l1Syncer = syncer.NewL1Syncer(
 			ctx,
 			ethermanClients,
@@ -1174,6 +1184,9 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			cfg.Zk.XLayer.GetLogsRetries,
 		)
 
+		// For X Layer, apollo
+		backend.l1InfoTreeSyncer = l1InfoTreeSyncer
+
 		l1InfoTreeUpdater := l1infotree.NewUpdater(cfg.Zk, l1InfoTreeSyncer)
 
 		var dataStreamServer server.DataStreamServer
@@ -1202,6 +1215,9 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				cfg.Zk.XLayer.GetLogsRetries,
 			)
 
+			// For X Layer, apollo
+			backend.l1BlockSyncer = l1BlockSyncer
+
 			backend.syncStages = stages2.NewSequencerZkStages(
 				backend.sentryCtx,
 				backend.chainDB,
@@ -1226,6 +1242,10 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
 
+			// For Xlayer
+			if cfg.Zk.XLayer.Apollo.Enable {
+				go backend.listenApollo(ctx, cfg)
+			}
 		} else {
 			/*
 			 if we are syncing from for the RPC, we do the normal ZK sync loop

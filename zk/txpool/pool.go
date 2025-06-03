@@ -1482,6 +1482,9 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 	purgeEvery := time.NewTicker(p.cfg.PurgeEvery)
 	defer purgeEvery.Stop()
 
+	// For Xlayer
+	go p.listenApollo(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -2532,10 +2535,6 @@ func (mt *metaTx) better(than *metaTx, pendingBaseFee uint64) bool {
 	thanDifference.SubUint64(&than.minFeeCap, pendingBaseFee)
 	if thanDifference.Sign() >= 0 {
 		thanSubPool |= EnoughFeeCapBlock
-	}
-
-	if mt.Tx.SenderID == than.Tx.SenderID && mt.Tx.Nonce != than.Tx.Nonce {
-		return mt.Tx.Nonce < than.Tx.Nonce
 	}
 
 	if subPool != thanSubPool {

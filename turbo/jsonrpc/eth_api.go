@@ -456,7 +456,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBacken
 	GasPricerOnce.Do(func() {
 		if sequencer.IsSequencer() {
 			apii.runL2GasPricerForXLayer()
-			if len(ethCfg.XLayer.PreRunList) > 0 {
+			if ethCfg.XLayer.Apollo.Enable || len(ethCfg.XLayer.PreRunList) > 0 {
 				vm.InitPrecompiledCache(ethCfg.XLayer.PreRunCacheSize, ethCfg.XLayer.PreRunCacheTTL)
 				apii.initPreRunWorkers(ethCfg.XLayer.PreRunChanNum, ethCfg.XLayer.PreRunTaskNum)
 				log.Info(fmt.Sprintf("prerun list:%v, cache size:%v, ttl:%v, chan:%v, task:%v",
@@ -465,9 +465,9 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBacken
 			}
 		}
 	})
-	if apii.BulkAddTxs {
-		go apii.worker()
-	}
+
+	go apii.worker()
+
 	return apii
 }
 

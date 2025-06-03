@@ -1,13 +1,17 @@
 package jsonrpc
 
 import (
+	"context"
 	"fmt"
 	"math/big"
+	"slices"
 	"sync"
 
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/eth/gasprice/gaspricecfg"
+	"github.com/ledgerwatch/erigon/zk/apollo"
 )
 
 func (apii *APIImpl) GetGPCache() *GasPriceCache {
@@ -19,6 +23,38 @@ func (apii *APIImpl) runL2GasPricerForXLayer() {
 	apii.gasCache.SetLatest(common.Hash{}, apii.L2GasPricer.GetConfig().Default)
 	apii.gasCache.SetLatestRawGP(apii.L2GasPricer.GetConfig().Default)
 	go apii.runL2GasPriceSuggester()
+}
+
+func (apii *APIImpl) listenApollo(ctx context.Context) {
+	stream := apollo.GetEthConfigStream()
+	ch, remove := stream.Sub()
+	defer remove()
+
+	for {
+		select {
+		case ethCfg := <-ch:
+			if ethCfg == nil {
+				continue
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BulkAddTxsFlag.Name) {
+				apii.BulkAddTxs = ethCfg.XLayer.BulkAddTxs
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BulkAddTxsSizeFlag.Name) {
+				apii.BulkAddTxsSize = ethCfg.XLayer.BulkAddTxsSize
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BulkAddTxsWaitTimeFlag.Name) {
+				apii.BulkAddTxsWaitTime = ethCfg.XLayer.BulkAddTxsWaitTime
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.EnableAddTxNotify.Name) {
+				apii.EnableNotify = ethCfg.XLayer.EnableAddTxNotify
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.PreRunAddressList.Name) {
+				apii.PreRunList = ethCfg.XLayer.PreRunList
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 const (

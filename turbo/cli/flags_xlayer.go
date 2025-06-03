@@ -64,7 +64,7 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		EnableTraceLog: ctx.Bool(utils.EnableTraceLog.Name),
 	}
 	if cfg.XLayer.BlockInfoConcurrent {
-		blockinfo.InitUseBlockInfoTreeTrue()
+		blockinfo.SetUseBlockInfoTree(true)
 	}
 
 	// For X Layer, pre run

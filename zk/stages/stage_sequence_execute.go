@@ -16,6 +16,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk"
+	"github.com/ledgerwatch/erigon/zk/apollo"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/metrics"
@@ -349,6 +350,7 @@ func sequencingBatchStep(
 	// For X Layer
 	var batchCloseReason metrics.BatchFinalizeType
 	batchStart := time.Now()
+	cfg.yieldSize = apollo.GetYieldSize(cfg.yieldSize)
 
 	// once the batch ticker has ticked we need a signal to close the batch after the next block is done
 	batchTimedOut := false

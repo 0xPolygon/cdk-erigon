@@ -2,6 +2,7 @@ package blockinfo
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ledgerwatch/log/v3"
 
@@ -13,9 +14,9 @@ import (
 
 var initBlockInfoTreeConcurrent bool
 
-func InitUseBlockInfoTreeTrue() {
-	log.Info("using concurrent block info tree calculation")
-	initBlockInfoTreeConcurrent = true
+func SetUseBlockInfoTree(value bool) {
+	log.Info(fmt.Sprintf("using concurrent block info tree calculation: %v\n", value))
+	initBlockInfoTreeConcurrent = value
 }
 
 // BuildBlockInfoTreeSerial is a serial implementation of block info tree generation

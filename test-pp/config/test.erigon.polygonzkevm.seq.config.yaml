@@ -1,0 +1,42 @@
+datadir: /home/erigon/.local/share/erigon
+chain: dynamic-polygonzkevm
+http: true
+private.api.addr: localhost:9091
+zkevm.l2-chain-id: 1101
+zkevm.l2-sequencer-rpc-url:
+zkevm.l2-datastreamer-url: ""
+zkevm.l1-chain-id: 1337
+zkevm.l1-rpc-url: http://xlayer-mock-l1-network:8545
+
+zkevm.address-sequencer: "0x5b06837A43bdC3dD9F114558DAf4B26ed49842Ed"
+zkevm.address-zkevm: "0xcfF753853f33864E92D6C9d25b79AA968853D979"
+zkevm.address-admin: "0x8943545177806ED17B9F23F0a21ee5948eCaa776"
+zkevm.address-rollup: "0xE96dBF374555C6993618906629988d39184716B3"
+zkevm.address-ger-manager: "0xB8cedD4B9eF683f0887C44a6E4312dC7A6e2fcdB"
+
+zkevm.default-gas-price: 1000000000
+zkevm.max-gas-price: 0
+zkevm.gas-price-factor: 0.0375
+
+zkevm.l1-rollup-id: 2
+zkevm.l1-block-range: 20000
+zkevm.l1-query-delay: 6000
+zkevm.l1-first-block: 156
+zkevm.datastream-version: 2
+zkevm.data-stream-host: "localhost"
+zkevm.data-stream-port: 6900
+
+zkevm.executor-urls: ""
+zkevm.executor-strict: false
+zkevm.witness-full: false
+
+# debug.timers: true # Uncomment to enable timers
+
+externalcl: true
+http.api: [eth, debug, net, trace, web3, erigon, zkevm]
+http.addr: 0.0.0.0
+http.vhosts: any
+http.corsdomain: any
+ws: true
+
+zkevm.initial-batch.config: /usr/src/app/first-batch-config.json

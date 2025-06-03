@@ -2,7 +2,9 @@ package txpool
 
 import (
 	"container/heap"
+	"context"
 	"math/big"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,8 +16,10 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/fixedgas"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/types"
+	"github.com/ledgerwatch/erigon/cmd/utils"
 	ecommon "github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/zk/apollo"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
 )
 
@@ -392,6 +396,33 @@ func (p *TxPool) setFreeGasList(freeGasList []ethconfig.FreeGasInfo) {
 		}
 		infoCopy := info
 		p.xlayerCfg.FreeGasList[info.Name] = &infoCopy
+	}
+}
+
+func (p *TxPool) listenApollo(ctx context.Context) {
+	stream := apollo.GetEthConfigStream()
+	ch, remove := stream.Sub()
+	defer remove()
+
+	for {
+		select {
+		case ethCfg := <-ch:
+			if ethCfg == nil {
+				continue
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.TxPoolEnableTimsort.Name) {
+				p.pending.mtx.Lock()
+				p.pending.enbaleTimsort = ethCfg.DeprecatedTxPool.EnableTimsort
+				p.pending.mtx.Unlock()
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.TxPoolFreeGasList.Name) {
+				p.lock.Lock()
+				p.setFreeGasList(ethCfg.DeprecatedTxPool.FreeGasList)
+				p.lock.Unlock()
+			}
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
