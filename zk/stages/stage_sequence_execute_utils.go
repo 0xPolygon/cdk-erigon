@@ -252,8 +252,8 @@ func prepareForkId(lastBatch, executionAt uint64, hermezDb ForkDb) (latest uint6
 
 	// write the fork height once for the next block at the point of fork upgrade
 	if lastBatchFork < latest {
-		log.Info("Upgrading fork id", "from", lastBatchFork, "to", latest, "batch", nextBatch)
-		if err := hermezDb.WriteForkIdBlockOnce(latest, executionAt+1); err != nil {
+		log.Info(fmt.Sprintf("Upgrading fork id from=%d to=%d batch=%d", lastBatchFork, latest, nextBatch))
+		if err = hermezDb.WriteForkIdBlockOnce(latest, executionAt+1); err != nil {
 			return latest, err
 		}
 	}

@@ -225,12 +225,6 @@ func SpawnStageL1CombinedSyncer(
 		}
 
 	} else {
-		if l1BlockProgress >= cfg.zkCfg.L1FirstBlock {
-			// do not save progress if progress less than L1FirstBlock
-			if err = stages.SaveStageProgress(tx, stages.L1CombinedSyncer, l1BlockProgress); err != nil {
-				return err
-			}
-		}
 		log.Info(fmt.Sprintf("[%s] No new L1 blocks to sync", logPrefix))
 	}
 
@@ -373,6 +367,8 @@ func processVerificationLog(
 		logsVerificationResult.VerificationCountInc()
 	case logIncompatible:
 		// log.Warn(fmt.Sprintf("L1 Syncer logIncompatible: %d %s", logEntry.BlockNumber, logEntry.Topics[0]))
+	case logUnknown:
+		log.Warn(fmt.Sprintf("L1 Syncer unknown log: %d %s", logEntry.BlockNumber, logEntry.Topics[0]))
 	default:
 		log.Warn(fmt.Sprintf("L1 Syncer unknown topic: %d %s", logEntry.BlockNumber, logEntry.Topics[0]))
 	}
@@ -391,6 +387,7 @@ func processSequencerLog(
 		// Called once, optimize
 		header := headersMap[logEntry.BlockNumber]
 		if err := HandleInitialSequenceBatches(hermezDb, logEntry, header); err != nil {
+			log.Error(fmt.Sprintf("[processSequencerLog] HandleInitialSequenceBatches error: %s", err))
 			return err
 		}
 		logsVerificationResult.UpdateHigherBlock(logEntry.BlockNumber)
@@ -401,6 +398,7 @@ func processSequencerLog(
 		forkIdBytes := logEntry.Data[64:96] // 3rd positioned item in the log data
 		forkId := new(big.Int).SetBytes(forkIdBytes).Uint64()
 		if err := hermezDb.WriteRollupType(rollupType, forkId); err != nil {
+			log.Error(fmt.Sprintf("[processSequencerLog] WriteRollupType error: %s", err))
 			return err
 		}
 		logsVerificationResult.UpdateHigherBlock(logEntry.BlockNumber)
@@ -416,7 +414,8 @@ func processSequencerLog(
 			return err
 		}
 		if fork == 0 {
-			log.Error("received CreateNewRollupTopic for unknown rollup type", "rollupType", rollupType)
+			err = fmt.Errorf("received CreateNewRollupTopic for fork=0, %v ", rollupType)
+			return err
 		}
 		if err = hermezDb.WriteNewForkHistory(fork, 0); err != nil {
 			return err
@@ -431,6 +430,7 @@ func processSequencerLog(
 		newRollup := new(big.Int).SetBytes(newRollupBytes).Uint64()
 		fork, err := hermezDb.GetForkFromRollupType(newRollup)
 		if err != nil {
+			log.Warn(fmt.Sprintf("Cannot get fork from rollup type %d: %s", newRollup, err))
 			return err
 		}
 		if fork == 0 {
@@ -440,6 +440,7 @@ func processSequencerLog(
 		latestVerifiedBytes := logEntry.Data[32:64]
 		latestVerified := new(big.Int).SetBytes(latestVerifiedBytes).Uint64()
 		if err = hermezDb.WriteNewForkHistory(fork, latestVerified); err != nil {
+			log.Warn(fmt.Sprintf("Cannot write WriteNewForkHistory: %s", err))
 			return err
 		}
 		logsVerificationResult.UpdateHigherBlock(logEntry.BlockNumber)
@@ -566,7 +567,7 @@ func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1Bat
 		} else {
 			batchLogType = logIncompatible
 		}
-	case contracts.UpdateL1InfoTreeTopic:
+	case contracts.UpdateL1InfoTreeTopic, contracts.UpdateL1InfoTreeV2Topic:
 		batchLogType = logL1InfoTreeUpdate
 	case contracts.RollbackBatchesTopic:
 		batchLogType = logRollbackBatches

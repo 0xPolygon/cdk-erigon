@@ -104,7 +104,7 @@ func (ib *L1InjectedBatch) Marshall() []byte {
 
 func (ib *L1InjectedBatch) Unmarshall(input []byte) error {
 	if len(input) < 132 {
-		return fmt.Errorf("unmarshall error, input is too short")
+		return fmt.Errorf("unmarshall error, input is too short: %d", len(input))
 	}
 	err := binary.Read(bytes.NewReader(input[:8]), binary.LittleEndian, &ib.L1BlockNumber)
 	if err != nil {

@@ -93,7 +93,7 @@ func (u *Updater) WarmUp(logPrefix string, tx kv.RwTx) (processedLogs uint64, er
 	if err != nil {
 		return 0, err
 	}
-	if progress == 0 {
+	if progress == 0 && u.cfg.L1FirstBlock > 0 {
 		progress = u.cfg.L1FirstBlock - 1
 	}
 
@@ -122,7 +122,7 @@ func (u *Updater) WarmUp(logPrefix string, tx kv.RwTx) (processedLogs uint64, er
 	treelogs := make([]ethTypes.Log, 0)
 
 	if latestUpdate != nil {
-		go u.syncer.GetL1TreeLogs(latestUpdate.BlockNumber, treeLogsChan)
+		go u.syncer.GetL1TreeLogs(latestUpdate.BlockNumber+1, treeLogsChan)
 	} else {
 		go u.syncer.GetL1TreeLogs(0, treeLogsChan)
 	}
@@ -135,12 +135,14 @@ func (u *Updater) WarmUp(logPrefix string, tx kv.RwTx) (processedLogs uint64, er
 	if len(treelogs) > 0 {
 		processedLogs, err = u.ProcessInfoTreeUpdates("Updater WarmUp", tx, treelogs)
 		if err != nil {
+			log.Warn(fmt.Sprintf("[%s] ProcessInfoTreeUpdates: %s", logPrefix, err))
 			return 0, err
 		}
 
 		if processedLogs > 0 {
 			u.latestUpdate, err = hermezDb.GetLatestL1InfoTreeUpdate()
 			if err != nil {
+				log.Warn(fmt.Sprintf("[%s] GetLatestL1InfoTreeUpdate: %s", logPrefix, err))
 				return 0, err
 			}
 		}
@@ -269,7 +271,6 @@ func (u *Updater) ProcessInfoTreeUpdates(logPrefix string, tx kv.RwTx, allLogs [
 	defer cancel()
 
 	go logsProcessingStatus(ctx, logPrefix, &processed, logsCount)
-
 	var tree *L1InfoTree
 	if logsCount > 0 {
 		log.Info(fmt.Sprintf("[%s] Checking for L1 info tree updates, logs count:%v", logPrefix, len(allLogs)))
@@ -293,6 +294,7 @@ func (u *Updater) ProcessInfoTreeUpdates(logPrefix string, tx kv.RwTx, allLogs [
 		// when the node / syncing process is restarted.
 		u.progress = allLogs[logsCount-1].BlockNumber
 	}
+	log.Info(fmt.Sprintf("[%s] SaveStageProgress %d ", logPrefix, u.progress))
 	if err = stages.SaveStageProgress(tx, stages.L1InfoTree, u.progress); err != nil {
 		return 0, fmt.Errorf("SaveStageProgress: %w", err)
 	}
@@ -378,7 +380,8 @@ func (u *Updater) HandleL1InfoTreeUpdate(hermezDb *hermez_db.HermezDb, l types.L
 
 	leafHash := HashLeafData(tmpUpdate.GER, tmpUpdate.ParentHash, tmpUpdate.Timestamp)
 	if tree.LeafExists(leafHash) {
-		log.Warn("Skipping log as L1 Info Tree leaf already exists", "hash", common.BytesToHash(leafHash[:]).String())
+		log.Warn(fmt.Sprintf("[HandleL1InfoTreeUpdate] log: %d %d %d ", l.BlockNumber, l.TxIndex, l.Index))
+		log.Warn(fmt.Sprintf("[HandleL1InfoTreeUpdate] Skipping log as L1 Info Tree leaf already exists: %s", common.BytesToHash(leafHash[:]).String()))
 		return nil
 	}
 
@@ -550,7 +553,7 @@ LOOP:
 
 				leafHash := HashLeafData(tmpUpdate.GER, tmpUpdate.ParentHash, tmpUpdate.Timestamp)
 				if tree.LeafExists(leafHash) {
-					log.Warn("Skipping log as L1 Info Tree leaf already exists", "hash", common.BytesToHash(leafHash[:]).String())
+					log.Warn("[CheckL2RpcForInfoTreeUpdates] Root: Skipping log as L1 Info Tree leaf already exists", "hash", common.BytesToHash(leafHash[:]).String())
 					continue
 				}
 
@@ -571,7 +574,7 @@ LOOP:
 
 		leafHash := HashLeafData(u.latestUpdate.GER, u.latestUpdate.ParentHash, u.latestUpdate.Timestamp)
 		if tree.LeafExists(leafHash) {
-			log.Warn("Skipping log as L1 Info Tree leaf already exists", "hash", common.BytesToHash(leafHash[:]).String())
+			log.Warn("[CheckL2RpcForInfoTreeUpdates] Skipping log as L1 Info Tree leaf already exists", "hash", common.BytesToHash(leafHash[:]).String())
 			continue
 		}
 
