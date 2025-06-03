@@ -122,7 +122,7 @@ func (u *Updater) WarmUp(logPrefix string, tx kv.RwTx) (processedLogs uint64, er
 	treelogs := make([]ethTypes.Log, 0)
 
 	if latestUpdate != nil {
-		go u.syncer.GetL1TreeLogs(latestUpdate.BlockNumber+1, treeLogsChan)
+		go u.syncer.GetL1TreeLogs(latestUpdate.BlockNumber, treeLogsChan)
 	} else {
 		go u.syncer.GetL1TreeLogs(0, treeLogsChan)
 	}

@@ -75,8 +75,6 @@ type L1Syncer struct {
 	blockRange          uint64
 	queryDelay          uint64 // milliseconds
 
-	latestL1Block uint64
-
 	// atomic
 	isSyncStarted      atomic.Bool
 	isDownloading      atomic.Bool
@@ -169,6 +167,11 @@ func (s *L1Syncer) StopSyncer() {
 
 // RunQueryBlocksOnce performs a one-time query of blockchain logs between the last checked block and the latest block.
 func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, startBlockNumber uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error) {
+	if s.IsSyncStarted() {
+		log.Warn(fmt.Sprintf("[%s] L1 syncer is already started. From %d", logPrefix, startBlockNumber))
+		return
+	}
+
 	s.StartSync()
 
 	// s.lastCheckedL1Block.Store(startBlockNumber)
@@ -221,6 +224,7 @@ func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, startBlockNumber uint64,
 func (s *L1Syncer) RunQueryBlocks(logPrefix string, startBlockNumber uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error) {
 	//if already started, don't start another thread
 	if s.IsSyncStarted() {
+		log.Warn(fmt.Sprintf("[%s] L1 syncer is already started. From %d", logPrefix, startBlockNumber))
 		return
 	}
 
@@ -447,8 +451,6 @@ func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Hea
 	return headersMap, nil
 }
 
-// Called a lot
-// TODO: Check multiple calls with prefix "Waiting for txs from the pool... "
 func (s *L1Syncer) getLatestL1Block() (uint64, error) {
 	em := s.getNextEtherman()
 
@@ -471,8 +473,6 @@ func (s *L1Syncer) getLatestL1Block() (uint64, error) {
 	}
 
 	latest := latestBlock.NumberU64()
-	s.latestL1Block = latest
-
 	log.Info(fmt.Sprintf("Received latest L1 block with option \"%s\": %d", s.highestBlockType, latest))
 
 	return latest, nil

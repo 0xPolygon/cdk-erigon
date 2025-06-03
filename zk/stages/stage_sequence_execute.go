@@ -190,7 +190,7 @@ func sequencingBatchStep(
 		return sdb.tx.Commit()
 	}
 
-	if err := utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix, cfg.zk.LogLevel == log.LvlTrace); err != nil {
+	if err = utils.UpdateZkEVMBlockCfg(cfg.chainConfig, sdb.hermezDb, logPrefix, cfg.zk.LogLevel == log.LvlTrace); err != nil {
 		return err
 	}
 
@@ -206,7 +206,8 @@ func sequencingBatchStep(
 		log.Info(fmt.Sprintf("[%s] L1 recovery beginning for batch", logPrefix), "batch", batchState.batchNumber)
 
 		// let's check if we have any L1 data to recover
-		if err := batchState.batchL1RecoveryData.loadBatchData(sdb); err != nil {
+		if err = batchState.batchL1RecoveryData.loadBatchData(sdb); err != nil {
+			log.Warn(fmt.Sprintf("[%s] L1 recovery batch load error: %v", logPrefix, err))
 			return err
 		}
 
@@ -285,7 +286,10 @@ func sequencingBatchStep(
 			if !batchState.resequenceBatchJob.HasMoreBlockToProcess() {
 				for {
 					if pending, _ := streamWriter.legacyVerifier.HasPendingVerifications(); pending {
-						streamWriter.CommitNewUpdates()
+						_, _, err = streamWriter.CommitNewUpdates()
+						if err != nil {
+							log.Warn(fmt.Sprintf("[%s] CommitNewUpdates failed: %v", logPrefix, err))
+						}
 						time.Sleep(1 * time.Second)
 					} else {
 						break
@@ -300,6 +304,7 @@ func sequencingBatchStep(
 		var parentBlock *types.Block
 		header, parentBlock, err = prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg), cfg.chainConfig, cfg.miningConfig)
 		if err != nil {
+			log.Error(fmt.Sprintf("[%s] PrepareHeader failed: %v", logPrefix, err))
 			return err
 		}
 
@@ -313,11 +318,13 @@ func sequencingBatchStep(
 
 		infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, shouldWriteGerToContract, err := prepareL1AndInfoTreeRelatedStuff(logPrefix, sdb, batchState, header.Time, cfg.zk.SequencerResequenceReuseL1InfoIndex, cfg.zk.SequencerResequenceInfoTreeOffset)
 		if err != nil {
+			log.Error(fmt.Sprintf("[%s] PrepareL1AndInfoTree failed: %v", logPrefix, err))
 			return err
 		}
 
 		overflowOnNewBlock, err := batchCounters.StartNewBlock(l1TreeUpdateIndex != 0)
 		if err != nil {
+			log.Error(fmt.Sprintf("[%s] StartNewBlock failed: %v", logPrefix, err))
 			return err
 		}
 		if (!batchState.isAnyRecovery() || batchState.isResequence()) && overflowOnNewBlock {
@@ -332,6 +339,7 @@ func sequencingBatchStep(
 
 		parentRoot := parentBlock.Root()
 		if err := handleStateForNewBlockStarting(batchContext, ibs, blockNumber, batchState.batchNumber, header.Time, &parentRoot, l1TreeUpdate, shouldWriteGerToContract); err != nil {
+			log.Error(fmt.Sprintf("[%s] handleStateForNewBlockStarting failed: %v", logPrefix, err))
 			return err
 		}
 
@@ -386,6 +394,7 @@ func sequencingBatchStep(
 			case <-infoTreeTicker.C:
 				processedLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
 				if err != nil {
+					log.Error(fmt.Sprintf("[%s] CheckForInfoTreeUpdates failed: %v", logPrefix, err))
 					return err
 				}
 				var latestIndex uint64
@@ -400,11 +409,13 @@ func sequencingBatchStep(
 			if batchState.isLimboRecovery() {
 				batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash, executionAt)
 				if err != nil {
+					log.Error(fmt.Sprintf("[%s] getLimboTransaction failed: %v", logPrefix, err))
 					return err
 				}
 			} else if batchState.isResequence() {
 				batchState.blockState.transactionsForInclusion, err = batchState.resequenceBatchJob.YieldNextBlockTransactions(zktx.DecodeTx)
 				if err != nil {
+					log.Error(fmt.Sprintf("[%s] resequenceBatchJob.YieldNextBlockTransactions failed: %v", logPrefix, err))
 					return err
 				}
 			} else if !batchState.isL1Recovery() {
@@ -414,6 +425,7 @@ func sequencingBatchStep(
 
 				newTransactions, newIds, _, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
 				if err != nil {
+					log.Error(fmt.Sprintf("[%s] getNextPoolTransactions failed: %v", logPrefix, err))
 					return err
 				}
 
@@ -476,6 +488,7 @@ func sequencingBatchStep(
 				backupDataSizeChecker := *blockDataSizeChecker
 				receipt, execResult, txCounters, anyOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, batchState.isL1Recovery(), batchState.forkId, l1TreeUpdateIndex, &backupDataSizeChecker, ethBlockGasPool)
 				if err != nil {
+					log.Error(fmt.Sprintf("[%s] attemptAddTransaction failed: %s", logPrefix, err))
 					if batchState.isLimboRecovery() {
 						panic("limbo transaction has already been executed once so they must not fail while re-executing")
 					}
@@ -547,6 +560,7 @@ func sequencingBatchStep(
 						tempCounters := prepareBatchCounters(batchContext, batchState)
 						singleTxOverflow, err := tempCounters.SingleTransactionOverflowCheck(txCounters)
 						if err != nil {
+							log.Error(fmt.Sprintf("[%s] attemptAddTransaction failed: %s", logPrefix, err))
 							return err
 						}
 
@@ -558,6 +572,7 @@ func sequencingBatchStep(
 							cfg.txPool.MarkForDiscardFromPendingBest(txHash)
 							counter, err := handleBadTxHashCounter(sdb.hermezDb, txHash)
 							if err != nil {
+								log.Error(fmt.Sprintf("[%s] attemptAddTransaction failed: %s", logPrefix, err))
 								return err
 							}
 							log.Info(fmt.Sprintf("[%s] single transaction %s cannot fit into batch - overflow", logPrefix, txHash), "context", ocs, "times_seen", counter)
