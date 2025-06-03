@@ -933,6 +933,11 @@ var (
 		Usage: "Inject L1 information into the scalable contract and ger manager. Default true.",
 		Value: true,
 	}
+	ElasticBlockIterations = cli.Uint64Flag{
+		Name:  "zkevm.elastic-block-iterations",
+		Usage: "Number of iterations to run execution for whilst no transactions are available. Default 1.",
+		Value: 1,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",

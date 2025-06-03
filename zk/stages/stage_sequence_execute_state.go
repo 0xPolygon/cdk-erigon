@@ -258,6 +258,9 @@ type BlockState struct {
 	builtBlockElements       BuiltBlockElements
 	blockL1RecoveryData      *zktx.DecodedBatchL2Data
 	transactionsToDiscard    []common.Hash
+	// used to track the number of iterations in the block building process - allows elastic block building
+	// on slow networks by only closing a block when a transaction has been processed.
+	blockIterations uint64
 }
 
 func newBlockState() *BlockState {
@@ -294,6 +297,14 @@ func (bs *BlockState) getL1EffectiveGases(cfg SequenceBlockCfg, i int) uint8 {
 	}
 
 	return DeriveEffectiveGasPrice(cfg, bs.transactionsForInclusion[i])
+}
+
+func (bs *BlockState) incrementBlockIterations() {
+	bs.blockIterations++
+}
+
+func (bs *BlockState) resetBlockIterations() {
+	bs.blockIterations = 0
 }
 
 // TYPE BLOCK ELEMENTS

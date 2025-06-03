@@ -92,17 +92,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		panic(fmt.Sprintf("could not parse sequencer block seal time timeout value %s", sequencerBlockSealTimeVal))
 	}
 
-	var sequencerEmptyBlockSealTime time.Duration
-	sequencerEmptyBlockSealTimeVal := ctx.String(utils.SequencerEmptyBlockSealTime.Name)
-	if sequencerEmptyBlockSealTimeVal == "" {
-		sequencerEmptyBlockSealTime = sequencerBlockSealTime
-	} else {
-		sequencerEmptyBlockSealTime, err = time.ParseDuration(sequencerEmptyBlockSealTimeVal)
-		if err != nil {
-			panic(fmt.Sprintf("could not parse sequencer empty block seal time timeout value %s", sequencerEmptyBlockSealTimeVal))
-		}
-	}
-
 	sequencerBatchSealTimeVal := ctx.String(utils.SequencerBatchSealTime.Name)
 	sequencerBatchSealTime, err := time.ParseDuration(sequencerBatchSealTimeVal)
 	if err != nil {
@@ -254,7 +243,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		IncrementTreeAlways:                    ctx.Bool(utils.IncrementTreeAlways.Name),
 		SmtRegenerateInMemory:                  ctx.Bool(utils.SmtRegenerateInMemory.Name),
 		SequencerBlockSealTime:                 sequencerBlockSealTime,
-		SequencerEmptyBlockSealTime:            sequencerEmptyBlockSealTime,
 		SequencerBatchSealTime:                 sequencerBatchSealTime,
 		SequencerBatchVerificationTimeout:      sequencerBatchVerificationTimeout,
 		SequencerBatchVerificationRetries:      ctx.Int(utils.SequencerBatchVerificationRetries.Name),
@@ -333,6 +321,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		Hardfork:                               hardfork,
 		Commitment:                             commitment,
 		InjectGers:                             ctx.Bool(utils.InjectGers.Name),
+		ElasticBlockIterations:                 ctx.Uint64(utils.ElasticBlockIterations.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

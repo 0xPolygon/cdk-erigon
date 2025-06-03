@@ -265,7 +265,6 @@ func sequencingBatchStep(
 		log.Info(fmt.Sprintf("[%s] Starting block %d (forkid %v)...", logPrefix, blockNumber, batchState.forkId))
 		logTicker.Reset(10 * time.Second)
 		blockTimer := time.NewTimer(cfg.zk.SequencerBlockSealTime)
-		emptyBlockTimer := time.NewTimer(cfg.zk.SequencerEmptyBlockSealTime)
 		ethBlockGasPool := new(core.GasPool).AddGas(transactionGasLimit) // used only in normalcy mode per block
 
 		if batchState.isL1Recovery() {
@@ -340,6 +339,7 @@ func sequencingBatchStep(
 			log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
 		}
 
+		batchState.blockState.resetBlockIterations()
 		innerBreak := false
 		emptyBlockOverflow := false
 		sendersToTriggerStatechanges := make(map[common.Address]struct{})
@@ -369,15 +369,19 @@ func sequencingBatchStep(
 			select {
 			case <-blockTimer.C:
 				if !batchState.isAnyRecovery() {
-					break OuterLoopTransactions
-				}
-			default:
-			}
+					batchState.blockState.incrementBlockIterations()
 
-			select {
-			case <-emptyBlockTimer.C:
-				if len(batchState.blockState.builtBlockElements.transactions) == 0 && !batchState.isAnyRecovery() {
-					break OuterLoopTransactions
+					// if we're over the number of iterations or have mined at least something
+					// then we can close this block otherwise continue iterating
+					if batchState.blockState.blockIterations >= cfg.zk.ElasticBlockIterations ||
+						len(batchState.blockState.builtBlockElements.transactions) > 0 {
+						break OuterLoopTransactions
+					} else {
+						log.Info(fmt.Sprintf("[%s] Block timeout reached, continuing to iterate", logPrefix), "blockIterations", batchState.blockState.blockIterations)
+						// stop the timer (avoid leaks) and reset the timer so we can continue processing transactions
+						blockTimer.Stop()
+						blockTimer.Reset(cfg.zk.SequencerBlockSealTime)
+					}
 				}
 			default:
 			}

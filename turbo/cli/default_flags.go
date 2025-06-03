@@ -334,4 +334,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.Hardfork,
 	&utils.Commitment,
 	&utils.InjectGers,
+	&utils.ElasticBlockIterations,
 }

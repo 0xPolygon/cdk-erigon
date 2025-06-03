@@ -156,10 +156,9 @@ func TestSpawnSequencingStage(t *testing.T) {
 	zkCfg := &ethconfig.Zk{
 		SequencerResequence: false,
 		// lower batch close time ensures only 1 block will be created on 1 turn, as the test expects
-		SequencerBatchSealTime:      2 * time.Millisecond, // normally it is greater that block seal time, allows one more block to be added to the batch
-		SequencerBlockSealTime:      2 * time.Millisecond,
-		SequencerEmptyBlockSealTime: 2 * time.Millisecond,
-		InfoTreeUpdateInterval:      2 * time.Millisecond,
+		SequencerBatchSealTime: 2 * time.Millisecond, // normally it is greater that block seal time, allows one more block to be added to the batch
+		SequencerBlockSealTime: 2 * time.Millisecond,
+		InfoTreeUpdateInterval: 2 * time.Millisecond,
 	}
 
 	legacyVerifier := verifier.NewLegacyExecutorVerifier(*zkCfg, nil, db1, nil, nil)

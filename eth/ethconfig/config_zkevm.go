@@ -40,7 +40,6 @@ type Zk struct {
 	RpcRateLimits                          int
 	RpcGetBatchWitnessConcurrencyLimit     int
 	SequencerBlockSealTime                 time.Duration
-	SequencerEmptyBlockSealTime            time.Duration
 	SequencerBatchSealTime                 time.Duration
 	SequencerBatchVerificationTimeout      time.Duration
 	SequencerBatchVerificationRetries      int
@@ -127,9 +126,10 @@ type Zk struct {
 	L2InfoTreeUpdatesBatchSize     uint64
 	L2InfoTreeUpdatesEnabled       bool
 
-	Hardfork   Hardfork
-	Commitment Commitment
-	InjectGers bool
+	Hardfork               Hardfork
+	Commitment             Commitment
+	InjectGers             bool
+	ElasticBlockIterations uint64
 }
 
 type Hardfork string
