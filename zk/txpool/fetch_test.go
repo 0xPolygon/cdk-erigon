@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/holiman/uint256"
 	"sync"
 	"testing"
 	"time"
@@ -57,7 +58,7 @@ func TestFetch(t *testing.T) {
 	cfg := txpoolcfg.DefaultConfig
 	ethCfg := &ethconfig.Defaults
 	sendersCache := kvcache.New(kvcache.DefaultCoherentConfig)
-	pool, err := New(ch, coreDB, cfg, sendersCache, *u256.N1, nil, nil, nil, nil, nil, nil, ethCfg, aclsDB)
+	pool, err := New(ch, coreDB, cfg, sendersCache, uint256.Int(*u256.N1), nil, nil, nil, nil, nil, nil, ethCfg, aclsDB)
 	assert.NoError(err)
 	require.True(pool != nil)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -69,7 +70,7 @@ func TestFetch(t *testing.T) {
 
 	m := txpool.NewMockSentry(ctx, sentryServer)
 	sentryClient := direct.NewSentryClientDirect(direct.ETH66, m)
-	fetch := NewFetch(ctx, []direct.SentryClient{sentryClient}, pool, remoteKvClient, nil, nil, *u256.N1)
+	fetch := NewFetch(ctx, []direct.SentryClient{sentryClient}, pool, remoteKvClient, nil, nil, uint256.Int(*u256.N1))
 	var wg sync.WaitGroup
 	fetch.SetWaitGroup(&wg)
 	// The corresponding WaitGroup.Done() will be called by the Sentry.

@@ -54,7 +54,6 @@ import (
 	"github.com/erigontech/erigon-lib/common/assert"
 	"github.com/erigontech/erigon-lib/common/dbg"
 	"github.com/erigontech/erigon-lib/common/fixedgas"
-	"github.com/erigontech/erigon-lib/common/u256"
 	libkzg "github.com/erigontech/erigon-lib/crypto/kzg"
 	"github.com/erigontech/erigon-lib/gointerfaces"
 	"github.com/erigontech/erigon-lib/gointerfaces/grpcutil"
@@ -1454,10 +1453,10 @@ func (p *TxPool) addLocked(mt *metaTx, announcements *types.Announcements) Disca
 		//Regular txn threshold checks
 		tipThreshold := uint256.NewInt(0)
 		tipThreshold = tipThreshold.Mul(&found.Tx.Tip, uint256.NewInt(100+priceBump))
-		tipThreshold.Div(tipThreshold, u256.N100)
+		tipThreshold.Div(tipThreshold, uint256.NewInt(100))
 		feecapThreshold := uint256.NewInt(0)
 		feecapThreshold.Mul(&found.Tx.FeeCap, uint256.NewInt(100+priceBump))
-		feecapThreshold.Div(feecapThreshold, u256.N100)
+		feecapThreshold.Div(feecapThreshold, uint256.NewInt(100))
 		if mt.Tx.Tip.Cmp(tipThreshold) < 0 || mt.Tx.FeeCap.Cmp(feecapThreshold) < 0 {
 			// Both tip and feecap need to be larger than previously to replace the transaction
 			// In case if the transition is stuck, "poke" it to rebroadcast

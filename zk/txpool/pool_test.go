@@ -47,7 +47,7 @@ func TestNonceFromAddress(t *testing.T) {
 	cfg := txpoolcfg.DefaultConfig
 	ethCfg := &ethconfig.Defaults
 	sendersCache := kvcache.New(kvcache.DefaultCoherentConfig)
-	pool, err := New(ch, coreDB, cfg, sendersCache, *u256.N1, nil, nil, nil, nil, nil, nil, ethCfg, aclsDB)
+	pool, err := New(ch, coreDB, cfg, sendersCache, uint256.Int(*u256.N1), nil, nil, nil, nil, nil, nil, ethCfg, aclsDB)
 	assert.NoError(err)
 	require.True(pool != nil)
 	ctx := context.Background()
@@ -239,7 +239,7 @@ func TestOnNewBlock(t *testing.T) {
 		).
 		Times(1)
 
-	fetch := NewFetch(ctx, nil, pool, stateChanges, coreDB, db, *u256.N1)
+	fetch := NewFetch(ctx, nil, pool, stateChanges, coreDB, db, uint256.Int(*u256.N1))
 	err := fetch.handleStateChanges(ctx, stateChanges)
 	assert.ErrorIs(t, io.EOF, err)
 	assert.Equal(t, 3, len(minedTxs.Txs))
