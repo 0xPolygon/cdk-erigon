@@ -1482,6 +1482,9 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 	purgeEvery := time.NewTicker(p.cfg.PurgeEvery)
 	defer purgeEvery.Stop()
 
+	// For Xlayer
+	go p.listenApollo(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():

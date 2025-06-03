@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/apolloconfig/agollo/v4/storage"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
@@ -14,7 +15,7 @@ import (
 
 // loadSequencer loads the apollo sequencer config cache on startup
 func (c *Client) loadSequencer(value interface{}) {
-	ctx, err := c.getConfigContext(value)
+	ctx, _, err := c.getConfigContext(value)
 	if err != nil {
 		utils.Fatalf("load sequencer from apollo config failed, err: %v", err)
 	}
@@ -25,13 +26,7 @@ func (c *Client) loadSequencer(value interface{}) {
 }
 
 // fireSequencer fires the apollo sequencer config change
-func (c *Client) fireSequencer(key string, value *storage.ConfigChange) {
-	ctx, err := c.getConfigContext(value.NewValue)
-	if err != nil {
-		log.Error(fmt.Sprintf("fire sequencer from apollo config failed, err: %v", err))
-		return
-	}
-
+func (c *Client) fireSequencer(ctx *cli.Context, value *storage.ConfigChange) {
 	loadSequencerConfig(ctx)
 	log.Info(fmt.Sprintf("apollo sequencer old config : %+v", value.OldValue.(string)))
 	log.Info(fmt.Sprintf("apollo sequencer config changed: %+v", value.NewValue.(string)))
@@ -75,6 +70,53 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	if ctx.IsSet(utils.SequencerHaltOnBatchNumber.Name) {
 		ethCfg.Zk.SequencerHaltOnBatchNumber = ctx.Uint64(utils.SequencerHaltOnBatchNumber.Name)
 	}
+	if ctx.IsSet(utils.EnableAsyncCommit.Name) {
+		ethCfg.Zk.XLayer.EnableAsyncCommit = ctx.Bool(utils.EnableAsyncCommit.Name)
+	}
+	if ctx.IsSet(utils.BulkAddTxsFlag.Name) {
+		ethCfg.Zk.XLayer.BulkAddTxs = ctx.Bool(utils.BulkAddTxsFlag.Name)
+	}
+	if ctx.IsSet(utils.BulkAddTxsSizeFlag.Name) {
+		ethCfg.Zk.XLayer.BulkAddTxsSize = ctx.Int(utils.BulkAddTxsSizeFlag.Name)
+	}
+	if ctx.IsSet(utils.BulkAddTxsWaitTimeFlag.Name) {
+		ethCfg.Zk.XLayer.BulkAddTxsWaitTime = ctx.Duration(utils.BulkAddTxsWaitTimeFlag.Name)
+	}
+	if ctx.IsSet(utils.EnableAddTxNotify.Name) {
+		ethCfg.Zk.XLayer.EnableAddTxNotify = ctx.Bool(utils.EnableAddTxNotify.Name)
+	}
+	if ctx.IsSet(utils.YieldSizeFlag.Name) {
+		ethCfg.YieldSize = ctx.Uint64(utils.YieldSizeFlag.Name)
+	}
+	if ctx.IsSet(utils.PreRunAddressList.Name) {
+		addrHexes := libcommon.CliString2Array(ctx.String(utils.PreRunAddressList.Name))
+
+		ethCfg.XLayer.PreRunList = make(map[libcommon.Address]struct{}, len(addrHexes))
+		for _, addr := range addrHexes {
+			ethCfg.XLayer.PreRunList[libcommon.HexToAddress(addr)] = struct{}{}
+		}
+	}
+	if ctx.IsSet(utils.BlockInfoConcurrent.Name) {
+		ethCfg.Zk.XLayer.BlockInfoConcurrent = ctx.Bool(utils.BlockInfoConcurrent.Name)
+	}
+	if ctx.IsSet(utils.SequencerBatchCounterPercentage.Name) {
+		ethCfg.Zk.XLayer.SequencerBatchCounterPercentage = ctx.Int(utils.SequencerBatchCounterPercentage.Name)
+	}
+	if ctx.IsSet(utils.SequencerMaxBlockSealTime.Name) {
+		sequencerMaxBlockSealTimeVal := ctx.String(utils.SequencerMaxBlockSealTime.Name)
+		sequencerMaxBlockSealTime, err := time.ParseDuration(sequencerMaxBlockSealTimeVal)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Apollo parse %s: %s got error %v\n", utils.SequencerMaxBlockSealTime.Name, sequencerMaxBlockSealTimeVal, err))
+		} else {
+			ethCfg.Zk.XLayer.SequencerMaxBlockSealTime = sequencerMaxBlockSealTime
+		}
+	}
+	if ctx.IsSet(utils.GetLogsTimeout.Name) {
+		ethCfg.Zk.XLayer.GetLogsTimeout = ctx.Duration(utils.GetLogsTimeout.Name)
+	}
+	if ctx.IsSet(utils.GetLogsRetries.Name) {
+		ethCfg.Zk.XLayer.GetLogsRetries = ctx.Int(utils.GetLogsRetries.Name)
+	}
 
 	// For OkPay
 	utils.SetApolloOkPayXLayer(ctx, &ethCfg.DeprecatedTxPool)
@@ -103,4 +145,14 @@ func GetSequencerHalt(localHaltBatchNumber uint64) uint64 {
 		return UnsafeGetApolloConfig().EthCfg.Zk.SequencerHaltOnBatchNumber
 	}
 	return localHaltBatchNumber
+}
+
+func GetYieldSize(localYieldSize uint16) uint16 {
+	yieldSize := UnsafeGetApolloConfig().EthCfg.YieldSize
+	if IsApolloConfigSequencerEnabled() && yieldSize > 0 {
+		UnsafeGetApolloConfig().RLock()
+		defer UnsafeGetApolloConfig().RUnlock()
+		return uint16(yieldSize)
+	}
+	return localYieldSize
 }

@@ -15,7 +15,7 @@ import (
 
 // loadL2GasPricer loads the apollo l2gaspricer config cache on startup
 func (c *Client) loadL2GasPricer(value interface{}) {
-	ctx, err := c.getConfigContext(value)
+	ctx, _, err := c.getConfigContext(value)
 	if err != nil {
 		utils.Fatalf("load l2gaspricer from apollo config failed, err: %v", err)
 	}
@@ -26,13 +26,7 @@ func (c *Client) loadL2GasPricer(value interface{}) {
 }
 
 // fireL2GasPricer fires the apollo l2gaspricer config change
-func (c *Client) fireL2GasPricer(key string, value *storage.ConfigChange) {
-	ctx, err := c.getConfigContext(value.NewValue)
-	if err != nil {
-		log.Error(fmt.Sprintf("fire l2gaspricer from apollo config failed, err: %v", err))
-		return
-	}
-
+func (c *Client) fireL2GasPricer(ctx *cli.Context, value *storage.ConfigChange) {
 	loadL2GasPricerConfig(ctx)
 	log.Info(fmt.Sprintf("apollo l2gaspricer old config : %+v", value.OldValue.(string)))
 	log.Info(fmt.Sprintf("apollo l2gaspricer config changed: %+v", value.NewValue.(string)))

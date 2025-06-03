@@ -96,6 +96,8 @@ func (api *APIImpl) worker() {
 		cancel()
 	}()
 
+	go api.listenApollo(ctx)
+
 	txBulkMtx := new(sync.Mutex)
 	bulkProcessCh := make(chan struct{})
 
