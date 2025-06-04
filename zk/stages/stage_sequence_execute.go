@@ -19,9 +19,18 @@ import (
 	"github.com/erigontech/erigon/zk/hermez_db"
 	zktx "github.com/erigontech/erigon/zk/tx"
 	"github.com/erigontech/erigon/zk/utils"
+	"github.com/erigontech/erigon/zk/sequencer"
 )
 
 var shouldCheckForExecutionAndDataStreamAlignment = true
+
+type txYielder interface {
+	YieldNextTransaction() (types.Transaction, uint8, bool)
+	RemoveMinedTransactions(hashes []common.Hash)
+	AddMined(hash common.Hash)
+	SetExecutionDetails(executionAt uint64, forkId uint64)
+	BeginYielding()
+}
 
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
@@ -256,6 +265,10 @@ func sequencingBatchStep(
 	// until the next batch starts
 	sendersToSkip := make(map[common.Address]struct{})
 
+	// default to using the normal transaction yielder
+	var yielder txYielder = cfg.txYielder
+	minedTxHashes := make([]common.Hash, 0)
+
 	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {
 		if batchTimedOut {
 			log.Debug(fmt.Sprintf("[%s] Closing batch due to timeout", logPrefix))
@@ -267,6 +280,36 @@ func sequencingBatchStep(
 		blockTimer := time.NewTimer(cfg.zk.SequencerBlockSealTime)
 		emptyBlockTimer := time.NewTimer(cfg.zk.SequencerEmptyBlockSealTime)
 		ethBlockGasPool := new(core.GasPool).AddGas(transactionGasLimit) // used only in normalcy mode per block
+
+		if batchState.isLimboRecovery() {
+			transactions, err := getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash, executionAt)
+			if err != nil {
+				return err
+			}
+			yielder = sequencer.NewLimboTransactionYielder(transactions, *cfg.zk)
+		} else if batchState.isResequence() {
+			transactions, effectivePercentages, err := batchState.resequenceBatchJob.YieldNextBlockTransactions(zktx.DecodeTx)
+			if err != nil {
+				return err
+			}
+			yielder = sequencer.NewRecoveryTransactionYielder(transactions, effectivePercentages)
+		} else if batchState.isL1Recovery() {
+			blockNumbersInBatchSoFar, err := batchContext.sdb.hermezDb.GetL2BlockNosByBatch(batchState.batchNumber)
+			if err != nil {
+				return err
+			}
+
+			decodedBatchL2Data, found := batchState.batchL1RecoveryData.getDecodedL1RecoveredBatchDataByIndex(uint64(len(blockNumbersInBatchSoFar)))
+			if !found {
+				log.Info(fmt.Sprintf("[%s] Block %d is not part of batch %d. Stopping blocks loop", logPrefix, blockNumber, batchState.batchNumber))
+				break
+			}
+
+			yielder = sequencer.NewRecoveryTransactionYielder(decodedBatchL2Data.Transactions, decodedBatchL2Data.EffectiveGasPricePercentages)
+		}
+
+		yielder.SetExecutionDetails(executionAt, batchState.forkId)
+		go yielder.BeginYielding()
 
 		if batchState.isL1Recovery() {
 			blockNumbersInBatchSoFar, err := batchContext.sdb.hermezDb.GetL2BlockNosByBatch(batchState.batchNumber)
@@ -285,7 +328,9 @@ func sequencingBatchStep(
 			if !batchState.resequenceBatchJob.HasMoreBlockToProcess() {
 				for {
 					if pending, _ := streamWriter.legacyVerifier.HasPendingVerifications(); pending {
-						streamWriter.CommitNewUpdates()
+						if _, _, err = streamWriter.CommitNewUpdates(); err != nil {
+							return fmt.Errorf("failed to commit new updates: %w", err)
+						}
 						time.Sleep(1 * time.Second)
 					} else {
 						break
@@ -343,6 +388,8 @@ func sequencingBatchStep(
 		innerBreak := false
 		emptyBlockOverflow := false
 		sendersToTriggerStatechanges := make(map[common.Address]struct{})
+		yieldedSomething := false
+		badTxHashes := make([]common.Hash, 0)
 
 	OuterLoopTransactions:
 		for {
@@ -397,46 +444,15 @@ func sequencingBatchStep(
 			default:
 			}
 
-			if batchState.isLimboRecovery() {
-				batchState.blockState.transactionsForInclusion, err = getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash, executionAt)
-				if err != nil {
-					return err
-				}
-			} else if batchState.isResequence() {
-				batchState.blockState.transactionsForInclusion, err = batchState.resequenceBatchJob.YieldNextBlockTransactions(zktx.DecodeTx)
-				if err != nil {
-					return err
-				}
-			} else if !batchState.isL1Recovery() {
-
-				var newTransactions []types.Transaction
-				var newIds []common.Hash
-
-				newTransactions, newIds, _, err = getNextPoolTransactions(ctx, cfg, executionAt, batchState.forkId, batchState.yieldedTransactions)
-				if err != nil {
-					return err
-				}
-
-				batchState.blockState.transactionsForInclusion = append(batchState.blockState.transactionsForInclusion, newTransactions...)
-				for idx, tx := range newTransactions {
-					batchState.blockState.transactionHashesToSlots[tx.Hash()] = newIds[idx]
-				}
-			}
-
-			if len(batchState.blockState.transactionsForInclusion) == 0 {
-				if !batchState.isAnyRecovery() {
-					log.Trace(fmt.Sprintf("[%s] Sleep on SequencerTimeoutOnEmptyTxPool", logPrefix), "time in ms", batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool.Milliseconds())
-					time.Sleep(batchContext.cfg.zk.SequencerTimeoutOnEmptyTxPool)
-				}
-			} else {
-				log.Trace(fmt.Sprintf("[%s] Yielded transactions from the pool", logPrefix), "txCount", len(batchState.blockState.transactionsForInclusion))
-			}
-
-			badTxHashes := make([]common.Hash, 0)
-			minedTxHashes := make([]common.Hash, 0)
-
 		InnerLoopTransactions:
-			for i, transaction := range batchState.blockState.transactionsForInclusion {
+			for {
+				transaction, effectiveGas, ok := yielder.YieldNextTransaction()
+				if !ok {
+					break InnerLoopTransactions
+				}
+
+				yieldedSomething = true
+
 				// quick check if we should stop handling transactions
 				select {
 				case <-blockTimer.C:
@@ -469,8 +485,6 @@ func sequencingBatchStep(
 				if _, found := sendersToSkip[txSender]; found {
 					continue
 				}
-
-				effectiveGas := batchState.blockState.getL1EffectiveGases(cfg, i)
 
 				// The copying of this structure is intentional
 				backupDataSizeChecker := *blockDataSizeChecker
@@ -603,6 +617,7 @@ func sequencingBatchStep(
 					blockDataSizeChecker = &backupDataSizeChecker
 					batchState.onAddedTransaction(transaction, receipt, execResult, effectiveGas)
 					minedTxHashes = append(minedTxHashes, txHash)
+					yielder.AddMined(txHash)
 				}
 
 				// We will only update the processed index in resequence job if there isn't overflow
@@ -612,7 +627,7 @@ func sequencingBatchStep(
 			}
 
 			if batchState.isResequence() {
-				if len(batchState.blockState.transactionsForInclusion) == 0 {
+				if !yieldedSomething {
 					// We need to jump to the next block here if there are no transactions in current block
 					batchState.resequenceBatchJob.UpdateLastProcessedTx(batchState.resequenceBatchJob.CurrentBlock().L2Blockhash)
 					break OuterLoopTransactions
@@ -624,25 +639,6 @@ func sequencingBatchStep(
 				} else {
 					if cfg.zk.SequencerResequenceStrict {
 						return fmt.Errorf("strict mode enabled, but resequenced batch %d has transactions that overflowed counters or failed transactions", batchState.batchNumber)
-					}
-				}
-			}
-
-			// remove bad and mined transactions from the list for inclusion
-			for i := len(batchState.blockState.transactionsForInclusion) - 1; i >= 0; i-- {
-				tx := batchState.blockState.transactionsForInclusion[i]
-				hash := tx.Hash()
-				for _, badHash := range badTxHashes {
-					if badHash == hash {
-						batchState.blockState.transactionsForInclusion = removeInclusionTransaction(batchState.blockState.transactionsForInclusion, i)
-						break
-					}
-				}
-
-				for _, minedHash := range minedTxHashes {
-					if minedHash == hash {
-						batchState.blockState.transactionsForInclusion = removeInclusionTransaction(batchState.blockState.transactionsForInclusion, i)
-						break
 					}
 				}
 			}
@@ -674,7 +670,7 @@ func sequencingBatchStep(
 		// if we had some transactions yielded but didn't mine any in this block then we shouldn't commit it and move on.
 		// this could happen if there were lots of nonce issues from transaction in the pool due to a failed tx processing or similar and
 		// there wasn't much time left in the batch to mine any transactions
-		if len(batchState.blockState.transactionsForInclusion) > 0 && len(batchState.blockState.builtBlockElements.transactions) == 0 {
+		if yieldedSomething && len(batchState.blockState.builtBlockElements.transactions) == 0 {
 			log.Info(fmt.Sprintf("[%s] Skipping block: no transactions mined in block %d, skipping block for now", logPrefix, blockNumber))
 			break
 		}
@@ -703,9 +699,6 @@ func sequencingBatchStep(
 		}
 
 		// remove the decoded transactions from the cache
-		for _, txHash := range batchState.blockState.builtBlockElements.txSlots {
-			cfg.decodedTxCache.Remove(txHash)
-		}
 		for _, txHash := range batchState.blockState.transactionsToDiscard {
 			cfg.decodedTxCache.Remove(txHash)
 		}
@@ -766,6 +759,10 @@ func sequencingBatchStep(
 		}
 	}
 
+	// notify the yielder that we can remove mined transactions from the queue
+	yielder.RemoveMinedTransactions(minedTxHashes)
+	minedTxHashes = minedTxHashes[:0]
+
 	/*
 		if adding something below that line we must ensure
 		- it is also handled property in processInjectedInitialBatch
@@ -779,19 +776,14 @@ func sequencingBatchStep(
 	return sdb.tx.Commit()
 }
 
-func removeInclusionTransaction(orig []types.Transaction, index int) []types.Transaction {
-	if index < 0 || index >= len(orig) {
-		return orig
-	}
-	return append(orig[:index], orig[index+1:]...)
-}
-
 func handleBadTxHashCounter(hermezDb *hermez_db.HermezDb, txHash common.Hash) (uint64, error) {
 	counter, err := hermezDb.GetBadTxHashCounter(txHash)
 	if err != nil {
 		return 0, err
 	}
 	newCounter := counter + 1
-	hermezDb.WriteBadTxHashCounter(txHash, newCounter)
+	if err = hermezDb.WriteBadTxHashCounter(txHash, newCounter); err != nil {
+		return 0, fmt.Errorf("failed to write bad tx hash counter: %w", err)
+	}
 	return newCounter, nil
 }
