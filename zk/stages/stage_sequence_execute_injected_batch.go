@@ -61,6 +61,9 @@ func processInjectedInitialBatch(
 		if err != nil {
 			return err
 		}
+		if injectedBatch == nil {
+			return fmt.Errorf("injected batch does not exist")
+		}
 	}
 
 	header, parentBlock, err := prepareHeader(batchContext.sdb.tx, 0, math.MaxUint64, math.MaxUint64,

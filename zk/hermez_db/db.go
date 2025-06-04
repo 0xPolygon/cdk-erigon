@@ -1426,6 +1426,10 @@ func (db *HermezDbReader) GetL1InjectedBatch(index uint64) (*types.L1InjectedBat
 	if err != nil {
 		return nil, err
 	}
+	// no data
+	if v == nil {
+		return nil, nil
+	}
 	ib := new(types.L1InjectedBatch)
 	err = ib.Unmarshall(v)
 	if err != nil {
