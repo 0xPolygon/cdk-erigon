@@ -4,8 +4,16 @@ RPC_URL=$1
 PRIVATE_KEY="$2"
 RUNDIR=$(dirname "$0")
 
+if [[ -z "$RPC_URL" || -z "$PRIVATE_KEY" ]]; then
+    echo "Usage: $0 <rpc-url> <private-key>"
+    exit 1
+fi
+
 . "$RUNDIR/../utils.sh"
 
+# ------------------------------------
+# EIP 1559 Transaction Test
+# ------------------------------------
 testTxEIP1559() {
     local RPC_URL="$1"
     local VALUE="0.01ether"
@@ -36,4 +44,45 @@ testTxEIP1559() {
     return 0
 }
 
+# ------------------------------------
+# EIP 3198 Base Fee Test
+# ------------------------------------
+testBaseFeeEIP3198() {
+    local RPC_URL="$1"
+    local CONTRACT_ADDR
+
+    CONTRACT_ADDR=$(forge create \
+        $CONTRACTS_DIR/BaseFee.sol:Basefee \
+        --broadcast \
+        --rpc-url "$RPC_URL" \
+        --private-key "$PRIVATE_KEY" \
+        --json | jq -r '.deployedTo')
+
+    if [ -z "$CONTRACT_ADDR" ]; then
+        echo "Failed to deploy Basefee contract" >&2
+        return 1
+    fi
+
+    echo "Deployed at: $CONTRACT_ADDR"
+    echo "Calling getBasefee() on contract at $CONTRACT_ADDR"
+
+    BASEFEE=$(cast call \
+        "$CONTRACT_ADDR" \
+        "getBasefee()(uint256)" \
+        --rpc-url "$RPC_URL")
+
+    echo "Basefee: $BASEFEE"
+
+    # Check that no error occurred
+    # "call" will not return real basefee, but returns 0
+    # the real basefee is used in a tx only
+    if [[ "$BASEFEE" != "0" ]]; then
+        echo "Error: Expected basefee to be 0, got $BASEFEE"
+        return 1
+    fi
+
+    echo "Basefee test passed"
+}
+
 run testTxEIP1559 "$RPC_URL"
+run testBaseFeeEIP3198 "$RPC_URL"
