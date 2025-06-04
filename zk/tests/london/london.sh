@@ -84,5 +84,48 @@ testBaseFeeEIP3198() {
     echo "Basefee test passed"
 }
 
+# ------------------------------------
+# EIP 3541 Reject new contract code starting with the 0xEF byte
+# ------------------------------------
+testEIP3541() {
+    local RPC_URL="$1"
+    local EF_INITCODE="0x60ef60005360016000f3"  # runtime = 0xef (should revert)
+    local FE_INITCODE="0x60fe60005360016000f3"  # runtime = 0xfe (should succeed)
+    local STATUS
+
+    echo "Deploy runtime 0xef (must fail under EIP-3541)"
+
+    STATUS=$(cast send \
+        --rpc-url "$RPC_URL" \
+        --private-key "$PRIVATE_KEY" \
+        --gas-limit 100000 \
+        --create "$EF_INITCODE" \
+        --json | jq -r .status)
+
+    if [[ $STATUS == "0x1" ]]; then
+        echo "Error: Contract with runtime 0xef was deployed, but it should have been rejected." >&2
+        return 1
+    fi
+
+    echo "Correctly reverted. EIP-3541 prevented 0xef runtime."
+
+    echo "Deploy runtime 0xfe (must succeed)"
+
+    STATUS=$(cast send \
+        --rpc-url "$RPC_URL" \
+        --private-key "$PRIVATE_KEY" \
+        --gas-limit 100000 \
+        --create "$FE_INITCODE" \
+        --json | jq -r .status)
+
+    if [[ $STATUS != "0x1" ]]; then
+        echo "Error: Contract with runtime 0xfe failed to deploy." >&2
+        return 1
+    fi
+
+    echo "EIP-3541 test passed"
+}
+
 run testTxEIP1559 "$RPC_URL"
 run testBaseFeeEIP3198 "$RPC_URL"
+run testEIP3541 "$RPC_URL"
