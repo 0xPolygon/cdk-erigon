@@ -1,25 +1,11 @@
 #!/bin/bash
 
 RPC_URL=$1
-PRIVATE_KEY=$2
+PRIVATE_KEY="$2"
 RUNDIR=$(dirname "$0")
 CONTRACTS_DIR="$RUNDIR/../../debug_tools/test-contracts/contracts"
 
-run() {
-    local func_name=$1
-    shift  # shift off the function name, leave only the arguments
-    echo "--------------- Starting $func_name ---------------"
-    $func_name "$@"
-    local result=$?
-
-    if [ $result -ne 0 ]; then
-        echo "--------------- $func_name failed with exit code $result ---------------"
-        exit $result
-    else
-        echo "--------------- Completed $func_name ---------------"
-    fi
-    return $result
-}
+. "$RUNDIR/../utils.sh"
 
 # ------------------------------------
 # EIP-7516: https://eips.ethereum.org/EIPS/eip-7516

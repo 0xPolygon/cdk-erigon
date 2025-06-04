@@ -1,25 +1,11 @@
 #!/bin/bash
 
 RPC_URL=$1
-PRIVATE_KEY=$2
+PRIVATE_KEY="$2"
 RUNDIR=$(dirname "$0")
 CONTRACTS_DIR="$RUNDIR/../../debug_tools/test-contracts/contracts"
 
-run() {
-    local func_name=$1
-    shift  # shift off the function name, leave only the arguments
-    echo "--------------- Starting $func_name ---------------"
-    $func_name "$@"
-    local result=$?
-
-    if [ $result -ne 0 ]; then
-        echo "--------------- $func_name failed with exit code $result ---------------"
-        exit $result
-    else
-        echo "--------------- Completed $func_name ---------------"
-    fi
-    return $result
-}
+. "$RUNDIR/../utils.sh"
 
 # ------------------------------------
 # EIP-6780: https://eips.ethereum.org/EIPS/eip-6780 Do not delete the contract
@@ -64,10 +50,6 @@ testMCopyEIP5656() {
 
     EXPECTED_DATA="0x01020304"
     DATA=$(cast call $CONTRACT "copy(bytes)(bytes)" $EXPECTED_DATA -r $RPC_URL)
-    if [ -z "$DATA" ]; then
-        echo "MCOPY data verification failed: no data returned."
-        return 1
-    fi
 
     echo "MCOPY data returned: $DATA"
 
@@ -79,11 +61,39 @@ testMCopyEIP5656() {
     echo "MCOPY data verification successful"
 }
 
+# ------------------------------------
+# EIP 1153: https://eips.ethereum.org/EIPS/eip-1153 Transient storage
+# ------------------------------------
+testTransientStorageEIP1153() {
+    local RPC_URL=$1
+    CONTRACT=$(forge create $CONTRACTS_DIR/TransientStorage.sol:TransientStorage --broadcast --rpc-url $RPC_URL --private-key $PRIVATE_KEY --json | jq -r '.deployedTo')
+    if [ -z "$CONTRACT" ]; then
+        echo "Failed to deploy transient storage contract."
+        return 1
+    fi
+
+    echo "Transient storage contract deployed at: $CONTRACT"
+
+    # Here we pick 0x010203...0004 padded to 32 bytes:
+    INPUT_WORD=0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20
+    DATA=$(cast call $CONTRACT "writeThenReadTransient(bytes32)(bytes32)" $INPUT_WORD -r $RPC_URL)
+
+    echo "Transient storage data returned: $DATA"
+
+    if [ "$DATA" != $INPUT_WORD ]; then
+        echo "Transient storage data verification failed: expected $INPUT_WORD, got $DATA"
+        return 1
+    fi
+
+    echo "Transient storage data verification successful"
+}
+
 echo "=============== Running Dencun tests ==============="
 
 run testSendAllEIP4758EIP6780 "$RPC_URL"
 run testPointEvalPrecompileEIP4844 "$RPC_URL"
 run testMCopyEIP5656 "$RPC_URL"
+run testTransientStorageEIP1153 "$RPC_URL"
 
 echo "=============== Dencun tests completed ==============="
 
