@@ -366,7 +366,11 @@ func processVerificationLog(
 		logsVerificationResult.UpdateHigherBlock(info.L1BlockNo)
 		logsVerificationResult.VerificationCountInc()
 	case logIncompatible:
-		// log.Warn(fmt.Sprintf("L1 Syncer logIncompatible: %d %s", logEntry.BlockNumber, logEntry.Topics[0]))
+
+		//logRollupId := logEntry.Topics[1].Big().Uint64()
+		//log.Warn(fmt.Sprintf("L1 Syncer log VerificationTopicEtrog incompatible: blockNumber=%d, logIndex=%d, received rollupId=%d, await rollupId=%d", logEntry.BlockNumber, logEntry.Index, logRollupId, rollupId))
+	case logL1InfoTreeUpdate:
+		log.Info(fmt.Sprintf("L1 syncer received log logL1InfoTreeUpdate %d", logEntry.BlockNumber))
 	case logUnknown:
 		log.Warn(fmt.Sprintf("L1 Syncer unknown log: %d %s", logEntry.BlockNumber, logEntry.Topics[0]))
 	default:
@@ -709,7 +713,7 @@ func HandleInitialSequenceBatches(
 	// TX without trimming these off
 	injectedBatchLogTrailingBytes := getTrailingCutoffLen(l.Data)
 	trailingCutoff := len(l.Data) - injectedBatchLogTrailingBytes
-	log.Debug(fmt.Sprintf("Handle initial sequence batches, trail len:%v, log data: %v", injectedBatchLogTrailingBytes, l.Data))
+	log.Info(fmt.Sprintf("Handle initial sequence batches, trail len:%v, log data: %v", injectedBatchLogTrailingBytes, l.Data))
 
 	txData := l.Data[injectedBatchLogTransactionStartByte:trailingCutoff]
 

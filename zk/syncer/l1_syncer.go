@@ -167,6 +167,11 @@ func (s *L1Syncer) StopSyncer() {
 
 // RunQueryBlocksOnce performs a one-time query of blockchain logs between the last checked block and the latest block.
 func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, startBlockNumber uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error) {
+	defer func() {
+		close(logsCh)
+		close(errCh)
+	}()
+
 	if s.IsSyncStarted() {
 		log.Warn(fmt.Sprintf("[%s] L1 syncer is already started. From %d", logPrefix, startBlockNumber))
 		return
@@ -174,13 +179,9 @@ func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, startBlockNumber uint64,
 
 	s.StartSync()
 
-	// s.lastCheckedL1Block.Store(startBlockNumber)
-
 	defer func() {
 		log.Info(fmt.Sprintf("[%s] Stopping L1 RunQueryBlocksOnce syncer", logPrefix))
 
-		close(logsCh)
-		close(errCh)
 		s.StopSync()
 		s.StopDownloading()
 	}()
@@ -222,6 +223,12 @@ func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, startBlockNumber uint64,
 // RunQueryBlocks
 // It prevents multiple simultaneous executions and manages synchronization states across the process lifecycle.
 func (s *L1Syncer) RunQueryBlocks(logPrefix string, startBlockNumber uint64, logsCh chan<- []ethTypes.Log, errCh chan<- error) {
+	defer func() {
+
+		close(logsCh)
+		close(errCh)
+	}()
+
 	//if already started, don't start another thread
 	if s.IsSyncStarted() {
 		log.Warn(fmt.Sprintf("[%s] L1 syncer is already started. From %d", logPrefix, startBlockNumber))
@@ -230,18 +237,17 @@ func (s *L1Syncer) RunQueryBlocks(logPrefix string, startBlockNumber uint64, log
 
 	s.StartSync()
 
+	defer func() {
+		log.Info(fmt.Sprintf("[%s] Stopping L1 syncer RunQueryBlocks thread", logPrefix))
+
+		s.StopSync()
+		s.StopDownloading()
+	}()
+
 	//	s.lastCheckedL1Block.Store(startBlockNumber)
 
 	//start a thread to check for new l1 block with interval
 	go func() {
-		// Never called
-		defer func() {
-			log.Info(fmt.Sprintf("[%s] Stopping L1 syncer RunQueryBlocks thread", logPrefix))
-			close(logsCh)
-			close(errCh)
-			s.StopSync()
-			s.StopDownloading()
-		}()
 
 		log.Info(fmt.Sprintf("[%s] Starting L1 syncer RunQueryBlocks thread", logPrefix))
 

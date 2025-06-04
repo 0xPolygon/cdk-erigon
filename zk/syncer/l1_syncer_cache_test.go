@@ -86,8 +86,8 @@ func TestL1Cache(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, mockBlockNumber.Uint64(), lastTreeLogBlockNumber)
 
-	logsCh := make(chan types.Log, 3)
-	l1CacheSyncer.getL1TreeLogs(0, logsCh)
+	logsCh := make(chan types.Log)
+	go l1CacheSyncer.getL1TreeLogs(0, logsCh)
 	index := 0
 	for logEntry := range logsCh {
 		assert.Equal(t, l1InfoTreeLogs[index].BlockNumber, logEntry.BlockNumber)
@@ -96,6 +96,8 @@ func TestL1Cache(t *testing.T) {
 		assert.Equal(t, l1InfoTreeLogs[index].Topics, logEntry.Topics)
 		index++
 	}
+
+	assert.Equal(t, len(l1InfoTreeLogs), index)
 
 	// getL1TreeLogs
 	err = l1CacheSyncer.clearTreeLogs()

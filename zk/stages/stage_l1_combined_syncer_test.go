@@ -442,6 +442,7 @@ func TestSpawnL1SequencerSyncStage(t *testing.T) {
 
 				l1InjectedBatch, err := hDB.GetL1InjectedBatch(0)
 				require.NoError(t, err)
+				require.NotNil(t, l1InjectedBatch)
 
 				assert.Equal(t, l1InjectedBatch.L1BlockNumber, latestBlock.NumberU64())
 				assert.Equal(t, l1InjectedBatch.Timestamp, latestBlock.Time())

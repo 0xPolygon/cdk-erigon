@@ -83,7 +83,7 @@ func SpawnL1InfoTreeStage(
 		latestIndex = latestUpdate.Index
 	}
 
-	log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", processedLogs, "latestIndex", latestIndex)
+	log.Info(fmt.Sprintf("[%s] Info tree updates: count=%d latestIndex=%d", logPrefix, processedLogs, latestIndex))
 
 	if freshTx {
 		if funcErr = tx.Commit(); funcErr != nil {

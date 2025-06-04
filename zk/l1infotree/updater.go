@@ -127,13 +127,14 @@ func (u *Updater) WarmUp(logPrefix string, tx kv.RwTx) (processedLogs uint64, er
 		go u.syncer.GetL1TreeLogs(0, treeLogsChan)
 	}
 
-	// TODO: Optimized with chunked channel processing
+	// TODO: Optimize with chunked channel processing
 	for treeLog := range treeLogsChan {
 		treelogs = append(treelogs, treeLog)
 	}
 
 	if len(treelogs) > 0 {
-		processedLogs, err = u.ProcessInfoTreeUpdates("Updater WarmUp", tx, treelogs)
+		log.Info(fmt.Sprintf("[%s] GetL1TreeLogs: %d", logPrefix, len(treelogs)))
+		processedLogs, err = u.ProcessInfoTreeUpdates("L1TreeLogs Updater WarmUp", tx, treelogs)
 		if err != nil {
 			log.Warn(fmt.Sprintf("[%s] ProcessInfoTreeUpdates: %s", logPrefix, err))
 			return 0, err
@@ -164,7 +165,6 @@ func (u *Updater) WarmUp(logPrefix string, tx kv.RwTx) (processedLogs uint64, er
 	return 0, nil
 }
 
-// CheckForInfoTreeUpdates deprecated
 func (u *Updater) CheckForInfoTreeUpdates(logPrefix string, tx kv.RwTx) (uint64, error) {
 	var err error
 
@@ -201,7 +201,7 @@ func (u *Updater) logsHandler(
 		select {
 		case logs, ok := <-logsCh:
 			if !ok {
-				log.Info(fmt.Sprintf("[%s] L1 syncer RunQueryBlocksOnce logs channel closed", logPrefix))
+				log.Info(fmt.Sprintf("[%s] L1 syncer RunQueryBlocksOnce logs received: %d", logPrefix, len(result)))
 				return result, nil
 			}
 			processedLogs := u.processLogs(logPrefix, logs)

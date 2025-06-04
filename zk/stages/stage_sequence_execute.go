@@ -392,6 +392,7 @@ func sequencingBatchStep(
 
 			select {
 			case <-infoTreeTicker.C:
+				log.Info(fmt.Sprintf("[%s] CheckForInfoTreeUpdates start...", logPrefix))
 				processedLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
 				if err != nil {
 					log.Error(fmt.Sprintf("[%s] CheckForInfoTreeUpdates failed: %v", logPrefix, err))
@@ -695,6 +696,7 @@ func sequencingBatchStep(
 		}
 
 		if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress, batchCounters); err != nil {
+			log.Error(fmt.Sprintf("[%s] Failed to doFinishBlockAndUpdateState %d: %s", logPrefix, blockNumber, err))
 			return err
 		}
 
@@ -714,6 +716,7 @@ func sequencingBatchStep(
 			if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
 				return errCommitAndStart
 			}
+			// TODO: Fix defer
 			defer sdb.tx.Rollback()
 		}
 
@@ -726,7 +729,8 @@ func sequencingBatchStep(
 		}
 
 		// now trigger sender state changes in the pool where we encountered nonce issues during execution
-		if err := cfg.txPool.TriggerSenderStateChanges(ctx, sdb.tx, header.GasLimit, sendersToTriggerStatechanges); err != nil {
+		if err = cfg.txPool.TriggerSenderStateChanges(ctx, sdb.tx, header.GasLimit, sendersToTriggerStatechanges); err != nil {
+			log.Error(fmt.Sprintf("[%s] TriggerSenderStateChanges: %s", logPrefix, err))
 			return err
 		}
 
@@ -748,12 +752,17 @@ func sequencingBatchStep(
 		useExecutorForVerification := !batchState.isL1Recovery() && batchState.hasExecutorForThisBatch
 		counters, err := batchCounters.CombineCollectors(l1TreeUpdateIndex != 0)
 		if err != nil {
+			log.Error(fmt.Sprintf("[%s] CombineCollectors: %s", logPrefix, err))
 			return err
 		}
 		cfg.legacyVerifier.StartAsyncVerification(batchContext.s.LogPrefix(), batchState.forkId, batchState.batchNumber, block.Root(), counters.UsedAsMap(), batchState.builtBlocks, useExecutorForVerification, batchContext.cfg.zk.SequencerBatchVerificationTimeout, batchContext.cfg.zk.SequencerBatchVerificationRetries)
 
 		// check for new responses from the verifier
-		needsUnwind, err := updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
+		// TODO: Check unwind logic
+		needsUnwind, err = updateStreamAndCheckRollback(batchContext, batchState, streamWriter, u)
+		if err != nil {
+			log.Error(fmt.Sprintf("[%s] updateStreamAndCheckRollback: %s", logPrefix, err))
+		}
 
 		// lets commit everything after updateStreamAndCheckRollback no matter of its result unless
 		// we're in L1 recovery where losing some blocks on restart doesn't matter
@@ -761,15 +770,18 @@ func sequencingBatchStep(
 			if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
 				return errCommitAndStart
 			}
+			// Wrong defer call
 			defer sdb.tx.Rollback()
 		}
 
 		// check the return values of updateStreamAndCheckRollback
 		if err != nil || needsUnwind {
+			log.Error(fmt.Sprintf("[%s] CommitAndStart failed: %v", logPrefix, err))
 			return err
 		}
 
 		if _, err := rawdb.IncrementStateVersionByBlockNumberIfNeeded(batchContext.sdb.tx, block.NumberU64()); err != nil {
+			log.Error(fmt.Sprintf("[%s] CommitAndStart failed: %v", logPrefix, err))
 			return fmt.Errorf("writing plain state version: %w", err)
 		}
 
@@ -777,6 +789,7 @@ func sequencingBatchStep(
 		// here we -1 the block number as we know we have just created a new block so can simulate that the last block notified
 		// was the previous block created
 		if err := cfg.doneHook.AfterRun(batchContext.sdb.tx, block.NumberU64()-1, s.PrevUnwindPoint()); err != nil {
+			log.Error(fmt.Sprintf("[%s] CommitAndStart failed: %v", logPrefix, err))
 			return err
 		}
 	}
