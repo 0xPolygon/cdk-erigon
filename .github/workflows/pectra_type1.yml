@@ -12,6 +12,7 @@ on:
 env:
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
   DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+  PRIVATE_KEY: "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625"
 
 jobs:
   pectra-type1:
@@ -30,7 +31,8 @@ jobs:
         working-directory:  ${{ github.workspace }}
         run: |
           RPC_URL=$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)
-          ./zk/tests/pectra/pectra.sh $RPC_URL
+          ./zk/tests/pectra/pectra.sh $RPC_URL $PRIVATE_KEY
+          ./zk/tests/dencun/dencun.sh $RPC_URL $PRIVATE_KEY
 
       - name: Prepare logs
         working-directory: ./kurtosis-cdk
