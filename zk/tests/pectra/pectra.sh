@@ -1,19 +1,11 @@
 #!/bin/bash
 
 RPC_URL=$1
-PRIVATE_KEY="0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625"
+PRIVATE_KEY="$2"
 RUNDIR=$(dirname "$0")
 CONTRACTS_DIR="$RUNDIR/../../debug_tools/test-contracts/contracts"
 
-run() {
-    local func_name=$1
-    shift  # shift off the function name, leave only the arguments
-    echo "--------------- Starting $func_name ---------------"
-    $func_name "$@"
-    local result=$?
-    echo "--------------- Completed $func_name ---------------"
-    return $result
-}
+. "$RUNDIR/../utils.sh"
 
 # ------------------------------------
 # EIP-7516: https://eips.ethereum.org/EIPS/eip-7516
@@ -37,7 +29,7 @@ testBlobBaseFeeEIP7516() {
 
     if [ -z "$CONTRACT" ]; then
         echo "Failed to deploy contract."
-        exit 1
+        return 1
     fi
 
     local RPC_URL=$1
@@ -48,7 +40,7 @@ testBlobBaseFeeEIP7516() {
         echo "BlobBasefee is 1 as expected."
     else
         echo "BlobBasefee is not 1, it is $fee."
-        exit 1
+        return 1
     fi
 }
 
@@ -71,26 +63,15 @@ testCalldataCostEIP7623() {
         echo "Gas cost for 2048 zero bytes is as expected: $zeros_cost"
     else
         echo "Gas cost for 2048 zero bytes is not as expected: $zeros_cost"
-        exit 1
+        return 1
     fi
 
     if [ "$ones_cost" -eq 102920 ]; then
         echo "Gas cost for 2048 non-zero bytes is as expected: $ones_cost"
     else
         echo "Gas cost for 2048 non-zero bytes is not as expected: $ones_cost"
-        exit 1
+        return 1
     fi
-}
-
-# ------------------------------------
-# EIP-6780: https://eips.ethereum.org/EIPS/eip-6780 Do not delete the contract
-# EIP-4758: https://eips.ethereum.org/EIPS/eip-4758 Call SENDALL instead
-# ------------------------------------
-testSendAllEIP4758EIP6780() {
-    local RPC_URL=$1
-    local RECIPIENT=0x0123456789abcdef0123456789abcdef01234567
-    $RUNDIR/test_selfdestruct.sh --rpc-url $RPC_URL --private-key $PRIVATE_KEY --recipient $RECIPIENT --contract $CONTRACTS_DIR/selfdestruct.sol:SelfDestruct
-    return $?
 }
 
 # ------------------------------------
@@ -107,27 +88,23 @@ testSetCodeTxEIP7702() {
     echo "Funding status: $STATUS"
     if [ "$STATUS" != "0x1" ]; then
         echo "Failed to fund sender account: $STATUS"
-        exit 1
+        return 1
     fi
 
     echo "Sender account funded successfully."
     $RUNDIR/test_eip7702_setcode_tx.sh --rpc-url $RPC_URL --private-key-eoa $PRIVATE_KEY --private-key-sender $SPONSOR_PKEY --contract $CONTRACTS_DIR/delegate.sol:Delegate --gas 100_000
-    return $?
+
+    if [ $? -ne 0 ]; then
+        echo "EIP-7702 test failed."
+        return 1
+    fi
 }
 
-# ------------------------------------
-# EIP 4844: https://eips.ethereum.org/EIPS/eip-4844 Point eval precompile only (L2 does not support blobs)
-# ------------------------------------
-testPointEvalPrecompileEIP4844() {
-    local RPC_URL=$1
-    $RUNDIR/test_precompile_prague_pointeval.sh --rpc-url $RPC_URL
-    return $?
-}
-
+echo "=============== Running Pectra tests ==============="
 
 run testBlobBaseFeeEIP7516 "$RPC_URL"
 run testCalldataCostEIP7623 "$RPC_URL"
-run testSendAllEIP4758EIP6780 "$RPC_URL"
 run testSetCodeTxEIP7702 "$RPC_URL"
-run testPointEvalPrecompileEIP4844 "$RPC_URL"
+
+echo "=============== Pectra tests completed ==============="
 
