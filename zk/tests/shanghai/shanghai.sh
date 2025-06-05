@@ -136,9 +136,85 @@ testEIP3855() {
     echo "EIP-3855 test completed successfully."
 }
 
+
+# ------------------------------------
+# EIP-3860 “Limit and Meter Initcode” Test
+# ------------------------------------
+testEIP3860() {
+    local RPC_URL="$1"
+    local TX1_JSON TX2_JSON ERR_JSON
+    local GAS1_HEX GAS2_HEX GAS1 GAS2 DIFF
+    local TOO_LONG_INITCODE
+
+    echo "A) Generate and deploy 32-byte initcode (1 word)"
+    INIT32="0x$(printf '%064s' '' | tr ' ' '0')"
+    TX1_JSON=$(cast send \
+        --rpc-url "$RPC_URL" \
+        --private-key "$PRIVATE_KEY" \
+        --gas-limit 200000 \
+        --create "$INIT32" \
+        --json)
+
+    GAS1_HEX=$(echo "$TX1_JSON" | jq -r '.gasUsed')
+    # Convert hex‐string to decimal
+    GAS1=$((16#${GAS1_HEX#0x}))
+    echo "gasUsed for 32-byte initcode: $GAS1    (hex $GAS1_HEX)"
+
+
+    echo "B) Generate and deploy 64-byte initcode (2 words)"
+    INIT64="0x$(printf '%0128s' '' | tr ' ' '0')"
+    TX2_JSON=$(cast send \
+        --rpc-url "$RPC_URL" \
+        --private-key "$PRIVATE_KEY" \
+        --gas-limit 200000 \
+        --create "$INIT64" \
+        --json)
+
+    GAS2_HEX=$(echo "$TX2_JSON" | jq -r '.gasUsed')
+    GAS2=$((16#${GAS2_HEX#0x}))
+    echo "gasUsed for 64-byte initcode: $GAS2    (hex $GAS2_HEX)"
+
+    echo "C) Check that extra word costs 2 gas"
+    CALLDATA_COST=$((4 * 32)) # 4 gas per extra byte of calldata (32 bytes = 1 word)
+    DIFF=$((GAS2 - CALLDATA_COST - GAS1))
+    EXPECTED_DIFF=2 # 2 gas per extra word
+    if [[ "$DIFF" -eq "$EXPECTED_DIFF" ]]; then
+        echo "Expected 2 gas difference per extra word, got $DIFF"
+    else
+        echo "Expected 2 gas difference, got $DIFF" >&2
+        return 1
+    fi
+
+
+    echo "D) Attempt to deploy (49 152 + 1) bytes of initcode (should revert)"
+    # Build a hex string of length 49 153 bytes: “0x” + 49 153 “00” pairs.
+    # (Each byte = “00”, so N bytes → 2N hex digits after “0x”.)
+    local TOO_LONG_BYTES=49153
+    # Use `head`+`xxd` to generate a repeated “00” sequence of length 49153.
+    TOO_LONG_INITCODE="0x$(head -c $((TOO_LONG_BYTES)) < /dev/zero | xxd -p | tr -d '\n')"
+    # That string is 2×49 153 hex digits prefixed by “0x”, so 98 306 nibbles + “0x”.
+
+    # Now try to CREATE—it must revert with “out of gas” or “invalid opcode” because initcode too big.
+    if ERR_JSON=$(cast send\
+        --rpc-url "$RPC_URL" \
+        --private-key "$PRIVATE_KEY" \
+        --gas-limit 10_000_000 \
+        --create "$TOO_LONG_INITCODE" 2>&1); then
+        echo "Unexpected: Creation of >49 152 bytes did not revert!" >&2
+        return 1
+    else
+        echo "Deployment error (expected), message: $ERR_JSON"
+        echo "Reverted when initcode exceeded 49 152 bytes (EIP-3860 limit)."
+    fi
+
+    return 0
+}
+
+
 echo "=============== Running Shaghai tests ==============="
 
 run testEIP3651 "$RPC_URL"
 run testEIP3855 "$RPC_URL"
+run testEIP3860 "$RPC_URL"
 
 echo "=============== Shanghai tests completed ==============="
