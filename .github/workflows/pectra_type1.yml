@@ -33,6 +33,7 @@ jobs:
           RPC_URL=$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)
           ./zk/tests/pectra/pectra.sh $RPC_URL $PRIVATE_KEY
           ./zk/tests/dencun/dencun.sh $RPC_URL $PRIVATE_KEY
+          ./zk/tests/shanghai/shanghai.sh $RPC_URL $PRIVATE_KEY
           ./zk/tests/london/london.sh $RPC_URL $PRIVATE_KEY
 
       - name: Prepare logs

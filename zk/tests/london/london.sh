@@ -54,6 +54,7 @@ testBaseFeeEIP3198() {
 
     CONTRACT_ADDR=$(forge create \
         $CONTRACTS_DIR/BaseFee.sol:Basefee \
+        --evm-version london \
         --broadcast \
         --rpc-url "$RPC_URL" \
         --private-key "$PRIVATE_KEY" \
@@ -139,8 +140,7 @@ testEIP3529() {
 
     CONTRACT_ADDR=$(forge create \
         $CONTRACTS_DIR/Refund3529.sol:Refund \
-        --evm-version berlin \
-        --legacy \
+        --evm-version london \
         --broadcast \
         --rpc-url "$RPC_URL" \
         --private-key "$PRIVATE_KEY" \
