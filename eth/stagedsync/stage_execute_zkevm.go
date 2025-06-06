@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -21,8 +22,6 @@ import (
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
-
-	"os"
 
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -49,8 +48,10 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 	defer func() {
 		if cfg.zk.DebugLimit > 0 {
 			if err != nil {
-				log.Error("Execution Failed", "err", err, "block", highestBlockExecuted)
-				os.Exit(2)
+				if !errors.Is(err, common.ErrStopped) {
+					log.Error("Execution Failed", "err", err, "block", highestBlockExecuted)
+					os.Exit(2)
+				}
 			}
 		}
 	}()
