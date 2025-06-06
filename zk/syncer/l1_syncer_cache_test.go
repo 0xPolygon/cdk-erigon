@@ -86,10 +86,22 @@ func TestL1Cache(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, mockBlockNumber.Uint64(), lastTreeLogBlockNumber)
 
-	logsCh := make(chan types.Log)
-	go l1CacheSyncer.getL1TreeLogs(0, logsCh)
+	checkLogsChanClosed := func(ch chan types.Log) bool {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return true
+			}
+			panic("value from closed channel")
+		default:
+			return false
+		}
+	}
+
+	expectedLogsCh := make(chan types.Log)
+	go l1CacheSyncer.getL1TreeLogs(0, expectedLogsCh)
 	index := 0
-	for logEntry := range logsCh {
+	for logEntry := range expectedLogsCh {
 		assert.Equal(t, l1InfoTreeLogs[index].BlockNumber, logEntry.BlockNumber)
 		assert.Equal(t, l1InfoTreeLogs[index].Index, logEntry.Index)
 		assert.Equal(t, l1InfoTreeLogs[index].Address, logEntry.Address)
@@ -102,6 +114,8 @@ func TestL1Cache(t *testing.T) {
 	// getL1TreeLogs
 	err = l1CacheSyncer.clearTreeLogs()
 	assert.NoError(t, err)
+
+	assert.Equal(t, true, checkLogsChanClosed(expectedLogsCh))
 }
 
 func TestDecodeL1LogKey(t *testing.T) {

@@ -1,9 +1,95 @@
 package syncer
 
 import (
+	"context"
+	ethereum "github.com/erigontech/erigon"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/kv/memdb"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/zk/contracts"
+	"github.com/erigontech/erigon/zk/syncer/mocks"
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
+	"math/big"
 	"reflect"
 	"testing"
+	"time"
 )
+
+func TestRunQueryBlocksOnce(t *testing.T) {
+	ctx := context.Background()
+	l1CacheDb := memdb.NewTestDB(t)
+	l1CacheSyncer, err := NewL1SyncerCache(ctx, l1CacheDb)
+	assert.NoError(t, err)
+	defer l1CacheSyncer.Close()
+
+	// mocks
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	ethermanMock := mocks.NewMockIEtherman(mockCtrl)
+
+	l1ContractAddresses := []common.Address{
+		common.HexToAddress("0x1"),
+		common.HexToAddress("0x2"),
+		common.HexToAddress("0x3"),
+	}
+	l1ContractTopics := [][]common.Hash{
+		{common.HexToHash("0x1")},
+		{common.HexToHash("0x2")},
+		{common.HexToHash("0x3")},
+	}
+
+	latestBlockParentHash := common.HexToHash("0x123456789")
+	latestBlockTime := uint64(time.Now().Unix())
+	latestBlockNumber := big.NewInt(21)
+	latestBlockHeader := &types.Header{ParentHash: latestBlockParentHash, Number: latestBlockNumber, Time: latestBlockTime}
+	latestBlock := types.NewBlockWithHeader(latestBlockHeader)
+
+	ethermanMock.EXPECT().HeaderByNumber(gomock.Any(), latestBlockNumber).Return(latestBlockHeader, nil).AnyTimes()
+	ethermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestBlock, nil).AnyTimes()
+	filterQuery := ethereum.FilterQuery{
+		FromBlock: big.NewInt(20),
+		ToBlock:   latestBlockNumber,
+		Addresses: l1ContractAddresses,
+		Topics:    l1ContractTopics,
+	}
+	mainnetExitRoot := common.HexToHash("0x111")
+	rollupExitRoot := common.HexToHash("0x222")
+
+	l1InfoTreeLog := types.Log{
+		BlockNumber: latestBlockNumber.Uint64(),
+		Index:       0,
+		Address:     l1ContractAddresses[0],
+		Topics:      []common.Hash{contracts.UpdateL1InfoTreeTopic, mainnetExitRoot, rollupExitRoot},
+	}
+	filteredLogs := []types.Log{l1InfoTreeLog}
+	ethermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
+	ethermanMock.EXPECT().FilterLogs(gomock.Any(), gomock.Not(filterQuery)).Return(nil, nil).AnyTimes()
+
+	l1Syncer := NewL1Syncer(ctx, l1CacheSyncer, []IEtherman{ethermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
+
+	checkLogsChanClosed := func(ch chan []types.Log) bool {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return true
+			}
+			panic("value from closed channel")
+		default:
+			return false
+		}
+	}
+
+	logsCh := make(chan []types.Log)
+	errCh := make(chan error)
+
+	go l1Syncer.RunQueryBlocksOnce("Test", 0, logsCh, errCh)
+
+	expectedResult := processLogs(t, logsCh, errCh)
+
+	t.Log(expectedResult)
+	assert.Equal(t, true, checkLogsChanClosed(logsCh))
+}
 
 func TestMakeFetchJobs_RangeBased(t *testing.T) {
 	var (
@@ -71,6 +157,25 @@ func TestMakeFetchJobs(t *testing.T) {
 		result := makeFetchJobs(test.from, test.to, test.blockRange)
 		if !reflect.DeepEqual(result, test.expected) {
 			t.Errorf("Test %d failed: expected %+v, got %+v", i, test.expected, result)
+		}
+	}
+}
+
+func processLogs(t *testing.T, logsCh <-chan []types.Log, errCh <-chan error) []types.Log {
+	resultLogs := []types.Log{}
+	for {
+		select {
+		case logs, ok := <-logsCh:
+			if !ok {
+				return resultLogs
+			}
+			t.Log(logs)
+			resultLogs = append(resultLogs, logs...)
+		case errVal := <-errCh:
+			if errVal != nil {
+				t.Logf("Error received: %v", errVal)
+				return resultLogs
+			}
 		}
 	}
 }

@@ -96,7 +96,7 @@ func TestSpawnStageL1Syncer(t *testing.T) {
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
-	EthermanMock := mocks.NewMockIEtherman(mockCtrl)
+	ethermanMock := mocks.NewMockIEtherman(mockCtrl)
 
 	l1ContractAddresses := []common.Address{
 		common.HexToAddress("0x1"),
@@ -115,7 +115,7 @@ func TestSpawnStageL1Syncer(t *testing.T) {
 	latestBlockHeader := &types.Header{ParentHash: latestBlockParentHash, Number: latestBlockNumber, Time: latestBlockTime}
 	latestBlock := types.NewBlockWithHeader(latestBlockHeader)
 
-	EthermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestBlock, nil).AnyTimes()
+	ethermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestBlock, nil).AnyTimes()
 
 	filterQuery := ethereum.FilterQuery{
 		FromBlock: l1FirstBlock,
@@ -275,7 +275,7 @@ func TestSpawnStageL1Syncer(t *testing.T) {
 				l1InfoRoot := common.HexToHash("0x101010")
 
 				for i := uint64(15); i <= uint64(25); i++ {
-					err := hDB.WriteSequence(blockNum, i, txHash, stateRoot, l1InfoRoot)
+					err = hDB.WriteSequence(blockNum, i, txHash, stateRoot, l1InfoRoot)
 					require.NoError(t, err)
 				}
 
@@ -308,9 +308,9 @@ func TestSpawnStageL1Syncer(t *testing.T) {
 		filteredLogs = append(filteredLogs, ll)
 	}
 
-	EthermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
+	ethermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
 
-	l1Syncer := syncer.NewL1Syncer(ctx, l1CacheSyncer, []syncer.IEtherman{EthermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
+	l1Syncer := syncer.NewL1Syncer(ctx, l1CacheSyncer, []syncer.IEtherman{ethermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
 
 	updater := l1infotree.NewUpdater(&ethconfig.Zk{}, l1Syncer, l1infotree.NewInfoTreeL2RpcSyncer(ctx, &ethconfig.Zk{}))
 
@@ -359,7 +359,7 @@ func TestSpawnL1SequencerSyncStage(t *testing.T) {
 	// mocks
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
-	EthermanMock := mocks.NewMockIEtherman(mockCtrl)
+	ethermanMock := mocks.NewMockIEtherman(mockCtrl)
 
 	l1ContractAddresses := []common.Address{
 		common.HexToAddress("0x1"),
@@ -386,10 +386,10 @@ func TestSpawnL1SequencerSyncStage(t *testing.T) {
 	latestBlockHeader := &types.Header{ParentHash: latestBlockParentHash, Number: latestBlockNumber, Time: latestBlockTime}
 	latestBlock := types.NewBlockWithHeader(latestBlockHeader)
 
-	EthermanMock.EXPECT().HeaderByNumber(gomock.Any(), finalizedBlockNumber).Return(finalizedBlockHeader, nil).AnyTimes()
-	EthermanMock.EXPECT().BlockByNumber(gomock.Any(), big.NewInt(rpc.FinalizedBlockNumber.Int64())).Return(finalizedBlock, nil).AnyTimes()
-	EthermanMock.EXPECT().HeaderByNumber(gomock.Any(), latestBlockNumber).Return(latestBlockHeader, nil).AnyTimes()
-	EthermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestBlock, nil).AnyTimes()
+	ethermanMock.EXPECT().HeaderByNumber(gomock.Any(), finalizedBlockNumber).Return(finalizedBlockHeader, nil).AnyTimes()
+	ethermanMock.EXPECT().BlockByNumber(gomock.Any(), big.NewInt(rpc.FinalizedBlockNumber.Int64())).Return(finalizedBlock, nil).AnyTimes()
+	ethermanMock.EXPECT().HeaderByNumber(gomock.Any(), latestBlockNumber).Return(latestBlockHeader, nil).AnyTimes()
+	ethermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestBlock, nil).AnyTimes()
 
 	filterQuery := ethereum.FilterQuery{
 		FromBlock: l1FirstBlock,
@@ -572,9 +572,9 @@ func TestSpawnL1SequencerSyncStage(t *testing.T) {
 		filteredLogs = append(filteredLogs, ll)
 	}
 
-	EthermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
+	ethermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
 
-	l1Syncer := syncer.NewL1Syncer(ctx, l1CacheSyncer, []syncer.IEtherman{EthermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
+	l1Syncer := syncer.NewL1Syncer(ctx, l1CacheSyncer, []syncer.IEtherman{ethermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
 
 	updater := l1infotree.NewUpdater(&ethconfig.Zk{}, l1Syncer, l1infotree.NewInfoTreeL2RpcSyncer(ctx, &ethconfig.Zk{}))
 

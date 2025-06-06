@@ -52,7 +52,7 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 	// mocks
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
-	EthermanMock := mocks.NewMockIEtherman(mockCtrl)
+	ethermanMock := mocks.NewMockIEtherman(mockCtrl)
 
 	l1ContractAddresses := []common.Address{
 		common.HexToAddress("0x1"),
@@ -71,8 +71,8 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 	latestBlockHeader := &types.Header{ParentHash: latestBlockParentHash, Number: latestBlockNumber, Time: latestBlockTime}
 	latestBlock := types.NewBlockWithHeader(latestBlockHeader)
 
-	EthermanMock.EXPECT().HeaderByNumber(gomock.Any(), latestBlockNumber).Return(latestBlockHeader, nil).AnyTimes()
-	EthermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestBlock, nil).AnyTimes()
+	ethermanMock.EXPECT().HeaderByNumber(gomock.Any(), latestBlockNumber).Return(latestBlockHeader, nil).AnyTimes()
+	ethermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestBlock, nil).AnyTimes()
 	filterQuery := ethereum.FilterQuery{
 		FromBlock: latestBlockNumber,
 		ToBlock:   latestBlockNumber,
@@ -89,9 +89,9 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 		Topics:      []common.Hash{contracts.UpdateL1InfoTreeTopic, mainnetExitRoot, rollupExitRoot},
 	}
 	filteredLogs := []types.Log{l1InfoTreeLog}
-	EthermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
+	ethermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
 
-	l1Syncer := syncer.NewL1Syncer(ctx, l1CacheSyncer, []syncer.IEtherman{EthermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
+	l1Syncer := syncer.NewL1Syncer(ctx, l1CacheSyncer, []syncer.IEtherman{ethermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
 
 	// write l1 tree logs for cache bus
 	for _, filteredLog := range filteredLogs {
