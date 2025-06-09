@@ -19,8 +19,6 @@ import (
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/ethclient"
-	"github.com/ledgerwatch/erigon/zkevm/hex"
-	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
 	"github.com/ledgerwatch/erigon/zkevm/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -139,13 +137,6 @@ func WaitGRPCHealthy(address string) error {
 	})
 }
 
-// WaitL2BlockToBeVirtualized waits until a L2 Block has been virtualized or the given timeout expires.
-func WaitL2BlockToBeVirtualized(l2Block *big.Int, timeout time.Duration) error {
-	return Poll(DefaultInterval, timeout, func() (bool, error) {
-		return l2BlockVirtualizationCondition(l2Block, DefaultL2NetworkURL)
-	})
-}
-
 func WaitTxReceipt(ctx context.Context, txHash common.Hash, timeout time.Duration, client *ethclient.Client) (*types.Receipt, error) {
 	if client == nil {
 		return nil, fmt.Errorf("client is nil")
@@ -252,25 +243,6 @@ func grpcHealthyCondition(address string) (bool, error) {
 	done := state.Status == grpc_health_v1.HealthCheckResponse_SERVING
 
 	return done, nil
-}
-
-// l2BlockVirtualizationCondition
-func l2BlockVirtualizationCondition(l2Block *big.Int, l2NetworkURL string) (bool, error) {
-	response, err := client.JSONRPCCall(l2NetworkURL, "zkevm_isBlockVirtualized", hex.EncodeBig(l2Block))
-	if err != nil {
-		return false, err
-	}
-	if response.Error != nil {
-		return false, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
-	}
-
-	var result bool
-	err = json.Unmarshal(response.Result, &result)
-	log.Infof("Block %v is virtualized: %v", l2Block.String(), result)
-	if err != nil {
-		return false, err
-	}
-	return result, nil
 }
 
 // WaitSignal blocks until an Interrupt or Kill signal is received, then it

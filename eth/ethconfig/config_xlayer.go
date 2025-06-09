@@ -30,7 +30,6 @@ type XLayerConfig struct {
 	PreRunTaskNum   int
 
 	// Executor
-	ExecutorMock        bool
 	BlockInfoConcurrent bool
 
 	EnableAsyncCommit bool

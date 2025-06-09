@@ -26,7 +26,6 @@ zkevm.effective-gas-price-eth-transfer: 0.34
 zkevm.effective-gas-price-erc20-transfer: 0.44
 zkevm.effective-gas-price-contract-invocation: 0.54
 zkevm.effective-gas-price-contract-deployment: 0.74
-zkevm.executor-strict: false
 zkevm.allow-free-transactions: true
 zkevm.allow-pre-eip155-transactions: true
 

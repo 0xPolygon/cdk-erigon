@@ -97,8 +97,6 @@ In order to enable the zkevm_ namespace, please add 'zkevm' to the http.api flag
 ### Supported
 - `zkevm_batchNumber`
 - `zkevm_batchNumberByBlockNumber`
-- `zkevm_isBlockVirtualized`
-- `zkevm_virtualBatchNumber`
 - `zkevm_getFullBlockByHash`
 - `zkevm_getFullBlockByNumber`
 - `zkevm_virtualCounters`
@@ -190,9 +188,6 @@ For a full explanation of the config options, see below:
 - `http.api`: List of enabled HTTP API modules.
 
 Sequencer specific config:
-- `zkevm.executor-urls`: A csv list of the executor URLs.  These will be used in a round robbin fashion by the sequencer
-- `zkevm.executor-strict`: Defaulted to true, but can be set to false when running the sequencer without verifications (use with extreme caution)
-- `zkevm.witness-full`: Defaulted to false.  Controls whether the full or partial witness is used with the executor.
 - `zkevm.reject-smart-contract-deployments`: Defaulted to false.  Controls whether smart contract deployments are rejected by the TxPool.
 
 Resource Utilisation config:

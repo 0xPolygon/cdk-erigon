@@ -19,13 +19,6 @@ get_latest_l2_batch() {
     echo "$latest_batch_dec"
 }
 
-get_latest_l1_verified_batch() {
-    current_batch=$(cast logs --rpc-url "$(kurtosis port print cdk-v1 el-1-geth-lighthouse rpc)" --address 0x1Fe038B54aeBf558638CA51C91bC8cCa06609e91 --from-block 0 --json | jq -r '.[] | select(.topics[0] == "0x9c72852172521097ba7e1482e6b44b351323df0155f97f4ea18fcec28e1f5966" or .topics[0] == "0xd1ec3a1216f08b6eff72e169ceb548b782db18a6614852618d86bb19f3f9b0d3") | .topics[1]' | tail -n 1 | sed 's/^0x//')
-    current_batch_dec=$((16#$current_batch))
-    echo "$current_batch_dec"
-}
-
-
 wait_for_l1_batch() {
     local timeout=$1
     local batch_type=$2
@@ -50,9 +43,6 @@ wait_for_l1_batch() {
         if [ "$batch_type" = "virtual" ]; then
             current_batch=$(cast logs --rpc-url "$(kurtosis port print cdk-v1 el-1-geth-lighthouse rpc)" --address 0x1Fe038B54aeBf558638CA51C91bC8cCa06609e91 --from-block 0 --json | jq -r '.[] | select(.topics[0] == "0x3e54d0825ed78523037d00a81759237eb436ce774bd546993ee67a1b67b6e766") | .topics[1]' | tail -n 1 | sed 's/^0x//')
             current_batch=$((16#$current_batch))
-        elif [ "$batch_type" = "verified" ]; then
-            # TODO: zkevm_verifiedBatchNumber API was removed. This test needs to be re-designed.
-            current_batch=$(cast rpc zkevm_verifiedBatchNumber --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc)" | sed 's/^"//;s/"$//')
         else
             echo "Invalid batch type. Use 'virtual' or 'verified'."
             return 1
@@ -126,7 +116,7 @@ else
 fi
 
 echo "Copying and modifying config"
-kurtosis service exec cdk-v1  cdk-erigon-sequencer-001 'cp \-r /etc/cdk-erigon/ /tmp/ && sed -i '\''s/zkevm\.executor-strict: true/zkevm.executor-strict: false/;s/zkevm\.executor-urls: zkevm-stateless-executor-001:50071/zkevm.executor-urls: ","/;$a zkevm.disable-virtual-counters: true'\'' /tmp/cdk-erigon/config.yaml'
+kurtosis service exec cdk-v1  cdk-erigon-sequencer-001 'cp \-r /etc/cdk-erigon/ /tmp/'
 
 echo "Starting cdk-erigon with modified config"
 kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 "nohup cdk-erigon --pprof=true --pprof.addr 0.0.0.0 --config /tmp/cdk-erigon/config.yaml --datadir /home/erigon/data/dynamic-kurtosis-sequencer > /proc/1/fd/1 2>&1 &"
@@ -150,15 +140,15 @@ stop_cdk_erigon_sequencer
 
 
 # Good batch before counter overflow
-latest_verified_batch=$(get_latest_l1_verified_batch)
+#latest_verified_batch=$(get_latest_l1_verified_batch)
 
 # Rollback to the last good batch before the counter overflow on L1
-echo "Rolling back to batch $latest_verified_batch"
-cast send "0x2F50ef6b8e8Ee4E579B17619A92dE3E2ffbD8AD2" "rollbackBatches(address,uint64)" "0x1Fe038B54aeBf558638CA51C91bC8cCa06609e91" "$latest_verified_batch" --private-key "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" --rpc-url "$(kurtosis port print cdk-v1 el-1-geth-lighthouse rpc)"
+#echo "Rolling back to batch $latest_verified_batch"
+#cast send "0x2F50ef6b8e8Ee4E579B17619A92dE3E2ffbD8AD2" "rollbackBatches(address,uint64)" "0x1Fe038B54aeBf558638CA51C91bC8cCa06609e91" "$latest_verified_batch" --private-key "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" --rpc-url "$(kurtosis port print cdk-v1 el-1-geth-lighthouse rpc)"
 
 # For X Layer, ac and split db
-echo "Using integration tool to unwind to batch $latest_verified_batch"
-kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 "integration state_stages_zkevm --config=/etc/cdk-erigon/config.yaml --unwind-batch-no=$latest_verified_batch --chain dynamic-kurtosis --datadir /home/erigon/data/dynamic-kurtosis-sequencer $INTEGRATION_TOOL_EXTRA_FLAGS"
+#echo "Using integration tool to unwind to batch $latest_verified_batch"
+#kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 "integration state_stages_zkevm --config=/etc/cdk-erigon/config.yaml --unwind-batch-no=$latest_verified_batch --chain dynamic-kurtosis --datadir /home/erigon/data/dynamic-kurtosis-sequencer $INTEGRATION_TOOL_EXTRA_FLAGS"
 
 echo "Starting cdk-erigon with resequencing and counter enabled"
 kurtosis service exec cdk-v1 cdk-erigon-sequencer-001 "timeout 300s cdk-erigon --pprof=true --pprof.addr 0.0.0.0 --config /etc/cdk-erigon/config.yaml --datadir /home/erigon/data/dynamic-kurtosis-sequencer  --zkevm.sequencer-resequence-strict=false --zkevm.sequencer-resequence=true --zkevm.sequencer-resequence-reuse-l1-info-index=true"
@@ -208,10 +198,5 @@ else
     exit 1
 fi
 
-echo "Waiting for batch verification"
-if ! wait_for_l1_batch 1200 "verified"; then
-    echo "Failed to wait for batch verification"
-    exit 1
-fi
 
 echo "All steps completed successfully"

@@ -43,12 +43,6 @@ tasks:
     events:
       - pull_request
 
-  - name: test-executor
-    command: ./.github/scripts/update_config.sh && cd test && make test-executor
-    type: compose
-    events:
-      - pull_request
-
   - name: data-loss
     command: cd ./test && make test-data-loss
     type: compose

@@ -23,7 +23,7 @@ MaxConns = 20
 [ClaimTxManager]
 Enabled = true
 FrequencyToMonitorTxs = "1s"
-PrivateKey = {Path = "/pk/keystore.claimtxmanager", Password = "testonly"}
+PrivateKey = { Path = "/pk/keystore.claimtxmanager", Password = "testonly" }
 RetryInterval = "1s"
 RetryNumber = 10
 FreeGas = true
@@ -81,12 +81,12 @@ RootCAPath = "/app/root-ca-cert"
 Enabled = false
 
 [NetworkConfig]
-GenBlockNumber = 353
-PolygonBridgeAddress = "0x3a277Fa4E78cc1266F32E26c467F99A8eAEfF7c3"
+GenBlockNumber = 100
+PolygonBridgeAddress = "0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA"
 PolygonZkEVMGlobalExitRootAddress = "0xB8cedD4B9eF683f0887C44a6E4312dC7A6e2fcdB"
-PolygonRollupManagerAddress = "0x2d42E2899662EFf08b13eeb65b154b904C7a1c8a"
-PolygonZkEvmAddress = "0xeb173087729c88a47568AF87b17C653039377BA6"
-L2PolygonBridgeAddresses = ["0x3a277Fa4E78cc1266F32E26c467F99A8eAEfF7c3"]
+PolygonRollupManagerAddress = "0xE96dBF374555C6993618906629988d39184716B3"
+PolygonZkEvmAddress = "0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd"
+L2PolygonBridgeAddresses = ["0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA"]
 
 [NacosConfig]
 NacosUrls = ""

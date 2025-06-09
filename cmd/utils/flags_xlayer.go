@@ -285,12 +285,6 @@ var (
 		Usage: "When enabled, the sequencer will only sync the L1 info and exit",
 		Value: false,
 	}
-	// Executor
-	ExecutorMock = cli.BoolFlag{
-		Name:  "zkevm.executor-mock",
-		Usage: "Only for testing use. Generate the witness and return the verifierBundle without actually sending payload to executor.",
-		Value: false,
-	}
 	// block info concurrent calculation
 	BlockInfoConcurrent = cli.BoolFlag{
 		Name:  "zkevm.block-info-concurrent",

@@ -35,16 +35,16 @@ if [ -d "$KURTOSIS_CDK_DIR" ]; then
   
   # Check if in detached HEAD state or other abnormal states
   if ! git symbolic-ref -q HEAD >/dev/null; then
-    echo "Repository is in detached HEAD state, fetching and checking out v0.2.24 branch..."
+    echo "Repository is in detached HEAD state, fetching and checking out v0.4.3 branch..."
     git fetch origin
-    git checkout v0.2.24 || git checkout main || git checkout master
+    git checkout v0.4.3 || git checkout main || git checkout master
   else
     # Normal update
     git pull
   fi
 else
   echo "Cloning kurtosis-cdk repository..."
-  git clone --branch v0.2.24 https://github.com/0xPolygon/kurtosis-cdk.git "$KURTOSIS_CDK_DIR"
+  git clone --branch v0.4.3 https://github.com/0xPolygon/kurtosis-cdk.git "$KURTOSIS_CDK_DIR"
   cd "$KURTOSIS_CDK_DIR"
 fi
 
@@ -68,6 +68,11 @@ sed -i '/zkevm\.sequencer-initial-fork-id/d' ./templates/cdk-erigon/config.yml
 sed -i '/sentry.drop-useless-peers:/d' templates/cdk-erigon/config.yml
 sed -i '/zkevm\.pool-manager-url/d' ./templates/cdk-erigon/config.yml
 sed -i '/zkevm.l2-datastreamer-timeout:/d' templates/cdk-erigon/config.yml
+sed -i '/zkevm.rpc-get-batch-witness-concurrency-limit: 1/d' templates/cdk-erigon/config.yml
+
+# Add new flags for dev-pp
+echo 'zkevm.executor-mock: true' >> templates/cdk-erigon/config.yml
+echo 'zkevm.reject-low-gas-price-transactions: false' >> templates/cdk-erigon/config.yml
 
 # Add specific configuration based on AC_SPLIT setting
 if [ "$AC_SPLIT" = "ac-split" ]; then
@@ -79,11 +84,9 @@ fi
 
 # Create params.yml with the same configuration as CI
 echo "Creating params.yml for Kurtosis..."
-echo 'args:' > params.yml
-echo '  cdk_erigon_node_image: cdk-erigon:local' >> params.yml
-echo '  el-1-geth-lighthouse: ethpandaops/lighthouse@sha256:4902d9e4a6b6b8d4c136ea54f0e51582a32f356f3dec7194a1adee13ed2d662e' >> params.yml
+pwd
+cp ../../params.yml .
 
-yq -i -y ".args.data_availability_mode = \"cdk-validium\"" params.yml
 
 # Modify chainspec.json file (same as in CI)
 echo "Modifying chainspec.json..."

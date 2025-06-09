@@ -183,8 +183,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		SequencerResequence:                    ctx.Bool(utils.SequencerResequence.Name),
 		SequencerResequenceStrict:              ctx.Bool(utils.SequencerResequenceStrict.Name),
 		SequencerResequenceReuseL1InfoIndex:    ctx.Bool(utils.SequencerResequenceReuseL1InfoIndex.Name),
-		ExecutorUrls:                           strings.Split(strings.ReplaceAll(ctx.String(utils.ExecutorUrls.Name), " ", ""), ","),
-		ExecutorStrictMode:                     ctx.Bool(utils.ExecutorStrictMode.Name),
 		ExecutorRequestTimeout:                 ctx.Duration(utils.ExecutorRequestTimeout.Name),
 		ExecutorEnabled:                        ctx.Bool(utils.ExecutorEnabled.Name),
 		DatastreamNewBlockTimeout:              ctx.Duration(utils.DatastreamNewBlockTimeout.Name),
@@ -201,7 +199,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		DefaultGasPrice:                        ctx.Uint64(utils.DefaultGasPrice.Name),
 		MaxGasPrice:                            ctx.Uint64(utils.MaxGasPrice.Name),
 		GasPriceFactor:                         ctx.Float64(utils.GasPriceFactor.Name),
-		WitnessFull:                            ctx.Bool(utils.WitnessFullFlag.Name),
 		SyncLimit:                              ctx.Uint64(utils.SyncLimit.Name),
 		DebugTimers:                            ctx.Bool(utils.DebugTimers.Name),
 		DebugNoSync:                            ctx.Bool(utils.DebugNoSync.Name),
@@ -210,7 +207,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		DebugStepAfter:                         ctx.Uint64(utils.DebugStepAfter.Name),
 		PoolManagerUrl:                         ctx.String(utils.PoolManagerUrl.Name),
 		TxPoolRejectSmartContractDeployments:   ctx.Bool(utils.TxPoolRejectSmartContractDeployments.Name),
-		DisableVirtualCounters:                 ctx.Bool(utils.DisableVirtualCounters.Name),
 		ExecutorPayloadOutput:                  ctx.String(utils.ExecutorPayloadOutput.Name),
 		DAUrl:                                  ctx.String(utils.DAUrl.Name),
 		DataStreamHost:                         ctx.String(utils.DataStreamHost.Name),
@@ -240,8 +236,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		checkFlag(utils.L2RpcUrlFlag.Name, cfg.Zk.L2RpcUrl)
 		checkFlag(utils.L2DataStreamerUrlFlag.Name, cfg.L2DataStreamerUrl)
 	} else {
-		checkFlag(utils.ExecutorUrls.Name, cfg.ExecutorUrls)
-		checkFlag(utils.ExecutorStrictMode.Name, cfg.ExecutorStrictMode)
 		checkFlag(utils.ExecutorEnabled.Name, cfg.ExecutorEnabled)
 		checkFlag(utils.DataStreamHost.Name, cfg.DataStreamHost)
 		checkFlag(utils.DataStreamPort.Name, cfg.DataStreamPort)
@@ -249,19 +243,6 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 
 		if cfg.DeprecatedTxPool.Disable {
 			panic("You need tx-pool in order to run a sequencer. Enable it using txpool.disable: false")
-		}
-
-		// if we are running in strict mode, the default, and we have no executor URLs then we panic
-		if cfg.ExecutorStrictMode && !cfg.HasExecutors() {
-			panic("You must set executor urls when running in executor strict mode (zkevm.executor-strict)")
-		}
-
-		if cfg.ExecutorStrictMode && cfg.DisableVirtualCounters {
-			panic("You cannot disable virtual counters when running in strict mode")
-		}
-
-		if cfg.UseExecutors() && cfg.DisableVirtualCounters {
-			panic("You cannot disable virtual counters when running with executors")
 		}
 	}
 

@@ -49,10 +49,8 @@ var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b
 
 // ZkEvmAPI is a collection of functions that are exposed in the
 type ZkEvmAPI interface {
-	IsBlockVirtualized(ctx context.Context, blockNumber rpc.BlockNumber) (bool, error)
 	BatchNumberByBlockNumber(ctx context.Context, blockNumber rpc.BlockNumber) (hexutil.Uint64, error)
 	BatchNumber(ctx context.Context) (hexutil.Uint64, error)
-	VirtualBatchNumber(ctx context.Context) (hexutil.Uint64, error)
 	GetBatchByNumber(ctx context.Context, batchNumber rpc.BlockNumber, fullTx *bool) (json.RawMessage, error)
 	GetFullBlockByNumber(ctx context.Context, number rpc.BlockNumber, fullTx bool) (types.Block, error)
 	GetFullBlockByHash(ctx context.Context, hash common.Hash, fullTx bool) (types.Block, error)
@@ -117,32 +115,6 @@ func NewZkEvmAPI(
 	return a
 }
 
-// IsBlockVirtualized returns true if the block is virtualized (not confirmed on the L1 but exists in the L1 smart contract i.e. sequenced)
-func (api *ZkEvmAPIImpl) IsBlockVirtualized(ctx context.Context, blockNumber rpc.BlockNumber) (bool, error) {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer tx.Rollback()
-
-	batchNum, err := getBatchNoByL2Block(tx, uint64(blockNumber.Int64()))
-	if errors.Is(err, hermez_db.ErrorNotStored) {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	}
-
-	hermezDb := hermez_db.NewHermezDbReader(tx)
-	latestSequencedBatch, err := hermezDb.GetLatestSequence()
-	// X Layer fixed for e2e test
-	if err != nil || latestSequencedBatch == nil {
-		return false, err
-	}
-
-	// if the batch is lower than the latest sequenced then it must be virtualized
-	return batchNum <= latestSequencedBatch.BatchNo, nil
-}
-
 // BatchNumberByBlockNumber returns the batch number of the block
 func (api *ZkEvmAPIImpl) BatchNumberByBlockNumber(ctx context.Context, blockNumber rpc.BlockNumber) (hexutil.Uint64, error) {
 	tx, err := api.db.BeginRo(ctx)
@@ -173,41 +145,6 @@ func (api *ZkEvmAPIImpl) BatchNumber(ctx context.Context) (hexutil.Uint64, error
 	}
 
 	return hexutil.Uint64(currentBatchNumber), err
-}
-
-// VirtualBatchNumber returns the latest virtual batch number
-// A virtual batch is a batch that is in the process of being created and has not yet been verified.
-// The virtual batch number represents the next batch to be verified using zero-knowledge proofs.
-func (api *ZkEvmAPIImpl) VirtualBatchNumber(ctx context.Context) (hexutil.Uint64, error) {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return hexutil.Uint64(0), err
-	}
-	defer tx.Rollback()
-
-	hermezDb := hermez_db.NewHermezDbReader(tx)
-	latestSequencedBatch, err := hermezDb.GetLatestSequence()
-	if err != nil {
-		return hexutil.Uint64(0), err
-	}
-
-	if latestSequencedBatch == nil {
-		forkId, err := hermezDb.GetForkId(0)
-		if err != nil {
-			return hexutil.Uint64(0), err
-		}
-
-		// injected batch post etrog must be both virtual and verified
-		if forkId >= uint64(chain.ForkID7Etrog) {
-			return hexutil.Uint64(1), nil
-		}
-
-		return hexutil.Uint64(0), nil
-	}
-
-	// todo: what if this number is the same as the last verified batch number?  do we return 0?
-
-	return hexutil.Uint64(latestSequencedBatch.BatchNo), nil
 }
 
 // GetBatchDataByNumbers returns the batch data for the given batch numbers

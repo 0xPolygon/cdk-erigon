@@ -42,7 +42,6 @@ func newBatchContext(ctx context.Context, cfg *SequenceBlockCfg, historyCfg *sta
 type BatchState struct {
 	forkId                        uint64
 	batchNumber                   uint64
-	hasExecutorForThisBatch       bool
 	hasAnyTransactionsInThisBatch bool
 	builtBlocks                   []uint64
 	yieldedTransactions           mapset.Set[[32]byte]
@@ -53,11 +52,10 @@ type BatchState struct {
 	overflowTransactions          int
 }
 
-func newBatchState(forkId, batchNumber, blockNumber uint64, hasExecutorForThisBatch, l1Recovery bool, txPool *txpool.TxPool, resequenceBatchJob *ResequenceBatchJob) *BatchState {
+func newBatchState(forkId, batchNumber, blockNumber uint64, l1Recovery bool, txPool *txpool.TxPool, resequenceBatchJob *ResequenceBatchJob) *BatchState {
 	batchState := &BatchState{
 		forkId:                        forkId,
 		batchNumber:                   batchNumber,
-		hasExecutorForThisBatch:       hasExecutorForThisBatch,
 		hasAnyTransactionsInThisBatch: false,
 		builtBlocks:                   make([]uint64, 0, 128),
 		yieldedTransactions:           mapset.NewSet[[32]byte](),

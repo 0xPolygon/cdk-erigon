@@ -100,12 +100,12 @@ func TestBridgeTx(t *testing.T) {
 	auth, err := operations.GetAuth(operations.DefaultL1AdminPrivateKey, operations.DefaultL1ChainID)
 	require.NoError(t, err)
 
-	wethAddress := common.HexToAddress("0x17a2a2e444a7f3446877d1b71eaa2b2ae7533baf")
+	wethAddress := common.HexToAddress("0x95076baf95000f2e67b2f88998a26d82140308ca")
 	wethToken, err := operations.NewToken(wethAddress, l2Client)
 	require.NoError(t, err)
-
 	balanceBefore, err := wethToken.BalanceOf(&bind.CallOpts{}, destAddr)
 	require.NoError(t, err)
+	log.Infof("balanceBefore:%d", balanceBefore)
 
 	err = sendBridgeAsset(ctx, common.Address{}, amount, destNetwork, &destAddr, []byte{}, auth, common.HexToAddress(operations.BridgeAddr), l1Client)
 	require.NoError(t, err)
@@ -118,6 +118,7 @@ func TestBridgeTx(t *testing.T) {
 
 		balanceAfter, err = wethToken.BalanceOf(&bind.CallOpts{}, destAddr)
 		require.NoError(t, err)
+		log.Infof("balanceAfter:%d", balanceAfter)
 
 		if balanceAfter.Cmp(balanceBefore) > 0 {
 			return
@@ -1176,20 +1177,6 @@ func TestZKEVMRPC(t *testing.T) {
 	}
 
 	blockHash, blockNumber := setupTestEnvironment(t)
-
-	// Test zkevm_isBlockVirtualized
-	t.Run("ZKEVMIsBlockVirtualized", func(t *testing.T) {
-		isVirtualized, err := operations.ZKEVMIsBlockVirtualized(1) // Block #1
-		require.NoError(t, err)
-		log.Infof("ZKEVMIsBlockVirtualized result for block 1: %t", isVirtualized)
-	})
-
-	// Test zkevm_virtualBatchNumber
-	t.Run("ZKEVMVirtualBatchNumber", func(t *testing.T) {
-		virtualBatchNum, err := operations.ZKEVMVirtualBatchNumber()
-		require.NoError(t, err)
-		log.Infof("ZKEVMVirtualBatchNumber result: %d", virtualBatchNum)
-	})
 
 	// Test zkevm_getExitRootTable - already covered in debug tests but including here for completeness
 	t.Run("ZKEVMGetExitRootTable", func(t *testing.T) {

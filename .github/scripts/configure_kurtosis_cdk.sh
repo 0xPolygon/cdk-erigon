@@ -9,7 +9,6 @@ sed -i '/zkevm.sequencer-non-empty-batch-seal-time:/d' templates/cdk-erigon/conf
 sed -i '/zkevm\.sequencer-initial-fork-id/d' ./templates/cdk-erigon/config.yml
 sed -i '/sentry.drop-useless-peers:/d' templates/cdk-erigon/config.yml
 sed -i '/zkevm\.pool-manager-url/d' ./templates/cdk-erigon/config.yml
-sed -i '$a\zkevm.disable-virtual-counters: true' ./templates/cdk-erigon/config.yml
 sed -i '/zkevm.l2-datastreamer-timeout:/d' templates/cdk-erigon/config.yml
 if [ "$1" = "ac-split" ]; then
   echo "Will use ac-split"

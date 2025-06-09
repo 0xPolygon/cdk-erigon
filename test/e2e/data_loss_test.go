@@ -278,26 +278,26 @@ func TestModifyCodeCase5(t *testing.T) {
 		}
 	}
 
-	// Insert lose data logic before updateStreamAndCheckRollback
+	// Insert lose data logic before WriteBlockDetailsToDatastream
 	blockToInsert := `
 // For data loss
 if batchState.batchNumber == 11 {
-	log.Warn(fmt.Sprintf("Stop before updateStreamAndCheckRollback:%v,%v", batchState.batchNumber, block.Number))
+	log.Warn(fmt.Sprintf("Stop before WriteBlockDetailsToDatastream:%v,%v", batchState.batchNumber, block.Number))
 	time.Sleep(10 * time.Second)
 	os.Exit(1)
 }
-log.Info(fmt.Sprintf("updateStreamAndCheckRollback:%v,%v", batchState.batchNumber, block.Number))`
+log.Info(fmt.Sprintf("WriteBlockDetailsToDatastream:%v,%v", batchState.batchNumber, block.Number))`
 
 	lines := strings.Split(content, "\n")
 	inserted := false
 	for i, line := range lines {
-		if strings.Contains(line, "updateStreamAndCheckRollback(") {
+		if strings.Contains(line, "streamWriter.WriteBlockDetailsToDatastream(") {
 			lines = append(lines[:i], append([]string{blockToInsert}, lines[i:]...)...)
 			inserted = true
 			break
 		}
 	}
-	require.True(t, inserted, "Expected the block to be inserted before updateStreamAndCheckRollback")
+	require.True(t, inserted, "Expected the block to be inserted before streamWriter.WriteBlockDetailsToDatastream")
 
 	content = strings.Join(lines, "\n")
 

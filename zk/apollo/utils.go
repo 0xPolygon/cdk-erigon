@@ -90,12 +90,6 @@ func loadZkConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	if ctx.IsSet(utils.RebuildTreeAfterFlag.Name) {
 		ethCfg.Zk.RebuildTreeAfter = ctx.Uint64(utils.RebuildTreeAfterFlag.Name)
 	}
-	if ctx.IsSet(utils.ExecutorUrls.Name) {
-		ethCfg.Zk.ExecutorUrls = strings.Split(ctx.String(utils.ExecutorUrls.Name), ",")
-	}
-	if ctx.IsSet(utils.ExecutorStrictMode.Name) {
-		ethCfg.Zk.ExecutorStrictMode = ctx.Bool(utils.ExecutorStrictMode.Name)
-	}
 	if ctx.IsSet(utils.ExecutorRequestTimeout.Name) {
 		ethCfg.Zk.ExecutorRequestTimeout = ctx.Duration(utils.ExecutorRequestTimeout.Name)
 	}
@@ -107,9 +101,6 @@ func loadZkConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	}
 	if ctx.IsSet(utils.AllowPreEIP155Transactions.Name) {
 		ethCfg.Zk.AllowPreEIP155Transactions = ctx.Bool(utils.AllowPreEIP155Transactions.Name)
-	}
-	if ctx.IsSet(utils.WitnessFullFlag.Name) {
-		ethCfg.Zk.WitnessFull = ctx.Bool(utils.WitnessFullFlag.Name)
 	}
 	if ctx.IsSet(utils.SyncLimit.Name) {
 		ethCfg.Zk.SyncLimit = ctx.Uint64(utils.SyncLimit.Name)
@@ -128,9 +119,6 @@ func loadZkConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	}
 	if ctx.IsSet(utils.PoolManagerUrl.Name) {
 		ethCfg.Zk.PoolManagerUrl = ctx.String(utils.PoolManagerUrl.Name)
-	}
-	if ctx.IsSet(utils.DisableVirtualCounters.Name) {
-		ethCfg.Zk.DisableVirtualCounters = ctx.Bool(utils.DisableVirtualCounters.Name)
 	}
 	if ctx.IsSet(utils.ExecutorPayloadOutput.Name) {
 		ethCfg.Zk.ExecutorPayloadOutput = ctx.String(utils.ExecutorPayloadOutput.Name)

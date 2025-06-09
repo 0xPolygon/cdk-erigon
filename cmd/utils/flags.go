@@ -596,19 +596,9 @@ var (
 		Usage: "Reuse the L1 info index for resequencing",
 		Value: true,
 	}
-	ExecutorUrls = cli.StringFlag{
-		Name:  "zkevm.executor-urls",
-		Usage: "A comma separated list of grpc addresses that host executors",
-		Value: "",
-	}
 	ExecutorEnabled = cli.BoolFlag{
 		Name:  "zkevm.executor-enabled",
 		Usage: "Enables the executor. Used for testing limbo, when executor-urls are set, but we don't want to use them, only in limbo to verify limbo transactions. For this case, set it to false. Defaulted to true",
-		Value: true,
-	}
-	ExecutorStrictMode = cli.BoolFlag{
-		Name:  "zkevm.executor-strict",
-		Usage: "Defaulted to true to ensure you must set some executor URLs, bypass this restriction by setting to false",
 		Value: true,
 	}
 	ExecutorRequestTimeout = cli.DurationFlag{
@@ -744,11 +734,6 @@ var (
 		Usage: "The number of historical gas prices to keep",
 		Value: 1,
 	}
-	WitnessFullFlag = cli.BoolFlag{
-		Name:  "zkevm.witness-full",
-		Usage: "Enable/Diable witness full",
-		Value: false,
-	}
 	SyncLimit = cli.UintFlag{
 		Name:  "zkevm.sync-limit",
 		Usage: "Limit the number of blocks to sync, this will halt batches and execution to this number but keep the node active",
@@ -762,11 +747,6 @@ var (
 	TxPoolRejectSmartContractDeployments = cli.BoolFlag{
 		Name:  "zkevm.reject-smart-contract-deployments",
 		Usage: "Reject smart contract deployments",
-		Value: false,
-	}
-	DisableVirtualCounters = cli.BoolFlag{
-		Name:  "zkevm.disable-virtual-counters",
-		Usage: "Disable the virtual counters. This has an effect on on sequencer node and when external executor is not enabled.",
 		Value: false,
 	}
 	ExecutorPayloadOutput = cli.StringFlag{

@@ -11,11 +11,6 @@ zkevm.l1-rpc-url: https://rpc.ankr.com/eth
 
 #debug.limit: 8554110
 
-# zkevm.executor-urls: xlayer-executor:50071
-zkevm.executor-strict: false
-zkevm.witness-full: false
-zkevm.executor-mock: true
-
 zkevm.sequencer-block-seal-time: "3s"
 zkevm.sequencer-batch-seal-time: "10s"
 zkevm.sequencer-batch-sleep-duration: "0s"

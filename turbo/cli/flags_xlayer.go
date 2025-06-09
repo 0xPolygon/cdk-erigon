@@ -10,7 +10,6 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
-	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/urfave/cli/v2"
 )
 
@@ -48,7 +47,6 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		SequencerReplayExternalDatastream: ctx.Bool(utils.SequencerReplayExternalDatastream.Name),
 		SequencerReplayL1SyncOnly:         ctx.Bool(utils.SequencerReplayL1SyncOnly.Name),
 		StandaloneSMTDatabase:             ctx.Bool(utils.StandaloneSMTDatabase.Name),
-		ExecutorMock:                      ctx.Bool(utils.ExecutorMock.Name),
 		BlockInfoConcurrent:               ctx.Bool(utils.BlockInfoConcurrent.Name),
 		EnableAsyncCommit:                 ctx.Bool(utils.EnableAsyncCommit.Name),
 		BulkAddTxs:                        ctx.Bool(utils.BulkAddTxsFlag.Name),
@@ -77,12 +75,6 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		}
 		cfg.XLayer.Apollo.NamespaceName = strings.Join(ns, ",")
 	}
-
-	// Since witness generation has been removed, sequencer must use mock executor
-	if sequencer.IsSequencer() && !cfg.XLayer.ExecutorMock {
-		panic("Witness generation has been removed, sequencer must use mock executor (--zkevm.executor-mock)")
-	}
-
 }
 
 func ApplyFlagsForNodeXLayerConfig(ctx *cli.Context, cfg *nodecfg.Config) {

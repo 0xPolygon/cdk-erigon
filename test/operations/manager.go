@@ -27,7 +27,7 @@ const (
 	DefaultL2MetricsPrometheusURL = "http://127.0.0.1:9092/debug/metrics/prometheus"
 	DefaultL2MetricsURL           = "http://127.0.0.1:9092/debug/metrics"
 
-	BridgeAddr = "0x3a277Fa4E78cc1266F32E26c467F99A8eAEfF7c3"
+	BridgeAddr = "0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA"
 
 	DefaultTimeoutTxToBeMined = 1 * time.Minute
 
@@ -101,12 +101,6 @@ func ApplyL2Txs(ctx context.Context, txs []*types.Transaction, auth *bind.Transa
 			continue
 		}
 
-		// wait for l2 block to be virtualized
-		log.Infof("waiting for the block number %v to be virtualized", receipt.BlockNumber.String())
-		err = WaitL2BlockToBeVirtualized(receipt.BlockNumber, 4*time.Minute) //nolint:gomnd
-		if err != nil {
-			return nil, err
-		}
 		if confirmationLevel == VirtualConfirmationLevel {
 			continue
 		}

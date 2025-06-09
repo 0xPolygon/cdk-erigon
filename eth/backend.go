@@ -37,7 +37,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/disk"
 	"github.com/ledgerwatch/erigon-lib/common/mem"
 	"github.com/ledgerwatch/erigon-lib/diagnostics"
-	"github.com/ledgerwatch/erigon/zk/legacy_executor_verifier"
 	"github.com/ledgerwatch/erigon/zk/nacos"
 
 	"github.com/0xPolygonHermez/zkevm-data-streamer/datastreamer"
@@ -243,7 +242,6 @@ type Ethereum struct {
 	smtFlushCtx    context.Context
 	smtFlushCancel context.CancelFunc
 	smtFlushDoneCh chan struct{}
-	verifier       *legacy_executor_verifier.LegacyExecutorVerifier
 
 	// For X Layer, apollo
 	seqVerSyncer     *syncer.L1Syncer

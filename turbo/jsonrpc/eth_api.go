@@ -384,7 +384,6 @@ type APIImpl struct {
 	BadTxAllowance                uint64
 	SenderLocks                   *SenderLock
 	LogsMaxRange                  uint64
-	DisableVirtualCounters        bool
 
 	// For X Layer
 	dbsmt              kv.RoDB
@@ -436,7 +435,6 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBacken
 		LogsMaxRange:                  LogsMaxRange,
 		gasTracker:                    gasTracker,
 		RejectLowGasPriceTolerance:    ethCfg.RejectLowGasPriceTolerance,
-		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
 
 		// For X Layer
 		L2GasPricer:        gasprice.NewL2GasPriceSuggester(context.Background(), ethCfg.GPO),

@@ -19,7 +19,6 @@ type SequencerBatchStreamWriter struct {
 	logPrefix    string
 	sdb          *stageDb
 	streamServer server.DataStreamServer
-	hasExecutors bool
 }
 
 func newSequencerBatchStreamWriter(batchContext *BatchContext, batchState *BatchState) *SequencerBatchStreamWriter {
@@ -30,7 +29,6 @@ func newSequencerBatchStreamWriter(batchContext *BatchContext, batchState *Batch
 		logPrefix:    batchContext.s.LogPrefix(),
 		sdb:          batchContext.sdb,
 		streamServer: batchContext.cfg.dataStreamServer,
-		hasExecutors: batchState.hasExecutorForThisBatch,
 	}
 }
 

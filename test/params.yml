@@ -1,0 +1,12 @@
+deployment_stages:
+  deploy_cdk_bridge_ui: true
+args:
+  verbosity: debug
+  "use_dynamic_ports": false # fix the host port to services, no need to change metamask rpc after every restart
+# pp_vkey_hash may change.
+# run `docker run -it ghcr.io/agglayer/agglayer:0.3.0-rc.16 agglayer vkey` to get the right hash.
+# see the comment of 'pp_vkey_hash' in input_parser.star
+  "pp_vkey_hash": "0x00d6e4bdab9cac75a50d58262bb4e60b3107a6b61131ccdff649576c624b6fb7"
+  "consensus_contract_type": "pessimistic"
+  erigon_strict_mode: false
+# "agglayer_prover_primary_prover": "cpu-prover"
