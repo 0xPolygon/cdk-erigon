@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -58,33 +57,20 @@ type HermezDb interface {
 	WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Index uint64) error
 }
 
-type DatastreamClient interface {
-	RenewEntryChannel()
-	RenewMaxEntryChannel()
-	ReadAllEntriesToChannel() error
-	StopReadingToChannel()
-	GetEntryChan() *chan interface{}
-	GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, error)
-	GetLatestL2Block() (*types.FullL2Block, error)
-	GetProgressAtomic() *atomic.Uint64
-	Start() error
-	Stop() error
-	HandleStart() error
-}
-
-type dsClientCreatorHandler func(context.Context, *ethconfig.Zk, uint64) (DatastreamClient, error)
+// Using DatastreamClient from types package instead of defining it here
+type dsClientCreatorHandler func(context.Context, *ethconfig.Zk, uint64) (types.DatastreamClient, error)
 
 type BatchesCfg struct {
 	db                   kv.RwDB
 	blockRoutineStarted  bool
-	dsClient             DatastreamClient
+	dsClient             types.DatastreamClient
 	dsQueryClientCreator dsClientCreatorHandler
 	zkCfg                *ethconfig.Zk
 	chainConfig          *chain.Config
 	miningConfig         *params.MiningConfig
 }
 
-func StageBatchesCfg(db kv.RwDB, dsClient DatastreamClient, zkCfg *ethconfig.Zk, chainConfig *chain.Config, miningConfig *params.MiningConfig, options ...Option) BatchesCfg {
+func StageBatchesCfg(db kv.RwDB, dsClient types.DatastreamClient, zkCfg *ethconfig.Zk, chainConfig *chain.Config, miningConfig *params.MiningConfig, options ...Option) BatchesCfg {
 	cfg := BatchesCfg{
 		db:                  db,
 		blockRoutineStarted: false,
@@ -830,7 +816,7 @@ func getUnwindPoint(eriDb erigon_db.ReadOnlyErigonDb, hermezDb state.ReadOnlyHer
 }
 
 // newStreamClient instantiates new datastreamer client and starts it.
-func newStreamClient(ctx context.Context, cfg BatchesCfg, latestForkId uint64) (dsClient DatastreamClient, stopFn func(), err error) {
+func newStreamClient(ctx context.Context, cfg BatchesCfg, latestForkId uint64) (dsClient types.DatastreamClient, stopFn func(), err error) {
 	if cfg.dsQueryClientCreator != nil {
 		dsClient, err = cfg.dsQueryClientCreator(ctx, cfg.zkCfg, latestForkId)
 		if err != nil {
@@ -889,7 +875,6 @@ func getHighestDSL2Block(ctx context.Context, batchCfg BatchesCfg, latestFork ui
 	return fullBlock.L2BlockNumber, nil
 }
 
-func buildNewStreamClient(ctx context.Context, batchesCfg BatchesCfg, latestFork uint16) *client.StreamClient {
-	cfg := batchesCfg.zkCfg
-	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.L2DataStreamerUseTLS, cfg.L2DataStreamerTimeout, latestFork, client.DefaultEntryChannelSize)
+func buildNewStreamClient(ctx context.Context, batchesCfg BatchesCfg, latestFork uint16) types.DatastreamClient {
+	return client.NewClient(ctx, batchesCfg.zkCfg.L2DataStreamerUrl, batchesCfg.zkCfg.L2DataStreamerUseTLS, batchesCfg.zkCfg.L2DataStreamerTimeout, latestFork, batchesCfg.zkCfg.L2DataStreamerMaxEntryChan)
 }

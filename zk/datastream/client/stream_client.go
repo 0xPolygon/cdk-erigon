@@ -87,7 +87,7 @@ const (
 
 // Creates a new client fo datastream
 // server must be in format "url:port"
-func NewClient(ctx context.Context, server string, useTLS bool, checkTimeout time.Duration, latestDownloadedForkId uint16, maxEntryChanSize uint64) *StreamClient {
+func NewClient(ctx context.Context, server string, useTLS bool, checkTimeout time.Duration, latestDownloadedForkId uint16, maxEntryChanSize uint64) types.DatastreamClient {
 	c := &StreamClient{
 		ctx:              ctx,
 		checkTimeout:     checkTimeout,

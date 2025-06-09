@@ -129,6 +129,7 @@ import (
 	"github.com/erigontech/erigon/zk/datastream/client"
 	"github.com/erigontech/erigon/zk/datastream/natsstream"
 	"github.com/erigontech/erigon/zk/datastream/server"
+	dstypes "github.com/erigontech/erigon/zk/datastream/types"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	"github.com/erigontech/erigon/zk/legacy_executor_verifier"
@@ -1351,7 +1352,21 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Clien
 }
 
 // creates a datastream client with default parameters
-func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk, latestForkId uint16) *client.StreamClient {
+func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk, latestForkId uint16) dstypes.DatastreamClient {
+	if cfg.L2NatsHost != "" {
+		// Use NATS client if NATS host is configured
+		log.Info("Using NATS for datastream client", "host", cfg.L2NatsHost, "port", cfg.L2NatsPort)
+
+		return natsstream.CreateNATSDatastreamClient(
+			ctx,
+			fmt.Sprintf("%s:%d", cfg.L2NatsHost, cfg.L2NatsPort),
+			cfg.L2DataStreamerUseTLS,
+			cfg.L2DataStreamerTimeout,
+			latestForkId,
+			cfg.L2DataStreamerMaxEntryChan,
+		)
+	}
+	// Default to regular stream client
 	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.L2DataStreamerUseTLS, cfg.L2DataStreamerTimeout, latestForkId, cfg.L2DataStreamerMaxEntryChan)
 }
 

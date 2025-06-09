@@ -16,6 +16,7 @@ import (
 	"github.com/erigontech/erigon/turbo/shards"
 	"github.com/erigontech/erigon/turbo/snapshotsync/freezeblocks"
 	"github.com/erigontech/erigon/zk/datastream/server"
+	"github.com/erigontech/erigon/zk/datastream/types"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	"github.com/erigontech/erigon/zk/legacy_executor_verifier"
 	"github.com/erigontech/erigon/zk/sequencer"
@@ -36,7 +37,7 @@ func NewDefaultZkStages(ctx context.Context,
 	forkValidator *engine_helpers.ForkValidator,
 	engine consensus.Engine,
 	l1Syncer *syncer.L1Syncer,
-	datastreamClient zkStages.DatastreamClient,
+	datastreamClient types.DatastreamClient,
 	dataStreamServer server.DataStreamServer,
 	infoTreeUpdater *l1infotree.Updater,
 ) []*stagedsync.Stage {

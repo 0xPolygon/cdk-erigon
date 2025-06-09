@@ -81,8 +81,8 @@ func (b *NATSBookmark) AddBookmark(manager *Manager, bookmark []byte, entryNum u
 	value := make([]byte, 8) // uint64 = 8 bytes
 	binary.BigEndian.PutUint64(value, entryNum)
 
-	// Use bookmark bytes as key
-	key := string(bookmark)
+	// Use hex encoding for the key since bookmark bytes contain non-ASCII characters
+	key := fmt.Sprintf("%x", bookmark)
 
 	// Insert or update the bookmark into KV store
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -108,8 +108,8 @@ func (b *NATSBookmark) GetBookmark(manager *Manager, bookmark []byte) (uint64, e
 		return 0, err
 	}
 
-	// Use bookmark bytes as key
-	key := string(bookmark)
+	// Use hex encoding for the key since bookmark bytes contain non-ASCII characters
+	key := fmt.Sprintf("%x", bookmark)
 
 	// Get the bookmark from KV store
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

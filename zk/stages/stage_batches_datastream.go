@@ -8,16 +8,17 @@ import (
 
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/zk/datastream/client"
+	"github.com/erigontech/erigon/zk/datastream/types"
 )
 
 type DatastreamClientRunner struct {
-	dsClient   DatastreamClient
+	dsClient   types.DatastreamClient
 	logPrefix  string
 	stopRunner atomic.Bool
 	isReading  atomic.Bool
 }
 
-func NewDatastreamClientRunner(dsClient DatastreamClient, logPrefix string) *DatastreamClientRunner {
+func NewDatastreamClientRunner(dsClient types.DatastreamClient, logPrefix string) *DatastreamClientRunner {
 	return &DatastreamClientRunner{
 		dsClient:  dsClient,
 		logPrefix: logPrefix,
