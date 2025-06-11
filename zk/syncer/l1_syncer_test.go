@@ -48,7 +48,7 @@ func TestRunQueryBlocksOnce(t *testing.T) {
 	ethermanMock.EXPECT().HeaderByNumber(gomock.Any(), latestBlockNumber).Return(latestBlockHeader, nil).AnyTimes()
 	ethermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestBlock, nil).AnyTimes()
 	filterQuery := ethereum.FilterQuery{
-		FromBlock: big.NewInt(20),
+		FromBlock: big.NewInt(21),
 		ToBlock:   latestBlockNumber,
 		Addresses: l1ContractAddresses,
 		Topics:    l1ContractTopics,
@@ -56,13 +56,27 @@ func TestRunQueryBlocksOnce(t *testing.T) {
 	mainnetExitRoot := common.HexToHash("0x111")
 	rollupExitRoot := common.HexToHash("0x222")
 
-	l1InfoTreeLog := types.Log{
-		BlockNumber: latestBlockNumber.Uint64(),
-		Index:       0,
-		Address:     l1ContractAddresses[0],
-		Topics:      []common.Hash{contracts.UpdateL1InfoTreeTopic, mainnetExitRoot, rollupExitRoot},
+	filteredLogs := []types.Log{
+		{
+			BlockNumber: latestBlockNumber.Uint64(),
+			Index:       0,
+			Address:     l1ContractAddresses[0],
+			Topics:      []common.Hash{contracts.UpdateL1InfoTreeTopic, mainnetExitRoot, rollupExitRoot},
+		},
+		{
+			BlockNumber: latestBlockNumber.Uint64(),
+			Index:       1,
+			Address:     l1ContractAddresses[0],
+			Topics:      []common.Hash{contracts.UpdateL1InfoTreeTopic, mainnetExitRoot, rollupExitRoot},
+		},
+		{
+			BlockNumber: latestBlockNumber.Uint64(),
+			Index:       2,
+			Address:     l1ContractAddresses[0],
+			Topics:      []common.Hash{contracts.UpdateL1InfoTreeTopic, mainnetExitRoot, rollupExitRoot},
+		},
 	}
-	filteredLogs := []types.Log{l1InfoTreeLog}
+
 	ethermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
 	ethermanMock.EXPECT().FilterLogs(gomock.Any(), gomock.Not(filterQuery)).Return(nil, nil).AnyTimes()
 
@@ -80,14 +94,22 @@ func TestRunQueryBlocksOnce(t *testing.T) {
 		}
 	}
 
-	logsCh := make(chan []types.Log)
+	logsCh := make(chan []types.Log, 100)
 	errCh := make(chan error)
 
-	go l1Syncer.RunQueryBlocksOnce("Test", 0, logsCh, errCh)
+	go l1Syncer.RunQueryBlocksOnce("l1_syncer_test", 0, logsCh, errCh)
 
 	expectedResult := processLogs(t, logsCh, errCh)
 
-	t.Log(expectedResult)
+	assert.Len(t, expectedResult, len(filteredLogs))
+
+	for index, expectedLog := range expectedResult {
+		assert.Equal(t, expectedLog.BlockNumber, filteredLogs[index].BlockNumber)
+		assert.Equal(t, expectedLog.Index, filteredLogs[index].Index)
+		assert.Equal(t, expectedLog.Address, filteredLogs[index].Address)
+		assert.Equal(t, expectedLog.Topics, filteredLogs[index].Topics)
+	}
+
 	assert.Equal(t, true, checkLogsChanClosed(logsCh))
 }
 
@@ -169,7 +191,6 @@ func processLogs(t *testing.T, logsCh <-chan []types.Log, errCh <-chan error) []
 			if !ok {
 				return resultLogs
 			}
-			t.Log(logs)
 			resultLogs = append(resultLogs, logs...)
 		case errVal := <-errCh:
 			if errVal != nil {

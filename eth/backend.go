@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/c2h5oh/datasize"
 	"io/fs"
 	"math/big"
 	"net"
@@ -1070,6 +1071,10 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		}
 
 		log.Info("Rollup ID", "rollupId", cfg.L1RollupId)
+
+		l1CacheDBConfig := stack.Config()
+		l1CacheDBConfig.MdbxGrowthStep = 32 * datasize.MB
+		l1CacheDBConfig.MdbxDBSizeLimit = 2048 * datasize.MB
 
 		l1CacheDB, err := node.OpenDatabase(ctx, stack.Config(), kv.L1CacheDB, "", false, logger)
 		if err != nil {

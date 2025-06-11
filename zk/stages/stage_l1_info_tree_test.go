@@ -88,16 +88,14 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 		Address:     l1ContractAddresses[0],
 		Topics:      []common.Hash{contracts.UpdateL1InfoTreeTopic, mainnetExitRoot, rollupExitRoot},
 	}
-	filteredLogs := []types.Log{l1InfoTreeLog}
-	ethermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
+	filteredLogs := []*types.Log{&l1InfoTreeLog}
+	ethermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return([]types.Log{l1InfoTreeLog}, nil).AnyTimes()
 
 	l1Syncer := syncer.NewL1Syncer(ctx, l1CacheSyncer, []syncer.IEtherman{ethermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest")
 
 	// write l1 tree logs for cache bus
-	for _, filteredLog := range filteredLogs {
-		err = l1Syncer.WriteL1TreeLogs(filteredLog)
-		assert.NoError(t, err)
-	}
+	err = l1Syncer.WriteL1TreeLogs(filteredLogs)
+	assert.NoError(t, err)
 
 	updater := l1infotree.NewUpdater(&ethconfig.Zk{}, l1Syncer, l1infotree.NewInfoTreeL2RpcSyncer(ctx, &ethconfig.Zk{
 		L2RpcUrl: "http://127.0.0.1:8545",

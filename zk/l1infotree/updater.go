@@ -93,9 +93,12 @@ func (u *Updater) WarmUp(logPrefix string, tx kv.RwTx) (processedLogs uint64, er
 	if err != nil {
 		return 0, err
 	}
+
 	if progress == 0 && u.cfg.L1FirstBlock > 0 {
 		progress = u.cfg.L1FirstBlock - 1
 	}
+
+	log.Info(fmt.Sprintf("[%s] Starting L1InfoTree calculating from %d", logPrefix, progress))
 
 	u.progress = progress
 
@@ -380,7 +383,7 @@ func (u *Updater) HandleL1InfoTreeUpdate(hermezDb *hermez_db.HermezDb, l types.L
 
 	leafHash := HashLeafData(tmpUpdate.GER, tmpUpdate.ParentHash, tmpUpdate.Timestamp)
 	if tree.LeafExists(leafHash) {
-		log.Warn(fmt.Sprintf("[HandleL1InfoTreeUpdate] log: %d %d %d ", l.BlockNumber, l.TxIndex, l.Index))
+		// log.Warn(fmt.Sprintf("[HandleL1InfoTreeUpdate] log: %d %d %d ", l.BlockNumber, l.TxIndex, l.Index))
 		log.Warn(fmt.Sprintf("[HandleL1InfoTreeUpdate] Skipping log as L1 Info Tree leaf already exists: %s", common.BytesToHash(leafHash[:]).String()))
 		return nil
 	}

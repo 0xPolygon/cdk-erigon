@@ -173,6 +173,7 @@ func (s *L1Syncer) RunQueryBlocksOnce(logPrefix string, startBlockNumber uint64,
 	}()
 
 	if s.IsSyncStarted() {
+		errCh <- errors.New("l1 syncer is already started")
 		log.Warn(fmt.Sprintf("[%s] L1 syncer is already started. From %d", logPrefix, startBlockNumber))
 		return
 	}
@@ -539,10 +540,6 @@ func (s *L1Syncer) queryBlocks(logPrefix string, startBlock, lastBlock uint64, l
 			progress.Add(res.Size)
 
 			if len(res.Logs) > 0 {
-				// for _, logEntry := range res.Logs {
-				// 	log.Info(fmt.Sprintf("[%s] Log received: %s ====> %s", logPrefix, logEntry.Address, logEntry.Topics))
-				// }
-
 				logsCh <- res.Logs
 			}
 
@@ -780,8 +777,8 @@ func (s *L1Syncer) QueryForRootLog(to uint64) (*ethTypes.Log, error) {
 	return &logs[0], nil
 }
 
-func (s *L1Syncer) WriteL1TreeLogs(logEntry ethTypes.Log) error {
-	return s.l1Cache.writeL1TreeLogs(&logEntry)
+func (s *L1Syncer) WriteL1TreeLogs(logEntries []*ethTypes.Log) error {
+	return s.l1Cache.writeL1TreeLogs(logEntries)
 }
 
 func (s *L1Syncer) GetLastL1TreeLogBlockNumber() (uint64, error) {
@@ -790,6 +787,10 @@ func (s *L1Syncer) GetLastL1TreeLogBlockNumber() (uint64, error) {
 
 func (s *L1Syncer) GetL1TreeLogs(startBlockNumber uint64, logsCh chan<- ethTypes.Log) {
 	s.l1Cache.getL1TreeLogs(startBlockNumber, logsCh)
+}
+
+func (s *L1Syncer) GetL1TreeLogsCount() (uint64, error) {
+	return s.l1Cache.getL1TreeLogsCount()
 }
 
 func (s *L1Syncer) ClearTreeLogs() error {

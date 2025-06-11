@@ -54,7 +54,7 @@ func TestL1Cache(t *testing.T) {
 	assert.Equal(t, mockBlockHeader.Number, resultHeader.Number)
 	assert.Equal(t, mockBlockHeader.Time, resultHeader.Time)
 
-	l1InfoTreeLogs := []types.Log{
+	l1InfoTreeLogs := []*types.Log{
 		{
 			BlockNumber: mockBlockNumber.Uint64(),
 			Index:       0,
@@ -76,15 +76,17 @@ func TestL1Cache(t *testing.T) {
 	}
 
 	// writeL1TreeLogs
-	for index := range l1InfoTreeLogs {
-		err = l1CacheSyncer.writeL1TreeLogs(&l1InfoTreeLogs[index])
-		assert.NoError(t, err)
-	}
+	err = l1CacheSyncer.writeL1TreeLogs(l1InfoTreeLogs)
+	assert.NoError(t, err)
 
 	// getLastL1TreeLogBlockNumber
 	lastTreeLogBlockNumber, err := l1CacheSyncer.getLastL1TreeLogBlockNumber()
 	assert.NoError(t, err)
 	assert.Equal(t, mockBlockNumber.Uint64(), lastTreeLogBlockNumber)
+
+	countTreeLogs, err := l1CacheSyncer.getL1TreeLogsCount()
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(len(l1InfoTreeLogs)), countTreeLogs)
 
 	checkLogsChanClosed := func(ch chan types.Log) bool {
 		select {

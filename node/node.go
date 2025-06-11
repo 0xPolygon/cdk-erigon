@@ -363,6 +363,17 @@ func OpenDatabase(ctx context.Context, config *nodecfg.Config, label kv.Label, n
 			if config.MdbxGrowthStep > 0 && config.MdbxGrowthStep < mdbx.DefaultGrowthStep {
 				opts = opts.GrowthStep(config.MdbxGrowthStep)
 			}
+		case kv.L1CacheDB:
+			if config.MdbxPageSize.Bytes() > 0 {
+				opts = opts.PageSize(config.MdbxPageSize.Bytes())
+			}
+			if config.MdbxDBSizeLimit > 0 && config.MdbxDBSizeLimit < mdbx.DefaultMapSize {
+				opts = opts.MapSize(config.MdbxDBSizeLimit)
+			}
+			if config.MdbxGrowthStep > 0 && config.MdbxGrowthStep < mdbx.DefaultGrowthStep {
+				opts = opts.GrowthStep(config.MdbxGrowthStep)
+			}
+			opts = opts.DirtySpace(uint64(32 * datasize.GB))
 		default:
 		}
 

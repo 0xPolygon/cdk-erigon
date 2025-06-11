@@ -69,7 +69,8 @@ type IL1Syncer interface {
 	CheckL1BlockFinalized(blockNo uint64) (bool, uint64, error)
 	VerifyAddress(logEntry *ethTypes.Log) bool
 	IsSequencer() bool
-	WriteL1TreeLogs(ethTypes.Log) error
+	WriteL1TreeLogs([]*ethTypes.Log) error
+	GetL1TreeLogsCount() (uint64, error)
 }
 
 var (
@@ -108,6 +109,7 @@ type logsVerificationResult struct {
 	newVerificationsCount       atomic.Uint64
 	newSequencesCount           atomic.Uint64
 	highestWrittenL1BlockNumber atomic.Uint64
+	l1InfoTreeLogsCount         atomic.Uint64
 	highestVerification         *types.L1BatchInfo
 	errChan                     chan error
 }
@@ -151,7 +153,7 @@ func SpawnStageL1CombinedSyncer(
 		return fmt.Errorf("GetStageProgress, %w", err)
 	}
 
-	if l1BlockProgress <= cfg.zkCfg.L1FinalizedBlockRequirement && cfg.zkCfg.L1FinalizedBlockRequirement > 0 {
+	if cfg.zkCfg.L1FinalizedBlockRequirement > 0 && l1BlockProgress <= cfg.zkCfg.L1FinalizedBlockRequirement {
 		for {
 			finalized, finalizedBn, err := cfg.syncer.CheckL1BlockFinalized(cfg.zkCfg.L1FinalizedBlockRequirement)
 			if err != nil {
@@ -190,18 +192,27 @@ func SpawnStageL1CombinedSyncer(
 		return fmt.Errorf("logsHandler: %w", err)
 	}
 
+	l1TreeLogsCached, err := cfg.syncer.GetL1TreeLogsCount()
+
+	if err != nil {
+		log.Warn(fmt.Sprintf("[%s] Failed to get L1 tree logs count: %v", logPrefix, err))
+	}
+
 	latestCheckedBlock := cfg.syncer.GetLastCheckedL1Block()
 
 	lastCheckedL1BlockCounter.Set(float64(latestCheckedBlock))
 
+	log.Info(fmt.Sprintf("[%s] L1 Tree Logs cached: %d", logPrefix, l1TreeLogsCached))
+
 	log.Info(fmt.Sprintf(
-		"[%s] Saving L1 syncer progress. latestCheckedBlock: %d, l1BlockProgress: %d, newVerificationsCount: %d, newSequencesCount: %d, highestWrittenL1BlockNo: %d",
+		"[%s] Saving L1 syncer progress. latestCheckedBlock: %d, l1BlockProgress: %d, newVerificationsCount: %d, newSequencesCount: %d, highestWrittenL1BlockNo: %d, l1InfoTreeLogsCount: %d",
 		logPrefix,
 		latestCheckedBlock,
 		l1BlockProgress,
 		result.VerificationCount(),
 		result.SequenceCount(),
 		result.HighestWrittenL1BlockNumber(),
+		result.L1InfoTreeLogsCount(),
 	),
 	)
 
@@ -262,7 +273,7 @@ func logsHandler(
 			}
 		case errVal := <-errCh:
 			if errVal != nil {
-				log.Info(fmt.Sprintf("[%s] L1 syncer RunQueryBlocksOnce error: %s", logPrefix, errVal))
+				log.Warn(fmt.Sprintf("[%s] L1 syncer RunQueryBlocksOnce error: %s", logPrefix, errVal))
 			}
 		}
 	}
@@ -277,6 +288,17 @@ func processLogs(
 	logsVerificationResult *logsVerificationResult,
 	syncer IL1Syncer,
 ) error {
+	//log.Info(fmt.Sprintf("Logs count: %d", len(logEntries)))
+	l1InfoTreeLogs := make([]*ethTypes.Log, 0)
+	defer func() {
+		if len(l1InfoTreeLogs) > 0 {
+			//log.Info(fmt.Sprintf("Write l1tree count: %d", len(l1InfoTreeLogs)))
+			err := syncer.WriteL1TreeLogs(l1InfoTreeLogs)
+			if err != nil {
+				log.Warn("Cannot Write L1 Tree Logs", logPrefix, err)
+			}
+		}
+	}()
 	for logEntryIndex := range logEntries {
 		if !syncer.VerifyAddress(&logEntries[logEntryIndex]) {
 			log.Info(fmt.Sprintf("[%s][Security] Log address mismatch with defined addresses. L1 syncer skipping log entry %s.", logPrefix, logEntries[logEntryIndex].Address))
@@ -289,22 +311,23 @@ func processLogs(
 				return fmt.Errorf("processVerificationLog: %w", err)
 			}
 		case logTypeSequence:
-			// optimize slow operation
-			headersMap, err := syncer.L1QueryHeaders([]ethTypes.Log{logEntries[logEntryIndex]})
+			var (
+				header *ethTypes.Header
+				err    error
+			)
+			if logEntries[logEntryIndex].Topics[0] == contracts.InitialSequenceBatchesTopic {
+				header, err = syncer.GetHeader(logEntries[logEntryIndex].BlockNumber)
+			}
 			if err != nil {
 				return err
 			}
 
-			if err = processSequencerLog(&logEntries[logEntryIndex], rollupId, hermezDb, headersMap, logsVerificationResult); err != nil {
+			if err = processSequencerLog(&logEntries[logEntryIndex], rollupId, hermezDb, header, logsVerificationResult); err != nil {
 				return fmt.Errorf("processSequencerLog: %w", err)
 			}
 		case logTypeL1InfoTree:
-			err := syncer.WriteL1TreeLogs(logEntries[logEntryIndex])
-			if err != nil {
-				log.Warn("Cannot Write L1 Tree Logs", logPrefix, err)
-			}
-			// logsVerificationResult.l1InfoTreeLogs = append(logsVerificationResult.l1InfoTreeLogs, logEntries[logEntryIndex])
-
+			l1InfoTreeLogs = append(l1InfoTreeLogs, &logEntries[logEntryIndex])
+			logsVerificationResult.L1InfoTreeLogCountInc()
 		default:
 			log.Warn("L1 Syncer unknown topic", "topic", logEntries[logEntryIndex].Topics[0])
 		}
@@ -383,13 +406,11 @@ func processSequencerLog(
 	logEntry *ethTypes.Log,
 	rollupId uint64,
 	hermezDb *hermez_db.HermezDb,
-	headersMap map[uint64]*ethTypes.Header,
+	header *ethTypes.Header,
 	logsVerificationResult *logsVerificationResult,
 ) error {
 	switch logEntry.Topics[0] {
 	case contracts.InitialSequenceBatchesTopic:
-		// Called once, optimize
-		header := headersMap[logEntry.BlockNumber]
 		if err := HandleInitialSequenceBatches(hermezDb, logEntry, header); err != nil {
 			log.Error(fmt.Sprintf("[processSequencerLog] HandleInitialSequenceBatches error: %s", err))
 			return err
@@ -462,33 +483,41 @@ func newLogsVerificationResult() *logsVerificationResult {
 }
 
 // SequenceCountInc atomically increments the count of new sequences by 1.
-func (l *logsVerificationResult) SequenceCountInc() {
-	l.newSequencesCount.Add(1)
+func (r *logsVerificationResult) SequenceCountInc() {
+	r.newSequencesCount.Add(1)
 }
 
-func (l *logsVerificationResult) SequenceCount() uint64 {
-	return l.newSequencesCount.Load()
+func (r *logsVerificationResult) SequenceCount() uint64 {
+	return r.newSequencesCount.Load()
+}
+
+func (r *logsVerificationResult) L1InfoTreeLogCountInc() {
+	r.l1InfoTreeLogsCount.Add(1)
+}
+
+func (r *logsVerificationResult) L1InfoTreeLogsCount() uint64 {
+	return r.l1InfoTreeLogsCount.Load()
 }
 
 // VerificationCountInc atomically increments the count of new verifications by 1.
-func (l *logsVerificationResult) VerificationCountInc() {
-	l.newVerificationsCount.Add(1)
+func (r *logsVerificationResult) VerificationCountInc() {
+	r.newVerificationsCount.Add(1)
 }
 
-func (l *logsVerificationResult) VerificationCount() uint64 {
-	return l.newVerificationsCount.Load()
+func (r *logsVerificationResult) VerificationCount() uint64 {
+	return r.newVerificationsCount.Load()
 }
 
 // UpdateHigherBlock updates the highest written block number if blockNumber is higher than the stored one
 // with atomic CAS operation strategy
-func (l *logsVerificationResult) UpdateHigherBlock(blockNumber uint64) {
+func (r *logsVerificationResult) UpdateHigherBlock(blockNumber uint64) {
 	for {
-		currentHighestBlockNumber := l.highestWrittenL1BlockNumber.Load()
+		currentHighestBlockNumber := r.highestWrittenL1BlockNumber.Load()
 
 		if blockNumber <= currentHighestBlockNumber {
 			break
 		}
-		if l.highestWrittenL1BlockNumber.CompareAndSwap(currentHighestBlockNumber, blockNumber) {
+		if r.highestWrittenL1BlockNumber.CompareAndSwap(currentHighestBlockNumber, blockNumber) {
 			break
 		}
 	}
@@ -517,26 +546,26 @@ func checkLogType(log *ethTypes.Log) uint8 {
 }
 
 // HighestWrittenL1BlockNumber returns the current highest L1 block number that has been written
-func (l *logsVerificationResult) HighestWrittenL1BlockNumber() uint64 {
-	return l.highestWrittenL1BlockNumber.Load()
+func (r *logsVerificationResult) HighestWrittenL1BlockNumber() uint64 {
+	return r.highestWrittenL1BlockNumber.Load()
 }
 
 // UpdateHighestVerification updates the highestVerification field if the provided batch info has a higher BatchNo.
-func (l *logsVerificationResult) UpdateHighestVerification(info *types.L1BatchInfo) {
-	l.muInfo.Lock()
-	defer l.muInfo.Unlock()
+func (r *logsVerificationResult) UpdateHighestVerification(info *types.L1BatchInfo) {
+	r.muInfo.Lock()
+	defer r.muInfo.Unlock()
 
-	if info.BatchNo > l.highestVerification.BatchNo {
-		l.highestVerification = info
+	if info.BatchNo > r.highestVerification.BatchNo {
+		r.highestVerification = info
 	}
 }
 
-func (l *logsVerificationResult) HighestVerification() *types.L1BatchInfo {
-	return l.highestVerification
+func (r *logsVerificationResult) HighestVerification() *types.L1BatchInfo {
+	return r.highestVerification
 }
 
-func (l *logsVerificationResult) ErrChan() chan error {
-	return l.errChan
+func (r *logsVerificationResult) ErrChan() chan error {
+	return r.errChan
 }
 
 func parseLogType(l1RollupId uint64, log *ethTypes.Log) (l1BatchInfo types.L1BatchInfo, batchLogType BatchLogType) {

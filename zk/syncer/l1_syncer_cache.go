@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
@@ -31,6 +32,10 @@ type L1Cache struct {
 }
 
 func NewL1SyncerCache(ctx context.Context, db kv.RwDB) (*L1Cache, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, errors.New("context canceled")
+	}
+
 	l1Cache := &L1Cache{
 		ctx:       ctx,
 		logPrefix: "L1Cache",
@@ -47,6 +52,10 @@ func NewL1SyncerCache(ctx context.Context, db kv.RwDB) (*L1Cache, error) {
 }
 
 func (c *L1Cache) writeL1BlockHeaderCache(header *ethTypes.Header) error {
+	if err := c.ctx.Err(); err != nil {
+		return errors.New("context canceled")
+	}
+
 	tx, err := c.l1CacheDB.BeginRw(c.ctx)
 
 	if err != nil {
@@ -74,6 +83,10 @@ func (c *L1Cache) writeL1BlockHeaderCache(header *ethTypes.Header) error {
 }
 
 func (c *L1Cache) getL1BlockHeaderCache(l1BlockNumber uint64) (*ethTypes.Header, error) {
+	if err := c.ctx.Err(); err != nil {
+		return nil, errors.New("context canceled")
+	}
+
 	tx, err := c.l1CacheDB.BeginRo(c.ctx)
 
 	if err != nil {
@@ -99,10 +112,12 @@ func (c *L1Cache) getL1BlockHeaderCache(l1BlockNumber uint64) (*ethTypes.Header,
 	return &header, nil
 }
 
-func (c *L1Cache) writeL1TreeLogs(logEntry *ethTypes.Log) error {
-	var buf bytes.Buffer
+func (c *L1Cache) writeL1TreeLogs(logEntries []*ethTypes.Log) error {
+	if err := c.ctx.Err(); err != nil {
+		return errors.New("context canceled")
+	}
 
-	tx, err := c.l1CacheDB.BeginRw(c.ctx)
+	tx, err := c.l1CacheDB.BeginRwNosync(c.ctx)
 
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %s", err)
@@ -110,19 +125,26 @@ func (c *L1Cache) writeL1TreeLogs(logEntry *ethTypes.Log) error {
 
 	defer tx.Rollback()
 
-	err = rlp.Encode(&buf, logEntry)
-	if err != nil {
-		return fmt.Errorf("failed to serialize logs: %s", err)
-	}
-	err = tx.Put(bucketL1TreeLogs, encodeL1LogKey(logEntry.BlockNumber, logEntry.Index), buf.Bytes())
-	if err != nil {
-		return fmt.Errorf("failed to write logs: %s", err)
+	for _, logEntry := range logEntries {
+		var buf bytes.Buffer
+		err = rlp.Encode(&buf, logEntry)
+		if err != nil {
+			return fmt.Errorf("failed to serialize logs: %s", err)
+		}
+		err = tx.Put(bucketL1TreeLogs, encodeL1LogKey(logEntry.BlockNumber, logEntry.Index), buf.Bytes())
+		if err != nil {
+			return fmt.Errorf("failed to write logs: %s", err)
+		}
 	}
 
 	return tx.Commit()
 }
 
 func (c *L1Cache) getLastL1TreeLogBlockNumber() (uint64, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, errors.New("context canceled")
+	}
+
 	tx, err := c.l1CacheDB.BeginRo(c.ctx)
 
 	if err != nil {
@@ -150,8 +172,39 @@ func (c *L1Cache) getLastL1TreeLogBlockNumber() (uint64, error) {
 	return keyBlockNumber, nil
 }
 
+func (c *L1Cache) getL1TreeLogsCount() (uint64, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, errors.New("context canceled")
+	}
+
+	tx, err := c.l1CacheDB.BeginRo(c.ctx)
+
+	if err != nil {
+		log.Warn(fmt.Sprintf("[%s] Failed to start transaction: %s", c.logPrefix, err))
+		return 0, fmt.Errorf("failed to start transaction: %s", err)
+	}
+
+	defer tx.Rollback()
+
+	cur, err := tx.Cursor(bucketL1TreeLogs)
+
+	if err != nil {
+		log.Warn(fmt.Sprintf("[%s] Failed to start cursor: %s", c.logPrefix, err))
+		return 0, fmt.Errorf("failed to start cursor: %s", err)
+	}
+
+	defer cur.Close()
+
+	return cur.Count()
+}
+
 func (c *L1Cache) getL1TreeLogs(startBlockNumber uint64, logsCh chan<- ethTypes.Log) {
 	defer close(logsCh)
+
+	if err := c.ctx.Err(); err != nil {
+		log.Warn(fmt.Sprintf("[%s] context canceled", c.logPrefix))
+		return
+	}
 
 	tx, err := c.l1CacheDB.BeginRo(c.ctx)
 
@@ -200,6 +253,10 @@ func (c *L1Cache) getL1TreeLogs(startBlockNumber uint64, logsCh chan<- ethTypes.
 }
 
 func (c *L1Cache) clearTreeLogs() error {
+	if err := c.ctx.Err(); err != nil {
+		return errors.New("context canceled")
+	}
+
 	tx, err := c.l1CacheDB.BeginRw(c.ctx)
 
 	if err != nil {
@@ -212,6 +269,10 @@ func (c *L1Cache) clearTreeLogs() error {
 }
 
 func (c *L1Cache) truncateTreeLogs(toBlockNumber uint64) error {
+	if err := c.ctx.Err(); err != nil {
+		return errors.New("context canceled")
+	}
+
 	tx, err := c.l1CacheDB.BeginRw(c.ctx)
 
 	if err != nil {
@@ -247,6 +308,10 @@ func (c *L1Cache) truncateTreeLogs(toBlockNumber uint64) error {
 }
 
 func (c *L1Cache) createCacheBuckets() error {
+	if err := c.ctx.Err(); err != nil {
+		return errors.New("context canceled")
+	}
+
 	tx, err := c.l1CacheDB.BeginRw(c.ctx)
 	if err != nil {
 		log.Error(fmt.Sprintf("[%s] NewL1Syncer: l1CacheDB.BeginRw error: %s", c.logPrefix, err))
