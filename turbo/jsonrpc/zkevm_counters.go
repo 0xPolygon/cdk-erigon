@@ -409,8 +409,7 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 		return nil, err
 	}
 
-	lastBlockNum := batchBlockNumbers[len(batchBlockNumbers)-1]
-	unlimitedCounters := chainConfig.IsNormalcy(lastBlockNum) || api.config.Zk.ShouldCountersBeUnlimited(api.config.Zk.IsL1Recovery())
+	unlimitedCounters := chainConfig.IsNormalcy(latestBlockNum) || api.config.Zk.ShouldCountersBeUnlimited(api.config.Zk.IsL1Recovery())
 
 	batchCounters := vm.NewBatchCounterCollector(smtDepth, uint16(forkId), api.config.Zk.VirtualCountersSmtReduction, unlimitedCounters, nil)
 
@@ -534,7 +533,7 @@ type batchCountersResponse struct {
 	BlockFrom      uint64           `json:"blockFrom"`
 	BlockTo        uint64           `json:"blockTo"`
 	CountersUsed   combinecCounters `json:"countersUsed"`
-	CoutnersLimits combinecCounters `json:"countersLimits"`
+	CountersLimits combinecCounters `json:"countersLimits"`
 }
 
 func populateBatchCounters(collected *vm.Counters, smtDepth int, batchNum, blockFrom, blockTo, totalGasUsed uint64) (jsonRes json.RawMessage, err error) {
@@ -592,7 +591,7 @@ func populateBatchCounters(collected *vm.Counters, smtDepth int, batchNum, block
 		BlockFrom:      blockFrom,
 		BlockTo:        blockTo,
 		CountersUsed:   countersUsed,
-		CoutnersLimits: countersLimits,
+		CountersLimits: countersLimits,
 	}
 
 	return json.Marshal(res)
