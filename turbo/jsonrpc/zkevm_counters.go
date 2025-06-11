@@ -410,7 +410,7 @@ func (api *ZkEvmAPIImpl) GetBatchCountersByNumber(ctx context.Context, batchNumR
 	}
 
 	lastBlockNum := batchBlockNumbers[len(batchBlockNumbers)-1]
-	unlimitedCounters := chainConfig.IsNormalcy(lastBlockNum)
+	unlimitedCounters := chainConfig.IsNormalcy(lastBlockNum) || api.config.Zk.ShouldCountersBeUnlimited(api.config.Zk.IsL1Recovery())
 
 	batchCounters := vm.NewBatchCounterCollector(smtDepth, uint16(forkId), api.config.Zk.VirtualCountersSmtReduction, unlimitedCounters, nil)
 
