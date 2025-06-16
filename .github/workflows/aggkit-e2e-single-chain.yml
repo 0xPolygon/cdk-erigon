@@ -116,8 +116,8 @@ jobs:
 
       - name: Write args input to a file
         run: |
-          docker_tag='${{ inputs.docker-tag }}'
-          if [[ $docker_tag == "" ]]; then
+          docker_image_override='${{ inputs.docker-image-override}}'
+          if [[ $docker_image_override == "" ]]; then
               echo '${{ inputs.kurtosis-cdk-args }}' | tee /tmp/kurtosis-args.json
               exit
           fi
