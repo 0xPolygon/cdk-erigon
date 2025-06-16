@@ -21,8 +21,9 @@ import (
 )
 
 var DeprecatedFlags = map[string]string{
-	"zkevm.gasless":       "zkevm.allow-free-transactions",
-	"zkevm.rpc-ratelimit": "",
+	"zkevm.gasless":            "zkevm.allow-free-transactions",
+	"zkevm.rpc-ratelimit":      "",
+	"zkevm.datastream-version": "",
 }
 
 func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
