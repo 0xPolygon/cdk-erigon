@@ -20,10 +20,14 @@ concurrency:
 
 jobs:
   build-aggkit-image:
-    uses: agglayer/aggkit/.github/workflows/build-aggkit-image.yml@2364b97d3186c5bd3b8ea618863219c58c0e49bb
+    # uses: agglayer/aggkit/.github/workflows/build-aggkit-image.yml@2364b97d3186c5bd3b8ea618863219c58c0e49bb
+    uses: ./.github/workflows/build-aggkit-image.yml # Use the local version of the workflow
     with:
       go-version: 1.24.x
       docker-image-name: aggkit
+      repository: agglayer/aggkit
+      ref:        2364b97d3186c5bd3b8ea618863219c58c0e49bb
+    secrets: inherit
 
   read-aggkit-args:
     name: Read aggkit args
