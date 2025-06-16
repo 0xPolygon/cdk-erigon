@@ -311,7 +311,7 @@ func sequencingBatchStep(
 		// timer: evm + smt
 		t := utils.StartTimer("stage_sequence_execute", "evm", "smt")
 
-		infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, shouldWriteGerToContract, err := prepareL1AndInfoTreeRelatedStuff(sdb, batchState, header.Time, cfg.zk.SequencerResequenceReuseL1InfoIndex)
+		infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, shouldWriteGerToContract, err := prepareL1AndInfoTreeRelatedStuff(logPrefix, sdb, batchState, header.Time, cfg.zk.SequencerResequenceReuseL1InfoIndex, cfg.zk.SequencerResequenceInfoTreeOffset)
 		if err != nil {
 			return err
 		}
@@ -369,7 +369,16 @@ func sequencingBatchStep(
 			select {
 			case <-blockTimer.C:
 				if !batchState.isAnyRecovery() {
-					break OuterLoopTransactions
+					// no transactions or the block seal time is equal to the empty block seal time
+					// break here to avoid log noise
+					if len(batchState.blockState.builtBlockElements.transactions) > 0 ||
+						cfg.zk.SequencerBlockSealTime == cfg.zk.SequencerEmptyBlockSealTime {
+						break OuterLoopTransactions
+					} else {
+						log.Info(fmt.Sprintf("[%s] Block timeout reached with no transactions processed", logPrefix))
+						blockTimer.Stop()
+						blockTimer.Reset(cfg.zk.SequencerBlockSealTime)
+					}
 				}
 			default:
 			}
@@ -377,6 +386,8 @@ func sequencingBatchStep(
 			select {
 			case <-emptyBlockTimer.C:
 				if len(batchState.blockState.builtBlockElements.transactions) == 0 && !batchState.isAnyRecovery() {
+					log.Info(fmt.Sprintf("[%s] Empty block timeout reached with no transactions processed", logPrefix))
+					emptyBlockTimer.Stop()
 					break OuterLoopTransactions
 				}
 			default:
@@ -384,7 +395,7 @@ func sequencingBatchStep(
 
 			select {
 			case <-infoTreeTicker.C:
-				newLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
+				processedLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
 				if err != nil {
 					return err
 				}
@@ -393,7 +404,7 @@ func sequencingBatchStep(
 				if latest != nil {
 					latestIndex = latest.Index
 				}
-				log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(newLogs), "latestIndex", latestIndex)
+				log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", processedLogs, "latestIndex", latestIndex)
 			default:
 			}
 
