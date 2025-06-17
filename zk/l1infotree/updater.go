@@ -399,7 +399,9 @@ func (u *Updater) HandleL1InfoTreeUpdate(hermezDb *hermez_db.HermezDb, l types.L
 		return fmt.Errorf("tree.AddLeaf: %w", err)
 	}
 
-	log.Debug("New L1 Index",
+	log.Info("New L1 Index",
+		"block", l.BlockNumber,
+		"tx_index", l.TxIndex,
 		"index", u.latestUpdate.Index,
 		"root", newRoot.String(),
 		"mainnet", u.latestUpdate.MainnetExitRoot.String(),

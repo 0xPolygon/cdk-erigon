@@ -2,6 +2,7 @@ package l1infotree
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/log/v3"
@@ -15,6 +16,7 @@ type L1InfoTree struct {
 	siblings    [][32]byte
 	currentRoot common.Hash
 	allLeaves   map[[32]byte]struct{}
+	mu          sync.RWMutex
 }
 
 // NewL1InfoTree creates new L1InfoTree.
@@ -55,6 +57,9 @@ func (mt *L1InfoTree) ResetL1InfoTree(initialLeaves [][32]byte) (*L1InfoTree, er
 		log.Error("error initializing siblings. Error: ", err)
 		return nil, err
 	}
+
+	mt.mu.Lock()
+	defer mt.mu.Unlock()
 
 	newMT.allLeaves = make(map[[32]byte]struct{})
 	for _, leaf := range initialLeaves {
@@ -177,6 +182,8 @@ func (mt *L1InfoTree) AddLeaf(index uint32, leaf [32]byte) (common.Hash, error) 
 		}
 	}
 
+	mt.mu.Lock()
+	defer mt.mu.Unlock()
 	mt.allLeaves[leaf] = struct{}{}
 
 	mt.currentRoot = cur
@@ -185,6 +192,8 @@ func (mt *L1InfoTree) AddLeaf(index uint32, leaf [32]byte) (common.Hash, error) 
 }
 
 func (mt *L1InfoTree) LeafExists(leaf [32]byte) bool {
+	mt.mu.RLock()
+	defer mt.mu.RUnlock()
 	_, ok := mt.allLeaves[leaf]
 	return ok
 }

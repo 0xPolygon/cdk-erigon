@@ -152,6 +152,7 @@ func SpawnStageL1CombinedSyncer(
 	if err != nil {
 		return fmt.Errorf("GetStageProgress, %w", err)
 	}
+	log.Info(fmt.Sprintf("[%s] L1 block progress: %d", logPrefix, l1BlockProgress))
 
 	if cfg.zkCfg.L1FinalizedBlockRequirement > 0 && l1BlockProgress <= cfg.zkCfg.L1FinalizedBlockRequirement {
 		for {
