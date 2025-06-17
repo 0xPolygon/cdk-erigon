@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   build-aggkit-image:
-    runs-on: amd-runner-2204
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout code
