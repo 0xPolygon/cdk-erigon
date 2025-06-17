@@ -60,7 +60,6 @@ jobs:
     needs:
       - build-aggkit-image
       - read-aggkit-args
-      - build-erigon
     uses: ./.github/workflows/aggkit-e2e-single-chain.yml # Replace with aggkit's version if PR to pass kurtosis-cdk-repo and ref is merged
     secrets: inherit
     with:
@@ -107,35 +106,3 @@ jobs:
         with:
           name: aggsender_find_imported_bridge
           path: ./target/aggsender_find_imported_bridge
-
-  # The only way to make it available in a reusable workflow is to upload it to the registry
-  # So I avoid that and build it in the same workflow
-  build-erigon:
-    if: false # Disabled
-    runs-on: ubuntu-latest
-    outputs:
-      image-tar: erigon.tar
-    steps:
-      - name: Checkout cdk-erigon
-        uses: actions/checkout@v4
-        with:
-          repository: 0xPolygon/cdk-erigon
-          ref: project/pp2
-          path: cdk-erigon
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build cdk-erigon image
-        run: |
-          cd cdk-erigon
-          docker buildx build --load -t cdk-erigon-type1:local .
-
-      - name: Save Docker image to tarball
-        run: docker save cdk-erigon-type1:local -o erigon.tar
-
-      - name: Upload image as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: erigon-image
-          path: erigon.tar

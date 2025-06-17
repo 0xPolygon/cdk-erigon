@@ -66,12 +66,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build & load cdk-erigon-type1:local
+      - name: Extract cdk_erigon_node_image from JSON
+        id: extract-image
+        run: |
+          echo "value=$(echo '${{ inputs.kurtosis-cdk-args }}' | jq -r '.args.cdk_erigon_node_image')" >> "$GITHUB_OUTPUT"
+
+      - name: Build & load cdk-erigon docker image
         uses: docker/build-push-action@v5
         with:
           context: cdk-erigon
-          tags:   cdk-erigon-type1:local
-          load:   true
+          tags: ${{ steps.extract-image.outputs.value }}
+          load: true
 
       - name: Checkout agglayer-e2e
         uses: actions/checkout@v4
