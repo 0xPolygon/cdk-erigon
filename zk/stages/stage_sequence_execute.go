@@ -24,7 +24,7 @@ import (
 
 var shouldCheckForExecutionAndDataStreamAlignment = true
 
-type txYielder interface {
+type TxYielder interface {
 	YieldNextTransaction() (types.Transaction, uint8, bool)
 	RemoveMinedTransactions(hashes []common.Hash)
 	AddMined(hash common.Hash)
@@ -266,7 +266,7 @@ func sequencingBatchStep(
 	sendersToSkip := make(map[common.Address]struct{})
 
 	// default to using the normal transaction yielder
-	var yielder txYielder = cfg.txYielder
+	var yielder TxYielder = cfg.txYielder
 	minedTxHashes := make([]common.Hash, 0)
 
 	for blockNumber := executionAt + 1; runLoopBlocks; blockNumber++ {

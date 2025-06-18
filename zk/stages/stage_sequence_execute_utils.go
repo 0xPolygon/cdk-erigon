@@ -92,7 +92,7 @@ type SequenceBlockCfg struct {
 
 	decodedTxCache *expirable.LRU[common.Hash, *types.Transaction]
 	doneHook       DoneHook
-	txYielder      *sequencer.PoolTransactionYielder
+	txYielder      TxYielder
 }
 
 func StageSequenceBlocksCfg(
