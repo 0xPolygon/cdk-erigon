@@ -124,6 +124,18 @@ func (y *PoolTransactionYielder) AddMined(hash common.Hash) {
 	y.readyMtx.Lock()
 	defer y.readyMtx.Unlock()
 	y.toSkip[hash] = struct{}{}
+
+	// remove the transaction from the readyTransactions slice. this will save burning CPU for the next yielding
+	// for a transaction to execute.  we still maintain the hash in the toSkip map to avoid yielding it again
+	// when we refresh the pool best list into the readyTransactions slice. there is a window where we have
+	// executed something, but the pool hasn't removed it yet, so we could yield it again before this has happened
+	for idx, readyHash := range y.readyTransactions {
+		if readyHash == hash {
+			// Remove the transaction from the slice
+			y.readyTransactions = append(y.readyTransactions[:idx], y.readyTransactions[idx+1:]...)
+			break
+		}
+	}
 }
 
 func (y *PoolTransactionYielder) SetExecutionDetails(executionAt, forkId uint64) {
