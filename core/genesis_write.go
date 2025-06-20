@@ -610,10 +610,10 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 		r, w := state.NewDbStateReader(tx), state.NewDbStateWriter(tx, 0)
 		statedb = state.New(r)
 
-		if g.Config != nil && g.Type1 != g.Config.Type1 {
-			panic(fmt.Sprintf("zkevm and chain type-1 configs mismatch: zkevm %v, chain %v", g.Type1, g.Config.Type1))
+		if g.Config != nil {
+			g.Config.Type1 = g.Type1
 		}
-		statedb.SetType1(g.Config.Type1)
+		statedb.SetType1(g.Type1)
 
 		hasConstructorAllocation := false
 		for _, account := range g.Alloc {
