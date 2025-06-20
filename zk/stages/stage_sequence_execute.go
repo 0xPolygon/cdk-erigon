@@ -309,7 +309,7 @@ func sequencingBatchStep(
 		}
 
 		yielder.SetExecutionDetails(executionAt, batchState.forkId)
-		go yielder.BeginYielding()
+		yielder.BeginYielding()
 
 		if batchState.isL1Recovery() {
 			blockNumbersInBatchSoFar, err := batchContext.sdb.hermezDb.GetL2BlockNosByBatch(batchState.batchNumber)

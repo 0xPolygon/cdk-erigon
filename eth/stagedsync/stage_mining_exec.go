@@ -127,6 +127,9 @@ func SpawnMiningExecStage(s *StageState, tx kv.RwTx, cfg MiningExecCfg, quit <-c
 			}
 
 			for {
+				// [zkevm] - warning here!  we no longer send an already yielded map here so if this code is
+				// ever required again then there needs to be a manual check for the yielded transactions already in a
+				// block.  see transaction_yielder.go for more details on how zkevm sequencer handles this
 				txs, y, err := getNextTransactions(cfg, chainID, current.Header, 50, executionAt, stateReader, simulationTx, logger)
 				if err != nil {
 					return err
