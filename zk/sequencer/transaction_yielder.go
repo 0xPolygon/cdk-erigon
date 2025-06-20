@@ -144,26 +144,38 @@ func (y *PoolTransactionYielder) SetExecutionDetails(executionAt, forkId uint64)
 }
 
 func (y *PoolTransactionYielder) BeginYielding() {
-	if y.alreadyYielding() {
-		return // Yielding has already started, no need to start again
+	y.startedYieldingMtx.Lock()
+	defer y.startedYieldingMtx.Unlock()
+
+	if y.startedYielding {
+		return
 	}
+
+	y.startedYielding = true
+
+	go y.startLoop()
+}
+
+func (y *PoolTransactionYielder) startLoop() {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-y.ctx.Done():
 			log.Info("Transaction yielder context done, stopping yielding")
-			y.startedYieldingMtx.Lock()
-			y.startedYielding = false
-			y.startedYieldingMtx.Unlock()
+			y.setYieldingState(false)
 			return
-		default:
+		case <-ticker.C:
+			y.performNextRefresh()
 		}
-
-		y.performNextRefresh()
-
-		// add in some delay here to avoid spamming the pool too quickly
-		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+func (y *PoolTransactionYielder) setYieldingState(state bool) {
+	y.startedYieldingMtx.Lock()
+	defer y.startedYieldingMtx.Unlock()
+	y.startedYielding = state
 }
 
 func (y *PoolTransactionYielder) performNextRefresh() {
@@ -182,16 +194,6 @@ func (y *PoolTransactionYielder) performNextRefresh() {
 		y.readyTransactions = append(y.readyTransactions, hash)
 		y.readyTransactionBytes[hash] = txBytes[idx]
 	}
-}
-
-func (y *PoolTransactionYielder) alreadyYielding() bool {
-	y.startedYieldingMtx.Lock()
-	defer y.startedYieldingMtx.Unlock()
-	if y.startedYielding {
-		return true
-	}
-	y.startedYielding = true
-	return false
 }
 
 func (y *PoolTransactionYielder) refreshPoolTransactions(executionAt, forkId uint64) ([]common.Hash, [][]byte, error) {
