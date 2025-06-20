@@ -127,6 +127,7 @@ type Config struct {
 	// this option should only be used in conjunction with normalcy, it is designed for testing
 	// vanilla EVM execution for comparison of state roots only and not to be used in production
 	DebugDisableZkevmStateChanges bool `json:"debugDisableZkevmStateChanges,omitempty"`
+	Type1                         bool `json:"type1,omitempty"` // if true, type1 behavior is enabled (normalcy + PMT), otherwise type2 behavior is used
 }
 
 type BlobConfig struct {
@@ -702,6 +703,7 @@ type Rules struct {
 	IsPrague, isOsaka                                                                                                                                    bool
 	IsAura                                                                                                                                               bool
 	IsNormalcy                                                                                                                                           bool
+	IsType1                                                                                                                                              bool
 	IsForkID4, IsForkID5Dragonfruit, IsForkID6IncaBerry, IsForkID7Etrog, IsForkID8Elderberry, IsForkId10, IsForkId11, IsForkID12Banana, IsForkID13Durian bool
 }
 
@@ -729,6 +731,7 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsPrague:             c.IsPrague(time),
 		isOsaka:              c.IsOsaka(time),
 		IsNormalcy:           c.IsNormalcy(num),
+		IsType1:              c.Type1,
 		IsAura:               c.Aura != nil,
 		IsForkID4:            c.IsForkID4(num),
 		IsForkID5Dragonfruit: c.IsForkID5Dragonfruit(num),

@@ -23,12 +23,13 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"github.com/erigontech/erigon/turbo/trie"
 	"math"
 	"math/big"
 	"os"
 	"slices"
 	"sync"
+
+	"github.com/erigontech/erigon/turbo/trie"
 
 	"github.com/c2h5oh/datasize"
 	"github.com/erigontech/erigon-lib/config3"
@@ -608,6 +609,11 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 
 		r, w := state.NewDbStateReader(tx), state.NewDbStateWriter(tx, 0)
 		statedb = state.New(r)
+
+		if g.Config != nil && g.Type1 != g.Config.Type1 {
+			panic(fmt.Sprintf("zkevm and chain type-1 configs mismatch: zkevm %v, chain %v", g.Type1, g.Config.Type1))
+		}
+		statedb.SetType1(g.Config.Type1)
 
 		hasConstructorAllocation := false
 		for _, account := range g.Alloc {
