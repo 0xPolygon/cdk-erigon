@@ -448,6 +448,9 @@ func sequencingBatchStep(
 			for {
 				transaction, effectiveGas, ok := yielder.YieldNextTransaction()
 				if !ok {
+					if !batchState.isAnyRecovery() {
+						time.Sleep(cfg.zk.SequencerTimeoutOnEmptyTxPool)
+					}
 					break InnerLoopTransactions
 				}
 

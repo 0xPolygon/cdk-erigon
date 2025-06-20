@@ -252,7 +252,6 @@ func newLimboRecoveryData(limboHeaderTimestamp uint64, limboTxHash *common.Hash)
 
 // TYPE BLOCK STATE
 type BlockState struct {
-	//transactionsForInclusion []types.Transaction
 	transactionHashesToSlots map[common.Hash]common.Hash
 	builtBlockElements       BuiltBlockElements
 	blockL1RecoveryData      *zktx.DecodedBatchL2Data

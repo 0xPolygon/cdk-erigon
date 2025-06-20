@@ -185,10 +185,8 @@ func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockC
 
 func validateIfDatastreamIsAheadOfExecution(
 	s *stagedsync.StageState,
-// u stagedsync.Unwinder,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
-// historyCfg stagedsync.HistoryCfg,
 ) error {
 	roTx, err := cfg.db.BeginRo(ctx)
 	if err != nil {

@@ -162,7 +162,7 @@ func (y *PoolTransactionYielder) BeginYielding() {
 		y.performNextRefresh()
 
 		// add in some delay here to avoid spamming the pool too quickly
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
