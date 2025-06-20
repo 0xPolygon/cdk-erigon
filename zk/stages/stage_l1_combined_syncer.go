@@ -524,6 +524,7 @@ func (r *logsVerificationResult) UpdateHigherBlock(blockNumber uint64) {
 	}
 }
 
+// checkLogType determines the log type based on the topic of the given log and returns a corresponding uint8 value.
 func checkLogType(log *ethTypes.Log) uint8 {
 	switch log.Topics[0] {
 	case contracts.SequenceBatchesTopicPreEtrog,
