@@ -1,18 +1,19 @@
 package sequencer
 
 import (
-	"github.com/erigontech/erigon/core/types"
-	"golang.org/x/net/context"
-	"github.com/erigontech/erigon/zk/txpool"
-	"github.com/erigontech/erigon-lib/kv"
-	"github.com/erigontech/erigon-lib/common"
-	"github.com/erigontech/erigon/zk/utils"
-	types2 "github.com/erigontech/erigon-lib/types"
-	"github.com/hashicorp/golang-lru/v2/expirable"
-	"github.com/erigontech/erigon-lib/log/v3"
-	"github.com/erigontech/erigon/eth/ethconfig"
-	"time"
 	"sync"
+	"time"
+
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/log/v3"
+	types2 "github.com/erigontech/erigon-lib/types"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/eth/ethconfig"
+	"github.com/erigontech/erigon/zk/txpool"
+	"github.com/erigontech/erigon/zk/utils"
+	"github.com/hashicorp/golang-lru/v2/expirable"
+	"golang.org/x/net/context"
 )
 
 type PoolTransactionYielder struct {
