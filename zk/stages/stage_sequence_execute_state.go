@@ -137,7 +137,7 @@ func (bs *BatchState) isThereAnyTransactionsToRecover() bool {
 	// mined blocks vs recovered blocks
 	remainingTransactions := len(bs.blockState.blockL1RecoveryData.Transactions) - len(bs.blockState.builtBlockElements.transactions)
 
-	return remainingTransactions <= 0 || bs.batchL1RecoveryData.recoveredBatchData.IsWorkRemaining
+	return remainingTransactions > 0 || bs.batchL1RecoveryData.recoveredBatchData.IsWorkRemaining
 }
 
 func (bs *BatchState) loadBlockL1RecoveryData(decodedBlocksIndex uint64) bool {
