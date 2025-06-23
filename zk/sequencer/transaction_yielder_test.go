@@ -456,7 +456,8 @@ func TestRecoveryTransactionYielder(t *testing.T) {
 	transactions := []types.Transaction{tx1, tx2}
 	effectivePercentages := []uint8{15, 25}
 
-	yielder := NewRecoveryTransactionYielder(transactions, effectivePercentages)
+	yielder, err := NewRecoveryTransactionYielder(transactions, effectivePercentages)
+	assert.NoError(t, err)
 
 	// Test yielding first transaction
 	tx, effectiveGas, hasMore := yielder.YieldNextTransaction()

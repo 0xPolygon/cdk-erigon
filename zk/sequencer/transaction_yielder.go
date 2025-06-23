@@ -83,12 +83,12 @@ func (y *PoolTransactionYielder) YieldNextTransaction() (types.Transaction, uint
 	var tx types.Transaction
 	var effectiveGas uint8
 	var err error
-	var yieldedIdx int
+	var yieldedSomething bool
 
 	y.readyMtx.Lock()
 	defer y.readyMtx.Unlock()
 
-	for idx, hash := range y.readyTransactions {
+	for _, hash := range y.readyTransactions {
 		if _, found := y.toSkip[hash]; found {
 			continue
 		}
@@ -104,22 +104,26 @@ func (y *PoolTransactionYielder) YieldNextTransaction() (types.Transaction, uint
 						"id", hash.String())
 					y.pool.MarkForDiscardFromPendingBest(hash)
 					y.toSkip[hash] = struct{}{}
-					continue // Skip this transaction if decoding fails
+					continue
 				}
 				y.decodedTxCache.Add(hash, &tx)
 			}
 			effectiveGas = deriveEffectiveGasPrice(y.cfg, tx)
-			yieldedIdx = idx
+			yieldedSomething = true
 			break
 		}
 	}
 
-	return tx, effectiveGas, tx != nil && yieldedIdx < len(y.readyTransactions)
+	return tx, effectiveGas, yieldedSomething
 }
 
 func (y *PoolTransactionYielder) RemoveMinedTransactions(hashes []common.Hash) {
 	y.readyMtx.Lock()
 	defer y.readyMtx.Unlock()
+
+	for _, hash := range hashes {
+		y.decodedTxCache.Remove(hash)
+	}
 
 	// ensure we take a fresh view on the pool
 	y.toSkip = make(map[common.Hash]struct{})
@@ -201,6 +205,9 @@ func (y *PoolTransactionYielder) performNextRefresh() {
 	defer y.readyMtx.Unlock()
 
 	y.readyTransactions = y.readyTransactions[:0] // Clear the ready transactions slice
+	for hash := range y.readyTransactionBytes {
+		delete(y.readyTransactionBytes, hash)
+	}
 
 	for idx, hash := range txHashes {
 		y.readyTransactions = append(y.readyTransactions, hash)
