@@ -1,6 +1,7 @@
 package sequencer
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -20,10 +21,19 @@ type PoolTransactionYielder struct {
 	ctx context.Context
 	cfg ethconfig.Zk
 
-	readyMtx              sync.Mutex
+	readyMtx sync.Mutex
+
+	// readyTransactions and readyTransactionBytes are used to avoid us eagerly
+	// decoding a transaction that we may never work with. instead we defer this
+	// until we yield that single transaction.
 	readyTransactions     []common.Hash
 	readyTransactionBytes map[common.Hash][]byte
-	toSkip                map[common.Hash]struct{}
+
+	// toSkip is used to hold on to a map of hashes for transactions that have been
+	// yielded and mined.  there is a lag between a block being built and the pool
+	// handling the removal.  because we continuosly yield transactions we need a
+	// way to handle this lag so we don't keep yielding the same transaction over and over.
+	toSkip map[common.Hash]struct{}
 
 	pool      *txpool.TxPool
 	yieldSize uint16
@@ -111,12 +121,6 @@ func (y *PoolTransactionYielder) RemoveMinedTransactions(hashes []common.Hash) {
 	y.readyMtx.Lock()
 	defer y.readyMtx.Unlock()
 
-	for _, hash := range hashes {
-		if _, found := y.decodedTxCache.Get(hash); found {
-			y.decodedTxCache.Remove(hash)
-		}
-	}
-
 	// ensure we take a fresh view on the pool
 	y.toSkip = make(map[common.Hash]struct{})
 }
@@ -130,13 +134,17 @@ func (y *PoolTransactionYielder) AddMined(hash common.Hash) {
 	// for a transaction to execute.  we still maintain the hash in the toSkip map to avoid yielding it again
 	// when we refresh the pool best list into the readyTransactions slice. there is a window where we have
 	// executed something, but the pool hasn't removed it yet, so we could yield it again before this has happened
+	foundIdx := -1
 	for idx, readyHash := range y.readyTransactions {
 		if readyHash == hash {
-			// Remove the transaction from the slice
-			y.readyTransactions = append(y.readyTransactions[:idx], y.readyTransactions[idx+1:]...)
+			foundIdx = idx
 			break
 		}
 	}
+	if foundIdx != -1 {
+		y.readyTransactions = append(y.readyTransactions[:foundIdx], y.readyTransactions[foundIdx+1:]...)
+	}
+	delete(y.readyTransactionBytes, hash)
 }
 
 func (y *PoolTransactionYielder) SetExecutionDetails(executionAt, forkId uint64) {
@@ -184,6 +192,9 @@ func (y *PoolTransactionYielder) performNextRefresh() {
 	if err != nil {
 		log.Error("Error while yielding next transactions", "error", err)
 		time.Sleep(500 * time.Millisecond) // could be a transient error, wait before retrying
+		// return early as there will be nothing to process now - we'll
+		// wait until the next iteration happens to attempt again
+		return
 	}
 
 	y.readyMtx.Lock()
@@ -286,11 +297,15 @@ type RecoveryTransactionYielder struct {
 	effectivePercentages []uint8
 }
 
-func NewRecoveryTransactionYielder(transactions []types.Transaction, effectivePercentages []uint8) *RecoveryTransactionYielder {
+func NewRecoveryTransactionYielder(transactions []types.Transaction, effectivePercentages []uint8) (*RecoveryTransactionYielder, error) {
+	if len(transactions) != len(effectivePercentages) {
+		return nil, errors.New("transactions and effectivePercentages must have the same length")
+	}
+
 	return &RecoveryTransactionYielder{
 		transactions:         transactions,
 		effectivePercentages: effectivePercentages,
-	}
+	}, nil
 }
 
 func (d *RecoveryTransactionYielder) YieldNextTransaction() (types.Transaction, uint8, bool) {

@@ -17,9 +17,9 @@ import (
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/zk"
 	"github.com/erigontech/erigon/zk/hermez_db"
+	"github.com/erigontech/erigon/zk/sequencer"
 	zktx "github.com/erigontech/erigon/zk/tx"
 	"github.com/erigontech/erigon/zk/utils"
-	"github.com/erigontech/erigon/zk/sequencer"
 )
 
 var shouldCheckForExecutionAndDataStreamAlignment = true
@@ -292,7 +292,10 @@ func sequencingBatchStep(
 			if err != nil {
 				return err
 			}
-			yielder = sequencer.NewRecoveryTransactionYielder(transactions, effectivePercentages)
+			yielder, err = sequencer.NewRecoveryTransactionYielder(transactions, effectivePercentages)
+			if err != nil {
+				return err
+			}
 		} else if batchState.isL1Recovery() {
 			blockNumbersInBatchSoFar, err := batchContext.sdb.hermezDb.GetL2BlockNosByBatch(batchState.batchNumber)
 			if err != nil {
@@ -305,7 +308,10 @@ func sequencingBatchStep(
 				break
 			}
 
-			yielder = sequencer.NewRecoveryTransactionYielder(decodedBatchL2Data.Transactions, decodedBatchL2Data.EffectiveGasPricePercentages)
+			yielder, err = sequencer.NewRecoveryTransactionYielder(decodedBatchL2Data.Transactions, decodedBatchL2Data.EffectiveGasPricePercentages)
+			if err != nil {
+				return err
+			}
 		}
 
 		yielder.SetExecutionDetails(executionAt, batchState.forkId)
