@@ -181,7 +181,7 @@ func attemptAddTransaction(
 
 	if overflow {
 		counters := batchCounters.CombineCollectorsNoChanges().UsedAsString()
-		log.Debug("Transaction overflow detected", "txHash", transaction.Hash(), "coutners", counters)
+		log.Debug("Transaction overflow detected", "txHash", transaction.Hash(), "counters", counters)
 		ibs.RevertToSnapshot(snapshot)
 		return nil, nil, txCounters, overflowCounters, nil
 	}
