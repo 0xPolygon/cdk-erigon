@@ -1,6 +1,13 @@
 
 name: "Setup Kurtosis type-1"
 description: "Setup Kurtosis CDK for type-1 tests"
+
+inputs:
+  enable-pectra:
+    description: "Enable Pectra for this workflow"
+    required: false
+    default: "true"
+
 runs:
   using: "composite"
   steps:
@@ -77,7 +84,11 @@ runs:
         sed -i 's/"normalcyBlock": [0-9]\+/"normalcyBlock": 0/' ./templates/cdk-erigon/chainspec.json
         sed -i 's/"shanghaiTime": [0-9]\+/"shanghaiTime": 0/' ./templates/cdk-erigon/chainspec.json
         sed -i 's/"cancunTime": [0-9]\+/"cancunTime": 0/' ./templates/cdk-erigon/chainspec.json
-        sed -i 's/"pragueTime": [0-9]\+/"pragueTime": 0/' ./templates/cdk-erigon/chainspec.json
+        if [ "${{ inputs.enable-pectra }}" = 'true' ]; then
+          sed -i 's/"pragueTime": [0-9]\+/"pragueTime": 0/' ./templates/cdk-erigon/chainspec.json
+        else
+          sed -i 's/"pragueTime": [0-9]\+/"pragueTime": 9999999999999999999999999999999999999999999999999/' ./templates/cdk-erigon/chainspec.json
+        fi
         sed -i '/"terminalTotalDifficulty"/d' ./templates/cdk-erigon/chainspec.json
         echo "Zkevm config file:"
         cat ./templates/cdk-erigon/config.yml
