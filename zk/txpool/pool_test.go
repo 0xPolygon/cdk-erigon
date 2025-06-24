@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	mapset "github.com/deckarep/golang-set/v2"
 	types2 "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/zk/utils"
 
@@ -383,8 +382,7 @@ func TestPriorityYieldBest(t *testing.T) {
 
 	yieldSlots := &types.TxsRlp{}
 	yieldSize := uint16(4)
-	yieldedTransactions := mapset.NewSet[[32]byte]()
-	allConditionsOk, _, err := pool.YieldBest(yieldSize, yieldSlots, tx, 0, utils.ForkId8BlockGasLimit, 0, yieldedTransactions)
+	allConditionsOk, _, err := pool.YieldBest(yieldSize, yieldSlots, tx, 0, utils.ForkId8BlockGasLimit, 0)
 	assert.NoError(t, err)
 	assert.True(t, allConditionsOk, "all conditions should be ok")
 	assert.Equal(t, yieldSize, uint16(len(yieldSlots.Txs)), "should yield the expected number of transactions")
