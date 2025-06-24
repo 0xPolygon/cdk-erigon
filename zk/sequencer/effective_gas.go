@@ -1,11 +1,11 @@
 package sequencer
 
 import (
-	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/eth/ethconfig"
+	"github.com/erigontech/erigon/core/types"
 )
 
-func deriveEffectiveGasPrice(cfg ethconfig.Zk, tx types.Transaction) uint8 {
+func DeriveEffectiveGasPrice(cfg ethconfig.Zk, tx types.Transaction) uint8 {
 	if tx.GetTo() == nil {
 		return cfg.EffectiveGasPriceForContractDeployment
 	}

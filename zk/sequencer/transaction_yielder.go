@@ -60,7 +60,6 @@ func NewPoolTransactionYielder(
 	db kv.RwDB,
 	decodedTxCache *expirable.LRU[common.Hash, *types.Transaction],
 ) *PoolTransactionYielder {
-	// Initialize the channel with the specified size
 	readyTransactions := make([]common.Hash, 0)
 
 	return &PoolTransactionYielder{
@@ -108,7 +107,7 @@ func (y *PoolTransactionYielder) YieldNextTransaction() (types.Transaction, uint
 				}
 				y.decodedTxCache.Add(hash, &tx)
 			}
-			effectiveGas = deriveEffectiveGasPrice(y.cfg, tx)
+			effectiveGas = DeriveEffectiveGasPrice(y.cfg, tx)
 			yieldedSomething = true
 			break
 		}
@@ -204,13 +203,16 @@ func (y *PoolTransactionYielder) performNextRefresh() {
 	y.readyMtx.Lock()
 	defer y.readyMtx.Unlock()
 
-	y.readyTransactions = y.readyTransactions[:0] // Clear the ready transactions slice
-	for hash := range y.readyTransactionBytes {
-		delete(y.readyTransactionBytes, hash)
+	// Ensure capacity and copy in one operation and keep allocations down
+	if cap(y.readyTransactions) < len(txHashes) {
+		y.readyTransactions = make([]common.Hash, len(txHashes))
+	} else {
+		y.readyTransactions = y.readyTransactions[:len(txHashes)]
 	}
+	copy(y.readyTransactions, txHashes)
 
+	y.readyTransactionBytes = make(map[common.Hash][]byte)
 	for idx, hash := range txHashes {
-		y.readyTransactions = append(y.readyTransactions, hash)
 		y.readyTransactionBytes[hash] = txBytes[idx]
 	}
 }
@@ -277,7 +279,7 @@ func (l *LimboTransactionYielder) YieldNextTransaction() (types.Transaction, uin
 	}
 
 	tx := l.transactions[0]
-	effectiveGas := deriveEffectiveGasPrice(l.cfg, tx)
+	effectiveGas := DeriveEffectiveGasPrice(l.cfg, tx)
 	l.transactions = l.transactions[1:] // Remove the transaction after yielding it
 
 	return tx, effectiveGas, true
