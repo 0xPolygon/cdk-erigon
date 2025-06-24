@@ -91,7 +91,7 @@ testTransientStorageEIP1153() {
 echo "=============== Running Dencun tests ==============="
 
 run testSendAllEIP4758EIP6780 "$RPC_URL"
-run testPointEvalPrecompileEIP4844 "$RPC_URL"
+# run testPointEvalPrecompileEIP4844 "$RPC_URL" # Disabled due to L2 not supporting blobs
 run testMCopyEIP5656 "$RPC_URL"
 run testTransientStorageEIP1153 "$RPC_URL"
 

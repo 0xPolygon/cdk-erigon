@@ -1,4 +1,4 @@
-name: Pectra type1 test
+name: Pre-Pectra type1 test
 on:
   pull_request:
     branches:
@@ -16,3 +16,5 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       PRIVATE_KEY: "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625"
+    with:
+      enable-pectra: false
