@@ -393,6 +393,9 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 
 	lock := &sync.Mutex{}
 
+	sendersCache := newSendersCache(tracedSenders)
+	sendersCache.registerPrioritySenders(priorityList)
+
 	res := &TxPool{
 		lock:                    lock,
 		lastSeenCond:            sync.NewCond(lock),
@@ -406,7 +409,7 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		queued:                  NewSubPool(QueuedSubPool, cfg.QueuedSubPoolLimit),
 		newPendingTxs:           newTxs,
 		_stateCache:             cache,
-		senders:                 newSendersCache(tracedSenders),
+		senders:                 sendersCache,
 		_chainDB:                coreDB,
 		cfg:                     cfg,
 		chainID:                 chainID,
@@ -422,6 +425,8 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		londonBlock:             londonBlock,
 		priorityList:            priorityList,
 	}
+
+	res.updatePendingPoolPrioritySenders()
 
 	return res, nil
 }
@@ -577,7 +582,6 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 	p.pending.EnforceWorstInvariants()
 	p.baseFee.EnforceInvariants()
 	p.queued.EnforceInvariants()
-	p.updatePendingPoolPrioritySenders()
 	p.promote(pendingBaseFee, pendingBlobFee, &announcements)
 	p.pending.EnforceBestInvariants()
 	p.promoted.Reset()
@@ -1302,7 +1306,6 @@ func (p *TxPool) addTxs(blockNum uint64, cacheView kvcache.CacheView, senders *s
 			protocolBaseFee, blockGasLimit, pending, baseFee, queued, discard)
 	}
 
-	p.updatePendingPoolPrioritySenders()
 	p.promote(pendingBaseFee, pendingBlobFee, &announcements)
 	p.pending.EnforceBestInvariants()
 
@@ -1973,8 +1976,20 @@ func (p *TxPool) flushLocked(tx kv.RwTx) (err error) {
 		if !p.all.hasTxs(id) {
 			addr, ok := p.senders.senderID2Addr[id]
 			if ok {
-				delete(p.senders.senderID2Addr, id)
-				delete(p.senders.senderIDs, addr)
+				if p.priorityList != nil {
+					prioSenders := p.priorityList.Addresses()
+					found := false
+					for _, prioAddr := range prioSenders {
+						if prioAddr == addr {
+							found = true
+							break
+						}
+					}
+					if !found {
+						delete(p.senders.senderID2Addr, id)
+						delete(p.senders.senderIDs, addr)
+					}
+				}
 			}
 		}
 		//fmt.Printf("del:%d,%d,%d\n", mt.Tx.senderID, mt.Tx.nonce, mt.Tx.tip)
@@ -2473,6 +2488,15 @@ func (sc *sendersBatch) info(cacheView kvcache.CacheView, id uint64) (nonce uint
 		return 0, emptySender.balance, err
 	}
 	return nonce, balance, nil
+}
+
+func (sc *sendersBatch) registerPrioritySenders(priorityList *PriorityList) {
+	if priorityList == nil {
+		return
+	}
+	for _, addr := range priorityList.Addresses() {
+		sc.getOrCreateID(addr)
+	}
 }
 
 func (sc *sendersBatch) registerNewSenders(newTxs *types.TxSlots) (err error) {
