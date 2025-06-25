@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/erigontech/mdbx-go/mdbx"
-	"github.com/ledgerwatch/erigon-lib/etl"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon-lib/kv/membatch"
-	"github.com/ledgerwatch/erigon/smt/pkg/utils"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/etl"
+	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/kv/membatch"
+	"github.com/erigontech/erigon/smt/pkg/utils"
+	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 type NodeType uint64

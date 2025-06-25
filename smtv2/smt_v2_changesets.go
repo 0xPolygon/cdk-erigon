@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/cl/phase1/core/state/lru"
-	"github.com/ledgerwatch/erigon/core/types/accounts"
-	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon/cl/phase1/core/state/lru"
+	"github.com/erigontech/erigon/core/types/accounts"
+	"github.com/erigontech/erigon/smt/pkg/utils"
 )
 
 func init() {

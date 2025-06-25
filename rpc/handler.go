@@ -30,6 +30,7 @@ import (
 
 	"github.com/erigontech/erigon/rpc/rpccfg"
 	"github.com/goccy/go-json"
+	"github.com/c2h5oh/datasize"
 )
 
 // handler handles JSON-RPC messages. There is one handler per connection. Note that

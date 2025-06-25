@@ -3,7 +3,7 @@ package vm
 import (
 	"testing"
 
-	zk_consts "github.com/ledgerwatch/erigon-lib/chain"
+	zk_consts "github.com/erigontech/erigon-lib/chain"
 )
 
 func Test_EmptyBlocksByFork(t *testing.T) {

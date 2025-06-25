@@ -1,15 +1,13 @@
 package utils
 
 import (
-	"bytes"
 	"fmt"
 	"math/big"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
-
-	"gotest.tools/v3/assert"
+	"github.com/erigontech/erigon-lib/common"
 )
 
 const forkId7BlockGasLimit = 18446744073709551615
@@ -793,10 +791,11 @@ func TestNodeKeyFromPath(t *testing.T) {
 
 func TestKeyContractStorageWithoutBig(t *testing.T) {
 	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
-	a := ConvertHexToBigInt("0x1234567890123456789012345678901234567890")
-	add := ScalarToArrayBig(a)
 	key := KeyContractStorageWithoutBig(addr, common.HexToHash("0x123"))
-	key2 := KeyContractStorage(add, "0x123")
+	key2, err := KeyContractStorage("0x1234567890123456789012345678901234567890", "0x123")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if key != key2 {
 		t.Errorf("key doesn't match, expected: %v, got: %v", key, key2)

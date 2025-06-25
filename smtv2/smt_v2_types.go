@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/erigontech/erigon/smt/pkg/utils"
 )
 
 type SmtKey [4]uint64

@@ -63,6 +63,7 @@ import (
 	"github.com/erigontech/erigon-lib/kv/kvcache"
 	"github.com/erigontech/erigon-lib/kv/mdbx"
 	"github.com/erigontech/erigon-lib/types"
+	"github.com/psilva261/timsort/v2"
 )
 
 var (

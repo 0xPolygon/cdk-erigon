@@ -38,6 +38,8 @@ import (
 	"github.com/erigontech/erigon/zk/utils"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/erigontech/erigon/zk/sequencer"
+	db2 "github.com/erigontech/erigon/smt/pkg/db"
+	"github.com/erigontech/erigon/smt/pkg/smt"
 )
 
 const (

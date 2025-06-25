@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon/smt/pkg/utils"
 	"github.com/status-im/keycard-go/hexutils"
 	"github.com/stretchr/testify/assert"
 )
@@ -108,7 +108,7 @@ func Test_OldMappingToNodeValue8(t *testing.T) {
 		newValue := ScalarToSmtValue8FromBytes(biggy)
 
 		for i := 0; i < 8; i++ {
-			if newValue[i] != oldValue[i].Uint64() {
+			if newValue[i] != oldValue[i] {
 				t.Errorf("ScalarToSmtValue8(%v) = %v; expected %v", test.hex, newValue, oldValue)
 			}
 		}

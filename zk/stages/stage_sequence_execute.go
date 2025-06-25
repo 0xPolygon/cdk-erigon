@@ -398,6 +398,7 @@ func sequencingBatchStep(
 		innerBreak := false
 		emptyBlockOverflow := false
 		sendersToTriggerStatechanges := make(map[common.Address]struct{})
+		nonceTooHighSenders := make(map[common.Address][]uint64)
 		yieldedSomething := false
 		badTxHashes := make([]common.Hash, 0)
 		gasUsed := uint64(0)
@@ -549,7 +550,7 @@ func sequencingBatchStep(
 
 					if errors.Is(err, core.ErrNonceTooLow) {
 						log.Info(fmt.Sprintf("[%s] nonce too low detected for sender, skipping transactions for now", logPrefix), "sender", txSender.Hex(), "nonceIssue", err)
-						sendersNeedingStateChanges[txSender] = struct{}{}
+						sendersToTriggerStatechanges[txSender] = struct{}{}
 						badTxHashes = append(badTxHashes, txHash)
 						continue
 					}
@@ -557,7 +558,7 @@ func sequencingBatchStep(
 					if errors.Is(err, core.ErrNonceTooHigh) {
 						log.Info(fmt.Sprintf("[%s] nonce too high detected for sender, skipping transactions for now", logPrefix), "sender", txSender.Hex(), "nonceIssue", err)
 						nonceTooHighSenders[txSender] = append(nonceTooHighSenders[txSender], transaction.GetNonce())
-						sendersNeedingStateChanges[txSender] = struct{}{}
+						sendersToTriggerStatechanges[txSender] = struct{}{}
 						badTxHashes = append(badTxHashes, txHash)
 						continue
 					}
@@ -701,8 +702,8 @@ func sequencingBatchStep(
 		}
 
 		// now trigger sender state changes in the pool where we encountered nonce issues during execution
-		if len(sendersNeedingStateChanges) > 0 {
-			if err := cfg.txPool.TriggerSenderStateChanges(ctx, sdb.tx, header.GasLimit, sendersNeedingStateChanges); err != nil {
+		if len(sendersToTriggerStatechanges) > 0 {
+			if err := cfg.txPool.TriggerSenderStateChanges(ctx, sdb.tx, header.GasLimit, sendersToTriggerStatechanges); err != nil {
 				return err
 			}
 		}
@@ -746,16 +747,9 @@ func sequencingBatchStep(
 			defer sdb.tx.Rollback()
 		}
 
-		batchState.blockState.clearDownMinedTransactions()
-
 		// remove the decoded transactions from the cache
 		for _, txHash := range batchState.blockState.transactionsToDiscard {
 			cfg.decodedTxCache.Remove(txHash)
-		}
-
-		// now trigger sender state changes in the pool where we encountered nonce issues during execution
-		if err := cfg.txPool.TriggerSenderStateChanges(ctx, sdb.tx, header.GasLimit, sendersToTriggerStatechanges); err != nil {
-			return err
 		}
 
 		t.LogTimer()

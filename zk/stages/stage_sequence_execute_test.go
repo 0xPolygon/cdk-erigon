@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"github.com/erigontech/erigon/zk/sequencer"
+	"github.com/erigontech/erigon/smtv2"
 )
 
 func TestSpawnSequencingStage(t *testing.T) {

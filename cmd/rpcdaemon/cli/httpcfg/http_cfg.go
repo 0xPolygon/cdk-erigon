@@ -8,6 +8,7 @@ import (
 	"github.com/erigontech/erigon-lib/kv/kvcache"
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/rpc/rpccfg"
+	"github.com/erigontech/erigon/turbo/rpchelper"
 )
 
 type HttpCfg struct {

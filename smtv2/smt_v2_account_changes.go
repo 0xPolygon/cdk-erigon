@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/etl"
-	"github.com/ledgerwatch/erigon/core/types/accounts"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/etl"
+	"github.com/erigontech/erigon/core/types/accounts"
 )
 
 type accountChanges struct {

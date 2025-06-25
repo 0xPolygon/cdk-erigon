@@ -5,19 +5,19 @@ import (
 	"path/filepath"
 	"runtime/pprof"
 
-	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/length"
-	"github.com/ledgerwatch/erigon-lib/etl"
-	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon-lib/state"
-	state2 "github.com/ledgerwatch/erigon/core/state"
-	"github.com/ledgerwatch/erigon/core/types"
-	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
-	"github.com/ledgerwatch/erigon/smt/pkg/smt"
-	"github.com/ledgerwatch/erigon/smt/pkg/utils"
-	"github.com/ledgerwatch/erigon/smtv2"
-	"github.com/ledgerwatch/erigon/zk/hermez_db"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/common/length"
+	"github.com/erigontech/erigon-lib/etl"
+	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon-lib/state"
+	state2 "github.com/erigontech/erigon/core/state"
+	"github.com/erigontech/erigon/core/types"
+	db2 "github.com/erigontech/erigon/smt/pkg/db"
+	"github.com/erigontech/erigon/smt/pkg/smt"
+	"github.com/erigontech/erigon/smt/pkg/utils"
+	"github.com/erigontech/erigon/smtv2"
+	"github.com/erigontech/erigon/zk/hermez_db"
+	"github.com/erigontech/erigon-lib/log/v3"
 
 	"strings"
 
@@ -392,7 +392,6 @@ func regenerateIntermediateHashes(ctx context.Context, logPrefix string, cfg ZkI
 		}
 	}
 
-	root := smtIn.LastRoot()
 	if !cfg.zk.OnlySmtV2 {
 		log.Info(fmt.Sprintf("[%s] Regeneration trie hashes comparison", logPrefix), "old", oldTiming, "new", newTiming)
 

@@ -171,6 +171,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 	}
 
 	isLondon := p.isLondon()
+	isShanghai := p.isShanghai()
 	best := p.pending.best
 
 	txs.Resize(uint(cmp.Min(int(n), len(best.ms))))
@@ -255,10 +256,6 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		}
 	}
 	return true, count, nil
-}
-
-func (p *TxPool) ClearLatestYielded() {
-	p.latestYielded = make(map[common.Hash]*metaTx)
 }
 
 func (p *TxPool) ForceUpdateLatestBlock(blockNumber uint64) {

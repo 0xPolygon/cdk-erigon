@@ -32,6 +32,7 @@ import (
 	"github.com/erigontech/erigon/rpc"
 	"github.com/erigontech/erigon/rpc/rpccfg"
 	"github.com/rs/cors"
+	"github.com/klauspost/compress/gzip"
 )
 
 // httpConfig is the JSON-RPC/HTTP configuration.
