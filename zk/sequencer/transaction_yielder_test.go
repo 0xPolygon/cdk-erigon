@@ -511,3 +511,41 @@ func TestPoolTransactionYielder_ContextCancellation(t *testing.T) {
 	// Verify the yielder stopped
 	assert.False(t, yielder.startedYielding)
 }
+
+// benchSink prevents the compiler from eliding our call.
+var benchTx types.Transaction
+var benchGas uint8
+
+func BenchmarkPoolTransactionYielder_YieldNextTransaction2(b *testing.B) {
+	ctx := context.Background()
+	cfg := ethconfig.Zk{EffectiveGasPriceForEthTransfer: 10}
+
+	mockDB := memdb.NewTestDB(b)
+	cache := expirable.NewLRU[common.Hash, *types.Transaction](100, nil, time.Hour)
+	var pool *txpool.TxPool // nil for this benchmark
+
+	y := NewPoolTransactionYielder(ctx, cfg, pool, 10, mockDB, cache)
+
+	const initialSize = 100_000
+	for i := 0; i < initialSize; i++ {
+		to := common.HexToAddress("0x1234567890123456789012345678901234567890")
+		tx := createMockTransaction(uint64(i), &to, []byte{})
+		txBytes := createMockTransactionBytes(tx)
+
+		y.readyTransactions = append(y.readyTransactions, tx.Hash())
+		y.readyTransactionBytes[tx.Hash()] = txBytes
+	}
+
+	b.ReportAllocs() // include allocations in the report
+	b.ResetTimer()   // forget about the setup time
+
+	for i := 0; i < b.N; i++ {
+		tx, gas, _ := y.YieldNextTransaction()
+		// minimal bookkeeping so the call isn't dead-code
+		benchTx = tx
+		benchGas = gas
+		if tx != nil {
+			y.AddMined(tx.Hash())
+		}
+	}
+}
