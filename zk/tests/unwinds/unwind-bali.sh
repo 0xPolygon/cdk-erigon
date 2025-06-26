@@ -63,6 +63,7 @@ go run ./cmd/integration state_stages_zkevm \
     --datadir="$dataPath/rpc-datadir" \
     --config="hermezconfig-bali.yaml" \
     --chain=hermez-bali \
+    --only-smt-v2=true \
     --unwind-batch-no="$unwindBatch" || { echo "Failed to unwind"; exit 1; }
 
 dump_data "${firstStop}-unwound" "after unwind"
