@@ -315,6 +315,7 @@ var DefaultFlags = []cli.Flag{
 
 	&utils.ACLPrintHistory,
 	&utils.ACLJsonLocation,
+	&utils.PrioritySendersJsonLocation,
 	&utils.InfoTreeUpdateInterval,
 	&utils.SealBatchImmediatelyOnOverflow,
 	&utils.MockWitnessGeneration,
