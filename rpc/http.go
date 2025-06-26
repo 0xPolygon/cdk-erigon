@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"mime"
 	"net/http"
@@ -297,8 +296,7 @@ type trackingWriter struct {
 }
 
 func (w *trackingWriter) Write(p []byte) (int, error) {
-	escaped := []byte(html.EscapeString(string(p)))
-	n, err := w.ResponseWriter.Write(escaped)
+	n, err := w.ResponseWriter.Write(p)
 	w.bytesWritten += uint64(n)
 	return n, err
 }
