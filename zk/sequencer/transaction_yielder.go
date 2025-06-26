@@ -35,7 +35,7 @@ type PoolTransactionYielder struct {
 	// way to handle this lag so we don't keep yielding the same transaction over and over.
 	toSkip map[common.Hash]struct{}
 
-	pool      *txpool.TxPool
+	pool      txpool.Pool
 	yieldSize uint16
 
 	// the pool db which sits separate from the usual erigon db
@@ -56,7 +56,7 @@ type PoolTransactionYielder struct {
 func NewPoolTransactionYielder(
 	ctx context.Context,
 	cfg ethconfig.Zk,
-	pool *txpool.TxPool,
+	pool txpool.Pool,
 	yieldSize uint16,
 	db kv.RwDB,
 	decodedTxCache *expirable.LRU[common.Hash, *types.Transaction],
