@@ -28,7 +28,7 @@ import (
 	"sync"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
+	"github.com/sugawarayuuta/sonnet"
 )
 
 const (
@@ -89,7 +89,7 @@ func (msg *jsonrpcMessage) namespace() string {
 }
 
 func (msg *jsonrpcMessage) String() string {
-	b, _ := jsoniter.Marshal(msg)
+	b, _ := sonnet.Marshal(msg)
 	return string(b)
 }
 
@@ -100,7 +100,7 @@ func (msg *jsonrpcMessage) errorResponse(err error) *jsonrpcMessage {
 }
 
 func (msg *jsonrpcMessage) response(result interface{}) *jsonrpcMessage {
-	enc, err := jsoniter.Marshal(result)
+	enc, err := sonnet.Marshal(result)
 	if err != nil {
 		// TODO: wrap with 'internal server error'
 		return msg.errorResponse(err)
@@ -253,7 +253,7 @@ func (c *jsonCodec) closed() <-chan interface{} {
 func parseMessage(raw json.RawMessage) ([]*jsonrpcMessage, bool) {
 	if !isBatch(raw) {
 		msgs := []*jsonrpcMessage{{}}
-		jsoniter.Unmarshal(raw, &msgs[0])
+		sonnet.Unmarshal(raw, &msgs[0])
 		return msgs, false
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
