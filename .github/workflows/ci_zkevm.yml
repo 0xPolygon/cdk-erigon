@@ -5,13 +5,11 @@ on:
       - zkevm
       - zkevm-2.60
       - stable/**
-      - gateway
   pull_request:
     branches:
       - zkevm
       - zkevm-2.60
       - stable/**
-      - gateway
     types:
       - opened
       - reopened

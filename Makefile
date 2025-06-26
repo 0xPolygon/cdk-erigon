@@ -132,21 +132,21 @@ endif
 cdk-erigon: go-version cdk-erigon.cmd
 	@rm -f $(GOBIN)/tg # Remove old binary to prevent confusion where users still use it because of the scripts
 
-# COMMANDS += devnet
-# COMMANDS += capcli
-# COMMANDS += downloader
+COMMANDS += devnet
+COMMANDS += capcli
+COMMANDS += downloader
 COMMANDS += hack
 COMMANDS += integration
-# COMMANDS += observer
-# COMMANDS += pics
+COMMANDS += observer
+COMMANDS += pics
 COMMANDS += rpcdaemon
-# COMMANDS += rpctest
-# COMMANDS += sentry
-# COMMANDS += state
+COMMANDS += rpctest
+COMMANDS += sentry
+COMMANDS += state
 COMMANDS += txpool
-# COMMANDS += verkle
-# COMMANDS += evm
-# COMMANDS += sentinel
+COMMANDS += verkle
+COMMANDS += evm
+COMMANDS += sentinel
 COMMANDS += acl
 COMMANDS += relay
 

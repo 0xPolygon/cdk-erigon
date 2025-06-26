@@ -4,12 +4,10 @@ on:
     branches:
       - zkevm
       - stable/**
-      - gateway
   pull_request:
     branches:
       - zkevm
       - stable/**
-      - gateway
     types:
       - opened
       - reopened

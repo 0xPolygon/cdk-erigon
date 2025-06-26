@@ -283,48 +283,6 @@ func (m *Mapmutation) doCommit(tx kv.RwTx) error {
 	return nil
 }
 
-func (m *Mapmutation) doCommitNoEtl(tx kv.RwTx) error {
-	logEvery := time.NewTicker(30 * time.Second)
-	defer logEvery.Stop()
-	count := 0
-	total := float64(m.count)
-	for table, bucket := range m.puts {
-		for key, value := range bucket {
-			if err := tx.Put(table, []byte(key), value); err != nil {
-				return err
-			}
-			count++
-			select {
-			default:
-			case <-logEvery.C:
-				progress := fmt.Sprintf("%.1fM/%.1fM", float64(count)/1_000_000, total/1_000_000)
-				m.logger.Info("Write to db", "progress", progress, "current table", table)
-				tx.CollectMetrics()
-			}
-		}
-	}
-
-	tx.CollectMetrics()
-	return nil
-}
-
-func (m *Mapmutation) FlushNoSort(ctx context.Context, tx kv.RwTx) error {
-	if tx == nil {
-		return errors.New("rwTx needed")
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if err := m.doCommitNoEtl(tx); err != nil {
-		return err
-	}
-
-	m.puts = map[string]map[string][]byte{}
-	m.size = 0
-	m.count = 0
-	return nil
-}
-
 func (m *Mapmutation) Flush(ctx context.Context, tx kv.RwTx) error {
 	if tx == nil {
 		return errors.New("rwTx needed")

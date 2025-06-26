@@ -518,6 +518,10 @@ func sequencingBatchStep(
 					continue
 				}
 
+				if _, found := nonceTooHighSenders[txSender]; found {
+					continue
+				}
+
 				// The copying of this structure is intentional
 				backupDataSizeChecker := *blockDataSizeChecker
 				receipt, execResult, txCounters, anyOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, transaction, effectiveGas, batchState.isL1Recovery(), batchState.forkId, l1TreeUpdateIndex, &backupDataSizeChecker, ethBlockGasPool)

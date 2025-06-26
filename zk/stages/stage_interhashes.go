@@ -3,7 +3,6 @@ package stages
 import (
 	"fmt"
 	"path/filepath"
-	"runtime/pprof"
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/length"
@@ -174,7 +173,6 @@ func SpawnZkIntermediateHashesStage(s *stagedsync.StageState, u stagedsync.Unwin
 			if root, err = zkIncrementIntermediateHashes(ctx, logPrefix, s, tx, eridb, smt, s.BlockNumber, to); err != nil {
 				return trie.EmptyRoot, err
 			}
-			pprof.StopCPUProfile()
 			oldTaken := time.Since(now)
 
 			newTime := time.Now()
