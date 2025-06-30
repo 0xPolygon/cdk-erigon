@@ -167,13 +167,14 @@ func (s *Merge) Finalize(config *chain.Config, header *types.Header, state *stat
 		for _, rec := range receipts {
 			allLogs = append(allLogs, rec.Logs...)
 		}
-		depositReqs, err := misc.ParseDepositLogs(allLogs, config.DepositContract)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("error: could not parse requests logs: %v", err)
-		}
-		if depositReqs != nil {
-			rs = append(rs, *depositReqs)
-		}
+		// [ cdk ] removed as we have no beacon chain
+		//depositReqs, err := misc.ParseDepositLogs(allLogs, config.DepositContract)
+		//if err != nil {
+		//	return nil, nil, nil, fmt.Errorf("error: could not parse requests logs: %v", err)
+		//}
+		//if depositReqs != nil {
+		//	rs = append(rs, *depositReqs)
+		//}
 		withdrawalReq := misc.DequeueWithdrawalRequests7002(syscall)
 		if withdrawalReq != nil {
 			rs = append(rs, *withdrawalReq)
