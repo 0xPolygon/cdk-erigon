@@ -194,7 +194,9 @@ func finaliseBlock(
 
 	// this is actually the interhashes stage
 	var newRoot common.Hash
-	if batchContext.cfg.zk.UsingPMT() {
+	var commitment string
+	if batchContext.cfg.chainConfig.IsPmtEnabled(newHeader.Number.Uint64()) {
+		commitment = "PMT"
 		logger := log.New()
 		if err = stagedsync.HashStateFromTo(batchContext.s.LogPrefix(), batchContext.sdb.tx, batchContext.cfg.hashStateCfg, newHeader.Number.Uint64()-1, newHeader.Number.Uint64(), batchContext.ctx, logger); err != nil {
 			return nil, err
@@ -202,6 +204,7 @@ func finaliseBlock(
 
 		newRoot, err = stagedsync.IncrementIntermediateHashes(batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, thisBlockNumber, trieConfigSequencer(batchContext.cfg.intersCfg), common.Hash{}, quit, logger)
 	} else {
+		commitment = "SMT"
 		newRoot, err = zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.eridb, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
 	}
 	if err != nil {
@@ -209,7 +212,7 @@ func finaliseBlock(
 		return nil, err
 	}
 
-	log.Info(fmt.Sprintf("[%s] IncrementIntermediateHashes finished newRoot: %s", batchContext.s.LogPrefix(), newRoot.String()), "from", batchContext.s.BlockNumber, "to", thisBlockNumber)
+	log.Info(fmt.Sprintf("[%s] IncrementIntermediateHashes for %s finished newRoot: %s", batchContext.s.LogPrefix(), commitment, newRoot.String()), "from", batchContext.s.BlockNumber, "to", thisBlockNumber)
 
 	if err = batchContext.sdb.eridb.CommitBatch(); err != nil {
 		return nil, err

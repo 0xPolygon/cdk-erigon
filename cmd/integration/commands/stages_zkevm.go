@@ -71,11 +71,6 @@ func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *
 		genesis.GasLimit = dConf.GasLimit
 		genesis.Difficulty = big.NewInt(dConf.Difficulty)
 
-		if !zkCfg.Commitment.IsValid() {
-			panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", zkCfg.Commitment, ethconfig.ValidCommitments()))
-		}
-
-		genesis.Type1 = zkCfg.Commitment.IsType1()
 		genesis.HonourChainspec = zkCfg.HonourChainspec
 	} else {
 		genesis = core.GenesisBlockByChainName(chain)

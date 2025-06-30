@@ -70,7 +70,14 @@ type Genesis struct {
 
 	// Zkevm fields
 	HonourChainspec bool `json:"honourChainspec,omitempty"` // Used in normalcy mode
-	Type1           bool `json:"type1,omitempty"`
+}
+
+type GenesisOverrides struct {
+	OverridePragueTime      *big.Int `toml:",omitempty"`
+	OverrideNormalcyBlock   *big.Int `toml:",omitempty"`
+	OverrideLondonBlock     *big.Int `toml:",omitempty"`
+	OverrideShanghaiTime    *big.Int `toml:",omitempty"`
+	OverridePmtEnabledBlock *big.Int `toml:",omitempty"`
 }
 
 type AuRaSeal struct {

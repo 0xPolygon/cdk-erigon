@@ -2,6 +2,7 @@ package stages
 
 import (
 	"fmt"
+	"github.com/erigontech/erigon-lib/chain"
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/length"
@@ -50,6 +51,7 @@ type ZkInterHashesCfg struct {
 	historyV3 bool
 	agg       *state.Aggregator
 	zk        *ethconfig.Zk
+	chainCfg  *chain.Config
 }
 
 func StageZkInterHashesCfg(
@@ -61,6 +63,7 @@ func StageZkInterHashesCfg(
 	historyV3 bool,
 	agg *state.Aggregator,
 	zk *ethconfig.Zk,
+	chainCfg *chain.Config,
 ) ZkInterHashesCfg {
 	return ZkInterHashesCfg{
 		db:                db,
@@ -74,6 +77,7 @@ func StageZkInterHashesCfg(
 		historyV3: historyV3,
 		agg:       agg,
 		zk:        zk,
+		chainCfg:  chainCfg,
 	}
 }
 

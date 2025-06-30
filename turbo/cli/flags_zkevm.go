@@ -182,9 +182,11 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		}
 	}
 
-	commitment := ethconfig.Commitment(ctx.String(utils.Commitment.Name))
-	if !commitment.IsValid() {
-		panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(utils.Commitment.Name), ethconfig.ValidCommitments()))
+	var simultaneousPmtAndSmt bool
+	if sequencer.IsSequencer() {
+		simultaneousPmtAndSmt = false
+	} else {
+		simultaneousPmtAndSmt = ctx.Bool(utils.SimultaneousPmtAndSmt.Name)
 	}
 
 	var l1InfoTreeOffset *ethconfig.L1InfoTreeOffset
@@ -331,8 +333,8 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		BadTxPurge:                             ctx.Bool(utils.BadTxPurge.Name),
 		L2InfoTreeUpdatesBatchSize:             ctx.Uint64(utils.L2InfoTreeUpdatesBatchSize.Name),
 		L2InfoTreeUpdatesEnabled:               ctx.Bool(utils.L2InfoTreeUpdatesEnabled.Name),
-		Commitment:                             commitment,
 		HonourChainspec:                        ctx.Bool(utils.HonourChainspec.Name),
+		SimultaneousPmtAndSmt:                  simultaneousPmtAndSmt,
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

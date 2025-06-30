@@ -1,7 +1,6 @@
 package ethconfig
 
 import (
-	"strings"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -129,36 +128,11 @@ type Zk struct {
 	L2InfoTreeUpdatesBatchSize     uint64
 	L2InfoTreeUpdatesEnabled       bool
 
-	Commitment      Commitment `yaml:"zkevm.initial-commitment"`
-	HonourChainspec bool       `yaml:"zkevm.honour-chainspec"`
+	HonourChainspec       bool
+	SimultaneousPmtAndSmt bool
 }
 
-type Commitment string
-
-const (
-	CommitmentPMT Commitment = "pmt"
-	CommitmentSMT Commitment = "smt"
-)
-
-func (c Commitment) IsValid() bool {
-	switch Commitment(strings.ToLower(string(c))) {
-	case CommitmentPMT, CommitmentSMT:
-		return true
-	}
-	return false
-}
-
-func ValidCommitments() []Commitment {
-	return []Commitment{CommitmentPMT, CommitmentSMT}
-}
-
-func (c Commitment) IsType1() bool {
-	return c == CommitmentPMT
-}
-
-var DefaultZkConfig = &Zk{
-	Commitment: CommitmentSMT,
-}
+var DefaultZkConfig = &Zk{}
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {
 	return l1Recovery || (c.DisableVirtualCounters && !c.ExecutorStrictMode && !c.HasExecutors())
@@ -179,14 +153,6 @@ func (c *Zk) ShouldImportInitialBatch() bool {
 
 func (c *Zk) IsL1Recovery() bool {
 	return c.L1SyncStartBlock > 0
-}
-
-func (c *Zk) UsingSMT() bool {
-	return c.Commitment == CommitmentSMT
-}
-
-func (c *Zk) UsingPMT() bool {
-	return c.Commitment == CommitmentPMT
 }
 
 type L1InfoTreeOffset struct {

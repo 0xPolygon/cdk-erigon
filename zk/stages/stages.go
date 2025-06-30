@@ -115,7 +115,7 @@ func SequencerZkStages(
 				return SpawnSequencerInterhashesStage(s, u, txc.Tx, ctx, zkInterHashesCfg, true)
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
-				if zkInterHashesCfg.zk.UsingPMT() {
+				if zkInterHashesCfg.chainCfg.IsPmtEnabled(s.BlockNumber) {
 					return stages.UnwindIntermediateHashesStage(u, s, txc.Tx, trieConfigSequencer(zkInterHashesCfg), ctx, logger)
 				}
 				return UnwindSequencerInterhashsStage(u, s, txc.Tx, ctx, zkInterHashesCfg)
@@ -130,7 +130,7 @@ func SequencerZkStages(
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
 				// this is only used in normalcy and the forward is used in execution stage before inters.
-				if !zkInterHashesCfg.zk.UsingPMT() {
+				if !zkInterHashesCfg.chainCfg.IsPmtEnabled(s.BlockNumber) {
 					return stages.SpawnHashStateStage(s, txc.Tx, hashStateCfg, ctx, logger)
 				}
 				return nil
@@ -373,11 +373,29 @@ func DefaultZkStages(
 			},
 		},
 		{
+			ID:          stages2.IntermediateHashesStandalone,
+			Description: "Standalone intermediate hashes for the PMT",
+			Disabled:    !zkInterHashesCfg.zk.SimultaneousPmtAndSmt,
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
+				// This should be false because we are using the SMT but building the PMT as a standalone.
+				zkInterHashesCfg.checkRoot = false
+				_, err := stages.SpawnIntermediateHashesStage(s, u, txc.Tx, trieConfigRPC(zkInterHashesCfg), ctx, logger)
+				return err
+			},
+			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
+				zkInterHashesCfg.checkRoot = false
+				return stages.UnwindIntermediateHashesStage(u, s, txc.Tx, trieConfigRPC(zkInterHashesCfg), ctx, logger)
+			},
+			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
+				return nil
+			},
+		},
+		{
 			ID:          stages2.IntermediateHashes,
 			Description: "Generate intermediate hashes and computing state root",
 			Disabled:    false,
 			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
-				if zkInterHashesCfg.zk.UsingPMT() {
+				if zkInterHashesCfg.chainCfg.IsPmtEnabled(s.BlockNumber) {
 					_, err := stages.SpawnIntermediateHashesStage(s, u, txc.Tx, trieConfigRPC(zkInterHashesCfg), ctx, logger)
 					return err
 				}
@@ -386,7 +404,7 @@ func DefaultZkStages(
 				return err
 			},
 			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
-				if zkInterHashesCfg.zk.UsingPMT() {
+				if zkInterHashesCfg.chainCfg.IsPmtEnabled(s.BlockNumber) {
 					return stages.UnwindIntermediateHashesStage(u, s, txc.Tx, trieConfigRPC(zkInterHashesCfg), ctx, logger)
 				}
 

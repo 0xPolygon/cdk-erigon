@@ -902,7 +902,7 @@ func (sdb *IntraBlockState) Prepare(rules *chain.Rules, sender, coinbase libcomm
 		}
 	}
 
-	sdb.isType1 = rules.IsType1
+	sdb.isType1 = rules.IsPmtEnabled && rules.IsNormalcy
 
 	// Reset transient storage at the beginning of transaction execution
 	sdb.transientStorage = newTransientStorage()

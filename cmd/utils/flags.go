@@ -20,6 +20,7 @@ package utils
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"github.com/erigontech/erigon/core/types"
 	"math/big"
 	"path/filepath"
 	"runtime"
@@ -116,6 +117,22 @@ var (
 	OverridePragueFlag = flags.BigFlag{
 		Name:  "override.prague",
 		Usage: "Manually specify the Prague fork time, overriding the bundled setting",
+	}
+	OverrideNormalcyBlockFlag = flags.BigFlag{
+		Name:  "override.normalcyblock",
+		Usage: "Manually specify the NormalcyBlock fork block, overriding the bundled setting",
+	}
+	OverrideShanghaiTimeFlag = flags.BigFlag{
+		Name:  "override.shanghaitime",
+		Usage: "Manually specify the time for shanghai fork",
+	}
+	OverrideLondonBlockFlag = flags.BigFlag{
+		Name:  "override.londonblock",
+		Usage: "Manually specify the block for london fork",
+	}
+	OverridePmtEnabledBlockFlag = flags.BigFlag{
+		Name:  "override.pmtenabledblock",
+		Usage: "Manually specify the block for london fork",
 	}
 	TrustedSetupFile = cli.StringFlag{
 		Name:  "trusted-setup-file",
@@ -923,14 +940,14 @@ var (
 		Usage: "Exclude zkevm flags from startup logging on zkevm flags.",
 		Value: cli.NewStringSlice("zkevm.l1-rpc-url"),
 	}
-	Commitment = cli.StringFlag{
-		Name:  "zkevm.initial-commitment",
-		Usage: "Values { smt | pmt }. Default, smt.",
-		Value: "smt",
-	}
 	HonourChainspec = cli.BoolFlag{
 		Name:  "zkevm.honour-chainspec",
 		Usage: "Honour the actual chainspec values. This means that no chainspec values will get changed based on normalcy mode. Default false.",
+		Value: false,
+	}
+	SimultaneousPmtAndSmt = cli.BoolFlag{
+		Name:  "zkevm.simultaneous-pmt-and-smt",
+		Usage: "Build the PMT as a standalone tree. To be used for promoting the SMT to PMT.",
 		Value: false,
 	}
 	ACLPrintHistory = cli.IntFlag{
@@ -2461,11 +2478,6 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 		genesis.GasLimit = dConf.GasLimit
 		genesis.Difficulty = big.NewInt(dConf.Difficulty)
 		genesis.HonourChainspec = ctx.Bool(HonourChainspec.Name)
-		commitment := ethconfig.Commitment(ctx.String(Commitment.Name))
-		if !commitment.IsValid() {
-			panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(Commitment.Name), ethconfig.ValidCommitments()))
-		}
-		genesis.Type1 = commitment.IsType1()
 
 		cfg.Genesis = genesis
 
@@ -2513,8 +2525,30 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	}
 
 	if ctx.IsSet(OverridePragueFlag.Name) {
-		cfg.OverridePragueTime = flags.GlobalBig(ctx, OverridePragueFlag.Name)
-		cfg.TxPool.OverridePragueTime = cfg.OverridePragueTime
+		cfg.GenesisOverrides = &types.GenesisOverrides{
+			OverridePragueTime: flags.GlobalBig(ctx, OverridePragueFlag.Name),
+		}
+		cfg.TxPool.OverridePragueTime = cfg.GenesisOverrides.OverridePragueTime
+	}
+	if ctx.IsSet(OverrideNormalcyBlockFlag.Name) {
+		cfg.GenesisOverrides = &types.GenesisOverrides{
+			OverrideNormalcyBlock: flags.GlobalBig(ctx, OverrideNormalcyBlockFlag.Name),
+		}
+	}
+	if ctx.IsSet(OverrideLondonBlockFlag.Name) {
+		cfg.GenesisOverrides = &types.GenesisOverrides{
+			OverrideLondonBlock: flags.GlobalBig(ctx, OverrideLondonBlockFlag.Name),
+		}
+	}
+	if ctx.IsSet(OverrideShanghaiTimeFlag.Name) {
+		cfg.GenesisOverrides = &types.GenesisOverrides{
+			OverrideShanghaiTime: flags.GlobalBig(ctx, OverrideShanghaiTimeFlag.Name),
+		}
+	}
+	if ctx.IsSet(OverridePmtEnabledBlockFlag.Name) {
+		cfg.GenesisOverrides = &types.GenesisOverrides{
+			OverridePmtEnabledBlock: flags.GlobalBig(ctx, OverridePmtEnabledBlockFlag.Name),
+		}
 	}
 
 	if ctx.IsSet(InternalConsensusFlag.Name) && clparams.EmbeddedSupported(cfg.NetworkID) {

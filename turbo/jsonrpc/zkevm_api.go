@@ -947,9 +947,6 @@ func (api *ZkEvmAPIImpl) populateBlockDetail(
 // }
 
 func (api *ZkEvmAPIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, mode *WitnessMode, debug *bool) (hexutility.Bytes, error) {
-	if api.config.Zk.UsingPMT() {
-		return nil, errors.New("state trie does not support witness")
-	}
 	checkedMode := WitnessModeNone
 	if mode != nil && *mode != WitnessModeFull && *mode != WitnessModeTrimmed {
 		return nil, errors.New("invalid mode, must be full or trimmed")
@@ -965,9 +962,6 @@ func (api *ZkEvmAPIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.Block
 }
 
 func (api *ZkEvmAPIImpl) GetBlockRangeWitness(ctx context.Context, startBlockNrOrHash rpc.BlockNumberOrHash, endBlockNrOrHash rpc.BlockNumberOrHash, mode *WitnessMode, debug *bool) (hexutility.Bytes, error) {
-	if api.config.Zk.UsingPMT() {
-		return nil, errors.New("state trie does not support witness")
-	}
 	checkedMode := WitnessModeNone
 	if mode != nil && *mode != WitnessModeFull && *mode != WitnessModeTrimmed {
 		return nil, errors.New("invalid mode, must be full or trimmed")
@@ -1090,6 +1084,15 @@ func (api *ZkEvmAPIImpl) getBlockRangeWitness(ctx context.Context, db kv.RoDB, s
 		return nil, fmt.Errorf("start block number must be less than or equal to end block number, start=%d end=%d", blockNr, endBlockNr)
 	}
 
+	cc, err := api.ethApi.chainConfig(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	if cc.IsPmtEnabled(blockNr) {
+		return nil, errors.New("state trie does not support witness")
+	}
+
 	generator, fullWitness, err := api.buildGenerator(ctx, tx, witnessMode)
 	if err != nil {
 		return nil, err
@@ -1109,9 +1112,6 @@ const (
 )
 
 func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64, mode *WitnessMode) (interface{}, error) {
-	if api.config.Zk.UsingPMT() {
-		return nil, errors.New("state trie does not support witness")
-	}
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -1158,9 +1158,6 @@ func (api *ZkEvmAPIImpl) GetBatchWitness(ctx context.Context, batchNumber uint64
 }
 
 func (api *ZkEvmAPIImpl) GetProverInput(ctx context.Context, batchNumber uint64, mode *WitnessMode, debug *bool) (*legacy_executor_verifier.RpcPayload, error) {
-	if api.config.Zk.UsingPMT() {
-		return nil, errors.New("state trie does not support witness")
-	}
 	if !sequencer.IsSequencer() {
 		return nil, errors.New("method only supported from a sequencer node")
 	}
@@ -1644,6 +1641,11 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		return nil, err
 	}
 
+	cc, err := api.chainConfig(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
 	if blockNr < latestBlock {
 		if latestBlock-blockNr > uint64(api.MaxGetProofRewindBlockCount) {
 			return nil, fmt.Errorf("requested block is too old, block must be within %d blocks of the head block number (currently %d)", api.MaxGetProofRewindBlockCount, latestBlock)
@@ -1651,7 +1653,7 @@ func (zkapi *ZkEvmAPIImpl) GetProof(ctx context.Context, address common.Address,
 		unwindState := &stagedsync.UnwindState{UnwindPoint: blockNr}
 		stageState := &stagedsync.StageState{BlockNumber: latestBlock}
 
-		interHashStageCfg := zkStages.StageZkInterHashesCfg(nil, !api.DisableStateRootCheck, true, false, api.dirs.Tmp, api._blockReader, nil, api.historyV3(tx), api._agg, nil)
+		interHashStageCfg := zkStages.StageZkInterHashesCfg(nil, !api.DisableStateRootCheck, true, false, api.dirs.Tmp, api._blockReader, nil, api.historyV3(tx), api._agg, zkapi.config.Zk, cc)
 
 		if err = zkStages.UnwindZkIntermediateHashesStage(unwindState, stageState, batch, interHashStageCfg, ctx, true); err != nil {
 			return nil, fmt.Errorf("unwind intermediate hashes: %w", err)

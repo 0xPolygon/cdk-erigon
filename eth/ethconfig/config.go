@@ -254,7 +254,7 @@ type Config struct {
 	SentinelAddr                string
 	SentinelPort                uint64
 
-	OverridePragueTime *big.Int `toml:",omitempty"`
+	GenesisOverrides *types.GenesisOverrides `toml:",omitempty"`
 
 	//[zkevm]
 	*Zk
