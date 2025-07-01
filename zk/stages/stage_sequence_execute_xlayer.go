@@ -17,7 +17,9 @@ import (
 type SMTAlignmentCheckState int
 
 // For X Layer, for auto recovery
-var shouldCheckForExecutionAndSMTAlignment = SMTAlignmentInit
+
+// For data loss
+var shouldCheckForExecutionAndSMTAlignment = SMTAlignmentTerminated
 
 // For X Layer, for local replay feature
 var externalDataStreamServerCreated = false

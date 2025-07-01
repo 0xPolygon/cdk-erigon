@@ -57,7 +57,9 @@ func AsyncFlushSmtData(ctx context.Context,
 		go func() {
 			<-replayDone
 			logger.Info("AsyncFlushSmtData received replay done signal")
-			handleShutdown(s, config, &wg, workerPool, db, cache, logger)
+
+// For data loss
+// handleShutdown(ctx, s, config, &wg, workerPool, db, cache, logger)
 			logger.Info("Waiting for all flush operations to complete...")
 			wg.Wait()
 			logger.Info("All flush operations completed, exiting AsyncFlushSmtData")

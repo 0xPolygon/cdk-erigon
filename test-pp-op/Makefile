@@ -13,7 +13,8 @@ STOP := $(DOCKER_COMPOSE) down --remove-orphans; \
     rm -Rf ./config-op/genesis.json; \
 	rm -Rf ./config-op/rollup.json; \
 	rm -Rf ./config-op/state_dump.json; \
-	rm -Rf ./l1-geth/execution/genesis.json;
+	rm -Rf ./l1-geth/execution/genesis.json; \
+	rm -Rf ./test-pp-op/config-op/genesis-op-raw.json; 
 
 	
 DEPLOY_ERC20_L1 := cd contracts && forge create OKBToken.sol:StandardERC20 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --rpc-url http://127.0.0.1:8545 --legacy --broadcast --constructor-args "OKBToken" "OKB" 1000000000
