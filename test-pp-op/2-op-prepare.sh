@@ -9,6 +9,17 @@ sed_inplace() {
   fi
 }
 
+docker-compose down xlayer-seq
+docker-compose down xlayer-rpc
+
+docker-compose down xlayer-bridge-service
+docker-compose down xlayer-bridge-ui
+docker-compose down xlayer-cdk-node
+
+docker-compose down xlayer-agglayer
+docker-compose down xlayer-agglayer-prover
+
+
 PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$PWD_DIR")"
 TMP_DIR="$PWD_DIR/tmp"
@@ -37,6 +48,7 @@ cd $PWD_DIR
 
 source .env
 
+# deploy contracts, TODO, should we need to modify source code to deploy contracts?
 docker run --rm \
   --network "$DOCKER_NETWORK" \
   -v "$(pwd)/$CONFIG_DIR:/app/packages/contracts-bedrock/deployments" \
@@ -56,10 +68,17 @@ docker run --rm \
 
 echo "genesis.json and rollup.json are generated in deployments folder"
 
+# regenerate genesis.json for op-geth
+cd $ROOT_DIR
+go install ./cmd/hack/
+cd $PWD_DIR
+cp ./config-op/genesis.json ./config-op/genesis-op-raw.json
+hack -action migrateGenesis -chaindata ./data/seq/chaindata/ -input ./config-op/genesis-op-raw.json   -output ./config-op/genesis.json
+
+# init op-geth
 OP_GETH_DATADIR="$(pwd)/data/op-geth"
 rm -rf "$OP_GETH_DATADIR"
 mkdir -p "$OP_GETH_DATADIR"
-
 docker compose run --rm --no-deps \
   -v "$(pwd)/$CONFIG_DIR/genesis.json:/genesis.json" \
   op-geth \

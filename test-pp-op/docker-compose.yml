@@ -396,7 +396,7 @@ services:
       - ./data/op-geth:/datadir
       - ./config-op/jwt.txt:/jwt.txt
     ports:
-      - "7547:7547"
+      - "8123:7547"
       - "7546:7546"
       - "8552:8552"
       - "30303:30303"
