@@ -6,8 +6,6 @@ PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$PWD_DIR")"
 TMP_DIR="$PWD_DIR/tmp"
 
-make stop
-
 sed_inplace() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
     sed -i '' "$@"
@@ -15,10 +13,6 @@ sed_inplace() {
     sed -i "$@"
   fi
 }
-
-echo "Starting L1 PoS environment..."
-make setup-l1
-sleep 5
 
 DEPLOYER_ADDRESS="0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"
 DEPLOYER_PRIVATE_KEY="0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2"

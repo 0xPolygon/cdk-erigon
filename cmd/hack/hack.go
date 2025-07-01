@@ -9,9 +9,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/common/hexutil"
-	"github.com/ledgerwatch/erigon/core/types/accounts"
-	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"math/big"
 	"net/http"
 	_ "net/http/pprof" //nolint:gosec
@@ -22,6 +19,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ledgerwatch/erigon-lib/common/hexutil"
+	"github.com/ledgerwatch/erigon/core/types/accounts"
+	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 
 	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 
@@ -41,8 +42,9 @@ import (
 	"github.com/ledgerwatch/erigon-lib/seg"
 	"golang.org/x/exp/slices"
 
-	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"path"
+
+	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 
 	hackdb "github.com/ledgerwatch/erigon/cmd/hack/db"
 	"github.com/ledgerwatch/erigon/cmd/hack/flow"
@@ -477,10 +479,19 @@ func migrateGenesis(chaindata, input, output string) error {
 		return err
 	}
 	defer cc.Close()
+	// Get alloc map for easier access
+	alloc := jsonData["alloc"].(map[string]interface{})
+
 	for _, acc_hex := range keys {
+		// Remove 0x prefix if present for the key
+		acc_key := acc_hex
+		if strings.HasPrefix(acc_hex, "0x") {
+			acc_key = acc_hex[2:]
+		}
+
 		acc_addr := libcommon.HexToAddress(acc_hex)
 		log.Debug("acc_addr: %s\n", acc_addr)
-		if _, exists := jsonData[acc_hex]; exists {
+		if _, exists := alloc[acc_key]; exists {
 			// Fixme: if xlayer account conflict with target node(such as op-geth), use which as new regenesis account?
 			a, err := plainStateReader.ReadAccountData(acc_addr)
 			if err != nil {
@@ -494,8 +505,8 @@ func migrateGenesis(chaindata, input, output string) error {
 			}
 			continue
 		}
-		jsonData[acc_hex] = make(map[string]interface{})
-		switch node := jsonData[acc_hex].(type) {
+		alloc[acc_key] = make(map[string]interface{})
+		switch node := alloc[acc_key].(type) {
 		case map[string]interface{}:
 			current = node
 		default:
