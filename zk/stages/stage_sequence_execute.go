@@ -761,14 +761,6 @@ BatchLoop:
 			quit := batchContext.ctx.Done()
 			batchContext.sdb.eridb.OpenBatch(quit)           // do nothing...
 			batchContext.sdb.eridb.SetCache(s.GetSmtCache()) // will deep copy in internal function
-
-// For data loss
-if batchState.batchNumber == 11 {
-	log.Warn(fmt.Sprintf("Waring Stop before doFinishBlockAndUpdateState:%v,%v", batchState.batchNumber, blockNumber))
-	time.Sleep(10 * time.Second)
-	os.Exit(1)
-}
-log.Info(fmt.Sprintf("doFinishBlockAndUpdateState:%v,%v", batchState.batchNumber, blockNumber))
 			if block, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress); err != nil {
 				batchContext.sdb.eridb.RollbackBatch()
 				return err
@@ -778,14 +770,6 @@ log.Info(fmt.Sprintf("doFinishBlockAndUpdateState:%v,%v", batchState.batchNumber
 				return err
 			}
 			setTime := time.Now()
-
-// For data loss
-if batchState.batchNumber == 11 {
-	log.Warn(fmt.Sprintf("Stop before SetSmtCache:%v,%v", batchState.batchNumber, block.Number))
-	time.Sleep(10 * time.Second)
-	os.Exit(1)
-}
-log.Info(fmt.Sprintf("SetSmtCache:%v,%v", batchState.batchNumber, block.Number))
 			s.SetSmtCache(blockNumber, blockCache)
 			metrics.GetLogStatistics().CumulativeTiming(metrics.SetSmtCacheTiming, time.Since(setTime))
 		} else {
@@ -823,14 +807,6 @@ log.Info(fmt.Sprintf("SetSmtCache:%v,%v", batchState.batchNumber, block.Number))
 		if !batchState.isL1Recovery() {
 			commitTime := time.Now()
 			// commit block data here so it is accessible in other threads
-
-// For data loss
-if batchState.batchNumber == 11 {
-	log.Warn(fmt.Sprintf("Stop before the 1st CommitAndStart:%v,%v", batchState.batchNumber, blockNumber))
-	time.Sleep(10 * time.Second)
-	os.Exit(1)
-}
-log.Info(fmt.Sprintf("1st CommitAndStart:%v,%v", batchState.batchNumber, blockNumber))
 			if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
 				return errCommitAndStart
 			}
@@ -889,14 +865,6 @@ log.Info(fmt.Sprintf("1st CommitAndStart:%v,%v", batchState.batchNumber, blockNu
 			}
 		}
 
-
-// For data loss
-if batchState.batchNumber == 11 {
-	log.Warn(fmt.Sprintf("Stop before WriteBlockDetailsToDatastream:%v,%v", batchState.batchNumber, block.Number))
-	time.Sleep(10 * time.Second)
-	os.Exit(1)
-}
-log.Info(fmt.Sprintf("WriteBlockDetailsToDatastream:%v,%v", batchState.batchNumber, block.Number))
 		if err := streamWriter.WriteBlockDetailsToDatastream(batchState.forkId, batchState.batchNumber, batchState.builtBlocks); err != nil {
 			return err
 		}
@@ -906,14 +874,6 @@ log.Info(fmt.Sprintf("WriteBlockDetailsToDatastream:%v,%v", batchState.batchNumb
 
 		if !batchState.isL1Recovery() {
 			commitTime := time.Now()
-
-// For data loss
-if batchState.batchNumber == 11 {
-	log.Warn(fmt.Sprintf("Stop before the 2nd CommitAndStart:%v,%v", batchState.batchNumber, blockNumber))
-	time.Sleep(10 * time.Second)
-	os.Exit(1)
-}
-log.Info(fmt.Sprintf("2nd CommitAndStart:%v,%v", batchState.batchNumber, blockNumber))
 			if errCommitAndStart := sdb.CommitAndStart(); errCommitAndStart != nil {
 				return errCommitAndStart
 			}
@@ -951,14 +911,6 @@ log.Info(fmt.Sprintf("2nd CommitAndStart:%v,%v", batchState.batchNumber, blockNu
 	*/
 
 	log.Info(fmt.Sprintf("[%s] Finish batch %d...", batchContext.s.LogPrefix(), batchState.batchNumber))
-
-// For data loss
-if batchState.batchNumber == 11 {
-	log.Warn(fmt.Sprintf("Stop before the last sdb.tx.Commit():%v,%v", batchState.batchNumber, block.Number))
-	time.Sleep(10 * time.Second)
-	os.Exit(1)
-}
-log.Info(fmt.Sprintf("last sdb.tx.Commit():%v,%v", batchState.batchNumber, block.Number))
 
 	// For X Layer
 	metrics.GetLogStatistics().SetTag(metrics.BatchCloseReason, string(batchCloseReason))
