@@ -1,0 +1,6 @@
+[Etherman]
+URL = "http://l1-geth:8545"
+ForkIDChunkSize = 100
+MultiGasProvider = false
+[Etherscan]
+ApiKey = ""

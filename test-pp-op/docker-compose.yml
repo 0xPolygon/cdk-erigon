@@ -1,0 +1,491 @@
+networks:
+  default:
+    name: pp-op
+
+services:
+  l1-geth-remove-db:
+    image: "alpine:3.19.0"
+    container_name: l1-geth-remove-db
+    command: rm -rf /execution/geth
+    volumes:
+      - ./l1-geth/execution:/execution
+
+  l1-beacon-remove-db:
+    image: "alpine:3.19.0"
+    container_name: l1-beacon-remove-db
+    command: rm -rf /consensus/beacondata /consensus/validatordata /consensus/genesis.ssz
+    volumes:
+      - ./l1-geth/consensus:/consensus
+
+  l1-create-beacon-chain-genesis:
+    image: "gcr.io/prysmaticlabs/prysm/cmd/prysmctl:HEAD-aec349"
+    container_name: l1-create-beacon-chain-genesis
+    command:
+      - testnet
+      - generate-genesis
+      - --fork=deneb
+      - --num-validators=64
+      - --genesis-time-delay=0
+      - --output-ssz=/consensus/genesis.ssz
+      - --chain-config-file=/consensus/config.yml
+      - --geth-genesis-json-in=/execution/genesis-raw.json
+      - --geth-genesis-json-out=/execution/genesis.json
+    volumes:
+      - ./l1-geth/consensus:/consensus
+      - ./l1-geth/execution:/execution
+    depends_on:
+      l1-beacon-remove-db:
+        condition: service_completed_successfully
+
+  l1-fix-genesis-fork-times:
+    image: "alpine:3.19.0"
+    container_name: l1-fix-genesis-fork-times
+    command: 
+      - /bin/sh
+      - -c
+      - |
+        echo "Fixing genesis.json fork times..."
+        sed -i 's/"shanghaiTime": [0-9]*/"shanghaiTime": 0/g' /execution/genesis.json
+        sed -i 's/"cancunTime": [0-9]*/"cancunTime": 0/g' /execution/genesis.json
+        echo "Genesis.json: shanghai=0, cancun=0 (MCOPY enabled)"
+        cat /execution/genesis.json | grep -E "(shanghaiTime|cancunTime)"
+    volumes:
+      - ./l1-geth/execution:/execution
+    depends_on:
+      l1-create-beacon-chain-genesis:
+        condition: service_completed_successfully
+
+  l1-geth-genesis:
+    image: "ethereum/client-go:v1.14.5"
+    container_name: l1-geth-genesis
+    command: --datadir=/execution --gcmode=archive init --state.scheme=hash /execution/genesis.json
+    volumes:
+      - ./l1-geth/execution:/execution
+      - ./l1-geth/execution/genesis.json:/execution/genesis.json
+    depends_on:
+      l1-fix-genesis-fork-times:
+        condition: service_completed_successfully
+      l1-geth-remove-db:
+        condition: service_completed_successfully
+
+  l1-geth:
+    image: "ethereum/client-go:v1.14.5"
+    container_name: l1-geth
+    command:
+      - --http
+      - --http.api=eth,net,web3,debug,admin
+      - --http.addr=0.0.0.0
+      - --http.corsdomain=*
+      - --http.vhosts=*
+      - --ws
+      - --ws.api=eth,net,web3,debug
+      - --ws.addr=0.0.0.0
+      - --ws.origins=*
+      - --authrpc.vhosts=*
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.jwtsecret=/execution/jwtsecret
+      - --datadir=/execution
+      - --allow-insecure-unlock
+      - --unlock=0x123463a4b065722e99115d6c222f267d9cabb524
+      - --password=/execution/geth_password.txt
+      - --nodiscover
+      - --syncmode=full
+      - --gcmode=archive
+      - --ipcdisable
+      - --rpc.allow-unprotected-txs
+      - --verbosity=3 
+    ports:
+      - 8551:8551
+      - 8545:8545
+      - 8546:8546
+    depends_on:
+      l1-geth-genesis:
+        condition: service_completed_successfully
+    volumes:
+      - ./l1-geth/execution:/execution
+      - ./l1-geth/execution/jwtsecret:/execution/jwtsecret
+      - ./l1-geth/execution/geth_password.txt:/execution/geth_password.txt
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8545"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  l1-beacon-chain:
+    image: "gcr.io/prysmaticlabs/prysm/beacon-chain:v4.1.1"
+    container_name: l1-beacon-chain
+    command:
+      - --datadir=/consensus/beacondata
+      - --min-sync-peers=0
+      - --genesis-state=/consensus/genesis.ssz
+      - --bootstrap-node=
+      - --interop-eth1data-votes
+      - --chain-config-file=/consensus/config.yml
+      - --contract-deployment-block=0
+      - --chain-id=${CHAIN_ID:-1337}
+      - --rpc-host=0.0.0.0
+      - --grpc-gateway-host=0.0.0.0
+      - --execution-endpoint=http://l1-geth:8551
+      - --accept-terms-of-use
+      - --jwt-secret=/execution/jwtsecret
+      - --suggested-fee-recipient=0x123463a4b065722e99115d6c222f267d9cabb524
+      - --minimum-peers-per-subnet=0
+      - --enable-debug-rpc-endpoints
+      - --verbosity=info
+    depends_on:
+      l1-create-beacon-chain-genesis:
+        condition: service_completed_successfully
+      l1-geth:
+        condition: service_healthy
+    ports:
+      - 4000:4000
+      - 3500:3500
+      - 18080:8080
+      - 6060:6060
+      - 19090:9090
+    volumes:
+      - ./l1-geth/consensus:/consensus
+      - ./l1-geth/execution:/execution
+      - ./l1-geth/execution/jwtsecret:/execution/jwtsecret
+
+  l1-validator:
+    image: "gcr.io/prysmaticlabs/prysm/validator:v4.1.1"
+    container_name: l1-validator
+    command:
+      - --beacon-rpc-provider=l1-beacon-chain:4000
+      - --datadir=/consensus/validatordata
+      - --accept-terms-of-use
+      - --interop-num-validators=64
+      - --interop-start-index=0
+      - --chain-config-file=/consensus/config.yml
+      - --verbosity=info
+    depends_on:
+      l1-beacon-chain:
+        condition: service_started
+    volumes:
+      - ./l1-geth/consensus:/consensus
+
+  xlayer-approve:
+    container_name: xlayer-approve
+    image: hermeznetwork/zkevm-node:v0.6.6
+    volumes:
+      - ./keystore/sequencer.keystore:/pk/keystore
+      - ./config/test.node.config.toml:/app/config.toml
+      - ./config/test.genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node approve --network custom --custom-network-file /app/genesis.json --key-store-path /pk/keystore --pw testonly --am 115792089237316195423570985008687907853269984665640564039457584007913129639935 -y --cfg /app/config.toml"
+
+  xlayer-seq:
+    container_name: xlayer-seq
+    image: cdk-erigon
+    environment:
+      - CDK_ERIGON_SEQUENCER=1
+      - WRITE_MAP=true
+    ports:
+      - 6062:6060
+      - 8123:8545
+      - 6900:6900
+      - 9092:9095
+    volumes:
+      - ./data/seq/:/home/erigon/data/
+      - ./config/test.erigon.seq.config.yaml:/usr/src/app/config.yaml
+      - ./config/first-batch-config.json:/usr/src/app/first-batch-config.json
+      - ./config/dynamic-mynetwork-allocs.json:/usr/src/app/dynamic-mynetwork-allocs.json
+      - ./config/dynamic-mynetwork-chainspec.json:/usr/src/app/dynamic-mynetwork-chainspec.json
+      - ./config/dynamic-mynetwork-conf.json:/usr/src/app/dynamic-mynetwork-conf.json
+    command: >
+      cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
+
+  xlayer-bridge-db:
+    container_name: xlayer-bridge-db
+    image: postgres:15
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    ports:
+      - 5439:5432
+    environment:
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_password
+      - POSTGRES_DB=test_db
+    command: [ "postgres", "-N", "500" ]
+
+  xlayer-bridge-service:
+    container_name: xlayer-bridge-service
+    image: hermeznetwork/zkevm-bridge-service:v0.6.0-RC16
+    ports:
+      - 8080:8080
+      - 9090:9090
+    environment:
+      - ZKEVM_BRIDGE_DATABASE_USER=test_user
+      - ZKEVM_BRIDGE_DATABASE_PASSWORD=test_password
+      - ZKEVM_BRIDGE_DATABASE_NAME=test_db
+      - ZKEVM_BRIDGE_DATABASE_HOST=xlayer-bridge-db
+      - ZKEVM_BRIDGE_DATABASE_PORT=5432
+    volumes:
+      - ./keystore/sequencer.keystore:/pk/keystore.claimtxmanager
+      - ./config/test.bridge.config.toml:/app/config.toml
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-bridge run --cfg /app/config.toml"
+
+  xlayer-bridge-ui:
+    container_name: xlayer-bridge-ui
+    image: hermeznetwork/zkevm-bridge-ui:latest
+    ports:
+      - 8090:80
+    environment:
+      - ETHEREUM_RPC_URL=http://127.0.0.1:8545
+      - ETHEREUM_EXPLORER_URL=http://127.0.0.1:4000
+      - ETHEREUM_ROLLUP_MANAGER_ADDRESS=0xE96dBF374555C6993618906629988d39184716B3
+      - ETHEREUM_BRIDGE_CONTRACT_ADDRESS=0xb2fAc1CE54bb9BF77A7FE106fA69F81453b72851
+      - ETHEREUM_FORCE_UPDATE_GLOBAL_EXIT_ROOT=true
+      - ETHEREUM_PROOF_OF_EFFICIENCY_CONTRACT_ADDRESS=0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd
+      - POLYGON_ZK_EVM_RPC_URL=http://127.0.0.1:8123
+      - POLYGON_ZK_EVM_EXPLORER_URL=http://127.0.0.1:4001
+      - POLYGON_ZK_EVM_BRIDGE_CONTRACT_ADDRESS=0xb2fAc1CE54bb9BF77A7FE106fA69F81453b72851
+      - POLYGON_ZK_EVM_NETWORK_ID=1
+      - BRIDGE_API_URL=http://127.0.0.1:8080
+      - ENABLE_FIAT_EXCHANGE_RATES=false
+      - ENABLE_OUTDATED_NETWORK_MODAL=false
+      - ENABLE_DEPOSIT_WARNING=false
+      - ENABLE_REPORT_FORM=false
+      - RESOLVE_RELATIVE_URLS=false
+
+  xlayer-pool-db:
+    container_name: xlayer-pool-db
+    image: postgres:15
+    ports:
+      - 5440:5432
+    volumes:
+      - /var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=pool_user
+      - POSTGRES_PASSWORD=pool_password
+      - POSTGRES_DB=pool_db
+    command:
+      - "postgres"
+      - "-N"
+      - "500"
+
+  xlayer-pool-manager:
+    container_name: xlayer-pool-manager
+    image: hermeznetwork/zkevm-pool-manager:v0.1.2
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    ports:
+      - 8125:8545
+    volumes:
+      - ./config/test.poolmanager.toml:/app/poolmanager.toml
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-pool-manager run --cfg /app/poolmanager.toml"
+
+  xlayer-cdk-node:
+    container_name: xlayer-cdk-node
+    image: zjg555543/cdk:v0.5.4-rc1
+    restart: on-failure
+    volumes:
+      - ./data/cdk-node:/tmp
+      - ./keystore/aggregator.keystore:/etc/cdk/aggregator.keystore
+      - ./keystore/sequencer.keystore:/etc/cdk/sequencer.keystore
+      - ./config/cdk-node-config.toml:/etc/cdk/cdk-node-config.toml
+      - ./config/test.genesis.config.json:/etc/cdk/genesis.json
+    ports:
+      - 5576:5576
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "cdk-node run --cfg=/etc/cdk/cdk-node-config.toml --custom-network-file=/etc/cdk/genesis.json --save-config-path=/tmp/ --components=aggsender"
+
+  xlayer-agglayer:
+    container_name: xlayer-agglayer
+    image: zjg555543/agglayer:v0.3.0-rc.16
+    ports:
+      - 4443:4443
+      - 4444:4444
+      - 4446:4446
+      - 9094:9092
+    volumes:
+      - ./keystore/agglayer.keystore:/etc/zkevm/agglayer.keystore
+      - ./config/agglayer-config.toml:/etc/zkevm/agglayer-config.toml
+      - ./data/agglayer/storage:/etc/zkevm/storage/
+      - ./data/agglayer/backups:/etc/zkevm/backups/
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/usr/local/bin/agglayer run --cfg /etc/zkevm/agglayer-config.toml"
+
+  xlayer-agglayer-prover:
+    container_name: xlayer-agglayer-prover
+    image: zjg555543/agglayer:v0.3.0-rc.16
+    volumes:
+      - ./config/agglayer-prover-config.toml:/etc/zkevm/agglayer-prover-config.toml
+    ports:
+      - 4445:4445
+      - 9093:9093
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/usr/local/bin/agglayer prover --cfg /etc/zkevm/agglayer-prover-config.toml"
+
+  xlayer-agg-db:
+    container_name: xlayer-agg-db
+    image: postgres:15
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    ports:
+      - 5434:5432
+    environment:
+      - POSTGRES_USER=aggregator_user
+      - POSTGRES_PASSWORD=aggregator_password
+      - POSTGRES_DB=aggregator_db
+    command:
+      - "postgres"
+      - "-N"
+      - "500"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aggregator_user -d aggregator_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  xlayer-rpc:
+    container_name: xlayer-rpc
+    image: cdk-erigon
+    environment:
+      - CDK_ERIGON_SEQUENCER=0
+      - WRITE_MAP=true
+    ports:
+      - 6061:6060
+      - 8124:8545
+      - 6901:6900
+      - 9091:9095
+    volumes:
+      - ./data/rpc/:/home/erigon/data/
+      - ./config/test.erigon.rpc.config.yaml:/usr/src/app/config.yaml
+      - ./config/first-batch-config.json:/usr/src/app/first-batch-config.json
+      - ./config/dynamic-mynetwork-allocs.json:/usr/src/app/dynamic-mynetwork-allocs.json
+      - ./config/dynamic-mynetwork-chainspec.json:/usr/src/app/dynamic-mynetwork-chainspec.json
+      - ./config/dynamic-mynetwork-conf.json:/usr/src/app/dynamic-mynetwork-conf.json
+    command: >
+      cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
+
+
+  op-geth:
+    image: "${OP_GETH_IMAGE_TAG}"
+    container_name: op-geth
+    entrypoint: geth
+    volumes:
+      - ./data/op-geth:/datadir
+      - ./config-op/jwt.txt:/jwt.txt
+    ports:
+      - "7547:7547"
+      - "7546:7546"
+      - "8552:8552"
+      - "30303:30303"
+      - "30303:30303/udp"
+    command:
+      - --datadir
+      - /datadir
+      - --http
+      - --http.corsdomain=*
+      - --http.vhosts=*
+      - --http.port=7547
+      - --http.addr=0.0.0.0
+      - --http.api=web3,debug,eth,txpool,net,engine
+      - --ws
+      - --ws.addr=0.0.0.0
+      - --ws.port=7546
+      - --ws.origins=*
+      - --ws.api=debug,eth,txpool,net,engine
+      - --syncmode=full
+      - --gcmode=archive
+      - --nodiscover
+      - --maxpeers=0
+      - --networkid=901
+      - --authrpc.vhosts=*
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.port=8552
+      - --authrpc.jwtsecret=/jwt.txt
+      - --rollup.disabletxpoolgossip=true
+
+  op-node:
+    image: "${OP_STACK_IMAGE_TAG}"
+    container_name: op-node
+    volumes:
+      - ./config-op/rollup.json:/rollup.json
+      - ./config-op/jwt.txt:/jwt.txt
+    ports:
+      - "9545:9545"
+      - "7070:7070"
+    command:
+      - /app/op-node/bin/op-node
+      - --l2=http://op-geth:8552
+      - --l2.jwt-secret=/jwt.txt
+      - --sequencer.enabled
+      - --sequencer.l1-confs=5
+      - --verifier.l1-confs=4
+      - --rollup.config=/rollup.json
+      - --rpc.addr=0.0.0.0
+      - --p2p.disable
+      - --rpc.enable-admin
+      - --p2p.sequencer.key=${SEQUENCER_P2P_KEY}
+      - --l1=${L1_RPC_URL_IN_DOCKER}
+      - --l1.beacon=${L1_BEACON_URL_IN_DOCKER}
+      - --l1.rpckind=standard
+    depends_on:
+      - op-geth
+
+  op-batcher:
+    image: "${OP_STACK_IMAGE_TAG}"
+    container_name: op-batcher
+    command:
+      - /app/op-batcher/bin/op-batcher
+      - --l2-eth-rpc=http://op-geth:7547
+      - --rollup-rpc=http://op-node:9545
+      - --poll-interval=1s
+      - --sub-safety-margin=6
+      - --num-confirmations=1
+      - --safe-abort-nonce-too-low-count=3
+      - --resubmission-timeout=30s
+      - --rpc.addr=0.0.0.0
+      - --rpc.port=8548
+      - --rpc.enable-admin
+      - --max-channel-duration=25
+      - --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER}
+      - --private-key=${OP_BATCHER_PRIVATE_KEY}
+    depends_on:
+      - op-node
+
+  op-proposer:
+    image: "${OP_STACK_IMAGE_TAG}"
+    container_name: op-proposer
+    environment:
+      - L2OO_ADDRESS=${L2OO_ADDRESS}
+    command:
+      - /app/op-proposer/bin/op-proposer
+      - --poll-interval=12s
+      - --rpc.port=8560
+      - --rollup-rpc=http://op-node:9545
+      - --l2oo-address=${L2OO_ADDRESS}
+      - --private-key=${OP_PROPOSER_PRIVATE_KEY}
+      - --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER}
+    depends_on:
+      - op-batcher

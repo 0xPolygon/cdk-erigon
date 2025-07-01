@@ -130,3 +130,15 @@ cmd/smt-db-split/smt-db-split
 test/app
 bridge-config-artifact
 kurtosis-cli.tar.gz
+test-pp-op/data
+test-pp-op/l1-geth/execution/genesis.json
+test-pp-op/l1-geth/execution/geth
+test-pp-op/l1-geth/consensus/beacondata
+test-pp-op/l1-geth/consensus/genesis.ssz
+test-pp-op/l1-geth/consensus/validatordata
+test-pp-op/tmp/
+test-pp-op/config-op/31337-deploy.json
+test-pp-op/config-op/artifact.json
+test-pp-op/config-op/genesis.json
+test-pp-op/config-op/rollup.json
+test-pp-op/config-op/state_dump.json

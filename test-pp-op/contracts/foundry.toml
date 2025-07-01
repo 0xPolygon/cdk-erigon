@@ -1,0 +1,9 @@
+[profile.default]
+src = "."
+out = "../tmp/OKB/out"
+cache_path = "../tmp/OKB/cache"
+libs = ["lib"]
+solc_version = "0.8.19"
+
+[rpc_endpoints]
+local = "http://127.0.0.1:8545" 

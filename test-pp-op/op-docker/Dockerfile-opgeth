@@ -1,0 +1,8 @@
+FROM golang:1.24 as builder
+WORKDIR /app
+COPY . .
+
+RUN make all
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/build/bin/geth /usr/local/bin/
