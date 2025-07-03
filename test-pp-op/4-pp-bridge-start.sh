@@ -79,4 +79,6 @@ docker-compose up -d xlayer-agglayer-prover
 docker-compose up -d xlayer-agglayer
 docker-compose up -d xlayer-bridge-service
 sleep 10
+docker rm xlayer-bridge-ui
+docker-compose up -d xlayer-bridge-ui
 docker-compose up -d xlayer-cdk-node
