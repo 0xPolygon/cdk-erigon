@@ -30,7 +30,7 @@ run: stop build-docker
 	@echo "🚀 Starting L1 PoS environment automatic dependency management..."
 	$(DOCKER_COMPOSE) up -d l1-validator
 	@echo "🎉 L1 PoS environment started!"
-	sleep 60
+	sleep 30
 	$(DEPLOY_ERC20_L1)
 	$(INIT_ACCOUNT_1)
 	$(INIT_ACCOUNT_2)

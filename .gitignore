@@ -143,3 +143,4 @@ test-pp-op/config-op/genesis.json
 test-pp-op/config-op/rollup.json
 test-pp-op/config-op/state_dump.json
 test-pp-op/config-op/genesis-op-raw.json
+test-pp-op/config-op/genesis-op-before-number.json

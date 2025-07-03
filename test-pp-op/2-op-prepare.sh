@@ -9,16 +9,23 @@ sed_inplace() {
   fi
 }
 
-docker-compose down xlayer-seq
-docker-compose down xlayer-rpc
 
-docker-compose down xlayer-bridge-service
-docker-compose down xlayer-bridge-ui
-docker-compose down xlayer-cdk-node
+docker-compose stop xlayer-seq
+docker-compose stop xlayer-rpc
 
-docker-compose down xlayer-agglayer
-docker-compose down xlayer-agglayer-prover
+docker-compose stop xlayer-bridge-service
+docker-compose stop xlayer-bridge-ui
+docker-compose stop xlayer-cdk-node
 
+docker-compose stop xlayer-agglayer
+docker-compose stop xlayer-agglayer-prover
+
+LOG_OUTPUT=$(docker compose logs xlayer-seq 2>&1 | tail -100)
+echo "LOG_OUTPUT: $LOG_OUTPUT"
+
+FORK_BLOCK=$(echo "$LOG_OUTPUT" | grep "Finish block" | tail -1 | sed -n 's/.*Finish block \([0-9]*\) with.*/\1/p')
+echo "FORK_BLOCK=$FORK_BLOCK"
+sed_inplace "s/FORK_BLOCK=.*/FORK_BLOCK=$FORK_BLOCK/" .env
 
 PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$PWD_DIR")"
@@ -49,7 +56,7 @@ cd $PWD_DIR
 source .env
 
 # deploy contracts, TODO, should we need to modify source code to deploy contracts?
-docker run --rm \
+docker run \
   --network "$DOCKER_NETWORK" \
   -v "$(pwd)/$CONFIG_DIR:/app/packages/contracts-bedrock/deployments" \
   -w /app/packages/contracts-bedrock \
@@ -75,11 +82,16 @@ cd $PWD_DIR
 cp ./config-op/genesis.json ./config-op/genesis-op-raw.json
 hack -action migrateGenesis -chaindata ./data/seq/chaindata/ -input ./config-op/genesis-op-raw.json   -output ./config-op/genesis.json
 
+# FORK_BLOCK_HEX=$(printf "0x%x" "$FORK_BLOCK")
+# cp ./config-op/genesis.json ./config-op/genesis-op-before-number.json
+# sed_inplace 's/"number": "0x0"/"number": "'"$FORK_BLOCK_HEX"'"/' ./config-op/genesis.json
+# sed_inplace 's/"number": 0/"number": '"$FORK_BLOCK"'/' ./config-op/rollup.json
+
 # init op-geth
 OP_GETH_DATADIR="$(pwd)/data/op-geth"
 rm -rf "$OP_GETH_DATADIR"
 mkdir -p "$OP_GETH_DATADIR"
-docker compose run --rm --no-deps \
+docker compose run --no-deps \
   -v "$(pwd)/$CONFIG_DIR/genesis.json:/genesis.json" \
   op-geth \
   --datadir "/datadir" \

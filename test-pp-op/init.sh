@@ -24,17 +24,27 @@ SEQ_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 SEQ_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 TOKEN_ADDRESS="0x5FbDB2315678afecb367f032d93F642f64180aa3"
 
+
+git checkout config/agglayer-config.toml
+git checkout config/cdk-node-config.toml
+git checkout config/test.bridge.config.toml
+git checkout config/test.erigon.seq.config.yaml
+git checkout config/test.genesis.config.json
+git checkout config/dynamic-mynetwork-allocs.json
+git checkout config/dynamic-mynetwork-conf.json
+git checkout config/first-batch-config.json
+
 echo "Sending funds to deployer..."
 cast send -f $RICH_ADDRESS --private-key $RICH_PRIVATE_KEY --value 3ether --legacy $DEPLOYER_ADDRESS
 
 mkdir -p $TMP_DIR
 cd $TMP_DIR
-if [ ! -d "./agglayer-contracts" ]; then
+if [ ! -d "./xlayer-contracts" ]; then
   echo "Cloning contract repository..."
-  git clone -b v11.0.0-rc.0 https://github.com/agglayer/agglayer-contracts.git
+  git clone -b upstream/v11.0.0-rc.0 https://github.com/okx/xlayer-contracts.git
 fi
 
-cd $TMP_DIR/agglayer-contracts
+cd $TMP_DIR/xlayer-contracts
 echo "Cleaning contract repository (selective)..."
 rm -rf artifacts cache .openzeppelin node_modules
 rm -f deployment/v2/deploy_output.json deployment/v2/create_rollup_output_*.json deployment/v2/genesis.json .env
@@ -112,12 +122,12 @@ npm run deploy:v2:localhost
 
 cd "$ROOT_DIR"
 mkdir -p $TMP_DIR/pp-deployed
-ROLLUP_OUTPUT_PATH=$(find $TMP_DIR/agglayer-contracts/deployment/v2 -name "create_rollup_output_*.json" | sort -r | head -n 1)
+ROLLUP_OUTPUT_PATH=$(find $TMP_DIR/xlayer-contracts/deployment/v2 -name "create_rollup_output_*.json" | sort -r | head -n 1)
 cp -rf $ROLLUP_OUTPUT_PATH $TMP_DIR/pp-deployed/create_rollup_output.json
-cp -rf $TMP_DIR/agglayer-contracts/deployment/v2/create_rollup_parameters.json $TMP_DIR/pp-deployed/
-cp -rf $TMP_DIR/agglayer-contracts/deployment/v2/deploy_parameters.json $TMP_DIR/pp-deployed/
-cp -rf $TMP_DIR/agglayer-contracts/deployment/v2/deploy_output.json $TMP_DIR/pp-deployed/
-cp -rf $TMP_DIR/agglayer-contracts/deployment/v2/genesis.json $TMP_DIR/pp-deployed/
+cp -rf $TMP_DIR/xlayer-contracts/deployment/v2/create_rollup_parameters.json $TMP_DIR/pp-deployed/
+cp -rf $TMP_DIR/xlayer-contracts/deployment/v2/deploy_parameters.json $TMP_DIR/pp-deployed/
+cp -rf $TMP_DIR/xlayer-contracts/deployment/v2/deploy_output.json $TMP_DIR/pp-deployed/
+cp -rf $TMP_DIR/xlayer-contracts/deployment/v2/genesis.json $TMP_DIR/pp-deployed/
 ROLLUP_OUTPUT_PATH="$TMP_DIR/pp-deployed/create_rollup_output.json"
 DEPLOY_OUTPUT_PATH="$TMP_DIR/pp-deployed/deploy_output.json"
 
@@ -156,7 +166,7 @@ fi
 echo "Generating configuration files..."
 go install ./cmd/hack/allocs
 which allocs
-allocs $TMP_DIR/agglayer-contracts/deployment/v2/genesis.json
+allocs $TMP_DIR/xlayer-contracts/deployment/v2/genesis.json
 mv allocs.json $PWD_DIR/config/dynamic-mynetwork-allocs.json
 
 cat > $PWD_DIR/config/dynamic-mynetwork-conf.json << EOF

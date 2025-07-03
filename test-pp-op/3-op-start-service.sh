@@ -1,10 +1,6 @@
 set -e
 set -x
 
-source .env
-
-docker compose up -d op-proposer
-
 sed_inplace() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
     sed -i '' "$@"
@@ -12,6 +8,8 @@ sed_inplace() {
     sed -i "$@"
   fi
 }
+
+docker compose up -d op-proposer
 
 sleep 10
 # TODO, we need to reseach and fix it,  0 block hash mismatch
@@ -24,3 +22,5 @@ if echo "$LOG_OUTPUT" | grep -q "expected L2 genesis hash to match L2 block at g
         docker compose restart op-node op-proposer
     fi
 fi
+
+sleep 10

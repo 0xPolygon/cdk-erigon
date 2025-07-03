@@ -396,7 +396,7 @@ services:
       - ./data/op-geth:/datadir
       - ./config-op/jwt.txt:/jwt.txt
     ports:
-      - "8123:7547"
+      - "8123:8545"
       - "7546:7546"
       - "8552:8552"
       - "30303:30303"
@@ -407,7 +407,7 @@ services:
       - --http
       - --http.corsdomain=*
       - --http.vhosts=*
-      - --http.port=7547
+      - --http.port=8545
       - --http.addr=0.0.0.0
       - --http.api=web3,debug,eth,txpool,net,engine
       - --ws
@@ -458,7 +458,7 @@ services:
     container_name: op-batcher
     command:
       - /app/op-batcher/bin/op-batcher
-      - --l2-eth-rpc=http://op-geth:7547
+      - --l2-eth-rpc=http://op-geth:8545
       - --rollup-rpc=http://op-node:9545
       - --poll-interval=1s
       - --sub-safety-margin=6
@@ -489,3 +489,15 @@ services:
       - --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER}
     depends_on:
       - op-batcher
+
+  xlayer-oracle:
+    container_name: xlayer-oracle
+    image: aggkit:local
+    volumes:
+      - ./data/oracle:/tmp
+      - ./keystore/aggoracle.keystore:/etc/aggkit/aggoracle.keystore
+      - ./config-op/aggkit.toml:/etc/aggkit/aggkit.toml
+      - ./config/test.genesis.config.json:/etc/aggkit/genesis.json
+    ports:
+      - 15576:5576
+    command: ["run", "--cfg=/etc/aggkit/aggkit.toml", "--components=aggoracle"]
