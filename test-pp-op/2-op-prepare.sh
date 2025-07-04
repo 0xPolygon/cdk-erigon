@@ -15,7 +15,7 @@ docker-compose stop xlayer-rpc
 
 docker-compose stop xlayer-bridge-service
 docker-compose stop xlayer-bridge-ui
-docker-compose stop xlayer-cdk-node
+docker-compose stop xlayer-agg-sender
 
 docker-compose stop xlayer-agglayer
 docker-compose stop xlayer-agglayer-prover
@@ -35,10 +35,10 @@ cd $TMP_DIR
 
 if [ ! -d "optimism" ]; then
     echo "Cloning Optimism repository..."
-    git clone -b v1.13.4 https://github.com/ethereum-optimism/optimism.git
+    git clone -b v1.9.3 https://github.com/ethereum-optimism/optimism.git
     cp $PWD_DIR/op-docker/Dockerfile-opstack optimism/Dockerfile
     cd optimism
-    docker build -t op-stack:v1.13.4 .
+    docker build -t op-stack:v1.9.3 .
     cd ..
 fi
 

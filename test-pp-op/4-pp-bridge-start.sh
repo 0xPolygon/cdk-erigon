@@ -1,6 +1,7 @@
 
 set -e
 set -x
+source .env
 
 L2_RPC_URL="http://127.0.0.1:8123"
 DEPLOYER_ADDRESS="0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"
@@ -57,21 +58,23 @@ cast send --legacy --rpc-url "$L2_RPC_URL" --private-key "$DEPLOYER_PRIVATE_KEY"
 sleep 5
 cast call --rpc-url "$L2_RPC_URL" $GER_MANAGER_ADDRESS 'GER_SOVEREIGN_VERSION()(string)'
 
-cd $PWD_DIR/tmp
-if [ ! -d "./aggkit" ]; then
-  echo "Cloning contract repository..."
-  git clone -b feature/0.1.0 https://github.com/okx/aggkit.git
-  cd ./aggkit
-  echo "Cleaning and resting contract repository..."
-  git reset --hard; git checkout feature/0.1.0;git pull
-  make build-docker
-fi
 cd $PWD_DIR
 
 sed_inplace 's/http:\/\/xlayer-rpc:8545/http:\/\/op-geth:8545/' config/agglayer-config.toml
-sed_inplace 's/http:\/\/xlayer-rpc:8545/http:\/\/op-geth:8545/' config/cdk-node-config.toml
+sed_inplace 's/http:\/\/xlayer-rpc:8545/http:\/\/op-geth:8545/' config/aggkit.toml
 sed_inplace 's/http:\/\/xlayer-rpc:8545/http:\/\/op-geth:8545/' config/test.bridge.config.toml
 sed_inplace 's/RequireSovereignChainSmcs = \[false\]/RequireSovereignChainSmcs = \[true\]/' config/test.bridge.config.toml
+
+while true; do
+  sleep 10
+  L2_BLOCK_HEIGHT=$(cast block-number --rpc-url $L2_RPC_URL)
+  if [ "$L2_BLOCK_HEIGHT" -ge "$FORK_BLOCK" ]; then
+    echo "L2 block height $L2_BLOCK_HEIGHT has reached fork block $FORK_BLOCK"
+    sleep 10
+    break
+  fi
+  echo "Waiting for L2 block height to reach $FORK_BLOCK (current: $L2_BLOCK_HEIGHT)"
+done
 
 docker-compose up -d xlayer-oracle
 sleep 5
@@ -81,4 +84,4 @@ docker-compose up -d xlayer-bridge-service
 sleep 10
 docker rm xlayer-bridge-ui
 docker-compose up -d xlayer-bridge-ui
-docker-compose up -d xlayer-cdk-node
+docker-compose up -d xlayer-agg-sender

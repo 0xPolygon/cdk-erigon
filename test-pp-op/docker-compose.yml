@@ -292,26 +292,23 @@ services:
       - "-c"
       - "/app/zkevm-pool-manager run --cfg /app/poolmanager.toml"
 
-  xlayer-cdk-node:
-    container_name: xlayer-cdk-node
-    image: zjg555543/cdk:v0.5.4-rc1
+  xlayer-agg-sender:
+    container_name: xlayer-agg-sender
+    image: aggkit:local
     restart: on-failure
     volumes:
       - ./data/cdk-node:/tmp
-      - ./keystore/aggregator.keystore:/etc/cdk/aggregator.keystore
-      - ./keystore/sequencer.keystore:/etc/cdk/sequencer.keystore
-      - ./config/cdk-node-config.toml:/etc/cdk/cdk-node-config.toml
-      - ./config/test.genesis.config.json:/etc/cdk/genesis.json
+      - ./keystore/aggregator.keystore:/etc/aggkit/aggregator.keystore
+      - ./keystore/sequencer.keystore:/etc/aggkit/sequencer.keystore
+      - ./config/aggkit.toml:/etc/aggkit/aggkit.toml
+      - ./config/test.genesis.config.json:/etc/aggkit/genesis.json
     ports:
       - 5576:5576
-    command:
-      - "/bin/sh"
-      - "-c"
-      - "cdk-node run --cfg=/etc/cdk/cdk-node-config.toml --custom-network-file=/etc/cdk/genesis.json --save-config-path=/tmp/ --components=aggsender"
+    command: ["run", "--cfg=/etc/aggkit/aggkit.toml", "--components=aggsender"]
 
   xlayer-agglayer:
     container_name: xlayer-agglayer
-    image: zjg555543/agglayer:v0.3.0-rc.16
+    image: zjg555543/agglayer:upstream-v0.3.3
     ports:
       - 4443:4443
       - 4444:4444
@@ -329,7 +326,7 @@ services:
 
   xlayer-agglayer-prover:
     container_name: xlayer-agglayer-prover
-    image: zjg555543/agglayer:v0.3.0-rc.16
+    image: zjg555543/agglayer:upstream-v0.3.3
     volumes:
       - ./config/agglayer-prover-config.toml:/etc/zkevm/agglayer-prover-config.toml
     ports:
