@@ -217,7 +217,7 @@ services:
 
   xlayer-bridge-service:
     container_name: xlayer-bridge-service
-    image: hermeznetwork/zkevm-bridge-service:v0.6.0-RC16
+    image: ${XLAYER_BRIDGE_SERVICE_IMAGE_TAG}
     ports:
       - 8080:8080
       - 9090:9090

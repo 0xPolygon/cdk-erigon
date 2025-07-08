@@ -1,0 +1,91 @@
+From ef6105a05d9c1399812c15f740e1b47adafc0e23 Mon Sep 17 00:00:00 2001
+From: JimmyShi <jimmyshixiang22@gmail.com>
+Date: Tue, 8 Jul 2025 14:29:46 +0800
+Subject: [PATCH] support load genesis at a given number
+
+---
+ core/blockchain_reader.go     |  7 ++++++-
+ core/genesis.go               | 13 ++++++++++---
+ core/rawdb/accessors_chain.go | 17 +++++++++++++++++
+ 3 files changed, 33 insertions(+), 4 deletions(-)
+
+diff --git a/core/blockchain_reader.go b/core/blockchain_reader.go
+index f53ddfa4c..1aa3caf90 100644
+--- a/core/blockchain_reader.go
++++ b/core/blockchain_reader.go
+@@ -424,7 +424,12 @@ func (bc *BlockChain) TxIndexProgress() (TxIndexProgress, error) {
+ func (bc *BlockChain) HistoryPruningCutoff() (uint64, common.Hash) {
+ 	pt := bc.historyPrunePoint.Load()
+ 	if pt == nil {
+-		return 0, bc.genesisBlock.Hash()
++		// get genesis block number
++		genesisHash := rawdb.ReadCanonicalHash(bc.db, 0)
++		genesisHeader := rawdb.ReadHeader(bc.db, genesisHash, 0)
++		genesisBlockNumber := genesisHeader.Number.Uint64()
++
++		return genesisBlockNumber, genesisHash
+ 	}
+ 	return pt.BlockNumber, pt.BlockHash
+ }
+diff --git a/core/genesis.go b/core/genesis.go
+index 5db5c9813..33a0f1291 100644
+--- a/core/genesis.go
++++ b/core/genesis.go
+@@ -683,9 +683,9 @@ func (g *Genesis) toBlockWithRoot(stateRoot, storageRootMessagePasser common.Has
+ // Commit writes the block and state of a genesis specification to the database.
+ // The block is committed as the canonical head block.
+ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Block, error) {
+-	if g.Number != 0 {
+-		return nil, errors.New("can't commit genesis block with number > 0")
+-	}
++	// if g.Number != 0 {
++	// 	return nil, errors.New("can't commit genesis block with number > 0")
++	// }
+ 	config := g.Config
+ 	if config == nil {
+ 		return nil, errors.New("invalid genesis without chain config")
+@@ -727,6 +727,13 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
+ 	rawdb.WriteHeadFastBlockHash(batch, block.Hash())
+ 	rawdb.WriteHeadHeaderHash(batch, block.Hash())
+ 	rawdb.WriteChainConfig(batch, block.Hash(), config)
++
++	if block.NumberU64() != 0 {
++		// Also write the genesis block as number 0
++		rawdb.WriteCanonicalHash(batch, block.Hash(), 0)
++		rawdb.WriteGenesisHeader(batch, block.Header())
++	}
++
+ 	return block, batch.Write()
+ }
+ 
+diff --git a/core/rawdb/accessors_chain.go b/core/rawdb/accessors_chain.go
+index 59c73aa99..e77733f78 100644
+--- a/core/rawdb/accessors_chain.go
++++ b/core/rawdb/accessors_chain.go
+@@ -404,6 +404,23 @@ func WriteHeader(db ethdb.KeyValueWriter, header *types.Header) {
+ 	}
+ }
+ 
++func WriteGenesisHeader(db ethdb.KeyValueWriter, header *types.Header) {
++	var (
++		hash   = header.Hash()
++		number = uint64(0)
++	)
++
++	// Write the encoded header
++	data, err := rlp.EncodeToBytes(header)
++	if err != nil {
++		log.Crit("Failed to RLP encode header", "err", err)
++	}
++	key := headerKey(number, hash)
++	if err := db.Put(key, data); err != nil {
++		log.Crit("Failed to store header", "err", err)
++	}
++}
++
+ // DeleteHeader removes all block header data associated with a hash.
+ func DeleteHeader(db ethdb.KeyValueWriter, hash common.Hash, number uint64) {
+ 	deleteHeaderWithoutNumber(db, hash, number)
+-- 
+2.39.5 (Apple Git-154)
+
