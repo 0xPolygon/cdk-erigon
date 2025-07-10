@@ -545,9 +545,13 @@ func (sdb *IntraBlockState) getStateObject(addr libcommon.Address) (stateObject 
 
 func (sdb *IntraBlockState) setStateObject(addr libcommon.Address, object *stateObject) {
 	if bi, ok := sdb.balanceInc[addr]; ok && !bi.transferred {
+		sdb.journal.append(balanceIncreaseTransfer{
+			account: &addr,
+			prev:    object.data.Balance,
+			bi:      bi,
+		})
 		object.data.Balance.Add(&object.data.Balance, &bi.increase)
 		bi.transferred = true
-		sdb.journal.append(balanceIncreaseTransfer{bi: bi})
 	}
 	sdb.stateObjects[addr] = object
 	sdb.seenStateObjects[addr] = struct{}{}
@@ -622,8 +626,22 @@ func (sdb *IntraBlockState) CreateAccount(addr libcommon.Address, contractCreati
 		newObj.createdContract = true
 		newObj.data.Incarnation = prevInc + 1
 	} else {
+		// Strange? When creating newObj, the selfdestructed is always false.
 		newObj.selfdestructed = false
+		// In case the account was selfdestructed, and then the native token is transferred to it,
+		// the current incarnation should be zero as an EOA account,
+		// but the previous incarnation that will be written to kv.IncarnationMap should be the original incarnation.
+		if previous != nil && previous.selfdestructed {
+			sdb.journal.append(incarnationMapChange{
+				account:  &addr,
+				original: previous.original.Incarnation,
+			})
+		}
 	}
+	sdb.journal.append(incarnationChange{
+		account: &addr,
+		post:    newObj.data.Incarnation,
+	})
 }
 
 // Snapshot returns an identifier for the current revision of the state.

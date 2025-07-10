@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -11,9 +12,13 @@ import (
 	"github.com/ledgerwatch/erigon/node/nodecfg"
 	"github.com/ledgerwatch/erigon/smt/pkg/blockinfo"
 	"github.com/ledgerwatch/erigon/zk/nacos"
+	"github.com/ledgerwatch/erigon/zk/realtime"
+	"github.com/ledgerwatch/erigon/zk/realtime/kafka"
 	"github.com/ledgerwatch/log/v3"
 	"github.com/urfave/cli/v2"
 )
+
+const EnvKafkaConsumerGroupID = "REALTIME_KAFKA_CONSUMER_GROUP_ID"
 
 func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	sequencerBlockSealTime := cfg.Zk.SequencerBlockSealTime
@@ -28,6 +33,13 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	err = vm.SetBatchCounterLimitPercentage(sequencerBatchCounterPercentage)
 	if err != nil {
 		panic(fmt.Sprintf("Got error: %v, sequencer-batch-counter-percentage: %d", err, sequencerBatchCounterPercentage))
+	}
+
+	// For realtime. Get GroupID from flag
+	groupID := ctx.String(utils.RealtimeKafkaSyncGroupID.Name)
+	if envGroupID := os.Getenv(EnvKafkaConsumerGroupID); envGroupID != "" {
+		// Override consumer group id if env variable is set
+		groupID = envGroupID
 	}
 
 	cfg.XLayer = ethconfig.XLayerConfig{
@@ -62,6 +74,20 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 
 		TraceLogPath:   ctx.String(utils.TraceLogPath.Name),
 		EnableTraceLog: ctx.Bool(utils.EnableTraceLog.Name),
+		Realtime: realtime.RealtimeConfig{
+			Enable:               ctx.Bool(utils.RealtimeEnableFlag.Name),
+			EnableSubscribe:      ctx.Bool(utils.RealtimeEnableSubscribeFlag.Name),
+			CacheHeightThreshold: ctx.Uint64(utils.RealtimeCacheHeightThreshold.Name),
+			CacheDumpPath:        ctx.String(utils.RealtimeCacheDumpPath.Name),
+			Kafka: kafka.KafkaConfig{
+				BootstrapServers: strings.Split(ctx.String(utils.RealtimeKafkaSyncBootstrapServers.Name), ","),
+				BlockTopic:       ctx.String(utils.RealtimeKafkaSyncBlockTopic.Name),
+				TxTopic:          ctx.String(utils.RealtimeKafkaSyncTxTopic.Name),
+				ErrorTopic:       ctx.String(utils.RealtimeKafkaSyncErrorTopic.Name),
+				ClientID:         ctx.String(utils.RealtimeKafkaSyncClientID.Name),
+				GroupID:          groupID,
+			},
+		},
 	}
 	if cfg.XLayer.BlockInfoConcurrent {
 		blockinfo.SetUseBlockInfoTree(true)

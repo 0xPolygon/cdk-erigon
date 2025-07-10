@@ -42,7 +42,7 @@ func main() {
 		gasTracker.Start()
 		defer gasTracker.Stop()
 
-		apiList, _ := jsonrpc.APIList(db, dbsmt, backend, txPool, nil, mining, ff, stateCache, blockReader, agg, cfg, engine, &ethConfig, nil, logger, nil, gasTracker, nil)
+		apiList, _ := jsonrpc.APIList(db, dbsmt, backend, txPool, nil, mining, ff, stateCache, blockReader, agg, cfg, engine, &ethConfig, nil, logger, nil, gasTracker, nil, false, nil, nil)
 		rpc.PreAllocateRPCMetricLabels(apiList)
 		if err := cli.StartRpcServer(ctx, cfg, apiList, logger); err != nil {
 			logger.Error(err.Error())

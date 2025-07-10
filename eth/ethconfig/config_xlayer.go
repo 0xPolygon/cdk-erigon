@@ -5,6 +5,7 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/zk/nacos"
+	"github.com/ledgerwatch/erigon/zk/realtime"
 )
 
 // AnalysisGroupVerificationConfig contains configuration for analysis group verification
@@ -61,6 +62,8 @@ type XLayerConfig struct {
 
 	// Analysis Group Verification
 	AnalysisGroupVerification AnalysisGroupVerificationConfig
+
+	Realtime realtime.RealtimeConfig
 }
 
 var DefaultXLayerConfig = XLayerConfig{}

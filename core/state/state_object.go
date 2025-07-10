@@ -231,9 +231,10 @@ func (so *stateObject) SetState(key *libcommon.Hash, value uint256.Int) {
 	}
 	// New value is different, update and journal the change
 	so.db.journal.append(storageChange{
-		account:  &so.address,
-		key:      *key,
-		prevalue: prev,
+		account:   &so.address,
+		key:       *key,
+		prevalue:  prev,
+		postvalue: value,
 	})
 	so.setState(key, value)
 }
@@ -307,6 +308,7 @@ func (so *stateObject) SetBalance(amount *uint256.Int) {
 	so.db.journal.append(balanceChange{
 		account: &so.address,
 		prev:    so.data.Balance,
+		post:    *amount,
 	})
 	so.setBalance(amount)
 }
@@ -354,6 +356,8 @@ func (so *stateObject) SetCode(codeHash libcommon.Hash, code []byte) {
 		account:  &so.address,
 		prevhash: so.data.CodeHash,
 		prevcode: prevcode,
+		posthash: codeHash,
+		postcode: code,
 	})
 	so.setCode(codeHash, code)
 }
@@ -368,6 +372,7 @@ func (so *stateObject) SetNonce(nonce uint64) {
 	so.db.journal.append(nonceChange{
 		account: &so.address,
 		prev:    so.data.Nonce,
+		post:    nonce,
 	})
 	so.setNonce(nonce)
 }

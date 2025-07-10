@@ -127,7 +127,7 @@ func FlushDataToDB(ctx context.Context, db *mdbx.MdbxKV, logger log.Logger, cach
 		return batch.Flush(ctx, tx)
 	})
 	if err != nil {
-		logger.Error("failed to flush data to DB", "error", err)
+		logger.Error("Failed to flush data to DB", "error", err)
 		return
 	}
 	cache.TruncateSmtCacheList(saveData.BlockHeight)

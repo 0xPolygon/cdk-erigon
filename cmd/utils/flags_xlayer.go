@@ -366,6 +366,57 @@ var (
 		Usage: "If true, skip calling analysis group API and directly set block number to AnalysisGroupVerifiedBatchNo status",
 		Value: true,
 	}
+	// For realtime features
+	RealtimeEnableFlag = cli.BoolFlag{
+		Name:  "realtime.enable-flag",
+		Usage: "Kafka sync enable flag",
+		Value: true,
+	}
+	RealtimeEnableSubscribeFlag = cli.BoolFlag{
+		Name:  "realtime.enable-subscribe-flag",
+		Usage: "Enable subscribe flag",
+		Value: false,
+	}
+	RealtimeCacheHeightThreshold = cli.Uint64Flag{
+		Name:  "realtime.cache-height-threshold",
+		Usage: "Cache height threshold to clear",
+		Value: 10,
+	}
+	RealtimeKafkaSyncBootstrapServers = cli.StringFlag{
+		Name:  "realtime.kafka-sync-bootstrap-servers",
+		Usage: "Kafka sync bootstrap servers",
+		Value: "",
+	}
+	RealtimeKafkaSyncBlockTopic = cli.StringFlag{
+		Name:  "realtime.kafka-sync-block-topic",
+		Usage: "Kafka block topic",
+		Value: "",
+	}
+	RealtimeKafkaSyncTxTopic = cli.StringFlag{
+		Name:  "realtime.kafka-sync-tx-topic",
+		Usage: "Kafka tx topic",
+		Value: "",
+	}
+	RealtimeKafkaSyncErrorTopic = cli.StringFlag{
+		Name:  "realtime.kafka-sync-error-topic",
+		Usage: "Kafka error trigger topic",
+		Value: "",
+	}
+	RealtimeKafkaSyncClientID = cli.StringFlag{
+		Name:  "realtime.kafka-sync-client-id",
+		Usage: "Kafka sync client id",
+		Value: "",
+	}
+	RealtimeKafkaSyncGroupID = cli.StringFlag{
+		Name:  "realtime.kafka-sync-group-id",
+		Usage: "Kafka sync group id",
+		Value: "",
+	}
+	RealtimeCacheDumpPath = cli.StringFlag{
+		Name:  "realtime.cache-dump-path",
+		Usage: "Cache dump path",
+		Value: "/home/erigon/data/cache",
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {

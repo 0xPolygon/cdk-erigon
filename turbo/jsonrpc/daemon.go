@@ -19,6 +19,9 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
+	realtimeCache "github.com/ledgerwatch/erigon/zk/realtime/cache"
+	realtimeRpc "github.com/ledgerwatch/erigon/zk/realtime/jsonrpc"
+	realtimeSub "github.com/ledgerwatch/erigon/zk/realtime/subscription"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zk/syncer"
 	txpool2 "github.com/ledgerwatch/erigon/zk/txpool"
@@ -30,7 +33,11 @@ func APIList(db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.
 	blockReader services.FullBlockReader, agg *libstate.Aggregator, cfg *httpcfg.HttpCfg, engine consensus.EngineReader,
 	ethCfg *ethconfig.Config, l1Syncer *syncer.L1Syncer, logger log.Logger, dataStreamServer server.DataStreamServer,
 	gasTracker *RecurringL1GasPriceTracker,
+	// For X Layer
 	cache *smt.SmtCache,
+	realtimeEnabled bool,
+	realtimeCache *realtimeCache.RealtimeCache,
+	realtimeSub *realtimeSub.RealtimeSubscription,
 ) (list []rpc.API, gpCache *GasPriceCache) {
 	// non-sequencer nodes should forward on requests to the sequencer
 	rpcUrl := ""
@@ -75,6 +82,8 @@ func APIList(db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.
 	overlayImpl := NewOverlayAPI(base, db, cfg.Gascap, cfg.OverlayGetLogsTimeout, cfg.OverlayReplayBlockTimeout, otsImpl)
 	// For X Layer, split db and ac
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, dbsmt, cfg.ReturnDataLimit, ethCfg, l1Syncer, rpcUrl, dataStreamServer, cache)
+	// For X Layer, realtime response
+	realtimeImpl := NewRealtimeAPI(realtimeCache, realtimeSub, ethImpl, realtimeEnabled)
 
 	if cfg.GraphQLEnabled {
 		list = append(list, rpc.API{
@@ -178,6 +187,17 @@ func APIList(db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.
 				Namespace: "zkevm",
 				Public:    true,
 				Service:   ZkEvmAPI(zkEvmImpl),
+				Version:   "1.0",
+			})
+		case "realtime":
+			if !ethCfg.Zk.XLayer.Realtime.Enable {
+				log.Warn("[Realtime] realtime api enabled but realtime backend is disabled. Failed init realtime api")
+				continue
+			}
+			list = append(list, rpc.API{
+				Namespace: "realtime",
+				Public:    true,
+				Service:   realtimeRpc.RealtimeAPI(realtimeImpl),
 				Version:   "1.0",
 			})
 		case "clique":

@@ -36,7 +36,7 @@ zkevm.gas-price-factor: 0.000001
 zkevm.allow-free-transactions: true
 zkevm.allow-internal-transactions: true
 externalcl: true
-http.api: [eth, debug, net, trace, web3, erigon, txpool, zkevm]
+http.api: [eth, debug, net, trace, web3, erigon, txpool, zkevm, realtime]
 http.addr: 0.0.0.0
 http.port: 8545
 http.vhosts: any
@@ -49,6 +49,8 @@ http.methodratelimit: "{\"methods\":[\"eth_syncing\"],\"count\":10,\"bucket\":1}
 #   {"project":"Biconomy","key":"45543e0adc5dd3e316044909d32501a5","timeout":"2030-12-31","methods":["eth_syncing"],"count":10000,"bucket":1}
 
 ws: true
+ws.addr: 0.0.0.0
+ws.port: 8546
 
 zkevm.apollo-enabled: false
 zkevm.apollo-ip-addr: ""
@@ -79,3 +81,17 @@ pprof.port: 6060
 pprof.addr: 0.0.0.0
 
 zkevm.standalone-smt-db: true  # true: enalbe split smt db, false: not split
+
+zkevm.enable-trace-log: true
+zkevm.trace-log-path: /home/erigon/data/logs/trace.log
+
+realtime.enable-flag: true
+realtime.enable-subscribe-flag: true
+realtime.cache-height-threshold: 10
+realtime.kafka-sync-bootstrap-servers: "xlayer-kafka:9092"
+realtime.kafka-sync-tx-topic: xlayer-tx
+realtime.kafka-sync-block-topic: xlayer-header
+realtime.kafka-sync-error-topic: xlayer-error
+realtime.kafka-sync-client-id: "xlayer-consumer"
+realtime.kafka-sync-group-id: "xlayer-consumer-1"
+realtime.cache-dump-path: /home/erigon/data/cache

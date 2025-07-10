@@ -19,6 +19,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
+	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
 )
@@ -212,7 +213,8 @@ func attemptAddTransaction(
 	l1Recovery bool,
 	forkId, l1InfoIndex uint64,
 	ethBlockGasPool *core.GasPool,
-) (*types.Receipt, *core.ExecutionResult, overflowType, error) {
+	txIndex int,
+) (*types.Receipt, *core.ExecutionResult, []*zktypes.InnerTx, overflowType, error) {
 	// Batch data size checking removed along with counters
 
 	// if not normalcy we want to create a gas pool per transaction (zkevm block gas limit is infinite), if normalcy create a pool per block.
@@ -227,13 +229,13 @@ func attemptAddTransaction(
 	cfg.zkVmConfig.CounterCollector = nil
 
 	snapshot := ibs.Snapshot()
-	ibs.Init(transaction.Hash(), common.Hash{}, 0)
+	ibs.Init(transaction.Hash(), common.Hash{}, txIndex)
 
 	evm := vm.NewZkEVM(*blockContext, evmtypes.TxContext{}, ibs, cfg.chainConfig, *cfg.zkVmConfig)
 
 	gasUsed := header.GasUsed
 
-	receipt, execResult, _, err := core.ApplyTransaction_zkevm(
+	receipt, execResult, innerTxs, err := core.ApplyTransaction_zkevm(
 		cfg.chainConfig,
 		cfg.engine,
 		evm,
@@ -263,15 +265,15 @@ func attemptAddTransaction(
 	if err != nil {
 		if errors.Is(err, core.ErrGasLimitReached) {
 			log.Debug("Transaction gas limit reached", "txHash", transaction.Hash())
-			return nil, nil, overflowGas, nil
+			return nil, nil, nil, overflowGas, nil
 		}
-		return nil, nil, overflowNone, err
+		return nil, nil, nil, overflowNone, err
 	}
 
 	if gasUsed > header.GasLimit {
 		log.Debug("Transaction overflows block gas limit", "txHash", transaction.Hash(), "txGas", receipt.GasUsed, "blockGasUsed", header.GasUsed)
 		ibs.RevertToSnapshot(snapshot)
-		return nil, nil, overflowGas, nil
+		return nil, nil, nil, overflowGas, nil
 	}
 
 	log.Debug("Transaction added", "txHash", transaction.Hash())
@@ -282,10 +284,14 @@ func attemptAddTransaction(
 	// we need to keep hold of the effective percentage used
 	// todo [zkevm] for now we're hard coding to the max value but we need to calc this properly
 	if err = sdb.hermezDb.WriteEffectiveGasPricePercentage(transaction.Hash(), effectiveGasPrice); err != nil {
-		return nil, nil, overflowNone, err
+		return nil, nil, nil, overflowNone, err
+	}
+
+	if cfg.zk.XLayer.Realtime.Enable && cfg.kafkaTxInfoChan != nil {
+		ibs.GenerateChangesetSinceSnapshotAndSendTxInfo(snapshot, cfg.kafkaTxInfoChan, transaction, receipt, innerTxs)
 	}
 
 	ibs.FinalizeTx(evm.ChainRules(), noop)
 
-	return receipt, execResult, overflowNone, nil
+	return receipt, execResult, innerTxs, overflowNone, nil
 }

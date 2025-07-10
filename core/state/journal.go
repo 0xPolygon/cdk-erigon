@@ -19,6 +19,8 @@ package state
 import (
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
 // journalEntry is a modification entry in the state change journal that can be
@@ -29,6 +31,9 @@ type journalEntry interface {
 
 	// dirtied returns the Ethereum address modified by this journal entry.
 	dirtied() *libcommon.Address
+
+	// For X Layer, collect transactional changeset
+	collectChangeset(*realtimeTypes.Changeset)
 }
 
 // journal contains the list of state modifications applied since the last state
@@ -37,6 +42,19 @@ type journalEntry interface {
 type journal struct {
 	entries []journalEntry            // Current changes tracked by the journal
 	dirties map[libcommon.Address]int // Dirty accounts and the number of changes
+}
+
+type Entries struct {
+	entries  *[]journalEntry
+	snapshot int
+}
+
+func CollectChangeset(entries Entries) *realtimeTypes.Changeset {
+	changeset := realtimeTypes.NewChangeset()
+	for _, entry := range (*entries.entries)[(entries).snapshot:] {
+		entry.collectChangeset(changeset)
+	}
+	return changeset
 }
 
 // newJournal create a new initialized journal.
@@ -102,22 +120,27 @@ type (
 	balanceChange struct {
 		account *libcommon.Address
 		prev    uint256.Int
+		post    uint256.Int
 	}
 	balanceIncrease struct {
 		account  *libcommon.Address
 		increase uint256.Int
 	}
 	balanceIncreaseTransfer struct {
-		bi *BalanceIncrease
+		account *libcommon.Address
+		prev    uint256.Int
+		bi      *BalanceIncrease
 	}
 	nonceChange struct {
 		account *libcommon.Address
 		prev    uint64
+		post    uint64
 	}
 	storageChange struct {
-		account  *libcommon.Address
-		key      libcommon.Hash
-		prevalue uint256.Int
+		account   *libcommon.Address
+		key       libcommon.Hash
+		prevalue  uint256.Int
+		postvalue uint256.Int
 	}
 	fakeStorageChange struct {
 		account  *libcommon.Address
@@ -128,6 +151,8 @@ type (
 		account  *libcommon.Address
 		prevcode []byte
 		prevhash libcommon.Hash
+		posthash libcommon.Hash
+		postcode []byte
 	}
 
 	// Changes to other state values.
@@ -155,6 +180,16 @@ type (
 		key      libcommon.Hash
 		prevalue uint256.Int
 	}
+
+	incarnationChange struct {
+		account *libcommon.Address
+		post    uint64
+	}
+
+	incarnationMapChange struct {
+		account  *libcommon.Address
+		original uint64
+	}
 )
 
 func (ch createObjectChange) revert(s *IntraBlockState) {
@@ -166,12 +201,27 @@ func (ch createObjectChange) dirtied() *libcommon.Address {
 	return ch.account
 }
 
+func (ch createObjectChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	if _, exists := cs.DeletedAccounts[*ch.account]; exists {
+		delete(cs.DeletedAccounts, *ch.account)
+	}
+	cs.BalanceChanges[*ch.account] = uint256.NewInt(0)
+	cs.NonceChanges[*ch.account] = 0
+	cs.CodeHashChanges[*ch.account] = emptyCodeHashH
+	cs.StorageChanges[*ch.account] = make(map[libcommon.Hash]*uint256.Int)
+	log.Debugf("[Realtime] createObjectChange: %v", *ch.account)
+}
+
 func (ch resetObjectChange) revert(s *IntraBlockState) {
 	s.setStateObject(*ch.account, ch.prev)
 }
 
 func (ch resetObjectChange) dirtied() *libcommon.Address {
 	return nil
+}
+
+func (ch resetObjectChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	// cleared because it's not dirty
 }
 
 func (ch selfdestructChange) revert(s *IntraBlockState) {
@@ -186,6 +236,22 @@ func (ch selfdestructChange) dirtied() *libcommon.Address {
 	return ch.account
 }
 
+func (ch selfdestructChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	if _, exists := cs.DeletedAccounts[*ch.account]; exists {
+		return
+	}
+
+	cs.DeletedAccounts[*ch.account] = struct{}{}
+
+	delete(cs.BalanceChanges, *ch.account)
+	delete(cs.NonceChanges, *ch.account)
+	delete(cs.CodeHashChanges, *ch.account)
+	delete(cs.IncarnationChanges, *ch.account)
+	delete(cs.IncarnationMapChanges, *ch.account)
+	delete(cs.StorageChanges, *ch.account)
+	log.Debugf("[Realtime] selfdestructChange: %v", *ch.account)
+}
+
 var ripemd = libcommon.HexToAddress("0000000000000000000000000000000000000003")
 
 func (ch touchChange) revert(s *IntraBlockState) {
@@ -195,12 +261,19 @@ func (ch touchChange) dirtied() *libcommon.Address {
 	return ch.account
 }
 
+func (ch touchChange) collectChangeset(cs *realtimeTypes.Changeset) {}
+
 func (ch balanceChange) revert(s *IntraBlockState) {
 	s.getStateObject(*ch.account).setBalance(&ch.prev)
 }
 
 func (ch balanceChange) dirtied() *libcommon.Address {
 	return ch.account
+}
+
+func (ch balanceChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	cs.BalanceChanges[*ch.account] = &ch.post
+	log.Debugf("[Realtime] balanceChange: %v -> %v", ch.account, *cs.BalanceChanges[*ch.account])
 }
 
 func (ch balanceIncrease) revert(s *IntraBlockState) {
@@ -217,6 +290,8 @@ func (ch balanceIncrease) dirtied() *libcommon.Address {
 	return ch.account
 }
 
+func (ch balanceIncrease) collectChangeset(cs *realtimeTypes.Changeset) {}
+
 func (ch balanceIncreaseTransfer) dirtied() *libcommon.Address {
 	return nil
 }
@@ -224,12 +299,27 @@ func (ch balanceIncreaseTransfer) dirtied() *libcommon.Address {
 func (ch balanceIncreaseTransfer) revert(s *IntraBlockState) {
 	ch.bi.transferred = false
 }
+
+func (ch balanceIncreaseTransfer) collectChangeset(cs *realtimeTypes.Changeset) {
+	if ch.bi.increase.IsZero() {
+		return
+	}
+	cs.BalanceChanges[*ch.account] = uint256.NewInt(0)
+	cs.BalanceChanges[*ch.account].Add(&ch.prev, &ch.bi.increase)
+	log.Debugf("[Realtime] balanceIncreaseTransfer: %v + %v -> %v", ch.account, ch.bi.increase, *cs.BalanceChanges[*ch.account])
+}
+
 func (ch nonceChange) revert(s *IntraBlockState) {
 	s.getStateObject(*ch.account).setNonce(ch.prev)
 }
 
 func (ch nonceChange) dirtied() *libcommon.Address {
 	return ch.account
+}
+
+func (ch nonceChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	cs.NonceChanges[*ch.account] = ch.post
+	log.Debugf("[Realtime] nonceChange: %v -> %v", ch.account, ch.post)
 }
 
 func (ch codeChange) revert(s *IntraBlockState) {
@@ -240,12 +330,28 @@ func (ch codeChange) dirtied() *libcommon.Address {
 	return ch.account
 }
 
+func (ch codeChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	cs.CodeHashChanges[*ch.account] = ch.posthash
+	if ch.posthash != emptyCodeHashH {
+		cs.CodeChanges[ch.posthash] = ch.postcode
+	}
+	log.Debugf("[Realtime] codeChange: %v -> %v", ch.account, ch.posthash)
+}
+
 func (ch storageChange) revert(s *IntraBlockState) {
 	s.getStateObject(*ch.account).setState(&ch.key, ch.prevalue)
 }
 
 func (ch storageChange) dirtied() *libcommon.Address {
 	return ch.account
+}
+
+func (ch storageChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	if _, ok := cs.StorageChanges[*ch.account]; !ok {
+		cs.StorageChanges[*ch.account] = make(map[libcommon.Hash]*uint256.Int)
+	}
+	cs.StorageChanges[*ch.account][ch.key] = &ch.postvalue
+	log.Debugf("[Realtime] storageChange: %v -> %v -> %v", ch.account, ch.key, *cs.StorageChanges[*ch.account][ch.key])
 }
 
 func (ch fakeStorageChange) revert(s *IntraBlockState) {
@@ -256,6 +362,8 @@ func (ch fakeStorageChange) dirtied() *libcommon.Address {
 	return ch.account
 }
 
+func (ch fakeStorageChange) collectChangeset(cs *realtimeTypes.Changeset) {}
+
 func (ch transientStorageChange) revert(s *IntraBlockState) {
 	s.setTransientState(*ch.account, ch.key, ch.prevalue)
 }
@@ -264,6 +372,8 @@ func (ch transientStorageChange) dirtied() *libcommon.Address {
 	return nil
 }
 
+func (ch transientStorageChange) collectChangeset(cs *realtimeTypes.Changeset) {}
+
 func (ch refundChange) revert(s *IntraBlockState) {
 	s.refund = ch.prev
 }
@@ -271,6 +381,8 @@ func (ch refundChange) revert(s *IntraBlockState) {
 func (ch refundChange) dirtied() *libcommon.Address {
 	return nil
 }
+
+func (ch refundChange) collectChangeset(cs *realtimeTypes.Changeset) {}
 
 func (ch addLogChange) revert(s *IntraBlockState) {
 	logs := s.logs[ch.txhash]
@@ -285,6 +397,8 @@ func (ch addLogChange) revert(s *IntraBlockState) {
 func (ch addLogChange) dirtied() *libcommon.Address {
 	return nil
 }
+
+func (ch addLogChange) collectChangeset(cs *realtimeTypes.Changeset) {}
 
 func (ch accessListAddAccountChange) revert(s *IntraBlockState) {
 	/*
@@ -303,10 +417,34 @@ func (ch accessListAddAccountChange) dirtied() *libcommon.Address {
 	return nil
 }
 
+func (ch accessListAddAccountChange) collectChangeset(cs *realtimeTypes.Changeset) {}
+
 func (ch accessListAddSlotChange) revert(s *IntraBlockState) {
 	s.accessList.DeleteSlot(*ch.address, *ch.slot)
 }
 
 func (ch accessListAddSlotChange) dirtied() *libcommon.Address {
 	return nil
+}
+
+func (ch accessListAddSlotChange) collectChangeset(cs *realtimeTypes.Changeset) {}
+
+func (ch incarnationChange) revert(s *IntraBlockState) {}
+
+func (ch incarnationChange) dirtied() *libcommon.Address {
+	return nil
+}
+
+func (ch incarnationChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	cs.IncarnationChanges[*ch.account] = ch.post
+}
+
+func (ch incarnationMapChange) revert(s *IntraBlockState) {}
+
+func (ch incarnationMapChange) dirtied() *libcommon.Address {
+	return nil
+}
+
+func (ch incarnationMapChange) collectChangeset(cs *realtimeTypes.Changeset) {
+	cs.IncarnationMapChanges[*ch.account] = ch.original
 }

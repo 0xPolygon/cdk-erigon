@@ -13,6 +13,7 @@ DOCKER_PROMETHEUS := prometheus
 DOCKER_GRAFANA := grafana
 DOCKER_MAINNET_SEQ := xlayer-mainnet-seq
 DOCKER_MAINNET_RPC := xlayer-mainnet-rpc
+DOCKER_KAFKA := xlayer-kafka
 
 # Apollo
 DOCKER_COMPOSE_APOLLO := docker compose -f docker-compose-apollo.yml
@@ -35,6 +36,7 @@ RUN_DOCKER_POOL_MANAGER := $(DOCKER_COMPOSE) up -d $(DOCKER_POOL_MANAGER)
 RUN_DOCKER_DS := $(DOCKER_COMPOSE) up -d $(DOCKER_DS)
 RUN_DOCKER_PROMETHEUS := $(DOCKER_COMPOSE) up -d $(DOCKER_PROMETHEUS)
 RUN_DOCKER_GRAFANA := $(DOCKER_COMPOSE) up -d $(DOCKER_GRAFANA)
+RUN_DOCKER_KAFKA := $(DOCKER_COMPOSE) up -d $(DOCKER_KAFKA)
 
 # Apollo
 RUN_DOCKER_APOLLO_CONFIGSERVICE := $(DOCKER_COMPOSE_APOLLO) up -d $(DOCKER_APOLLO_CONFIGSERVICE)
@@ -84,6 +86,33 @@ run: stop build-docker
 	
 	$(DOCKER_COMPOSE) up -d xlayer-cdk-node
 
+.PHONY: run
+realtime-run: stop build-docker
+	$(DOCKER_COMPOSE) up -d xlayer-mock-l1-network
+	$(DOCKER_COMPOSE) up -d xlayer-agg-db
+	$(DOCKER_COMPOSE) up -d xlayer-bridge-db
+	$(DOCKER_COMPOSE) up -d xlayer-pool-db
+	$(DOCKER_COMPOSE) up -d xlayer-agglayer-prover
+	$(DOCKER_COMPOSE) up -d xlayer-agglayer
+	$(DOCKER_COMPOSE) up -d xlayer-bridge-redis
+	$(DOCKER_COMPOSE) up -d kafka-zookeeper
+	$(DOCKER_COMPOSE) up -d xlayer-bridge-coin-kafka
+	$(RUN_DOCKER_KAFKA)
+
+	sleep 15
+	$(DOCKER_COMPOSE) up -d xlayer-approve
+	$(DOCKER_COMPOSE) up -d xlayer-seq
+	$(DOCKER_COMPOSE) up -d xlayer-pool-manager
+
+	sleep 5
+	$(DOCKER_COMPOSE) up -d xlayer-rpc
+
+	sleep 10
+	$(DOCKER_COMPOSE) up -d xlayer-bridge-service
+	$(DOCKER_COMPOSE) up -d xlayer-bridge-ui
+	$(INIT_BRIDGE_ACCOUNT)
+	
+	$(DOCKER_COMPOSE) up -d xlayer-cdk-node
 
 .PHONY: run
 multi-run: run

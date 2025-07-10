@@ -48,6 +48,8 @@ http.timeouts.idle: "10s"
 rpc.batch.concurrency: 2
 rpc.batch.limit: 20
 ws: true
+ws.addr: 0.0.0.0
+ws.port: 8546
 
 zkevm.apollo-enabled: false
 zkevm.apollo-ip-addr: ""
@@ -114,3 +116,12 @@ zkevm.skip-analysis-group-api: true
 # zkevm.analysis-group-nacos-namespace: "ns-global"
 # zkevm.analysis-group-service-name: "analysis-group"
 # zkevm.analysis-group-api-path: "api/v1/196/validHeight"
+
+realtime.enable-flag: true
+realtime.enable-subscribe-flag: false
+realtime.cache-height-threshold: 10
+realtime.kafka-sync-bootstrap-servers: "xlayer-kafka:9092"
+realtime.kafka-sync-tx-topic: xlayer-tx
+realtime.kafka-sync-block-topic: xlayer-header
+realtime.kafka-sync-error-topic: xlayer-error
+realtime.kafka-sync-client-id: "xlayer-producer"

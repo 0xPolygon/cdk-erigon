@@ -39,7 +39,7 @@ services:
       - REDIS_DATABASES=8
 
   kafka-zookeeper:
-    image: wurstmeister/zookeeper
+    image: zookeeper
     container_name: kafka-zookeeper
     environment:
       - EXPERIMENTAL_DOCKER_DESKTOP_FORCE_QEMU=1
@@ -138,6 +138,24 @@ services:
     command: >
       cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
 
+  xlayer-kafka:
+    image: bitnami/kafka:latest
+    container_name: xlayer-kafka
+    ports:
+      - 9095:9094
+    environment:
+      # Configs
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@xlayer-kafka:9093
+      - KAFKA_MESSAGE_MAX_BYTES=30000000
+      # Listeners
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092,EXTERNAL://localhost:9095
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+
   xlayer-approve:
     container_name: xlayer-approve
     image: hermeznetwork/zkevm-node:v0.6.6
@@ -159,6 +177,7 @@ services:
     ports:
       - 6060:6060
       - 8123:8545
+      - 8547:8546
       - 6900:6900
       - 9092:9095
     volumes:
@@ -373,6 +392,7 @@ services:
     ports:
       - 6061:6060
       - 8124:8545
+      - 8548:8546
       - 6901:6900
       - 9091:9095
     volumes:

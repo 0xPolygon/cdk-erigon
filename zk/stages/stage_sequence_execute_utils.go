@@ -34,6 +34,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/l1infotree"
+	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/txpool"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
@@ -94,6 +95,10 @@ type SequenceBlockCfg struct {
 
 	decodedTxCache *expirable.LRU[common.Hash, *types.Transaction]
 	doneHook       DoneHook
+
+	// For X Layer, realtime
+	kafkaBlockInfoChan chan *realtimeTypes.BlockInfo
+	kafkaTxInfoChan    chan *state.TxInfo
 }
 
 func StageSequenceBlocksCfg(
@@ -124,6 +129,10 @@ func StageSequenceBlocksCfg(
 	yieldSize uint16,
 	infoTreeUpdater *l1infotree.Updater,
 	doneHook DoneHook,
+
+	// For X Layer, realtime
+	kafkaBlockInfoChan chan *realtimeTypes.BlockInfo,
+	kafkaTxInfoChan chan *state.TxInfo,
 ) SequenceBlockCfg {
 
 	return SequenceBlockCfg{
@@ -154,6 +163,10 @@ func StageSequenceBlocksCfg(
 
 		// For X Layer, split db and ac
 		dbsmt: dbsmt,
+
+		// For X Layer, realtime
+		kafkaBlockInfoChan: kafkaBlockInfoChan,
+		kafkaTxInfoChan:    kafkaTxInfoChan,
 	}
 }
 
@@ -183,10 +196,8 @@ func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockC
 
 func validateIfDatastreamIsAheadOfExecution(
 	s *stagedsync.StageState,
-// u stagedsync.Unwinder,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
-// historyCfg stagedsync.HistoryCfg,
 ) error {
 	roTx, err := cfg.db.BeginRo(ctx)
 	if err != nil {

@@ -20,6 +20,7 @@ import (
 	bortypes "github.com/ledgerwatch/erigon/polygon/bor/types"
 	"github.com/ledgerwatch/erigon/turbo/engineapi/engine_helpers"
 	"github.com/ledgerwatch/erigon/turbo/services"
+	realtimeCache "github.com/ledgerwatch/erigon/zk/realtime/cache"
 	"github.com/ledgerwatch/log/v3"
 
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -32,13 +33,25 @@ type FinishCfg struct {
 	db            kv.RwDB
 	tmpDir        string
 	forkValidator *engine_helpers.ForkValidator
+
+	// For X Layer, realtime
+	realtimeCache                *realtimeCache.RealtimeCache
+	realtimeEnable               bool
+	realtimeCacheHeightThreshold uint64
+	realtimeFinishChan           chan uint64
 }
 
-func StageFinishCfg(db kv.RwDB, tmpDir string, forkValidator *engine_helpers.ForkValidator) FinishCfg {
+func StageFinishCfg(db kv.RwDB, tmpDir string, forkValidator *engine_helpers.ForkValidator, realtimeCache *realtimeCache.RealtimeCache, realtimeEnable bool, realtimeCacheHeightThreshold uint64, realtimeFinishChan chan uint64) FinishCfg {
 	return FinishCfg{
 		db:            db,
 		tmpDir:        tmpDir,
 		forkValidator: forkValidator,
+
+		// For X Layer, realtime
+		realtimeCache:                realtimeCache,
+		realtimeEnable:               realtimeEnable,
+		realtimeCacheHeightThreshold: realtimeCacheHeightThreshold,
+		realtimeFinishChan:           realtimeFinishChan,
 	}
 }
 
@@ -88,6 +101,16 @@ func FinishForward(s *StageState, tx kv.RwTx, cfg FinishCfg, initialCycle bool) 
 	if !useExternalTx {
 		if err := tx.Commit(); err != nil {
 			return err
+		}
+	}
+
+	// For X Layer, realtime
+	if cfg.realtimeEnable && cfg.realtimeFinishChan != nil && cfg.realtimeCache != nil {
+		cfg.realtimeFinishChan <- executionAt
+		if executionAt > cfg.realtimeCacheHeightThreshold {
+			deleteHeight := executionAt - cfg.realtimeCacheHeightThreshold
+			cfg.realtimeCache.Stateless.DeleteBlock(deleteHeight)
+			log.Debug(fmt.Sprintf("[Realtime] Sent execution height %d, delete height %d in cache", executionAt, deleteHeight))
 		}
 	}
 
