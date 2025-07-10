@@ -336,6 +336,36 @@ var (
 		Usage: "Enable full trace log",
 		Value: true,
 	}
+	VerificationBatchDelay = cli.Uint64Flag{
+		Name:  "zkevm.verification-batch-delay",
+		Usage: "Number of batches to delay before verifying the last block of a batch in analysis group verification",
+		Value: 2,
+	}
+	AnalysisGroupNacosUrls = cli.StringFlag{
+		Name:  "zkevm.analysis-group-nacos-urls",
+		Usage: "nacos service urls for analysis group API",
+		Value: "",
+	}
+	AnalysisGroupNacosNamespace = cli.StringFlag{
+		Name:  "zkevm.analysis-group-nacos-namespace",
+		Usage: "nacos service namespace for analysis group API",
+		Value: "",
+	}
+	AnalysisGroupServiceName = cli.StringFlag{
+		Name:  "zkevm.analysis-group-service-name",
+		Usage: "nacos service name for analysis group API",
+		Value: "",
+	}
+	AnalysisGroupAPIPath = cli.StringFlag{
+		Name:  "zkevm.analysis-group-api-path",
+		Usage: "API path for analysis group verification (e.g., api/v1/196/validHeight)",
+		Value: "api/v1/196/validHeight",
+	}
+	SkipAnalysisGroupAPI = cli.BoolFlag{
+		Name:  "zkevm.skip-analysis-group-api",
+		Usage: "If true, skip calling analysis group API and directly set block number to AnalysisGroupVerifiedBatchNo status",
+		Value: true,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {

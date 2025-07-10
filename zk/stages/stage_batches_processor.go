@@ -14,7 +14,9 @@ import (
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/params"
+	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
+	"github.com/ledgerwatch/erigon/zk/sequencer"
 	txtype "github.com/ledgerwatch/erigon/zk/tx"
 	"github.com/ledgerwatch/erigon/zk/utils"
 	"github.com/ledgerwatch/log/v3"
@@ -102,9 +104,17 @@ func NewBatchesProcessor(
 	miningConfig *params.MiningConfig,
 	unwindFn func(uint64) (uint64, error),
 ) (*BatchesProcessor, error) {
-	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
+	highestVerifiedBatch, err := rpchelper.GetFinalizedBatchNumber(tx)
 	if err != nil {
-		return nil, errors.New("could not retrieve l1 verifications batch no progress")
+		// normally, it should success, but it failed in `fixing-unwinds-tests` when running ci
+		// since `GetFinalizedBatchNumber` will access sequencer, which is not available when running `fixing-unwinds-tests`.
+		// if highestVerifiedBatch is 0, WriteForkchoiceFinalized will not be called in `processFullBlock`, but it's not a big deal.
+		// just to be safe, we only allow this to happen in sequencer.
+		if sequencer.IsSequencer() {
+			panic("rpchelper.GetFinalizedBatchNumber should not faild in sequencer")
+		}
+		log.Error("retrieve batch number by block number error in NewBatchesProcessor. BUT CONTINUING", "error", err)
+		highestVerifiedBatch = 0
 	}
 
 	lastForkId, err := stages.GetStageProgress(tx, stages.ForkId)

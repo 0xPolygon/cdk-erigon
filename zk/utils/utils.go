@@ -20,11 +20,11 @@ import (
 // if current sync is before verified batch - short circuit to verified batch, otherwise to enx of next batch
 // if there is no new fully downloaded batch - do not short circuit
 // returns (shouldShortCircuit, blockNumber, error)
-func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string, l2ShortCircuitToVerifiedBatch bool) (bool, uint64, error) {
+func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string, l2ShortCircuitToVerifiedBatch bool, getHighestVerifiedBatchNo func(tx kv.Tx) (uint64, error)) (bool, uint64, error) {
 	hermezDb := hermez_db.NewHermezDb(tx)
 
 	// get highest verified batch
-	highestVerifiedBatchNo, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
+	highestVerifiedBatchNo, err := getHighestVerifiedBatchNo(tx)
 	if err != nil {
 		return false, 0, err
 	}

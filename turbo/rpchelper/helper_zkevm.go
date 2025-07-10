@@ -26,7 +26,12 @@ func GetBatchNumber(rpcBatchNumber rpc.BlockNumber, tx kv.Tx, filters *Filters) 
 	case rpc.SafeBlockNumber, rpc.FinalizedBlockNumber:
 		// [zkevm] safe not available, returns finilized instead
 		// get highest verified batch
-		if batchNumber, err = stages.GetStageProgress(tx, stages.L1VerificationsBatchNo); err != nil {
+		finalizedBlockNumber, err := GetFinalizedBlockNumber(tx)
+		if err != nil {
+			return 0, false, fmt.Errorf("getting finalized block number: %w", err)
+		}
+		batchNumber, err = hermezDb.GetBatchNoByL2Block(finalizedBlockNumber)
+		if err != nil {
 			return 0, false, fmt.Errorf("getting verified batch number: %w", err)
 		}
 	case rpc.LatestBlockNumber, rpc.LatestExecutedBlockNumber, rpc.PendingBlockNumber:

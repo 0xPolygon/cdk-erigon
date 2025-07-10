@@ -4,7 +4,16 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/zk/nacos"
 )
+
+// AnalysisGroupVerificationConfig contains configuration for analysis group verification
+type AnalysisGroupVerificationConfig struct {
+	BatchDelay  uint64                   // Number of batches to delay before verifying the last block of a batch
+	NacosClient *nacos.XlayerNacosClient // Nacos client for analysis group service discovery
+	APIPath     string                   // API path for analysis group verification
+	SkipAPI     bool                     // If true, skip calling analysis group API and directly set block number to verified status
+}
 
 // XLayerConfig is the X Layer config used on the eth backend
 type XLayerConfig struct {
@@ -49,6 +58,9 @@ type XLayerConfig struct {
 	EnableTraceLog bool
 
 	SequencerBatchCounterPercentage int
+
+	// Analysis Group Verification
+	AnalysisGroupVerification AnalysisGroupVerificationConfig
 }
 
 var DefaultXLayerConfig = XLayerConfig{}

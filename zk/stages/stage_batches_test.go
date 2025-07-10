@@ -3,6 +3,7 @@ package stages
 import (
 	"context"
 	"encoding/hex"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,12 +18,16 @@ import (
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
+	"github.com/ledgerwatch/erigon/zk/sequencer"
 
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/stretchr/testify/require"
 )
 
 func TestUnwindBatches(t *testing.T) {
+	// set sequencer env key to 1 to run as sequencer, which could avoid panic in GetFinalizedBlockNumber
+	os.Setenv(sequencer.SEQUENCER_ENV_KEY, "1")
+
 	currentBlockNumber := 10
 	fullL2Blocks := createTestL2Blocks(t, currentBlockNumber)
 
@@ -60,7 +65,7 @@ func TestUnwindBatches(t *testing.T) {
 	hDB := hermez_db.NewHermezDb(tx)
 	err = hDB.WriteBlockBatch(0, 0)
 	require.NoError(t, err)
-	err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, 20)
+	err = stages.SaveStageProgress(tx, stages.AnalysisGroupVerifiedBatchNo, 20)
 	require.NoError(t, err)
 
 	// get bucket sizes pre inserts

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"os"
+	"strings"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
@@ -204,10 +206,15 @@ Loop:
 			return fmt.Errorf("SaveStageProgress: %w", err)
 		}
 		if highestVerification.BatchNo > 0 {
-			log.Info(fmt.Sprintf("[%s]", logPrefix), "highestVerificationBatchNo", highestVerification.BatchNo)
-			if err := stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, highestVerification.BatchNo); err != nil {
-				return fmt.Errorf("SaveStageProgress: %w", err)
+			// should never get a logVerifyEtrog log in pp mode, so highestVerification.BatchNo should always be 0.
+			// the exception is when running tests, such as TestSpawnStageL1Syncer
+			if !isTestEnv() {
+				panic("highestVerification.BatchNo > 0")
 			}
+			// log.Info(fmt.Sprintf("[%s]", logPrefix), "highestVerificationBatchNo", highestVerification.BatchNo)
+			// if err := stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, highestVerification.BatchNo); err != nil {
+			// 	return fmt.Errorf("SaveStageProgress: %w", err)
+			// }
 		}
 
 		// State Root Verifications Check
@@ -412,4 +419,16 @@ func blockComparison(tx kv.RwTx, hermezDb *hermez_db.HermezDb, blockNo uint64, l
 	}
 
 	return nil
+}
+
+func isTestEnv() bool {
+	if strings.Contains(os.Args[0], "test") {
+        return true
+    }
+	for _, arg := range os.Args {
+        if strings.HasPrefix(arg, "-test.") {
+            return true
+        }
+    }
+	return false
 }

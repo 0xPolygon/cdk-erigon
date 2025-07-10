@@ -22,6 +22,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/ethclient"
+	"github.com/ledgerwatch/erigon/rpc"
 	"gopkg.in/yaml.v2"
 
 	"github.com/ledgerwatch/erigon/test/operations"
@@ -1406,4 +1407,125 @@ func TestFixedNonceTooLowTransactions(t *testing.T) {
 	expectedFinalNonce := baseNonce + uint64(totalTxs-nonceTooLowCnt)
 	require.Equal(t, expectedFinalNonce, finalNonce,
 		"Final nonce is incorrect, expected: %d, actual: %d", expectedFinalNonce, finalNonce)
+}
+
+// TestVerification tests the block verification functionality
+func TestVerification(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+
+	// Set default verification delay batch to 2
+	const defaultVerificationDelayBatch = 2
+
+	// Helper function to get highest block number in a batch
+	getHighestBlockInBatch := func(batchNumber uint64) (uint64, error) {
+		batch, err := operations.GetBatchByNumber(new(big.Int).SetUint64(batchNumber))
+		if err != nil {
+			return 0, err
+		}
+
+		// Get blocks from batch
+		blocks := batch.Blocks
+		if len(blocks) == 0 {
+			return 0, fmt.Errorf("no blocks found in batch %d", batchNumber)
+		}
+
+		// Find the highest block number
+		var highestBlock uint64
+		for _, blockHash := range blocks {
+			blockHashStr, ok := blockHash.(string)
+			if !ok {
+				continue
+			}
+
+			block, err := operations.GetBlockByHash(common.HexToHash(blockHashStr))
+			if err != nil {
+				continue
+			}
+
+			blockNumber := uint64(block.Number)
+			if blockNumber > highestBlock {
+				highestBlock = blockNumber
+			}
+		}
+
+		return highestBlock, nil
+	}
+
+	// Helper function to get finalized and safe block numbers
+	getFinalizedAndSafeBlocks := func() (uint64, uint64, error) {
+		// Get finalized block
+		finalizedBlock, err := operations.GetBlockByNumber(big.NewInt(int64(rpc.FinalizedBlockNumber)))
+		if err != nil {
+			return 0, 0, err
+		}
+		finalizedNumber := uint64(finalizedBlock.Number)
+
+		// Get safe block
+		safeBlock, err := operations.GetBlockByNumber(big.NewInt(int64(rpc.SafeBlockNumber)))
+		if err != nil {
+			return 0, 0, err
+		}
+		safeNumber := uint64(safeBlock.Number)
+
+		return finalizedNumber, safeNumber, nil
+	}
+
+	// Run the test 10 times
+	prevBatchNumber := uint64(0)
+	for i := 0; i < 10; i++ {
+		log.Infof("Test iteration %d/10", i+1)
+
+		// 1. Get current latest batch number
+		latestBatchNumber, err := operations.GetBatchNumber()
+		require.NoError(t, err)
+		log.Infof("Latest batch number: %d", latestBatchNumber)
+
+		// 2. Calculate target batch number (latest - default verification delay batch)
+		// and also make sure that the batch number is increasing every time we check the verification
+		if latestBatchNumber < defaultVerificationDelayBatch || latestBatchNumber == prevBatchNumber {
+			log.Infof("Latest batch number (%d) is less than verification delay batch (%d) or equal to previous batch number (%d), skipping",
+				latestBatchNumber, defaultVerificationDelayBatch, prevBatchNumber)
+			time.Sleep(2 * time.Second)
+			i-- // ignore this iteration
+			continue
+		}
+
+		prevBatchNumber = latestBatchNumber
+
+		targetBatchNumber := latestBatchNumber - defaultVerificationDelayBatch
+		log.Infof("Target batch number: %d", targetBatchNumber)
+
+		// 3. Get the highest block number in the target batch
+		expectedVerificationBlock, err := getHighestBlockInBatch(targetBatchNumber)
+		require.NoError(t, err)
+		log.Infof("Expected verification block: %d", expectedVerificationBlock)
+
+		// 4. Get finalized and safe block numbers
+		finalizedBlockNumber, safeBlockNumber, err := getFinalizedAndSafeBlocks()
+		require.NoError(t, err)
+		log.Infof("Finalized block number: %d, Safe block number: %d", finalizedBlockNumber, safeBlockNumber)
+
+		// 5. Wait for the finalized and safe block numbers to be >= expected verification block
+		for i := 0; i < 30 && finalizedBlockNumber < expectedVerificationBlock && safeBlockNumber < expectedVerificationBlock; i++ {
+			time.Sleep(1 * time.Second)
+			finalizedBlockNumber, safeBlockNumber, err = getFinalizedAndSafeBlocks()
+			require.NoError(t, err)
+			log.Infof("Finalized block number: %d, Safe block number: %d", finalizedBlockNumber, safeBlockNumber)
+		}
+
+		// 6. Check that finalized and safe block numbers are >= highest block in target batch
+		require.GreaterOrEqual(t, finalizedBlockNumber, expectedVerificationBlock,
+			"Finalized block number should be >= highest block in target batch")
+		require.GreaterOrEqual(t, safeBlockNumber, expectedVerificationBlock,
+			"Safe block number should be >= highest block in target batch")
+
+		log.Infof("Verification check passed for iteration %d", i+1)
+
+		// 7. Sleep 2 seconds before next iteration
+		time.Sleep(2 * time.Second)
+	}
+
+	log.Info("Verification delay batch test completed successfully")
 }

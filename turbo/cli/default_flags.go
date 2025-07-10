@@ -351,6 +351,12 @@ var DefaultFlags = []cli.Flag{
 	&utils.GetLogsRetries,
 	&utils.OkPaySenderAccountsList,
 	&utils.OkPayBlockPriorityTxsLimit,
+	&utils.VerificationBatchDelay,
+	&utils.AnalysisGroupNacosUrls,
+	&utils.AnalysisGroupNacosNamespace,
+	&utils.AnalysisGroupServiceName,
+	&utils.AnalysisGroupAPIPath,
+	&utils.SkipAnalysisGroupAPI,
 
 	&utils.ACLPrintHistory,
 	&utils.InfoTreeUpdateInterval,

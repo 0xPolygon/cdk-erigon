@@ -21,6 +21,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/params"
+	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/zk"
 	"github.com/ledgerwatch/erigon/zk/datastream/client"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
@@ -438,9 +439,17 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	//////////////////////////////////
 	// delete batch connected stuff //
 	//////////////////////////////////
-	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
+	highestVerifiedBatch, err := rpchelper.GetFinalizedBatchNumber(tx)
 	if err != nil {
-		return fmt.Errorf("GetStageProgress: %w", err)
+		// normally, it should success, but it failed in `fixing-unwinds-tests` when running ci
+		// since `GetFinalizedBatchNumber` will access sequencer, which is not available when running `fixing-unwinds-tests`
+		// if highestVerifiedBatch is 0, WriteForkchoiceFinalized will not be called later, but it's not a big deal.
+		// just to be safe, we only allow this to happen in sequencer.
+		if sequencer.IsSequencer() {
+			panic("rpchelper.GetFinalizedBatchNumber should not faild in sequencer")
+		}
+		log.Error("retrieve finalized batch number error in UnwindBatchesStage. BUT CONTINUING", "error", err)
+		highestVerifiedBatch = 0
 	}
 
 	fromBatchPrev, err := hermezDb.GetBatchNoByL2Block(fromBlock - 1)

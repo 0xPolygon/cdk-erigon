@@ -36,6 +36,7 @@ func APIList(db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.
 	rpcUrl := ""
 	if !sequencer.IsSequencer() {
 		rpcUrl = ethCfg.Zk.L2RpcUrl
+		rpchelper.SetSequencerRpcUrl(ethCfg.Zk.L2RpcUrl)
 	}
 
 	base := NewBaseApi(filters, stateCache, blockReader, agg, cfg.WithDatadir, cfg.EvmCallTimeout, engine, cfg.Dirs)

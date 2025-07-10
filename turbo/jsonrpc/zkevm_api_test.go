@@ -153,7 +153,7 @@ func TestBatchNumber(t *testing.T) {
 	err = hDB.WriteSequence(7, 7, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba86"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e1"), common.HexToHash("0x0"))
 	assert.NoError(err)
 	for i := 1; i <= 4; i++ {
-		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
+		err = stages.SaveStageProgress(tx, stages.AnalysisGroupVerifiedBatchNo, uint64(i))
 		assert.NoError(err)
 	}
 	tx.Commit()
@@ -247,7 +247,7 @@ func TestGetBatchByNumber(t *testing.T) {
 	assert.NoError(err)
 
 	for i := 1; i <= 2; i++ {
-		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
+		err = stages.SaveStageProgress(tx, stages.AnalysisGroupVerifiedBatchNo, uint64(i))
 		assert.NoError(err)
 	}
 
@@ -386,7 +386,7 @@ func TestGetBatchDataByNumber(t *testing.T) {
 	}
 
 	for i := 1; i <= 2; i++ {
-		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
+		err = stages.SaveStageProgress(tx, stages.AnalysisGroupVerifiedBatchNo, uint64(i))
 		assert.NoError(err)
 	}
 	err = stages.SaveStageProgress(tx, stages.Execution, 9)
@@ -1094,7 +1094,7 @@ func TestGetForkId(t *testing.T) {
 	err = hDB.WriteSequence(7, 7, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba86"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e1"), common.HexToHash("0x0"))
 	assert.NoError(err)
 	for i := 1; i <= 4; i++ {
-		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
+		err = stages.SaveStageProgress(tx, stages.AnalysisGroupVerifiedBatchNo, uint64(i))
 		assert.NoError(err)
 	}
 
@@ -1137,7 +1137,7 @@ func TestGetForkIdByBatchNumber(t *testing.T) {
 	err = hDB.WriteSequence(7, 7, common.HexToHash("0x21ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba86"), common.HexToHash("0xcefad4e508c098b9a7e1d8feb19955fb02ba9675585078710969d3440f5054e1"), common.HexToHash("0x0"))
 	assert.NoError(err)
 	for i := 1; i <= 4; i++ {
-		err = stages.SaveStageProgress(tx, stages.L1VerificationsBatchNo, uint64(i))
+		err = stages.SaveStageProgress(tx, stages.AnalysisGroupVerifiedBatchNo, uint64(i))
 		assert.NoError(err)
 	}
 

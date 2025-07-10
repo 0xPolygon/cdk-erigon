@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/rpc"
 	types "github.com/ledgerwatch/erigon/zk/rpcdaemon"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zkevm/hex"
@@ -134,21 +135,45 @@ func GetBlockByHash(hash common.Hash) (*types.Block, error) {
 	return &result, nil
 }
 
-func GetBlockHashByNumber(block uint64) (string, error) {
-	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "eth_getBlockByNumber", hex.EncodeBig(big.NewInt(int64(block))), true)
+func toBlockNumArg(number *big.Int) string {
+	if number == nil {
+		return "latest"
+	}
+	if number.Sign() >= 0 {
+		return hex.EncodeBig(number)
+	}
+	// It's negative.
+	if number.IsInt64() {
+		return rpc.BlockNumber(number.Int64()).String()
+	}
+	// It's negative and large, which is invalid.
+	panic(fmt.Sprintf("<invalid block number %d>", number))
+}
+
+// GetBlockByNumber retrieves a block by its number
+func GetBlockByNumber(blockNumber *big.Int) (*types.Block, error) {
+	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "eth_getBlockByNumber", toBlockNumArg(blockNumber), true)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if response.Error != nil {
-		return "", fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
+		return nil, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
 	}
 	result := types.Block{}
 	err = json.Unmarshal(response.Result, &result)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return result.Hash.String(), nil
+	return &result, nil
+}
+
+func GetBlockHashByNumber(block uint64) (string, error) {
+	blockData, err := GetBlockByNumber(big.NewInt(int64(block)))
+	if err != nil {
+		return "", err
+	}
+	return blockData.Hash.String(), nil
 }
 
 func GetInternalTransactions(hash common.Hash) ([]zktypes.InnerTx, error) {

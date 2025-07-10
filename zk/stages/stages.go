@@ -8,6 +8,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/wrap"
 
+	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	stages "github.com/ledgerwatch/erigon/eth/stagedsync"
 	stages2 "github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
@@ -35,6 +36,24 @@ func SequencerZkStages(
 	test bool,
 ) []*stages.Stage {
 	return []*stages.Stage{
+		{
+			ID:          stages2.AnalysisGroupVerificationCheck,
+			Description: "Analysis Group Verification Check",
+			Forward: func(firstCycle bool, badBlockUnwind bool, s *stages.StageState, u stages.Unwinder, txc wrap.TxContainer, logger log.Logger) error {
+				if badBlockUnwind {
+					return nil
+				}
+				return stagedsync.SpawnAnalysisGroupVerificationCheckStage(ctx, s, exec.db, exec.zk.XLayer.AnalysisGroupVerification, logger)
+			},
+			Unwind: func(firstCycle bool, u *stages.UnwindState, s *stages.StageState, txc wrap.TxContainer, logger log.Logger) error {
+				// No unwind needed for verification check stage
+				return nil
+			},
+			Prune: func(firstCycle bool, p *stages.PruneState, tx kv.RwTx, logger log.Logger) error {
+				// No prune needed for verification check stage
+				return nil
+			},
+		},
 		{
 			ID:          stages2.L1Syncer,
 			Description: "Download L1 Verifications",
@@ -459,7 +478,7 @@ func DefaultZkStages(
 }
 
 var AllStagesZk = []stages2.SyncStage{
-	stages2.L1Syncer,
+	stages2.AnalysisGroupVerificationCheck,
 	stages2.Batches,
 	stages2.BlockHashes,
 	stages2.Senders,
@@ -482,7 +501,7 @@ var ZkSequencerUnwindOrder = stages.UnwindOrder{
 	stages2.AccountHistoryIndex,
 	stages2.CallTraces,
 	stages2.Execution, // need to happen after history and calltraces
-	stages2.L1Syncer,
+	stages2.AnalysisGroupVerificationCheck,
 	stages2.Finish,
 }
 

@@ -49,6 +49,7 @@ var sha3UncleHash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b
 
 // ZkEvmAPI is a collection of functions that are exposed in the
 type ZkEvmAPI interface {
+	FinalizedBatchNumber(ctx context.Context) (hexutil.Uint64, error)
 	BatchNumberByBlockNumber(ctx context.Context, blockNumber rpc.BlockNumber) (hexutil.Uint64, error)
 	BatchNumber(ctx context.Context) (hexutil.Uint64, error)
 	GetBatchByNumber(ctx context.Context, batchNumber rpc.BlockNumber, fullTx *bool) (json.RawMessage, error)
@@ -113,6 +114,20 @@ func NewZkEvmAPI(
 	}
 
 	return a
+}
+
+// FinalizedBatchNumber returns the highest verified batch number
+func (api *ZkEvmAPIImpl) FinalizedBatchNumber(ctx context.Context) (hexutil.Uint64, error) {
+	var highestVerifiedBatchNo uint64
+	var err error
+	api.db.View(ctx, func(tx kv.Tx) error {
+		highestVerifiedBatchNo, err = stages.GetStageProgress(tx, stages.AnalysisGroupVerifiedBatchNo)
+		return err
+	})
+	if err != nil {
+		return hexutil.Uint64(0), err
+	}
+	return hexutil.Uint64(highestVerifiedBatchNo), nil
 }
 
 // BatchNumberByBlockNumber returns the batch number of the block
