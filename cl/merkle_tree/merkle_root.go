@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"reflect"
 	"unsafe"
 
 	"github.com/erigontech/erigon-lib/common"
@@ -92,18 +91,8 @@ func HashByteSlice(out, in []byte) error {
 
 func convertHeader(xs []byte) [][32]byte {
 	// i wont pretend to understand, but my solution for the problem is as so
-
-	// first i grab the slice header of the input
-	header := (*reflect.SliceHeader)(unsafe.Pointer(&xs))
-	// then i allocate a new result slice of no size - this should make the escape analyzer happy i think?
-	dat := make([][32]byte, 0)
-	// we then get the header of our output  to modify
-	chunkedHeader := (*reflect.SliceHeader)(unsafe.Pointer(&dat))
-	// then we move over the values
-	chunkedHeader.Len = header.Len / 32
-	chunkedHeader.Cap = header.Cap / 32
-	chunkedHeader.Data = header.Data
-	return dat
+	xsLen, xsData := len(xs), unsafe.SliceData(xs)
+	return unsafe.Slice((*[32]byte)(unsafe.Pointer(xsData)), xsLen/32)
 }
 
 func MerkleRootFromFlatLeaves(leaves []byte, out []byte) (err error) {
