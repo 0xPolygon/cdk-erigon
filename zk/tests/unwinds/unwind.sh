@@ -106,6 +106,7 @@ go run ./cmd/integration state_stages_zkevm \
     --datadir="$dataPath/rpc-datadir" \
     --config="$configPath/dynamic-integration8.yaml" \
     --chain=$chainName \
+    --only-smt-v2=true \
     --unwind-batch-no="$unwindBatch" || { echo "Failed to unwind"; exit 1; }
 
 echo "[$(date)] Completed unwinding to batch: $unwindBatch"

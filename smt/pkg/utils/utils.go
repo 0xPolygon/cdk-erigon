@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/length"
@@ -33,6 +34,11 @@ const (
 	SC_LENGTH              = 4
 	BYTECODE_ELEMENTS_HASH = 8
 	BYTECODE_BYTES_ELEMENT = 7
+
+	HASH_POSEIDON_ALL_ZEROES = "0xc71603f33a1144ca7953db0ab48808f4c4055e3364a246c33c18a9786cb0b359"
+
+	maxBytesPerChunk  = BYTECODE_ELEMENTS_HASH * BYTECODE_BYTES_ELEMENT
+	maxContractBuffer = 32 * 1024 // 32 KiB
 )
 
 var (
@@ -61,17 +67,33 @@ var (
 	LeafCapacity   = [4]uint64{1, 0, 0, 0}
 	BranchCapacity = [4]uint64{0, 0, 0, 0}
 	hashFunc       = poseidon.HashWithResult
+
+	byteBufPool = &sync.Pool{
+		New: func() any {
+			b := make([]byte, 0, maxContractBuffer)
+			return &b
+		},
+	}
+	zeroPad = [maxBytesPerChunk]byte{}
 )
 
 func Hash(in [8]uint64, capacity [4]uint64) [4]uint64 {
 	var result [4]uint64 = [4]uint64{0, 0, 0, 0}
 	hashFunc(&in, &capacity, &result)
+	// fmt.Println("in\t\t", in)
+	// fmt.Println("capacity\t", capacity)
+	// fmt.Println("result\t\t", result)
+	// fmt.Println("--------------------------------")
 	return result
 }
 
 func HashByPointers(in *[8]uint64, capacity *[4]uint64) *[4]uint64 {
 	var result [4]uint64 = [4]uint64{0, 0, 0, 0}
 	hashFunc(in, capacity, &result)
+	// fmt.Println("in\t\t", in)
+	// fmt.Println("capacity\t", capacity)
+	// fmt.Println("result\t\t", result)
+	// fmt.Println("--------------------------------")
 	return &result
 }
 
@@ -501,13 +523,15 @@ func ScalarToNodeValue8(scalarIn *big.Int) NodeValue8 {
 }
 
 func (nk *NodeKey) GetPath() []int {
-	res := make([]int, 0, 256)
+	res := make([]int, 256) // Pre-allocate exact size needed
 	auxk := [4]uint64{nk[0], nk[1], nk[2], nk[3]}
 
+	idx := 0
 	for j := 0; j < 64; j++ {
 		for i := 0; i < 4; i++ {
-			res = append(res, int(auxk[i]&1)) // Append the LSB of the current part to res
-			auxk[i] >>= 1                     // Right shift the current part
+			res[idx] = int(auxk[i] & 1) // Use direct index assignment instead of append
+			auxk[i] >>= 1
+			idx++
 		}
 	}
 
@@ -703,6 +727,42 @@ func Key(ethAddr string, c int) NodeKey {
 	return Hash(key, PoseidonAllZeroesHash)
 }
 
+func KeyWithoutBig(addr common.Address, c int) NodeKey {
+	addrBytes := addr.Bytes()
+	addrUint64s := [6]uint64{0, 0, 0, 0, 0, 0}
+
+	// When converting hex to big.Int, bytes are interpreted in big-endian order
+	// But when extracting 32-bit chunks, we want them in little-endian order
+	// So we need to process bytes in reverse order
+	for i := 0; i < 20; i++ {
+		// Which 32-bit chunk this byte belongs to
+		chunkIndex := (19 - i) / 4
+		// Position within the 32-bit chunk
+		bytePos := (19 - i) % 4
+
+		// Place byte in correct position within its 32-bit chunk
+		addrUint64s[chunkIndex] |= uint64(addrBytes[i]) << (bytePos * 8)
+	}
+
+	// Create the input array for hashing: [addr(6 uint64s), keyType, 0]
+	input := [8]uint64{
+		addrUint64s[0],
+		addrUint64s[1],
+		addrUint64s[2],
+		addrUint64s[3],
+		addrUint64s[4],
+		addrUint64s[5],
+		uint64(c),
+		0,
+	}
+
+	// Get the zero capacity hash
+	capacity, _ := StringToH4(HASH_POSEIDON_ALL_ZEROES)
+
+	// Hash and return
+	return Hash(input, capacity)
+}
+
 func KeyBig(k *big.Int, c int) (*NodeKey, error) {
 	if k == nil {
 		return nil, errors.New("nil key")
@@ -747,11 +807,67 @@ func KeyContractStorage(ethAddr string, storagePosition string) (NodeKey, error)
 	return Hash(key, hk0), nil
 }
 
+func KeyContractStorageWithoutBig(addr common.Address, storagePosition common.Hash) NodeKey {
+	// First hash the storage position bytes
+	// Convert the storage position hash to 8 uint64s for hashing
+	spUint64s := [8]uint64{0, 0, 0, 0, 0, 0, 0, 0}
+	spBytes := storagePosition.Bytes()
+
+	// Process storage position bytes in reverse order to match ScalarToArrayBig behavior
+	for i := 0; i < len(spBytes); i++ {
+		// Which 32-bit chunk this byte belongs to
+		chunkIndex := (31 - i) / 4
+		// Position within the 32-bit chunk
+		bytePos := (31 - i) % 4
+
+		// Place byte in correct position within its 32-bit chunk
+		spUint64s[chunkIndex] |= uint64(spBytes[i]) << (bytePos * 8)
+	}
+
+	// Hash the storage position with zero capacity
+	hk0 := Hash(spUint64s, [4]uint64{0, 0, 0, 0})
+
+	// Process the address bytes similar to KeyWithoutBig
+	addrBytes := addr.Bytes()
+	addrUint64s := [6]uint64{0, 0, 0, 0, 0, 0}
+
+	// Process address bytes in reverse order to match ScalarToArrayBig behavior
+	for i := 0; i < 20; i++ {
+		// Which 32-bit chunk this byte belongs to
+		chunkIndex := (19 - i) / 4
+		// Position within the 32-bit chunk
+		bytePos := (19 - i) % 4
+
+		// Place byte in correct position within its 32-bit chunk
+		addrUint64s[chunkIndex] |= uint64(addrBytes[i]) << (bytePos * 8)
+	}
+
+	// Create the input array for hashing: [addr(6 uint64s), SC_STORAGE, 0]
+	input := [8]uint64{
+		addrUint64s[0],
+		addrUint64s[1],
+		addrUint64s[2],
+		addrUint64s[3],
+		addrUint64s[4],
+		addrUint64s[5],
+		uint64(SC_STORAGE),
+		0,
+	}
+
+	// Hash with the storage position hash as capacity
+	return Hash(input, hk0)
+}
+
 func HashContractBytecode(bc string) string {
 	return ConvertBigIntToHex(HashContractBytecodeBigInt(bc))
 }
 
 func HashContractBytecodeBigInt(bc string) *big.Int {
+	interim := CreateInterimBytecodeHash(bc)
+	return ArrayToScalar(interim[:])
+}
+
+func HashContractBytecodeBigIntV1(bc string) *big.Int {
 	bytecode := bc
 
 	if strings.HasPrefix(bc, "0x") {
@@ -818,6 +934,69 @@ func HashContractBytecodeBigInt(bc string) *big.Int {
 	}
 
 	return ArrayToScalar(tmpHash[:])
+}
+
+func CreateInterimBytecodeHash(bc string) [4]uint64 {
+	s := strings.TrimPrefix(bc, "0x")
+	if len(s)&1 == 1 {
+		s = "0" + s
+	}
+
+	// compute final length: hex bytes + 1 marker + pad to maxBytesPerChunk
+	rawLen := len(s) / 2
+	if len(s)%2 != 0 {
+		rawLen++
+	}
+	rawLen++ // for 0x01
+	pad := (maxBytesPerChunk - rawLen%maxBytesPerChunk) % maxBytesPerChunk
+	total := rawLen + pad
+
+	pbuf := byteBufPool.Get().(*[]byte)
+	buf := *pbuf
+	if cap(buf) < total {
+		buf = make([]byte, total)
+	}
+	buf = buf[:total]
+
+	// decode hex into buf[0:rawLen-1]
+	n, err := hex.Decode(buf[:rawLen-1], []byte(s))
+	if err != nil {
+		panic(err)
+	}
+
+	// marker and padding
+	buf[n] = 0x01
+	// zero just the padding region in one go
+	// the padding region runs from n+1 up to total-1
+	if pad := total - (n + 1); pad > 0 {
+		copy(buf[n+1:], zeroPad[:pad])
+	}
+
+	// flip the top bit of the very last byte
+	buf[total-1] |= 0x80
+
+	var capacity [4]uint64
+	var tmpHash [4]uint64
+	var in [8]uint64
+	for i := 0; i < total; i += maxBytesPerChunk {
+		capacity = tmpHash
+		chunk := buf[i:min(i+maxBytesPerChunk, total)]
+		for j := range BYTECODE_ELEMENTS_HASH {
+			var w uint64
+			off := j * BYTECODE_BYTES_ELEMENT
+			for k := range BYTECODE_BYTES_ELEMENT {
+				if b := off + k; b < len(chunk) {
+					w |= uint64(chunk[b]) << (8 * k)
+				}
+			}
+			in[j] = w
+		}
+		tmpHash = Hash(in, capacity)
+	}
+
+	*pbuf = buf[:0]
+	byteBufPool.Put(pbuf)
+	return tmpHash
 }
 
 func ResizeHashTo32BytesByPrefixingWithZeroes(hashValue []byte) []byte {
@@ -890,19 +1069,25 @@ func DecodeKeySource(keySource []byte) (int, common.Address, common.Hash, error)
 	return t, accountAddr, storagePosition, nil
 }
 
-func BigIntArrayToBytes(array []*big.Int) []byte {
-	// Each uint64 needs 8 bytes, so total bytes needed is len(array) * 8
-	buf := make([]byte, len(array)*8)
-
-	// Convert each big.Int to uint64 and write to buffer
-	for i := 0; i < len(array); i++ {
-		// Write to buffer in reverse order to match original ArrayToScalarBig behavior
-		pos := (len(array) - 1 - i) * 8
-		binary.BigEndian.PutUint64(buf[pos:pos+8], array[i].Uint64())
+func KeyToHex(key [4]uint64) string {
+	// convert the key to a hex string with proper padding
+	hex := ""
+	for i := 3; i >= 0; i-- { // Changed to iterate in reverse order
+		hex += fmt.Sprintf("%016x", key[i]) // Ensure each uint64 is 16 characters (64 bits)
 	}
-	return buf
+	return "0x" + hex
 }
 
-func BigIntArrayToHex(array []*big.Int) string {
-	return hex.EncodeToString(BigIntArrayToBytes(array))
+func HexToKey(hex string) [4]uint64 {
+	// convert the hex string to a key
+	key := [4]uint64{}
+	hex = strings.TrimPrefix(hex, "0x") // Remove the 0x prefix
+	if len(hex) != 64 {                 // Ensure we have exactly 64 characters (4 * 16)
+		return key
+	}
+	for i := 0; i < 4; i++ {
+		// Changed to read in reverse order
+		key[3-i], _ = strconv.ParseUint(hex[i*16:i*16+16], 16, 64)
+	}
+	return key
 }

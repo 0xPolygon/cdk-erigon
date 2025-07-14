@@ -31,6 +31,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.TxPoolCommitEveryFlag,
 	&utils.TxpoolPurgeEveryFlag,
 	&utils.TxpoolPurgeDistanceFlag,
+	&utils.TxPoolEnableTimsort,
 	&PruneFlag,
 	&PruneHistoryFlag,
 	&PruneReceiptFlag,
@@ -173,6 +174,9 @@ var DefaultFlags = []cli.Flag{
 	&utils.PolygonSyncFlag,
 	&utils.EthStatsURLFlag,
 	&utils.OverridePragueFlag,
+	&utils.OverrideNormalcyBlockFlag,
+	&utils.OverrideLondonBlockFlag,
+	&utils.OverrideShanghaiTimeFlag,
 
 	&utils.LightClientDiscoveryAddrFlag,
 	&utils.LightClientDiscoveryPortFlag,
@@ -335,4 +339,8 @@ var DefaultFlags = []cli.Flag{
 
 	&utils.Commitment,
 	&utils.HonourChainspec,
+	&utils.InjectGers,
+	&utils.SkipSmt,
+	&utils.OnlySmtV2,
+	&utils.SequencerBlockGasLimit,
 }

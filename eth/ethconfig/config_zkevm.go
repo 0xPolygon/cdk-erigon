@@ -129,8 +129,33 @@ type Zk struct {
 	L2InfoTreeUpdatesBatchSize     uint64
 	L2InfoTreeUpdatesEnabled       bool
 
-	Commitment      Commitment `yaml:"zkevm.initial-commitment"`
+	Hardfork   Hardfork
+	Commitment Commitment
+	InjectGers bool
 	HonourChainspec bool       `yaml:"zkevm.honour-chainspec"`
+
+	SkipSmt                        bool
+	OnlySmtV2                      bool
+	SequencerBlockGasLimit         uint64
+}
+
+type Hardfork string
+
+const (
+	HardforkTypeHermez   Hardfork = "hermez"
+	HardforkTypeEthereum Hardfork = "ethereum"
+)
+
+func (h Hardfork) IsValid() bool {
+	switch Hardfork(strings.ToLower(string(h))) {
+	case HardforkTypeHermez, HardforkTypeEthereum:
+		return true
+	}
+	return false
+}
+
+func (h Hardfork) ValidHardforks() []Hardfork {
+	return []Hardfork{HardforkTypeHermez, HardforkTypeEthereum}
 }
 
 type Commitment string
@@ -187,6 +212,12 @@ func (c *Zk) UsingSMT() bool {
 
 func (c *Zk) UsingPMT() bool {
 	return c.Commitment == CommitmentPMT
+}
+
+type L1InfoTreeOffset struct {
+	Index           uint64
+	Offset          int64
+	ExpectedGerHash common.Hash
 }
 
 type L1InfoTreeOffset struct {

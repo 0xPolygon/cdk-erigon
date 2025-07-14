@@ -97,6 +97,19 @@ func TestSpawnSequencingStage(t *testing.T) {
 	err = rawdb.WriteCanonicalHash(tx, latestL2Block.Hash(), latestL2Block.NumberU64())
 	require.NoError(t, err)
 
+	// insert a random hash into the smt intermediate hashes table - this will prevent the test
+	// from attempting to regenerate the smt intermediate hashes which is out of scope for this test
+	smtKey := smtv2.SmtKey{0, 0, 0, 0}
+	dbKey := smtv2.PathToKeyBytes(smtKey.GetPath(), 1)
+	inter := smtv2.IntermediateHash{
+		HashType:  smtv2.IntermediateHashType_Value,
+		Path:      [257]int{0, 0, 0, 0},
+		Hash:      [4]uint64{0, 0, 0, 0},
+		LeafKey:   smtKey,
+		LeafValue: [8]uint64{0, 0, 0, 0, 0, 0, 0, 0},
+	}
+	tx.Put(kv.TableSmtIntermediateHashes, dbKey, inter.Serialise())
+
 	err = tx.Commit()
 	require.NoError(t, err)
 
