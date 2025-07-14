@@ -12,6 +12,7 @@ datastreamZipFileName=$2
 firstStop=$3
 secondStop=$4
 unwindBatch=$5
+smtV2Only=$6
 datastreamPort=6900
 logFile="script.log"
 chainName=$(yq '.chain' "$configPath/dynamic-integration8.yaml")
@@ -106,7 +107,7 @@ go run ./cmd/integration state_stages_zkevm \
     --datadir="$dataPath/rpc-datadir" \
     --config="$configPath/dynamic-integration8.yaml" \
     --chain=$chainName \
-    --only-smt-v2=true \
+    --only-smt-v2="$smtV2Only" \
     --unwind-batch-no="$unwindBatch" || { echo "Failed to unwind"; exit 1; }
 
 echo "[$(date)] Completed unwinding to batch: $unwindBatch"

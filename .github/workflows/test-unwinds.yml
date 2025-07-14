@@ -48,4 +48,5 @@ jobs:
           firstStop=11203
           secondStop=11315
           unwindToBatch=70
-          ./zk/tests/unwinds/unwind.sh $dsDir $dsFile $firstStop $secondStop $unwindToBatch
+          smtV2Only=true
+          ./zk/tests/unwinds/unwind.sh $dsDir $dsFile $firstStop $secondStop $unwindToBatch $smtV2Only
