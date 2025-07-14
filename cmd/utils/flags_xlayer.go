@@ -370,7 +370,7 @@ var (
 	RealtimeEnableFlag = cli.BoolFlag{
 		Name:  "realtime.enable-flag",
 		Usage: "Kafka sync enable flag",
-		Value: true,
+		Value: false,
 	}
 	RealtimeEnableSubscribeFlag = cli.BoolFlag{
 		Name:  "realtime.enable-subscribe-flag",
