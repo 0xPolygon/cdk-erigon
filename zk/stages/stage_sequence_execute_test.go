@@ -23,10 +23,12 @@ import (
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/ethdb/prune"
 	"github.com/erigontech/erigon/smt/pkg/db"
+	"github.com/erigontech/erigon/smtv2"
 	dsMocks "github.com/erigontech/erigon/zk/datastream/mocks"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	verifier "github.com/erigontech/erigon/zk/legacy_executor_verifier"
+	"github.com/erigontech/erigon/zk/sequencer"
 	"github.com/erigontech/erigon/zk/syncer"
 	"github.com/erigontech/erigon/zk/syncer/mocks"
 	"github.com/erigontech/erigon/zk/txpool"
@@ -35,7 +37,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-	"github.com/erigontech/erigon/zk/sequencer"
 )
 
 func TestSpawnSequencingStage(t *testing.T) {

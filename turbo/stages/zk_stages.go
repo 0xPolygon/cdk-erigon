@@ -18,10 +18,10 @@ import (
 	"github.com/erigontech/erigon/zk/datastream/server"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	"github.com/erigontech/erigon/zk/legacy_executor_verifier"
+	"github.com/erigontech/erigon/zk/sequencer"
 	zkStages "github.com/erigontech/erigon/zk/stages"
 	"github.com/erigontech/erigon/zk/syncer"
 	"github.com/erigontech/erigon/zk/txpool"
-	"github.com/erigontech/erigon/zk/sequencer"
 )
 
 // NewDefaultZkStages creates stages for zk syncer (RPC mode)
@@ -155,6 +155,7 @@ func NewSequencerZkStages(ctx context.Context,
 			uint16(cfg.YieldSize),
 			infoTreeUpdater,
 			hook,
+			zkIntersCfg,
 			txYielder,
 		),
 		zkIntersCfg,

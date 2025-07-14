@@ -32,12 +32,15 @@ import (
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	verifier "github.com/erigontech/erigon/zk/legacy_executor_verifier"
+	"github.com/erigontech/erigon/zk/sequencer"
 	zktx "github.com/erigontech/erigon/zk/tx"
 	"github.com/erigontech/erigon/zk/txpool"
 	zktypes "github.com/erigontech/erigon/zk/types"
 	"github.com/erigontech/erigon/zk/utils"
 	"github.com/hashicorp/golang-lru/v2/expirable"
-	"github.com/erigontech/erigon/zk/sequencer"
+
+	db2 "github.com/erigontech/erigon/smt/pkg/db"
+	"github.com/erigontech/erigon/smt/pkg/smt"
 )
 
 const (
@@ -94,6 +97,8 @@ type SequenceBlockCfg struct {
 
 	decodedTxCache *expirable.LRU[common.Hash, *types.Transaction]
 	doneHook       DoneHook
+
+	interHashesCfg ZkInterHashesCfg
 	txYielder      TxYielder
 }
 
@@ -127,6 +132,7 @@ func StageSequenceBlocksCfg(
 	yieldSize uint16,
 	infoTreeUpdater *l1infotree.Updater,
 	doneHook DoneHook,
+	interHashesCfg ZkInterHashesCfg,
 	txYielder *sequencer.PoolTransactionYielder,
 ) SequenceBlockCfg {
 

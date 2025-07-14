@@ -2,6 +2,8 @@ package stages
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
@@ -19,7 +21,6 @@ import (
 	"github.com/erigontech/erigon/zk/hermez_db"
 	zktypes "github.com/erigontech/erigon/zk/types"
 	"github.com/erigontech/secp256k1"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 func handleStateForNewBlockStarting(
@@ -194,6 +195,7 @@ func finaliseBlock(
 	batchContext.sdb.eridb.OpenBatch(quit)
 
 	// this is actually the interhashes stage
+	now := time.Now()
 	var newRoot common.Hash
 	if batchContext.cfg.zk.UsingPMT() {
 		logger := log.New()
