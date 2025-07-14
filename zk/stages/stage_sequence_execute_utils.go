@@ -98,8 +98,7 @@ type SequenceBlockCfg struct {
 	decodedTxCache *expirable.LRU[common.Hash, *types.Transaction]
 	doneHook       DoneHook
 
-	interHashesCfg ZkInterHashesCfg
-	txYielder      TxYielder
+	txYielder TxYielder
 }
 
 func StageSequenceBlocksCfg(
@@ -132,7 +131,6 @@ func StageSequenceBlocksCfg(
 	yieldSize uint16,
 	infoTreeUpdater *l1infotree.Updater,
 	doneHook DoneHook,
-	interHashesCfg ZkInterHashesCfg,
 	txYielder *sequencer.PoolTransactionYielder,
 ) SequenceBlockCfg {
 
@@ -655,7 +653,7 @@ func sequencerRegenIntermediateHashes(ctx context.Context, s *stagedsync.StageSt
 	eridb := db2.NewEriDb(tx)
 	smt := smt.NewSMT(eridb, false)
 	to := s.BlockNumber
-	if _, err := regenerateIntermediateHashes(ctx, s.LogPrefix(), cfg.interHashesCfg, tx, eridb, smt, to); err != nil {
+	if _, err := regenerateIntermediateHashes(ctx, s.LogPrefix(), cfg.intersCfg, tx, eridb, smt, to); err != nil {
 		return err
 	}
 	return tx.Commit()
