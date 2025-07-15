@@ -204,23 +204,28 @@ func (msg TransactionMessage) Validate() error {
 
 func (msg TransactionMessage) MarshalJSON() ([]byte, error) {
 	type TransactionMessage struct {
-		BlockNumber uint64                   `json:"blockNumber"`
-		Type        uint8                    `json:"type"`
-		Hash        libcommon.Hash           `json:"hash"`
-		From        libcommon.Address        `json:"from"`
-		ChainID     *uint256.Int             `json:"chainId"`
-		Nonce       uint64                   `json:"nonce"`
-		Gas         uint64                   `json:"gas"`
-		To          *libcommon.Address       `json:"to"`
-		Value       *uint256.Int             `json:"value"`
-		Data        []byte                   `json:"data"`
-		V           uint256.Int              `json:"v"`
-		R           uint256.Int              `json:"r"`
-		S           uint256.Int              `json:"s"`
-		GasPrice    string                   `json:"gasPrice"`
-		Receipt     *ethTypes.Receipt        `json:"receipt"`
-		InnerTxs    []*zktypes.InnerTx       `json:"innerTxs"`
-		Changeset   *realtimeTypes.Changeset `json:"changeset"`
+		BlockNumber         uint64                   `json:"blockNumber"`
+		Type                uint8                    `json:"type"`
+		Hash                libcommon.Hash           `json:"hash"`
+		From                libcommon.Address        `json:"from"`
+		ChainID             *uint256.Int             `json:"chainId"`
+		Nonce               uint64                   `json:"nonce"`
+		Gas                 uint64                   `json:"gas"`
+		To                  *libcommon.Address       `json:"to"`
+		Value               *uint256.Int             `json:"value"`
+		Data                []byte                   `json:"data"`
+		V                   uint256.Int              `json:"v"`
+		R                   uint256.Int              `json:"r"`
+		S                   uint256.Int              `json:"s"`
+		GasPrice            string                   `json:"gasPrice"`
+		AccessList          []AccessTupleMessage     `json:"accessList"`
+		Tip                 string                   `json:"tip"`
+		FeeCap              string                   `json:"feeCap"`
+		MaxFeePerBlobGas    string                   `json:"maxFeePerBlobGas"`
+		BlobVersionedHashes []string                 `json:"blobVersionedHashes"`
+		Receipt             *ethTypes.Receipt        `json:"receipt"`
+		InnerTxs            []*zktypes.InnerTx       `json:"innerTxs"`
+		Changeset           *realtimeTypes.Changeset `json:"changeset"`
 	}
 
 	var enc TransactionMessage
@@ -238,6 +243,11 @@ func (msg TransactionMessage) MarshalJSON() ([]byte, error) {
 	enc.S = msg.S
 	enc.V = msg.V
 	enc.GasPrice = msg.GasPrice
+	enc.AccessList = msg.AccessList
+	enc.Tip = msg.Tip
+	enc.FeeCap = msg.FeeCap
+	enc.MaxFeePerBlobGas = msg.MaxFeePerBlobGas
+	enc.BlobVersionedHashes = msg.BlobVersionedHashes
 	enc.InnerTxs = msg.InnerTxs
 	enc.Changeset = msg.Changeset
 
