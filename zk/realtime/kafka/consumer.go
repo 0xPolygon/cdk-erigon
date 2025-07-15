@@ -15,11 +15,15 @@ type KafkaConsumer struct {
 	config   KafkaConfig
 }
 
-func NewKafkaConsumer(config KafkaConfig) (*KafkaConsumer, error) {
+func NewKafkaConsumer(config KafkaConfig, latestFlag bool) (*KafkaConsumer, error) {
 	saramaConfig := sarama.NewConfig()
 	saramaConfig.Version = DEFAULT_VERSION
 	saramaConfig.ClientID = config.ClientID
-	saramaConfig.Consumer.Offsets.Initial = sarama.OffsetNewest
+	if latestFlag {
+		saramaConfig.Consumer.Offsets.Initial = sarama.OffsetNewest
+	} else {
+		saramaConfig.Consumer.Offsets.Initial = sarama.OffsetOldest
+	}
 	saramaConfig.Consumer.Offsets.AutoCommit.Enable = false
 
 	// Create consumer group

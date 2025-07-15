@@ -10,6 +10,7 @@ import (
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/u256"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
+	types1 "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/zk/realtime/kafka"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
@@ -59,6 +60,21 @@ var (
 		},
 	}
 
+	accessListTx = &types1.AccessListTx{
+		ChainID: u256.Num1,
+		LegacyTx: types1.LegacyTx{
+			CommonTx: types1.CommonTx{
+				Nonce: 3,
+				To:    &testToAddr,
+				Value: uint256.NewInt(10),
+				Gas:   25000,
+				Data:  libcommon.FromHex("5544"),
+			},
+			GasPrice: uint256.NewInt(1),
+		},
+		AccessList: accesses,
+	}
+
 	difficulty, _ = new(big.Int).SetString("8398142613866510000000000000000000000000000000", 10)
 	blockHeader   = &ethTypes.Header{
 		ParentHash:  libcommon.HexToHash("0x8b00fcf1e541d371a3a1b79cc999a85cc3db5ee5637b5159646e1acd3613fd15"),
@@ -87,6 +103,7 @@ func TestKafka(t *testing.T) {
 		TxTopic:          "xlayer-test-tx",
 		ErrorTopic:       "xlayer-test-error",
 		ClientID:         "xlayer-test-consumer",
+		GroupID:          "xlayer-test-consumer-1",
 	}
 	producer, err := kafka.NewKafkaProducer(cfg)
 	assert.NilError(t, err)
@@ -102,15 +119,22 @@ func TestKafka(t *testing.T) {
 		assert.NilError(t, err)
 	}
 
+	accessListTx.SetSender(testFromAddr)
+	for i := 10; i < 20; i++ {
+		err = producer.SendKafkaTransaction(context.Background(), uint64(i), accessListTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset)
+
+		assert.NilError(t, err)
+	}
+
 	err = producer.Close()
 	assert.NilError(t, err)
 
-	consumer, err := kafka.NewKafkaConsumer(cfg)
+	consumer, err := kafka.NewKafkaConsumer(cfg, false)
 	assert.NilError(t, err)
 	ctx, ctxWithCancel := context.WithCancel(context.Background())
-	headersChan := make(chan kafkaTypes.BlockMessage, 10)
-	txMsgsChan := make(chan kafkaTypes.TransactionMessage, 10)
-	errorMsgsChan := make(chan kafkaTypes.ErrorTriggerMessage, 10)
+	headersChan := make(chan kafkaTypes.BlockMessage, 20)
+	txMsgsChan := make(chan kafkaTypes.TransactionMessage, 20)
+	errorMsgsChan := make(chan kafkaTypes.ErrorTriggerMessage, 20)
 	errorChan := make(chan error, 10)
 	go consumer.ConsumeKafka(ctx, headersChan, txMsgsChan, errorMsgsChan, errorChan, log.New())
 
@@ -121,6 +145,19 @@ func TestKafka(t *testing.T) {
 			t.Fatalf("Received error from consumer: %v", err)
 		case txMsg := <-txMsgsChan:
 			AssertCommonTx(t, txMsg, rightvrsTx, uint64(i), ethTypes.LegacyTxType)
+			AssertReceipt(t, txMsg, rightvrsTxReceipt)
+			AssertInnerTxs(t, txMsg, rightvrsTxInnerTxs)
+			AssertChangeseet(t, txMsg, rightvrsTxChangeset)
+		}
+	}
+
+	for i := 10; i < 20; i++ {
+		select {
+		case err := <-errorChan:
+			t.Fatalf("Received error from consumer: %v", err)
+		case txMsg := <-txMsgsChan:
+			AssertCommonTx(t, txMsg, accessListTx, uint64(i), ethTypes.AccessListTxType)
+			AssertAccessList(t, txMsg.AccessList)
 			AssertReceipt(t, txMsg, rightvrsTxReceipt)
 			AssertInnerTxs(t, txMsg, rightvrsTxInnerTxs)
 			AssertChangeseet(t, txMsg, rightvrsTxChangeset)

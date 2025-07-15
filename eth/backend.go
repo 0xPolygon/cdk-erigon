@@ -1298,7 +1298,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			// For X Layer, realtime
 			if cfg.Zk.XLayer.Realtime.Enable {
 				// Init kafka consumer
-				kafkaConsumer, err := kafka.NewKafkaConsumer(cfg.Zk.XLayer.Realtime.Kafka)
+				kafkaConsumer, err := kafka.NewKafkaConsumer(cfg.Zk.XLayer.Realtime.Kafka, true)
 				if err != nil {
 					backend.txKafkaEnabled = false
 					log.Warn("[Realtime] Failed to initialize kafka consumer", "error", err)
