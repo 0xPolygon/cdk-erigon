@@ -623,6 +623,11 @@ func checkSmtMigration(ctx context.Context, cfg SequenceBlockCfg, roTx kv.Tx, s 
 		return nil
 	}
 
+	// we only care to migrate the SMT if the commitment type is SMT
+	if cfg.zk.Commitment != ethconfig.CommitmentSMT {
+		return nil
+	}
+
 	smtCursor, err := roTx.Cursor(kv.TableSmtIntermediateHashes)
 	if err != nil {
 		return err
