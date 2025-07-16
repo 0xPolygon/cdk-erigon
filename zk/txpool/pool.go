@@ -39,7 +39,6 @@ import (
 	"github.com/erigontech/erigon/zk/acl"
 
 	"github.com/VictoriaMetrics/metrics"
-	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/erigontech/erigon-lib/crypto"
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/eth/ethconfig"
@@ -87,7 +86,7 @@ type PolicyValidator interface {
 // This interface exists for the convenience of testing, and not yet because
 // there are multiple implementations
 //
-//go:generate mockgen -typed=true -destination=./pool_mock.go -package=txpool . Pool
+//go:generate go run go.uber.org/mock/mockgen -source=pool.go -destination=pool_mock.go -package=txpool -imports gomock=go.uber.org/mock/gomock
 type Pool interface {
 	ValidateSerializedTxn(serializedTxn []byte) error
 
@@ -101,6 +100,10 @@ type Pool interface {
 	GetRlp(tx kv.Tx, hash []byte) ([]byte, error)
 
 	AddNewGoodPeer(peerID types.PeerID)
+	MarkForDiscardFromPendingBest(hash common.Hash)
+	YieldBest(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64) (bool, int, error)
+	PreYield()
+	PostYield()
 }
 
 var _ Pool = (*TxPool)(nil) // compile-time interface check
@@ -212,7 +215,6 @@ type metaTx struct {
 	subPool                   SubPoolMarker
 	currentSubPool            SubPoolType
 	minedBlockNum             uint64
-	alreadyYielded            bool
 }
 
 func newMetaTx(slot *types.TxSlot, isLocal bool, timestamp uint64) *metaTx {
@@ -326,6 +328,7 @@ type TxPool struct {
 	ethCfg          *ethconfig.Config
 	aclDB           kv.RwDB
 	policyValidator PolicyValidator
+	priorityList    *PriorityList
 
 	// we cannot be in a flushing state whilst getting transactions from the pool, so we have this mutex which is
 	// exposed publicly so anything wanting to get "best" transactions can ensure a flush isn't happening and
@@ -355,7 +358,7 @@ type FeeCalculator interface {
 
 func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, cache kvcache.Cache,
 	chainID uint256.Int, shanghaiTime, agraBlock, cancunTime, pragueTime *big.Int, blobSchedule *chain.BlobSchedule,
-	londonBlock *big.Int, normalcyBlock *big.Int, ethCfg *ethconfig.Config, aclDB kv.RwDB) (*TxPool, error) {
+	londonBlock *big.Int, normalcyBlock *big.Int, ethCfg *ethconfig.Config, aclDB kv.RwDB, priorityList *PriorityList) (*TxPool, error) {
 	var err error
 	localsHistory, err := simplelru.NewLRU[string, struct{}](10_000, nil)
 	if err != nil {
@@ -396,6 +399,9 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 
 	lock := &sync.Mutex{}
 
+	sendersCache := newSendersCache(tracedSenders)
+	sendersCache.registerPrioritySenders(priorityList)
+
 	res := &TxPool{
 		lock:                    lock,
 		lastSeenCond:            sync.NewCond(lock),
@@ -409,7 +415,7 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		queued:                  NewSubPool(QueuedSubPool, cfg.QueuedSubPoolLimit),
 		newPendingTxs:           newTxs,
 		_stateCache:             cache,
-		senders:                 newSendersCache(tracedSenders),
+		senders:                 sendersCache,
 		_chainDB:                coreDB,
 		cfg:                     cfg,
 		chainID:                 chainID,
@@ -429,7 +435,10 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		pragueTime:              blockTimeOrNil(pragueTime),
 		normalcyBlock:           normalcyBlock,
 		auths:                   map[common.Address]*metaTx{},
+		priorityList:            priorityList,
 	}
+
+	res.updatePendingPoolPrioritySenders()
 
 	return res, nil
 }
@@ -758,22 +767,12 @@ func (p *TxPool) IsLocal(idHash []byte) bool {
 func (p *TxPool) AddNewGoodPeer(peerID types.PeerID) { p.recentlyConnectedPeers.AddPeer(peerID) }
 func (p *TxPool) Started() bool                      { return p.started.Load() }
 
-func (p *TxPool) ResetYieldedStatus() {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-	best := p.pending.best
-	for i := 0; i < len(best.ms); i++ {
-		best.ms[i].alreadyYielded = false
-	}
-}
-
-func (p *TxPool) YieldBest(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, toSkip mapset.Set[[32]byte]) (bool, int, error) {
-	return p.best(n, txs, tx, onTopOf, availableGas, availableBlobGas, toSkip)
+func (p *TxPool) YieldBest(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64) (bool, int, error) {
+	return p.best(n, txs, tx, onTopOf, availableGas, availableBlobGas)
 }
 
 func (p *TxPool) PeekBest(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64) (bool, error) {
-	set := mapset.NewThreadUnsafeSet[[32]byte]()
-	onTime, _, err := p.best(n, txs, tx, onTopOf, availableGas, availableBlobGas, set)
+	onTime, _, err := p.best(n, txs, tx, onTopOf, availableGas, availableBlobGas)
 	return onTime, err
 }
 
@@ -1582,6 +1581,7 @@ func (p *TxPool) discardLocked(mt *metaTx, reason DiscardReason) {
 	p.deletedTxs = append(p.deletedTxs, mt)
 	p.all.delete(mt)
 	p.discardReasonsLRU.Add(hashStr, reason)
+
 	if mt.Tx.Type == types.BlobTxType {
 		t := p.totalBlobsInPool.Load()
 		p.totalBlobsInPool.Store(t - uint64(len(mt.Tx.BlobHashes)))
@@ -2012,8 +2012,20 @@ func (p *TxPool) flushLocked(tx kv.RwTx) (err error) {
 		if !p.all.hasTxs(id) {
 			addr, ok := p.senders.senderID2Addr[id]
 			if ok {
-				delete(p.senders.senderID2Addr, id)
-				delete(p.senders.senderIDs, addr)
+				if p.priorityList != nil {
+					prioSenders := p.priorityList.Addresses()
+					found := false
+					for _, prioAddr := range prioSenders {
+						if prioAddr == addr {
+							found = true
+							break
+						}
+					}
+					if !found {
+						delete(p.senders.senderID2Addr, id)
+						delete(p.senders.senderIDs, addr)
+					}
+				}
 			}
 		}
 		//fmt.Printf("del:%d,%d,%d\n", mt.Tx.senderID, mt.Tx.nonce, mt.Tx.tip)
@@ -2355,6 +2367,26 @@ func (p *TxPool) deprecatedForEach(_ context.Context, f func(rlp []byte, sender 
 	})
 }
 
+// updatePendingPoolPrioritySenders updates the priority senders in the pending pool
+func (p *TxPool) updatePendingPoolPrioritySenders() {
+	if p.priorityList == nil {
+		return
+	}
+
+	var senderPriorities map[uint64]Priority
+	senderPriorities = make(map[uint64]Priority)
+	priorityAddresses := p.priorityList.Addresses()
+
+	for _, addr := range priorityAddresses {
+		if senderID, exists := p.senders.getID(addr); exists {
+			priority := p.priorityList.GetPriority(addr)
+			senderPriorities[senderID] = priority
+		}
+	}
+
+	p.pending.UpdateSenderPriorities(senderPriorities)
+}
+
 func (p *TxPool) purge() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -2492,6 +2524,15 @@ func (sc *sendersBatch) info(cacheView kvcache.CacheView, id uint64) (nonce uint
 		return 0, emptySender.balance, err
 	}
 	return nonce, balance, nil
+}
+
+func (sc *sendersBatch) registerPrioritySenders(priorityList *PriorityList) {
+	if priorityList == nil {
+		return
+	}
+	for _, addr := range priorityList.Addresses() {
+		sc.getOrCreateID(addr)
+	}
 }
 
 func (sc *sendersBatch) registerNewSenders(newTxs *types.TxSlots) (err error) {
@@ -2670,14 +2711,15 @@ type PendingPool struct {
 }
 
 func NewPendingSubPool(t SubPoolType, limit int) *PendingPool {
-	return &PendingPool{limit: limit, t: t, best: &bestSlice{ms: []*metaTx{}}, worst: &WorstQueue{ms: []*metaTx{}}}
+	return &PendingPool{limit: limit, t: t, best: &bestSlice{ms: []*metaTx{}, senderPriorities: nil}, worst: &WorstQueue{ms: []*metaTx{}}}
 }
 
 // bestSlice - is similar to best queue, but with O(n log n) complexity and
 // it maintains element.bestIndex field
 type bestSlice struct {
-	ms             []*metaTx
-	pendingBaseFee uint64
+	ms               []*metaTx
+	pendingBaseFee   uint64
+	senderPriorities map[uint64]Priority // Map from senderID to priority level
 }
 
 func (s *bestSlice) Len() int { return len(s.ms) }
@@ -2686,6 +2728,33 @@ func (s *bestSlice) Swap(i, j int) {
 	s.ms[i].bestIndex, s.ms[j].bestIndex = i, j
 }
 func (s *bestSlice) Less(i, j int) bool {
+	/*
+		Case 1: 1 Priority sender
+		t = 1, j = 0
+		T takes precedence
+
+		Case 2: 2 Priority senders
+		t = 1, j = 2
+		J takes precedence
+
+		Case 3: No Priority senders
+		Fallback to better method
+
+		Case 4: Same Priority senders
+		t = 1, j = 1
+		Takes precedence based on better method
+	*/
+
+	if s.senderPriorities != nil {
+		iPriority := s.senderPriorities[s.ms[i].Tx.SenderID]
+		jPriority := s.senderPriorities[s.ms[j].Tx.SenderID]
+
+		// If priorities are different, higher priority comes first
+		if iPriority != jPriority {
+			return iPriority > jPriority
+		}
+	}
+
 	return s.ms[i].better(s.ms[j], s.pendingBaseFee)
 }
 func (s *bestSlice) UnsafeRemove(i *metaTx) {
@@ -2699,11 +2768,17 @@ func (s *bestSlice) UnsafeAdd(i *metaTx) {
 	s.ms = append(s.ms, i)
 }
 
+// UpdateSenderPriorities updates the sender priorities map
+func (s *bestSlice) UpdateSenderPriorities(senderPriorities map[uint64]Priority) {
+	s.senderPriorities = senderPriorities
+}
+
 func (p *PendingPool) EnforceWorstInvariants() {
 	heap.Init(p.worst)
 }
 func (p *PendingPool) EnforceBestInvariants() {
 	if !p.sorted {
+		// Sort with priority senders consideration (handled in bestSlice.Less method)
 		sort.Sort(p.best)
 		p.sorted = true
 	}
@@ -2765,6 +2840,11 @@ func (p *PendingPool) DebugPrint(prefix string) {
 	for i, it := range p.worst.ms {
 		fmt.Printf("%s.worst: %d, %d, %d,%d\n", prefix, i, it.subPool, it.worstIndex, it.Tx.Nonce)
 	}
+}
+
+// UpdateSenderPriorities updates the sender priorities for the pending pool
+func (p *PendingPool) UpdateSenderPriorities(senderPriorities map[uint64]Priority) {
+	p.best.UpdateSenderPriorities(senderPriorities)
 }
 
 type SubPool struct {

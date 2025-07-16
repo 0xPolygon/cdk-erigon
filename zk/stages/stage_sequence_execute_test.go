@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"github.com/erigontech/erigon/zk/sequencer"
 )
 
 func TestSpawnSequencingStage(t *testing.T) {
@@ -129,7 +130,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 	cacheMock := cMocks.NewMockCache(mockCtrl)
 	cacheMock.EXPECT().View(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
-	txPool, err := txpool.New(nil, txPoolDb, txpoolcfg.Config{}, cacheMock, chainID, nil, nil, nil, nil, nil, nil, nil, &ethconfig.Config{}, nil)
+	txPool, err := txpool.New(nil, txPoolDb, txpoolcfg.Config{}, cacheMock, chainID, nil, nil, nil, nil, nil, nil, nil, &ethconfig.Config{}, nil, nil)
 	require.NoError(t, err)
 
 	engineMock.EXPECT().
@@ -178,6 +179,8 @@ func TestSpawnSequencingStage(t *testing.T) {
 	}
 	historyCfg := stagedsync.StageHistoryCfg(db1, prune.DefaultMode, "")
 	quiet := true
+
+	cfg.txYielder = &sequencer.RecoveryTransactionYielder{}
 
 	// Act
 	err = SpawnSequencingStage(s, u, ctx, cfg, historyCfg, quiet)
