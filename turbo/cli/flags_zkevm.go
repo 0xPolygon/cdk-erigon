@@ -21,8 +21,9 @@ import (
 )
 
 var DeprecatedFlags = map[string]string{
-	"zkevm.gasless":       "zkevm.allow-free-transactions",
-	"zkevm.rpc-ratelimit": "",
+	"zkevm.gasless":            "zkevm.allow-free-transactions",
+	"zkevm.rpc-ratelimit":      "",
+	"zkevm.datastream-version": "",
 }
 
 func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
@@ -181,14 +182,42 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		}
 	}
 
-	hardfork := ethconfig.Hardfork(ctx.String(utils.Hardfork.Name))
-	if !hardfork.IsValid() {
-		panic(fmt.Sprintf("Invalid hardfork: %s. Must be one of: %s", ctx.String(utils.Hardfork.Name), hardfork.ValidHardforks()))
-	}
-
 	commitment := ethconfig.Commitment(ctx.String(utils.Commitment.Name))
 	if !commitment.IsValid() {
-		panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(utils.Commitment.Name), commitment.ValidCommitments()))
+		panic(fmt.Sprintf("Invalid commitment: %s. Must be one of: %s", ctx.String(utils.Commitment.Name), ethconfig.ValidCommitments()))
+	}
+
+	var l1InfoTreeOffset *ethconfig.L1InfoTreeOffset
+	infoTreeOffsetStr := ctx.String(utils.SequencerResequenceInfoTreeOffset.Name)
+	if infoTreeOffsetStr != "" {
+		parts := strings.Split(infoTreeOffsetStr, ":")
+		if len(parts) != 3 {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s, should be <index>:<offset>:<expected_ger_hash>", infoTreeOffsetStr))
+		}
+		index, err := strconv.ParseUint(parts[0], 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s", infoTreeOffsetStr))
+		}
+		offset, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s", infoTreeOffsetStr))
+		}
+		hashStr := parts[2]
+		if !strings.HasPrefix(hashStr, "0x") {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s, expected_ger_hash should start with 0x", infoTreeOffsetStr))
+		}
+		if _, err := hex.DecodeString(hashStr[2:]); err != nil {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s, expected_ger_hash should be a valid hex string", infoTreeOffsetStr))
+		}
+		if len(hashStr) != 66 {
+			panic(fmt.Sprintf("Invalid info tree offset format: %s, expected_ger_hash should be 66 characters long", infoTreeOffsetStr))
+		}
+		expectedGerHash := libcommon.HexToHash(hashStr)
+		l1InfoTreeOffset = &ethconfig.L1InfoTreeOffset{
+			Index:           index,
+			Offset:          offset,
+			ExpectedGerHash: expectedGerHash,
+		}
 	}
 
 	var l1InfoTreeOffset *ethconfig.L1InfoTreeOffset
@@ -279,6 +308,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		ExecutorMaxConcurrentRequests:          ctx.Int(utils.ExecutorMaxConcurrentRequests.Name),
 		Limbo:                                  ctx.Bool(utils.Limbo.Name),
 		AllowFreeTransactions:                  ctx.Bool(utils.AllowFreeTransactions.Name),
+		FreeInjectedBatch:                      ctx.Bool(utils.FreeInjectedBatch.Name),
 		AllowPreEIP155Transactions:             ctx.Bool(utils.AllowPreEIP155Transactions.Name),
 		EffectiveGasPriceForEthTransfer:        uint8(math.Round(effectiveGasPriceForEthTransferVal * 255.0)),
 		EffectiveGasPriceForErc20Transfer:      uint8(math.Round(effectiveGasPriceForErc20TransferVal * 255.0)),
@@ -334,8 +364,8 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		BadTxPurge:                             ctx.Bool(utils.BadTxPurge.Name),
 		L2InfoTreeUpdatesBatchSize:             ctx.Uint64(utils.L2InfoTreeUpdatesBatchSize.Name),
 		L2InfoTreeUpdatesEnabled:               ctx.Bool(utils.L2InfoTreeUpdatesEnabled.Name),
-		Hardfork:                               hardfork,
 		Commitment:                             commitment,
+		HonourChainspec:                        ctx.Bool(utils.HonourChainspec.Name),
 		InjectGers:                             ctx.Bool(utils.InjectGers.Name),
 		SkipSmt:                                ctx.Bool(utils.SkipSmt.Name),
 		OnlySmtV2:                              ctx.Bool(utils.OnlySmtV2.Name),
@@ -344,6 +374,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 
 	utils2.EnableTimer(cfg.DebugTimers)
 
+	// check if the flags are set
 	checkFlag(utils.L2ChainIdFlag.Name, cfg.L2ChainId)
 	if !sequencer.IsSequencer() {
 		checkFlag(utils.L2RpcUrlFlag.Name, cfg.Zk.L2RpcUrl)
@@ -373,9 +404,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 			panic("You cannot disable virtual counters when running with executors")
 		}
 	}
-
 	checkFlag(utils.AddressZkevmFlag.Name, cfg.AddressZkevm)
-
 	checkFlag(utils.L1ChainIdFlag.Name, cfg.L1ChainId)
 	checkFlag(utils.L1RpcUrlFlag.Name, cfg.L1RpcUrl)
 	checkFlag(utils.L1MaticContractAddressFlag.Name, cfg.L1MaticContractAddress.Hex())
@@ -387,6 +416,5 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.TxPoolRejectSmartContractDeployments.Name, cfg.TxPoolRejectSmartContractDeployments)
 	checkFlag(utils.L1ContractAddressCheckFlag.Name, cfg.L1ContractAddressCheck)
 	checkFlag(utils.L1ContractAddressRetrieveFlag.Name, cfg.L1ContractAddressCheck)
-
 	verifyAddressFlag(utils.L2DataStreamerUrlFlag.Name, cfg.L2DataStreamerUrl)
 }
