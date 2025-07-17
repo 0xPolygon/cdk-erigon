@@ -230,11 +230,21 @@ type ForkDb interface {
 	WriteForkId(batch, forkId uint64) error
 }
 
-func prepareForkId(lastBatch, executionAt uint64, hermezDb ForkDb) (latest uint64, err error) {
+func prepareForkId(lastBatch, executionAt uint64, hermezDb ForkDb, cfg SequenceBlockCfg) (latest uint64, err error) {
 	// get all history and find the fork appropriate for the batch we're processing now
 	allForks, allBatches, err := hermezDb.GetAllForkHistory()
 	if err != nil {
 		return 0, err
+	}
+
+	if cfg.zk.Commitment.IsType1() {
+		if len(allForks) == 1 && allForks[0] == 0 {
+			// we are in normalcy on a network that has never had an FEP rollup type
+			// assigned to it, so there is no fork history to use here.  So we default
+			// to the highest available fork id (13) to ensure we're using the latest
+			// methods for decoding things like the injected batch (read from disk in normalcy).
+			return 13, nil
+		}
 	}
 
 	nextBatch := lastBatch + 1
