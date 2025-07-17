@@ -215,9 +215,3 @@ type L1InfoTreeOffset struct {
 	Offset          int64
 	ExpectedGerHash common.Hash
 }
-
-type L1InfoTreeOffset struct {
-	Index           uint64
-	Offset          int64
-	ExpectedGerHash common.Hash
-}

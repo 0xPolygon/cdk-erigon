@@ -6,10 +6,10 @@ import (
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
-	"github.com/erigontech/erigon-lib/log/v3"
 
 	"math/big"
 
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/state"
@@ -21,7 +21,6 @@ import (
 	"github.com/erigontech/erigon/zk/hermez_db"
 	zktypes "github.com/erigontech/erigon/zk/types"
 	"github.com/erigontech/secp256k1"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 func handleStateForNewBlockStarting(
@@ -221,8 +220,6 @@ func finaliseBlock(
 	if err = batchContext.sdb.eridb.CommitBatch(); err != nil {
 		return nil, err
 	}
-	elapsed := time.Since(now)
-	log.Info(fmt.Sprintf("[%s]: zkIncrementIntermediateHashes_v2_Forwards took %s", batchContext.s.LogPrefix(), elapsed))
 
 	finalHeader := finalBlock.HeaderNoCopy()
 	finalHeader.Root = newRoot

@@ -22,7 +22,6 @@ import (
 	zkStages "github.com/erigontech/erigon/zk/stages"
 	"github.com/erigontech/erigon/zk/syncer"
 	"github.com/erigontech/erigon/zk/txpool"
-	"github.com/erigontech/erigon/zk/sequencer"
 )
 
 // NewDefaultZkStages creates stages for zk syncer (RPC mode)
