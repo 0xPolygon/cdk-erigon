@@ -71,17 +71,16 @@ import (
 //
 // The returned chain configuration is never nil.
 func CommitGenesisBlock(db kv.RwDB, genesis *types.Genesis, tmpDir string, logger log.Logger) (*chain.Config, *types.Block, error) {
-	return CommitGenesisBlockWithOverride(db, genesis, nil, tmpDir, logger)
+	return CommitGenesisBlockWithOverride(db, genesis, nil, nil, nil, nil, tmpDir, logger)
 }
 
-func CommitGenesisBlockWithOverride(db kv.RwDB, genesis *types.Genesis, overridePragueTime *big.Int, tmpDir string, logger log.Logger) (*chain.Config, *types.Block, error) {
+func CommitGenesisBlockWithOverride(db kv.RwDB, genesis *types.Genesis, overridePragueTime, overrideNormalcyBlock, overrideLondonBlock, overrideShanghaiTime *big.Int, tmpDir string, logger log.Logger) (*chain.Config, *types.Block, error) {
 	tx, err := db.BeginRw(context.Background())
 	if err != nil {
 		return nil, nil, err
 	}
 	defer tx.Rollback()
-	// honourChainspec is false here, CommitGenesisBlock is for integration.
-	c, b, err := WriteGenesisBlock(tx, genesis, overridePragueTime, tmpDir, logger)
+	c, b, err := WriteGenesisBlock(tx, genesis, overridePragueTime, overrideNormalcyBlock, overrideLondonBlock, overrideShanghaiTime, tmpDir, logger)
 	if err != nil {
 		return c, b, err
 	}
@@ -92,7 +91,7 @@ func CommitGenesisBlockWithOverride(db kv.RwDB, genesis *types.Genesis, override
 	return c, b, nil
 }
 
-func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overridePragueTime *big.Int, tmpDir string, logger log.Logger) (*chain.Config, *types.Block, error) {
+func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overridePragueTime, overrideNormalcyBlock, overrideLondonBlock, overrideShanghaiTime *big.Int, tmpDir string, logger log.Logger) (*chain.Config, *types.Block, error) {
 	var storedBlock *types.Block
 	if genesis != nil && genesis.Config == nil {
 		return params.AllProtocolChanges, nil, types.ErrGenesisNoConfig
@@ -106,6 +105,15 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overridePragueTime *b
 	applyOverrides := func(config *chain.Config) {
 		if overridePragueTime != nil {
 			config.PragueTime = overridePragueTime
+		}
+		if overrideNormalcyBlock != nil {
+			config.NormalcyBlock = overrideNormalcyBlock
+		}
+		if overrideLondonBlock != nil {
+			config.LondonBlock = overrideLondonBlock
+		}
+		if overrideShanghaiTime != nil {
+			config.ShanghaiTime = overrideShanghaiTime
 		}
 	}
 

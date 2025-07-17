@@ -53,7 +53,7 @@ type Zk struct {
 	SequencerDecodedTxCacheTTL             time.Duration
 	SequencerResequenceInfoTreeOffset      *L1InfoTreeOffset
 	ExecutorUrls                           []string
-	ExecutorStrictMode                     bool
+	ExecutorStrictMode                     bool `yaml:"zkevm.executor-strict"`
 	ExecutorRequestTimeout                 time.Duration
 	ExecutorEnabled                        bool
 	DatastreamNewBlockTimeout              time.Duration
@@ -129,8 +129,33 @@ type Zk struct {
 	L2InfoTreeUpdatesBatchSize     uint64
 	L2InfoTreeUpdatesEnabled       bool
 
+	Hardfork        Hardfork
 	Commitment      Commitment `yaml:"zkevm.initial-commitment"`
-	HonourChainspec bool       `yaml:"zkevm.honour-chainspec"`
+	InjectGers      bool
+	HonourChainspec bool `yaml:"zkevm.honour-chainspec"`
+
+	SkipSmt                bool
+	OnlySmtV2              bool
+	SequencerBlockGasLimit uint64
+}
+
+type Hardfork string
+
+const (
+	HardforkTypeHermez   Hardfork = "hermez"
+	HardforkTypeEthereum Hardfork = "ethereum"
+)
+
+func (h Hardfork) IsValid() bool {
+	switch Hardfork(strings.ToLower(string(h))) {
+	case HardforkTypeHermez, HardforkTypeEthereum:
+		return true
+	}
+	return false
+}
+
+func (h Hardfork) ValidHardforks() []Hardfork {
+	return []Hardfork{HardforkTypeHermez, HardforkTypeEthereum}
 }
 
 type Commitment string
@@ -154,10 +179,6 @@ func ValidCommitments() []Commitment {
 
 func (c Commitment) IsType1() bool {
 	return c == CommitmentPMT
-}
-
-var DefaultZkConfig = &Zk{
-	Commitment: CommitmentSMT,
 }
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {

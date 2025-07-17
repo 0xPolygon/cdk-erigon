@@ -117,6 +117,18 @@ var (
 		Name:  "override.prague",
 		Usage: "Manually specify the Prague fork time, overriding the bundled setting",
 	}
+	OverrideNormalcyBlockFlag = flags.BigFlag{
+		Name:  "override.normalcyblock",
+		Usage: "Manually specify the NormalcyBlock fork block, overriding the bundled setting",
+	}
+	OverrideShanghaiTimeFlag = flags.BigFlag{
+		Name:  "override.shanghaitime",
+		Usage: "Manually specify the time for shanghai fork",
+	}
+	OverrideLondonBlockFlag = flags.BigFlag{
+		Name:  "override.londonblock",
+		Usage: "Manually specify the block for london fork",
+	}
 	TrustedSetupFile = cli.StringFlag{
 		Name:  "trusted-setup-file",
 		Usage: "Absolute path to trusted_setup.json file",
@@ -246,6 +258,11 @@ var (
 		Name:  "txpool.purge.distance",
 		Usage: "Transactions older than this distance will be purged",
 		Value: txpoolcfg.DefaultConfig.PurgeDistance,
+	}
+	TxPoolEnableTimsort = cli.BoolFlag{
+		Name:  "txpool.enabletimsort",
+		Usage: "Enable timsort for the txpool",
+		Value: true,
 	}
 	// Miner settings
 	MiningEnabledFlag = cli.BoolFlag{
@@ -928,10 +945,30 @@ var (
 		Usage: "Values { smt | pmt }. Default, smt.",
 		Value: "smt",
 	}
+	InjectGers = cli.BoolFlag{
+		Name:  "zkevm.inject-gers",
+		Usage: "Inject L1 information into the scalable contract and ger manager. Default true.",
+		Value: true,
+	}
 	HonourChainspec = cli.BoolFlag{
 		Name:  "zkevm.honour-chainspec",
 		Usage: "Honour the actual chainspec values. This means that no chainspec values will get changed based on normalcy mode. Default false.",
 		Value: false,
+	}
+	SkipSmt = cli.BoolFlag{
+		Name:  "zkevm.skip-smt",
+		Usage: "Skip the SMT verification",
+		Value: false,
+	}
+	OnlySmtV2 = cli.BoolFlag{
+		Name:  "zkevm.only-smt-v2",
+		Usage: "Only use SMT v2 for state changes",
+		Value: true,
+	}
+	SequencerBlockGasLimit = cli.Uint64Flag{
+		Name:  "zkevm.sequencer-block-gas-limit",
+		Usage: "The gas limit of the sequencer block.  Default (0) means no limit.",
+		Value: 0,
 	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
@@ -1022,6 +1059,16 @@ var (
 		Name:  "rpc.gascap",
 		Usage: "Sets a cap on gas that can be used in eth_call/estimateGas",
 		Value: 50000000,
+	}
+	SpuriousPayloadSize = cli.StringFlag{
+		Name:  "rpc.spurious-payload-size",
+		Usage: "Sets the point at which we log a payload as 'spurious'",
+		Value: "100MB",
+	}
+	BatchMethodForbiddenList = cli.StringFlag{
+		Name:  "rpc.batch-method-forbidden",
+		Usage: "Specify granular (method-by-method) API forbidden list for batch requests as CSV, these requests won't be allowed in a batch request as they can lead to OOM",
+		Value: "eth_getLogs,debug_traceTransaction,trace_transaction",
 	}
 	RpcTraceCompatFlag = cli.BoolFlag{
 		Name:  "trace.compat",
@@ -2045,6 +2092,9 @@ func setTxPool(ctx *cli.Context, fullCfg *ethconfig.Config) {
 	if ctx.IsSet(TxPoolDisableFlag.Name) {
 		cfg.Disable = ctx.Bool(TxPoolDisableFlag.Name)
 	}
+	if ctx.IsSet(TxPoolEnableTimsort.Name) {
+		cfg.EnableTimsort = ctx.Bool(TxPoolEnableTimsort.Name)
+	}
 	if ctx.IsSet(TxPoolLocalsFlag.Name) {
 		locals := libcommon.CliString2Array(ctx.String(TxPoolLocalsFlag.Name))
 		for _, account := range locals {
@@ -2515,6 +2565,15 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	if ctx.IsSet(OverridePragueFlag.Name) {
 		cfg.OverridePragueTime = flags.GlobalBig(ctx, OverridePragueFlag.Name)
 		cfg.TxPool.OverridePragueTime = cfg.OverridePragueTime
+	}
+	if ctx.IsSet(OverrideNormalcyBlockFlag.Name) {
+		cfg.OverrideNormalcyBlock = flags.GlobalBig(ctx, OverrideNormalcyBlockFlag.Name)
+	}
+	if ctx.IsSet(OverrideLondonBlockFlag.Name) {
+		cfg.OverrideLondonBlock = flags.GlobalBig(ctx, OverrideLondonBlockFlag.Name)
+	}
+	if ctx.IsSet(OverrideShanghaiTimeFlag.Name) {
+		cfg.OverrideShanghaiTime = flags.GlobalBig(ctx, OverrideShanghaiTimeFlag.Name)
 	}
 
 	if ctx.IsSet(InternalConsensusFlag.Name) && clparams.EmbeddedSupported(cfg.NetworkID) {

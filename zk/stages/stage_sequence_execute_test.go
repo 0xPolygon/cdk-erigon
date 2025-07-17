@@ -23,10 +23,12 @@ import (
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/ethdb/prune"
 	"github.com/erigontech/erigon/smt/pkg/db"
+	"github.com/erigontech/erigon/smtv2"
 	dsMocks "github.com/erigontech/erigon/zk/datastream/mocks"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	verifier "github.com/erigontech/erigon/zk/legacy_executor_verifier"
+	"github.com/erigontech/erigon/zk/sequencer"
 	"github.com/erigontech/erigon/zk/syncer"
 	"github.com/erigontech/erigon/zk/syncer/mocks"
 	"github.com/erigontech/erigon/zk/txpool"
@@ -35,7 +37,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-	"github.com/erigontech/erigon/zk/sequencer"
 )
 
 func TestSpawnSequencingStage(t *testing.T) {
@@ -96,6 +97,19 @@ func TestSpawnSequencingStage(t *testing.T) {
 	require.NoError(t, err)
 	err = rawdb.WriteCanonicalHash(tx, latestL2Block.Hash(), latestL2Block.NumberU64())
 	require.NoError(t, err)
+
+	// insert a random hash into the smt intermediate hashes table - this will prevent the test
+	// from attempting to regenerate the smt intermediate hashes which is out of scope for this test
+	smtKey := smtv2.SmtKey{0, 0, 0, 0}
+	dbKey := smtv2.PathToKeyBytes(smtKey.GetPath(), 1)
+	inter := smtv2.IntermediateHash{
+		HashType:  smtv2.IntermediateHashType_Value,
+		Path:      [257]int{0, 0, 0, 0},
+		Hash:      [4]uint64{0, 0, 0, 0},
+		LeafKey:   smtKey,
+		LeafValue: [8]uint64{0, 0, 0, 0, 0, 0, 0, 0},
+	}
+	tx.Put(kv.TableSmtIntermediateHashes, dbKey, inter.Serialise())
 
 	err = tx.Commit()
 	require.NoError(t, err)

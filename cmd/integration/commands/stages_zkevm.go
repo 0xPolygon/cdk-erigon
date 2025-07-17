@@ -38,11 +38,13 @@ func loadZkConfig(path string) (*ethconfig.Zk, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg := ethconfig.DefaultZkConfig
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	cfg := ethconfig.Zk{
+		Commitment: ethconfig.CommitmentSMT,
+	}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
-	return cfg, nil
+	return &cfg, nil
 }
 
 func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *stagedsync.Sync) {
@@ -98,6 +100,7 @@ func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *
 	cfg.Genesis = genesis
 	cfg.Dirs = datadir.New(datadirCli)
 	cfg.Zk = zkCfg
+	cfg.Zk.OnlySmtV2 = onlySmtV2
 
 	logger := log.New()
 	br, _ := blocksIO(db, logger)

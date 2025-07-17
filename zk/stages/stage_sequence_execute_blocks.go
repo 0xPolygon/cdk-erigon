@@ -2,6 +2,8 @@ package stages
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
@@ -193,8 +195,11 @@ func finaliseBlock(
 	batchContext.sdb.eridb.OpenBatch(quit)
 
 	// this is actually the interhashes stage
+	now := time.Now()
 	var newRoot common.Hash
+	commitment := "smt"
 	if batchContext.cfg.zk.UsingPMT() {
+		commitment = "pmt"
 		logger := log.New()
 		if err = stagedsync.HashStateFromTo(batchContext.s.LogPrefix(), batchContext.sdb.tx, batchContext.cfg.hashStateCfg, newHeader.Number.Uint64()-1, newHeader.Number.Uint64(), batchContext.ctx, logger); err != nil {
 			return nil, err
@@ -209,7 +214,8 @@ func finaliseBlock(
 		return nil, err
 	}
 
-	log.Info(fmt.Sprintf("[%s] IncrementIntermediateHashes finished newRoot: %s", batchContext.s.LogPrefix(), newRoot.String()), "from", batchContext.s.BlockNumber, "to", thisBlockNumber)
+	elapsed := time.Since(now)
+	log.Info(fmt.Sprintf("[%s] IncrementIntermediateHashes finished newRoot: %s", batchContext.s.LogPrefix(), newRoot.String()), "took", elapsed, "commitment", commitment)
 
 	if err = batchContext.sdb.eridb.CommitBatch(); err != nil {
 		return nil, err
