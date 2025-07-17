@@ -20,11 +20,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
-
-	"github.com/erigontech/erigon/zk/datastream/types"
 
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/nats-io/nats-server/v2/server"
@@ -67,8 +64,8 @@ type Config struct {
 	// Debug enables debug logging
 	Debug bool
 
-	// ChainId is the blockchain chain ID to use for streams
-	ChainId uint64
+	// Trace enables verbose tracing
+	Trace bool
 }
 
 // DefaultConfig returns default configuration values
@@ -85,7 +82,7 @@ func DefaultConfig() Config {
 		MaxMemory:        1 * 1024 * 1024 * 1024,  // 1GB
 		MaxStorage:       10 * 1024 * 1024 * 1024, // 10GB
 		Debug:            false,
-		ChainId:          0,
+		Trace:            false,
 	}
 }
 
@@ -135,7 +132,7 @@ func (m *Manager) Start() error {
 		NoSigs:                true,
 		JetStream:             m.config.JetStreamEnabled,
 		Debug:                 m.config.Debug,
-		TraceVerbose:          m.config.Debug,
+		TraceVerbose:          m.config.Trace,
 		MaxPayload:            8 * 1024 * 1024,  // 8MB
 		MaxPending:            64 * 1024 * 1024, // 64MB
 		DisableShortFirstPing: false,
@@ -303,19 +300,12 @@ func (m *Manager) getJetStream() (jetstream.JetStream, error) {
 	return m.js, m.jsErr
 }
 
-// InitStreams initializes the streams for the configured chain ID
-// Since we only support one chain ID per service instance, this only needs to be called once
-func (m *Manager) InitStreams() error {
+// InitStreams initializes the default streams
+func (m *Manager) InitStreams(ctx context.Context) error {
 	m.streamsInitLock.Lock()
 	defer m.streamsInitLock.Unlock()
 
-	// Check if chain ID is set
-	if m.config.ChainId == 0 {
-		return fmt.Errorf("chain ID not set in manager config")
-	}
-
 	m.streamsInit.Do(func() {
-		chainId := m.config.ChainId
 
 		// Get JetStream
 		js, err := m.getJetStream()
@@ -325,14 +315,14 @@ func (m *Manager) InitStreams() error {
 		}
 
 		// Initialize main stream
-		mainStreamName := fmt.Sprintf("DATASTREAM_%d", chainId)
-		mainStream, err := js.Stream(context.Background(), mainStreamName)
+		mainStreamName := "DATASTREAM"
+		mainStream, err := js.Stream(ctx, mainStreamName)
 		if err == nil {
 			m.mainStream = mainStream
 			m.logger.Info("Using existing main stream", "name", mainStreamName)
 		} else {
 			// Create main stream
-			mainStream, err = js.CreateStream(context.Background(), jetstream.StreamConfig{
+			mainStream, err = js.CreateStream(ctx, jetstream.StreamConfig{
 				Name:     mainStreamName,
 				Subjects: []string{"datastream.>"},
 				Storage:  jetstream.FileStorage,
@@ -350,82 +340,11 @@ func (m *Manager) InitStreams() error {
 }
 
 // GetOrCreateDataStream returns the JetStream instance
-func (m *Manager) GetOrCreateDataStream() (jetstream.JetStream, error) {
-	// Check if we have a chainId set
-	if m.config.ChainId == 0 {
-		return nil, fmt.Errorf("chain ID not set in manager config")
-	}
-
-	// Make sure streams are initialized
-	err := m.InitStreams()
+func (m *Manager) GetOrCreateDataStream(ctx context.Context) (jetstream.JetStream, error) {
+	err := m.InitStreams(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Return the JetStream instance
 	return m.getJetStream()
-}
-
-// PublishMsg publishes a message to the main stream
-func (m *Manager) PublishMsg(msgFactory func() *nats.Msg) error {
-	stream, err := m.GetOrCreateDataStream()
-	if err != nil {
-		return err
-	}
-
-	_, err = stream.PublishMsg(context.Background(), msgFactory())
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// PublishEntry adds an entry to the stream
-func (m *Manager) PublishEntry(entryType types.EntryType, data []byte) error {
-	// Check if we have a chainId set
-	if m.config.ChainId == 0 {
-		return fmt.Errorf("chain ID not set in manager config")
-	}
-
-	err := m.PublishMsg(func() *nats.Msg {
-		return &nats.Msg{
-			Subject: "datastream.entry",
-			Data:    data,
-			Header: nats.Header{
-				"EntryType": []string{strconv.Itoa(int(entryType))},
-			},
-		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to publish entry to stream: %w", err)
-	}
-
-	return nil
-}
-
-// PublishBookmark adds a bookmark to the stream
-func (m *Manager) PublishBookmark(bookmark []byte, entryNum uint64) error {
-	// Check if we have a chainId set
-	if m.config.ChainId == 0 {
-		return fmt.Errorf("chain ID not set in manager config")
-	}
-
-	err := m.PublishMsg(func() *nats.Msg {
-		return &nats.Msg{
-			Subject: "datastream.entry",
-			Data:    bookmark,
-			Header: nats.Header{
-				"EntryType": []string{"176"}, // BookmarkEntryType
-				"EntryNum":  []string{strconv.FormatUint(entryNum, 10)},
-			},
-		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to publish bookmark to stream: %w", err)
-	}
-
-	return nil
 }

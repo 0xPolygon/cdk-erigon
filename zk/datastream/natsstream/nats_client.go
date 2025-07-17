@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,26 +16,31 @@ import (
 	"github.com/erigontech/erigon/zk/datastream/types"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"google.golang.org/protobuf/proto"
 )
 
 // Constants
 const (
 	DefaultEntryChannelSize = 100000
-	DefaultConnectTimeout   = 10 * time.Second
-	DefaultReadTimeout      = 5 * time.Second
 )
 
 // Errors
 var (
-	ErrNotConnected     = errors.New("not connected to NATS server")
-	ErrNotStarted       = errors.New("client not started")
-	ErrAlreadyStarted   = errors.New("client already started")
-	ErrStreamNotFound   = errors.New("stream not found")
-	ErrNoEntries        = errors.New("no entries available")
-	ErrInvalidBookmark  = errors.New("invalid bookmark")
-	ErrReadingStopped   = errors.New("reading has been stopped")
-	ErrContextCancelled = errors.New("context cancelled")
+	ErrNotStarted = errors.New("client not started")
 )
+
+// isFatalError determines if an error should stop processing (like TCP client)
+func isFatalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	// These are sequencing errors that should stop processing to match TCP client behavior
+	return errMsg == "unexpected L2 tx entry, found outside of block" ||
+		strings.Contains(errMsg, "received new L2 block") && strings.Contains(errMsg, "without proper block end") ||
+		strings.Contains(errMsg, "block end number doesn't match block number") ||
+		strings.Contains(errMsg, "message missing EntryType header")
+}
 
 // NATSClient implements the DatastreamClient interface to read from NATS JetStream
 type NATSClient struct {
@@ -42,12 +48,12 @@ type NATSClient struct {
 	natsURL       string
 	streamName    string
 	subjectPrefix string
-	chainID       uint64
-	forkID        uint64
 	useTLS        bool
+	clientID      string // Unique identifier for this client instance
 
 	// Context for lifecycle management
-	ctx        context.Context
+	parentCtx  context.Context // Parent context from constructor
+	ctx        context.Context // Current context, created in Start()
 	cancelFunc context.CancelFunc
 
 	// NATS components
@@ -59,9 +65,10 @@ type NATSClient struct {
 	// State
 	mutex            sync.RWMutex
 	started          bool
-	reading          bool
+	reading          atomic.Bool
 	readWg           sync.WaitGroup
 	entryChan        chan interface{}
+	errorChan        chan error
 	maxEntryChanSize uint64
 	progress         atomic.Uint64
 	lastProcessed    atomic.Uint64
@@ -75,7 +82,11 @@ type NATSClient struct {
 	latestBlock      *types.FullL2Block
 
 	// Logging
-	logger log.Logger
+	logger      log.Logger
+	timeout     time.Duration
+	natsManager *Manager
+	metadata    *MetadataManager
+	consumer    jetstream.Consumer
 }
 
 func (c *NATSClient) ExecutePerFile(bookmark *types.BookmarkProto, function func(file *types.FileEntry) error) error {
@@ -83,21 +94,24 @@ func (c *NATSClient) ExecutePerFile(bookmark *types.BookmarkProto, function func
 }
 
 // NewNATSClient creates a new NATS client for datastream
-func NewNATSClient(ctx context.Context, natsURL string, useTLS bool, chainID uint64, forkID uint64, logger log.Logger) *NATSClient {
-	clientCtx, cancelFunc := context.WithCancel(ctx)
+func NewNATSClient(ctx context.Context, natsURL string, useTLS bool, natsManager *Manager, logger log.Logger) *NATSClient {
+	// Generate unique client ID using timestamp and random component to avoid collisions
+	clientID := fmt.Sprintf("client_%d", time.Now().UnixNano())
 
 	return &NATSClient{
 		natsURL:          natsURL,
-		streamName:       fmt.Sprintf("DATASTREAM_%d", chainID),
-		subjectPrefix:    fmt.Sprintf("datastream.%d", chainID),
-		chainID:          chainID,
-		forkID:           forkID,
-		currentFork:      forkID,
+		streamName:       "DATASTREAM",
+		subjectPrefix:    "datastream",
 		useTLS:           useTLS,
-		ctx:              clientCtx,
-		cancelFunc:       cancelFunc,
+		clientID:         clientID,
+		parentCtx:        ctx,
+		ctx:              nil, // Will be created in Start()
+		cancelFunc:       nil,
 		entryChan:        make(chan interface{}, DefaultEntryChannelSize),
+		errorChan:        make(chan error, 1), // Buffered to prevent blocking
 		maxEntryChanSize: DefaultEntryChannelSize,
+		natsManager:      natsManager,
+		timeout:          10 * time.Second,
 		logger:           logger,
 	}
 }
@@ -106,6 +120,12 @@ func NewNATSClient(ctx context.Context, natsURL string, useTLS bool, chainID uin
 func (c *NATSClient) RenewEntryChannel() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+
+	// Check if currently reading
+	if c.reading.Load() {
+		// Could add warning or handle differently
+		c.logger.Warn("Renewing channel while reading is active")
+	}
 
 	// Clear existing channel
 	close(c.entryChan)
@@ -117,6 +137,12 @@ func (c *NATSClient) RenewMaxEntryChannel() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	// Check if currently reading
+	if c.reading.Load() {
+		// Could add warning or handle differently
+		c.logger.Warn("Renewing channel while reading is active")
+	}
+
 	// Create a new channel with max size
 	close(c.entryChan)
 	c.entryChan = make(chan interface{}, c.maxEntryChanSize)
@@ -125,123 +151,353 @@ func (c *NATSClient) RenewMaxEntryChannel() {
 // ReadAllEntriesToChannel implements DatastreamClient interface
 func (c *NATSClient) ReadAllEntriesToChannel() error {
 	c.mutex.Lock()
-	if !c.started {
-		c.mutex.Unlock()
-		return ErrNotStarted
-	}
-	if c.reading {
-		c.mutex.Unlock()
-		return nil // Already reading, nothing to do
-	}
-	c.reading = true
-	c.stopReading.Store(false)
+	started := c.started
 	c.mutex.Unlock()
 
+	if !started {
+		return ErrNotStarted
+	}
+
+	// Atomic check-and-set for reading state
+	if !c.reading.CompareAndSwap(false, true) {
+		return nil // Already reading, nothing to do
+	}
+
+	c.stopReading.Store(false)
 	c.readWg.Add(1)
-	go c.readEntriesLoop()
 
-	return nil
-}
-
-// readEntriesLoop continuously reads messages from the NATS stream
-func (c *NATSClient) readEntriesLoop() {
-	defer c.readWg.Done()
 	defer func() {
-		c.mutex.Lock()
-		c.reading = false
-		c.mutex.Unlock()
+		c.reading.Store(false)
+		c.readWg.Done()
 	}()
 
 	c.logger.Info("Starting to read entries from NATS stream",
 		"stream", c.streamName,
 		"subject", c.subjectPrefix)
 
+	blockNumber, err := c.GetLatestL2BlockNumber()
+
+	blockProgress := c.progress.Load()
+	if blockProgress >= blockNumber {
+		c.logger.Debug("No new entries to read, current progress matches or exceeds total entries",
+			"progress", blockProgress, "blockNumber", blockNumber)
+		return nil // Early return - nothing to read
+	}
+
+	// Check if there are any entries to read before creating consumer
+	totalEntries, err := c.GetTotalEntries()
+	if err != nil {
+		return fmt.Errorf("Could not get total entry count: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(c.ctx, c.timeout)
+	defer cancel()
+
+	var entryProgress uint64 = 0
+
+	if blockProgress > 0 {
+
+		entryProgress, err = c.getEntryNumForBlock(blockProgress, ctx)
+		if err != nil {
+			return fmt.Errorf("Could not entry number for block : %w", err)
+		}
+	}
+
+	// Calculate expected entries to process
+	var expectedEntries uint64
+
+	expectedEntries = totalEntries - entryProgress
+	c.logger.Info("Will read available entries",
+		"blockProgress", blockProgress,
+		"blockNumber", blockNumber,
+		"expectedEntries", expectedEntries)
+
+	if c.consumer != nil {
+		consumerName := fmt.Sprintf("DATASTREAM_CONSUMER_%s", c.clientID)
+		if err := c.js.DeleteConsumer(c.ctx, c.streamName, consumerName); err != nil {
+			c.logger.Warn("Failed to delete durable consumer (may not exist)",
+				"consumer", consumerName,
+				"error", err)
+		}
+		c.consumer = nil
+	}
+
 	// Create consumer configuration based on current progress
 	consumerConfig, err := c.createConsumerConfig()
 	if err != nil {
 		c.logger.Error("Failed to create consumer config", "error", err)
-		return
+		return err
 	}
 
 	// Create and start the consumer
-	_, msgChan, cleanup, err := c.createStreamConsumer(consumerConfig)
+	msgChan, cleanup, err := c.createStreamConsumer(consumerConfig)
 	if err != nil {
 		c.logger.Error("Failed to create stream consumer", "error", err)
-		return
+		return err
 	}
 	defer cleanup()
 
-	// Process messages using the unified message processor
+	// Process messages synchronously using the unified message processor
 	processor := &streamProcessor{
-		client:     c,
-		msgChan:    msgChan,
-		ctx:        c.ctx,
-		stopSignal: &c.stopReading,
+		client:          c,
+		msgChan:         msgChan,
+		ctx:             c.ctx,
+		stopSignal:      &c.stopReading,
+		expectedEntries: expectedEntries,
+		startProgress:   entryProgress,
+		timeout:         c.timeout,
 	}
 
-	processor.processMessages()
+	// Process messages and return any fatal errors
+	return c.processMessages(processor)
+}
 
-	// Send end-of-stream signal
-	c.sendEndOfStreamSignal()
+func (c *NATSClient) getEntryNumForBlock(blockProgress uint64, ctx context.Context) (uint64, error) {
+	bookmark := types.NewBookmarkProto(blockProgress, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
+	marshalledBookmark, err := bookmark.Marshal()
+	if err != nil {
+		return 0, err
+	}
+
+	return c.metadata.GetBookmark(ctx, marshalledBookmark)
+}
+
+// processMessages processes messages synchronously and returns fatal errors directly (like TCP client)
+func (c *NATSClient) processMessages(processor *streamProcessor) error {
+	// For unbounded reading (expectedEntries == 0), set timeouts to prevent infinite loops
+	unboundedEmptyTimeout := c.timeout / 2 // Timeout for completely empty streams
+	unboundedIdleTimeout := c.timeout      // Timeout for streams with no new messages
+	startTime := time.Now()
+	lastProcessTime := startTime
+
+	for {
+		// Check if we should stop reading
+		if processor.stopSignal.Load() {
+			c.logger.Info("Stop signal received, exiting read loop")
+			break
+		}
+
+		// Check if we've processed all expected entries (bounded reading)
+		if processor.expectedEntries > 0 && processor.entriesProcessed >= processor.expectedEntries {
+			c.logger.Debug("All expected entries processed, exiting read loop",
+				"processed", processor.entriesProcessed,
+				"expected", processor.expectedEntries)
+			break
+		}
+
+		// For unbounded reading, handle different timeout scenarios
+		if processor.expectedEntries == 0 {
+			now := time.Now()
+
+			// If no entries processed and enough time passed, likely empty stream
+			if processor.entriesProcessed == 0 && now.Sub(startTime) > unboundedEmptyTimeout {
+				c.logger.Debug("Unbounded reading timeout reached with no entries processed, likely empty stream")
+				break
+			}
+
+			// If we've processed some entries but haven't seen new ones for a while, consider done
+			if processor.entriesProcessed > 0 && now.Sub(lastProcessTime) > unboundedIdleTimeout {
+				c.logger.Debug("Unbounded reading idle timeout reached, no new messages for a while",
+					"processed", processor.entriesProcessed,
+					"idleTime", now.Sub(lastProcessTime))
+				break
+			}
+		}
+
+		// Get next message with timeout
+		msg, shouldContinue := processor.getNextMessage()
+		if !shouldContinue {
+			break
+		}
+		if msg == nil {
+			continue // Timeout, check stop signal again
+		}
+
+		// Process the message using unified processing
+		if err := processor.processMessage(msg); err != nil {
+			c.logger.Error("Error processing message", "error", err)
+
+			// Check if this is a fatal error that should stop processing
+			if isFatalError(err) {
+				// Return fatal error directly (matches TCP client behavior)
+				c.logger.Error("Fatal error encountered, stopping processing", "error", err)
+				return err
+			}
+
+			// Use negative acknowledgment for processing errors
+			if nakErr := msg.Nak(); nakErr != nil {
+				c.logger.Error("Failed to send negative acknowledgment", "error", nakErr)
+			}
+		} else {
+			// Successfully processed message - update entry count
+			processor.entriesProcessed++
+			// Note: Block progress (c.progress) is updated separately when L2Blocks are finalized
+
+			// Update last process time for unbounded reading timeout logic
+			lastProcessTime = time.Now()
+
+			// Only acknowledge if processing was successful
+			if ackErr := msg.Ack(); ackErr != nil {
+				c.logger.Error("Failed to acknowledge message", "error", ackErr)
+			}
+		}
+	}
+
+	// Handle any incomplete block before exiting
+	if processor.expectingBlockEnd && processor.currentBlock != nil {
+		// Match TCP client behavior: log error but don't send incomplete block
+		c.logger.Error("Stream ended with incomplete block - not sending partial block",
+			"blockNumber", processor.currentBlock.L2BlockNumber,
+			"txCount", len(processor.txs),
+			"error", "missing L2BlockEnd entry")
+		// Do not call finalizeAndSendBlock() - TCP client would not send incomplete blocks
+	}
+
+	// Send termination signal to match TCP client behavior
+	// This signals to BatchesProcessor that stream reading is complete
+	c.logger.Debug("Sending termination signal to processor")
+	select {
+	case c.entryChan <- nil:
+		c.logger.Debug("Termination signal sent successfully")
+	default:
+		c.logger.Warn("Could not send termination signal, channel full")
+		// Try a few more times with backoff (matching TCP client retry logic)
+		for retries := 0; retries < 3; retries++ {
+			time.Sleep(100 * time.Millisecond)
+			select {
+			case c.entryChan <- nil:
+				c.logger.Debug("Termination signal sent after retry", "retry", retries+1)
+				return nil
+			default:
+				continue
+			}
+		}
+		c.logger.Error("Failed to send termination signal after retries")
+	}
+
+	return nil
 }
 
 // createConsumerConfig creates a consumer configuration based on current progress
 func (c *NATSClient) createConsumerConfig() (jetstream.ConsumerConfig, error) {
-	progress := c.progress.Load()
-	c.logger.Info("Reading from progress position", "progress", progress)
 
 	consumerConfig := jetstream.ConsumerConfig{
-		Durable:   fmt.Sprintf("DATASTREAM_CONSUMER_%d", c.chainID),
+		Durable:   fmt.Sprintf("DATASTREAM_CONSUMER_%s", c.clientID),
 		AckPolicy: jetstream.AckExplicitPolicy,
 	}
 
-	if progress == 0 {
+	ctx, cancel := context.WithTimeout(c.ctx, c.timeout)
+	defer cancel()
+
+	var entryProgress uint64
+
+	blockProgress := c.progress.Load()
+	if blockProgress > 0 {
+		entryNumForCurrentBlock, err := c.getEntryNumForBlock(blockProgress, ctx)
+		if err != nil {
+			return consumerConfig, fmt.Errorf("failed to get entry number for block: %w", err)
+		}
+		entryProgress, err = c.getLastValidEntryBeforeNextBlock(entryNumForCurrentBlock)
+
+		if err != nil {
+			return consumerConfig, fmt.Errorf("failed to get entryprogress for block: %w", err)
+		}
+	}
+
+	c.logger.Info("Reading from progress position", "progress", entryProgress)
+
+	if entryProgress == 0 {
 		consumerConfig.DeliverPolicy = jetstream.DeliverAllPolicy
 		c.logger.Info("Starting from beginning of stream (progress=0)")
 		return consumerConfig, nil
 	}
 
-	// If progress > 0, try to find a bookmark for the next block
-	// TODO: there is a hole here, if a Truncate has been called on
-	// the stream there may be deleted sequence numbers so progress + 1 might be invalid
-	bookmark := types.NewBookmarkProto(progress+1, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
-	bookmarkBytes, err := bookmark.Marshal()
-	if err != nil {
-		return consumerConfig, fmt.Errorf("failed to marshal bookmark: %w", err)
-	}
-
-	// Try to get the bookmark from KV store using hex-encoded key
-	bookmarkKey := fmt.Sprintf("%x", bookmarkBytes)
-	entry, err := c.kv.Get(c.ctx, bookmarkKey)
-	if err == nil {
-		// Found bookmark, use its sequence
-		seq := binary.BigEndian.Uint64(entry.Value())
-		consumerConfig.DeliverPolicy = jetstream.DeliverByStartSequencePolicy
-		consumerConfig.OptStartSeq = seq
-		c.logger.Info("Starting from sequence for block after progress",
-			"progress", progress,
-			"nextBlock", progress+1,
-			"sequence", seq)
-	} else {
-		// No bookmark found, need to find closest starting point
-		// For now, start from the beginning but log the issue
-		consumerConfig.DeliverPolicy = jetstream.DeliverAllPolicy
-		c.logger.Warn("No bookmark found for position after progress, starting from beginning",
-			"progress", progress,
-			"nextBlock", progress+1,
-			"error", err)
-	}
+	consumerConfig.DeliverPolicy = jetstream.DeliverByStartSequencePolicy
+	consumerConfig.OptStartSeq = entryProgress
+	c.logger.Info("Starting from sequence for block after progress",
+		"progress", entryProgress,
+		"nextBlock", entryProgress+1,
+		"sequence", entryProgress)
 
 	return consumerConfig, nil
 }
 
+// GetLastValidEntryBeforeNextBlock scans forward from a given entry position
+// and finds the last valid (non-deleted) entry before the next block start bookmark
+func (c *NATSClient) getLastValidEntryBeforeNextBlock(startEntryNum uint64) (uint64, error) {
+	if !c.started {
+		return 0, ErrNotStarted
+	}
+
+	// Get total entries to know the bounds
+	totalEntries, err := c.GetTotalEntries()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get total entries: %w", err)
+	}
+
+	lastValidSeq := startEntryNum
+	currentEntryNum := startEntryNum + 1
+
+	// Get deleted sequences once
+	ctx, cancel := context.WithTimeout(c.ctx, c.timeout)
+	info, err := c.natsManager.mainStream.Info(ctx)
+	cancel()
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to get stream info: %w", err)
+	}
+
+	// Convert to map for O(1) lookups
+	deletedSeqs := make(map[uint64]bool, len(info.State.Deleted))
+	for _, seq := range info.State.Deleted {
+		deletedSeqs[seq] = true
+	}
+
+	// Scan forward looking for next block start bookmark
+	for currentEntryNum < totalEntries {
+
+		ctx, cancel := context.WithTimeout(c.ctx, 20*time.Second)
+		msg, err := c.natsManager.mainStream.GetMsg(ctx, currentEntryNum)
+		cancel()
+
+		if err == nil {
+
+			entryTypeStr := msg.Header.Get("EntryType")
+
+			// Check if this is a block start bookmark
+			if entryTypeStr == "176" { // Bookmark entry type
+				// Parse the bookmark to see if it's a block start
+				bookmark := &datastream.BookMark{}
+				if proto.Unmarshal(msg.Data, bookmark) == nil {
+					if bookmark.Type == datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK {
+						// Found next block start, return the last valid sequence before this
+						return lastValidSeq, nil
+					}
+				}
+			}
+
+			// This is a valid (non-deleted) entry, update our last valid sequence
+			lastValidSeq = currentEntryNum
+		} else {
+			// Entry is deleted or doesn't exist, continue scanning but don't update lastValidSeq
+			c.logger.Debug("Skipping deleted/missing entry while scanning",
+				"entryNum", currentEntryNum)
+		}
+
+		currentEntryNum++
+	}
+
+	// Reached end of stream without finding next block start, return last valid sequence
+	return lastValidSeq, nil
+}
+
 // createStreamConsumer creates a NATS consumer and message channel
 func (c *NATSClient) createStreamConsumer(consumerConfig jetstream.ConsumerConfig) (
-	jetstream.Consumer, <-chan jetstream.Msg, func(), error) {
+	<-chan jetstream.Msg, func(), error) {
 
 	consumer, err := c.js.CreateOrUpdateConsumer(c.ctx, c.streamName, consumerConfig)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create consumer: %w", err)
+		return nil, nil, fmt.Errorf("failed to create consumer: %w", err)
 	}
 
 	// Use Consume pattern which allows context cancellation
@@ -259,7 +515,7 @@ func (c *NATSClient) createStreamConsumer(consumerConfig jetstream.ConsumerConfi
 	}))
 	if err != nil {
 		cancelConsume()
-		return nil, nil, nil, fmt.Errorf("failed to start consuming: %w", err)
+		return nil, nil, fmt.Errorf("failed to start consuming: %w", err)
 	}
 
 	cleanup := func() {
@@ -267,28 +523,9 @@ func (c *NATSClient) createStreamConsumer(consumerConfig jetstream.ConsumerConfi
 		consumerCtx.Stop()
 	}
 
-	return consumer, msgChan, cleanup, nil
-}
+	c.consumer = consumer // Store consumer for later use
 
-// sendEndOfStreamSignal attempts to send a nil signal to indicate end of stream
-func (c *NATSClient) sendEndOfStreamSignal() {
-	retries := 0
-	for retries < 5 {
-		select {
-		case c.entryChan <- nil:
-			c.logger.Debug("Sent end-of-stream signal to channel")
-			return
-		default:
-			if retries >= 4 {
-				c.logger.Warn("Failed to send end-of-stream signal after 5 retries")
-				return
-			}
-			retries++
-			c.logger.Debug("Channel is full, waiting to write end-of-stream signal",
-				"retry", retries)
-			time.Sleep(1 * time.Second)
-		}
-	}
+	return msgChan, cleanup, nil
 }
 
 // streamProcessor handles the unified message processing for the read loop
@@ -297,41 +534,17 @@ type streamProcessor struct {
 	msgChan    <-chan jetstream.Msg
 	ctx        context.Context
 	stopSignal *atomic.Bool
+	timeout    time.Duration
+
+	// Bounded reading state
+	expectedEntries  uint64 // Number of entries expected to read (0 means unknown/unbounded)
+	startProgress    uint64 // Progress at start of reading
+	entriesProcessed uint64 // Number of entries processed so far
 
 	// State for L2 block building
 	currentBlock      *types.FullL2Block
 	txs               []types.L2TransactionProto
 	expectingBlockEnd bool
-}
-
-// processMessages is the main message processing loop
-func (p *streamProcessor) processMessages() {
-	for {
-		// Check if we should stop reading
-		if p.stopSignal.Load() {
-			p.client.logger.Info("Stop signal received, exiting read loop")
-			break
-		}
-
-		// Get next message with timeout
-		msg, shouldContinue := p.getNextMessage()
-		if !shouldContinue {
-			break
-		}
-		if msg == nil {
-			continue // Timeout, check stop signal again
-		}
-
-		// Process the message using unified processing
-		if err := p.processMessage(msg); err != nil {
-			p.client.logger.Error("Error processing message", "error", err)
-		}
-
-		msg.Ack()
-	}
-
-	// Handle any incomplete block before exiting
-	p.handleIncompleteBlock()
 }
 
 // getNextMessage retrieves the next message with timeout and stop signal checking
@@ -382,7 +595,7 @@ func (p *streamProcessor) processMessage(msg jetstream.Msg) error {
 	case types.EntryTypeGerUpdate:
 		return p.handleStreamGerUpdate(msg)
 	case types.BookmarkEntryType:
-		return p.handleStreamBookmark(msg)
+		return nil
 	default:
 		p.client.logger.Debug("Ignoring unknown entry type", "type", entryType)
 		return nil
@@ -425,8 +638,7 @@ func getBlockNumberFromMessage(msg jetstream.Msg) uint64 {
 // handleStreamL2Tx processes L2Tx entries for the stream
 func (p *streamProcessor) handleStreamL2Tx(msg jetstream.Msg) error {
 	if !p.expectingBlockEnd || p.currentBlock == nil {
-		p.client.logger.Warn("Received L2 transaction outside of a block")
-		return nil
+		return fmt.Errorf("unexpected L2 tx entry, found outside of block")
 	}
 
 	tx, err := p.client.processL2Transaction(msg)
@@ -528,18 +740,6 @@ func (p *streamProcessor) handleStreamGerUpdate(msg jetstream.Msg) error {
 	return p.sendToChannel(gerUpdate)
 }
 
-// handleStreamBookmark processes Bookmark entries for the stream
-func (p *streamProcessor) handleStreamBookmark(msg jetstream.Msg) error {
-	bookmark, err := p.client.processBookmark(msg)
-	if err != nil {
-		return fmt.Errorf("error processing bookmark: %w", err)
-	}
-
-	p.client.logger.Debug("Processed bookmark")
-
-	return p.sendToChannel(bookmark)
-}
-
 // finalizeAndSendBlock finalizes the current block and sends it to the channel
 func (p *streamProcessor) finalizeAndSendBlock() error {
 	if p.currentBlock == nil {
@@ -550,10 +750,19 @@ func (p *streamProcessor) finalizeAndSendBlock() error {
 	finalizedBlock := p.client.finalizeL2Block(p.currentBlock, p.txs)
 
 	// Send to channel
-	return p.sendToChannel(finalizedBlock)
+	err := p.sendToChannel(finalizedBlock)
+	if err != nil {
+		return err
+	}
+
+	// Update progress with the actual block number after successful processing
+	p.client.progress.Store(finalizedBlock.L2BlockNumber)
+	p.client.logger.Debug("Updated block progress", "blockNumber", finalizedBlock.L2BlockNumber)
+
+	return nil
 }
 
-// sendToChannel sends an entry to the output channel with context cancellation support
+// sendToChannel sends an entry to the output channel with timeout and context cancellation support
 func (p *streamProcessor) sendToChannel(entry interface{}) error {
 	select {
 	case p.client.entryChan <- entry:
@@ -566,32 +775,18 @@ func (p *streamProcessor) sendToChannel(entry interface{}) error {
 			p.client.logger.Debug("Sent entry to channel", "type", fmt.Sprintf("%T", entry))
 		}
 		return nil
+	case <-time.After(p.timeout):
+		return fmt.Errorf("timeout sending to channel after %v", p.timeout)
 	case <-p.ctx.Done():
 		return fmt.Errorf("context cancelled while sending to channel")
-	}
-}
-
-// handleIncompleteBlock handles any incomplete block processing before exiting
-// Matches TCP client behavior: treat incomplete blocks as errors, don't send partial data
-func (p *streamProcessor) handleIncompleteBlock() {
-	if p.expectingBlockEnd && p.currentBlock != nil {
-		// Match TCP client behavior: log error but don't send incomplete block
-		p.client.logger.Error("Stream ended with incomplete block - not sending partial block",
-			"blockNumber", p.currentBlock.L2BlockNumber,
-			"txCount", len(p.txs),
-			"error", "missing L2BlockEnd entry")
-		// Do not call finalizeAndSendBlock() - TCP client would not send incomplete blocks
 	}
 }
 
 // StopReadingToChannel implements DatastreamClient interface
 func (c *NATSClient) StopReadingToChannel() {
 	c.stopReading.Store(true)
-	c.mutex.RLock()
-	reading := c.reading
-	c.mutex.RUnlock()
 
-	if reading {
+	if c.reading.Load() {
 		c.logger.Info("Waiting for read loop to complete")
 		c.readWg.Wait()
 	}
@@ -620,11 +815,8 @@ func (c *NATSClient) processBookmark(msg jetstream.Msg) (*types.BookmarkProto, e
 // processL2Transaction processes an L2 transaction message and returns the unmarshaled transaction
 // This abstracts the transaction processing logic to be used by both GetL2BlockByNumber and readEntriesLoop
 func (c *NATSClient) processL2Transaction(msg jetstream.Msg) (*types.L2TransactionProto, error) {
-	// Get data from message and acknowledge it
-	data, err := receiveMsg(msg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to receive message: %w", err)
-	}
+	// Get data from message - acknowledgment is handled by the caller
+	data := msg.Data()
 
 	// Unmarshal transaction
 	tx, err := types.UnmarshalTx(data)
@@ -696,7 +888,7 @@ func (c *NATSClient) GetL2BlockByNumber(blockNum uint64) (*types.FullL2Block, er
 	c.mutex.RUnlock()
 
 	// Create a context with timeout for this operation
-	ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(c.ctx, c.timeout)
 	defer cancel()
 
 	c.logger.Debug("Getting L2 block by number", "blockNumber", blockNum)
@@ -723,7 +915,7 @@ func (c *NATSClient) createIteratorFromBookmark(ctx context.Context, blockNum ui
 
 	// Try to get the bookmark from the KV store using hex-encoded key
 	bookmarkKey := fmt.Sprintf("%x", bookmarkBytes)
-	entry, err := c.kv.Get(ctx, bookmarkKey)
+	entry, err := c.GetKeyValue(ctx, bookmarkKey)
 	if err != nil {
 		c.logger.Error("Error looking up bookmark",
 			"blockNumber", blockNum,
@@ -733,7 +925,7 @@ func (c *NATSClient) createIteratorFromBookmark(ctx context.Context, blockNum ui
 	}
 
 	// Found bookmark - use its entry number to calculate sequence
-	entryNum := binary.BigEndian.Uint64(entry.Value())
+	entryNum := binary.BigEndian.Uint64(entry)
 	startSeq := entryNum + 1 // NATS sequences are 1-based
 
 	c.logger.Debug("Found bookmark for block",
@@ -741,13 +933,13 @@ func (c *NATSClient) createIteratorFromBookmark(ctx context.Context, blockNum ui
 		"entryNum", entryNum,
 		"sequence", startSeq)
 
-	// Create a consumer that starts from the bookmark sequence
+	// Create an ephemeral consumer that starts from the bookmark sequence
 	consumerConfig := jetstream.ConsumerConfig{
-		Name:          fmt.Sprintf("BLOCK_LOOKUP_%d_%d", blockNum, time.Now().UnixNano()),
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		MaxDeliver:    1,
-		DeliverPolicy: jetstream.DeliverByStartSequencePolicy,
-		OptStartSeq:   startSeq,
+		AckPolicy:         jetstream.AckExplicitPolicy,
+		MaxDeliver:        1,
+		DeliverPolicy:     jetstream.DeliverByStartSequencePolicy,
+		OptStartSeq:       startSeq,
+		InactiveThreshold: 30 * time.Second, // Auto-cleanup after 30s of inactivity
 	}
 
 	// Create a temporary consumer for this query
@@ -1014,16 +1206,6 @@ func (c *NATSClient) handleBatchEndMessage(msg jetstream.Msg, state *blockSearch
 	return *state, nil, nil, false, nil
 }
 
-func receiveMsg(msg jetstream.Msg) ([]byte, error) {
-	// Acknowledge the message
-	if err := msg.Ack(); err != nil {
-		return nil, fmt.Errorf("failed to acknowledge message: %w", err)
-	}
-
-	// Return the message data
-	return msg.Data(), nil
-}
-
 // GetLatestL2Block implements DatastreamClient interface
 func (c *NATSClient) GetLatestL2Block() (*types.FullL2Block, error) {
 	c.mutex.RLock()
@@ -1033,15 +1215,33 @@ func (c *NATSClient) GetLatestL2Block() (*types.FullL2Block, error) {
 	}
 	c.mutex.RUnlock()
 
-	c.latestBlockMutex.RLock()
-	latestBlock := c.latestBlock
-	c.latestBlockMutex.RUnlock()
-
-	if latestBlock == nil {
-		return nil, nil // Return nil, nil when no blocks exist yet
+	blockNum, err := c.GetLatestL2BlockNumber()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest L2 block number: %w", err)
 	}
 
-	return latestBlock, nil
+	return c.GetL2BlockByNumber(blockNum)
+}
+
+func (c *NATSClient) GetLatestL2BlockNumber() (uint64, error) {
+
+	// Try to get the latest block bookmark from KV store
+	ctx, cancel := context.WithTimeout(c.ctx, c.timeout)
+	defer cancel()
+
+	// Get the latest block bookmark
+	bookmarkData, err := c.GetKeyValue(ctx, MetadataLatestBlockBookmark)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get latest block bookmark: %w", err)
+	}
+
+	// Unmarshal the bookmark to get the block number
+	bookmark := &datastream.BookMark{}
+	if err := proto.Unmarshal(bookmarkData, bookmark); err != nil {
+		return 0, fmt.Errorf("failed to unmarshal bookmark: %w", err)
+	}
+
+	return bookmark.Value, nil
 }
 
 // GetProgressAtomic implements DatastreamClient interface
@@ -1058,12 +1258,17 @@ func (c *NATSClient) Start() error {
 		return nil // Already started, nothing to do
 	}
 
+	// Create fresh context for this start cycle
+	// This ensures cancelled contexts from previous Stop() calls don't interfere
+	c.ctx, c.cancelFunc = context.WithCancel(c.parentCtx)
+	c.logger.Debug("Created fresh context for NATS client start")
+
 	// Connect to NATS
 	opts := []nats.Option{
 		nats.Name("erigon-datastream-client"),
 		nats.ReconnectWait(1 * time.Second),
 		nats.MaxReconnects(-1),
-		nats.Timeout(DefaultConnectTimeout),
+		nats.Timeout(c.timeout),
 	}
 
 	if c.useTLS {
@@ -1091,28 +1296,10 @@ func (c *NATSClient) Start() error {
 		return fmt.Errorf("stream not found: %w", err)
 	}
 
-	// Initialize KV store for bookmarks
-	kv, err := js.KeyValue(c.ctx, fmt.Sprintf("DATASTREAM_KV_%d", c.chainID))
-	if err != nil {
-		// If KV doesn't exist, create it
-		kvConfig := jetstream.KeyValueConfig{
-			Bucket:      fmt.Sprintf("DATASTREAM_KV_%d", c.chainID),
-			Description: "Datastream bookmarks and metadata",
-		}
-		kv, err = js.CreateKeyValue(c.ctx, kvConfig)
-		if err != nil {
-			nc.Close()
-			return fmt.Errorf("failed to create KV store: %w", err)
-		}
-	}
-	c.kv = kv
-
 	c.started = true
 	c.logger.Info("NATS datastream client started",
 		"url", c.natsURL,
-		"stream", c.streamName,
-		"chainID", c.chainID,
-		"forkID", c.forkID)
+		"stream", c.streamName)
 
 	return nil
 }
@@ -1128,7 +1315,6 @@ func (c *NATSClient) Stop() error {
 
 	// Stop reading first
 	c.stopReading.Store(true)
-	c.cancelFunc()
 
 	// Wait for read loop to complete
 	c.readWg.Wait()
@@ -1137,11 +1323,30 @@ func (c *NATSClient) Stop() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	if c.js != nil {
+		consumerName := fmt.Sprintf("DATASTREAM_CONSUMER_%s", c.clientID)
+		if err := c.js.DeleteConsumer(c.ctx, c.streamName, consumerName); err != nil {
+			c.logger.Warn("Failed to delete durable consumer (may not exist)",
+				"consumer", consumerName,
+				"error", err)
+		}
+	}
+
+	if c.cancelFunc != nil {
+		c.cancelFunc()
+	}
+
 	if c.nc != nil {
 		c.nc.Close()
 		c.nc = nil
 	}
 
+	c.kv = nil
+	c.js = nil
+
+	// Clear context and cancel function to force recreation on next Start()
+	c.ctx = nil
+	c.cancelFunc = nil
 	c.started = false
 	c.logger.Info("NATS datastream client stopped")
 
@@ -1150,42 +1355,68 @@ func (c *NATSClient) Stop() error {
 
 // HandleStart implements DatastreamClient interface
 func (c *NATSClient) HandleStart() error {
-	c.mutex.RLock()
-	if !c.started {
-		c.mutex.RUnlock()
-		return ErrNotStarted
-	}
-	c.mutex.RUnlock()
+	return c.Start()
+}
 
-	return nil
+// GetTotalEntries retrieves the total number of entries in the stream from the KV store
+func (c *NATSClient) GetTotalEntries() (uint64, error) {
+	if !c.started {
+		return 0, ErrNotStarted
+	}
+
+	// Create a context with timeout for this operation
+	ctx, cancel := context.WithTimeout(c.ctx, c.timeout)
+	defer cancel()
+
+	// Use the metadata key to get total entries
+	entry, err := c.GetKeyValue(ctx, MetadataTotalEntriesKey)
+	if err != nil {
+		// No fallback - KV store is the source of truth
+		if errors.Is(err, nats.ErrKeyNotFound) || errors.Is(err, jetstream.ErrKeyNotFound) {
+			return 0, fmt.Errorf("METADATA_TOTAL_ENTRIES not found in KV store - this indicates a critical issue with datastream state management")
+		}
+		return 0, fmt.Errorf("failed to get total entries from KV: %w", err)
+	}
+
+	// Validate data length before conversion
+	value := entry
+	if len(value) < 8 {
+		return 0, fmt.Errorf("corrupted METADATA_TOTAL_ENTRIES: expected 8 bytes, got %d bytes", len(value))
+	}
+
+	// Convert bytes to uint64
+	totalEntries := binary.BigEndian.Uint64(value)
+
+	c.logger.Debug("Retrieved total entries from KV store",
+		"totalEntries", totalEntries)
+
+	return totalEntries, nil
+}
+
+func (c *NATSClient) GetKeyValue(ctx context.Context, key string) ([]byte, error) {
+	kvctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	if c.natsManager == nil {
+		return nil, fmt.Errorf("NATS manager not initialized")
+	}
+
+	var err error
+	if c.metadata == nil {
+		c.metadata, err = NewMetadataManager(kvctx, c.natsManager, c.logger)
+		if err != nil {
+			c.logger.Error("Failed to initialize NATS metadata manager", "error", err)
+			return nil, fmt.Errorf("metadata manager initialization failed: %w", err)
+		}
+	}
+
+	return c.metadata.GetValue(kvctx, key)
 }
 
 // CreateNATSDatastreamClient is a factory function that can be used to create a DatastreamClient
 // implementation that reads from NATS JetStream.
-func CreateNATSDatastreamClient(ctx context.Context, natsURL string, useTLS bool, timeout time.Duration, latestForkID uint16, maxChannelSize uint64) types.DatastreamClient {
+func CreateNATSDatastreamClient(ctx context.Context, manager *Manager, natsURL string, useTLS bool, timeout time.Duration, maxChannelSize uint64) types.DatastreamClient {
 	logger := log.Root()
-	client := NewNATSClient(ctx, natsURL, useTLS, 0, uint64(latestForkID), logger)
-	client.maxEntryChanSize = maxChannelSize
+	client := NewNATSClient(ctx, natsURL, useTLS, manager, logger)
 	return client
-}
-
-// processBookmarkMessage processes a bookmark entry
-func (c *NATSClient) processBookmarkMessage(msg jetstream.Msg) (interface{}, error) {
-	// Parse the bookmark from the message data
-	bookmark, err := c.processBookmark(msg)
-	if err != nil {
-		return nil, err
-	}
-
-	metadata, err := msg.Metadata()
-	if err != nil {
-		c.logger.Debug("Failed to get message metadata", "error", err)
-	} else {
-		c.logger.Debug("Processed bookmark",
-			"type", bookmark.BookmarkType(),
-			"value", bookmark.BookMark.GetValue(),
-			"sequence", metadata.Sequence.Stream)
-	}
-
-	return bookmark, nil
 }

@@ -993,14 +993,14 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		)
 
 		natsConfig := natsstream.Config{
-			Host:             config.L2NatsHost,
-			Port:             config.L2NatsPort,
+			Host:             config.DataStreamNatsHost,
+			Port:             config.DataStreamNatsPort,
 			ServerName:       fmt.Sprintf("erigon-nats-chain-%d", config.NetworkID),
 			ClusterName:      fmt.Sprintf("erigon-cluster-chain-%d", config.NetworkID),
 			JetStreamEnabled: true,
 			StorageDir:       filepath.Join(stack.Config().Dirs.DataDir, "nats-data"),
-			Debug:            config.LogLevel <= log.LvlDebug,
-			ChainId:          config.NetworkID,
+			Debug:            config.LogLevel >= log.LvlDebug,
+			Trace:            config.LogLevel >= log.LvlTrace,
 		}
 
 		backend.natsManager = natsstream.NewManager(natsConfig, logger)
@@ -1037,7 +1037,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			// 0 we can just set the datastream progress to 0 also which will force a re-population of the stream
 			latestHeader := backend.streamServer.GetHeader()
 			if latestHeader.TotalEntries == 0 {
-				log.Info("[dataStream] setting the stream progress to 0")
+				log.Info("[dataStream] flagging for prewarm")
 				backend.preStartTasks.WarmUpDataStream = true
 			}
 		}
@@ -1266,7 +1266,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			if err != nil {
 				return nil, err
 			}
-			streamClient := initDataStreamClient(ctx, cfg.Zk, uint16(latestForkId))
+			streamClient := initDataStreamClient(ctx, cfg.Zk, backend.natsManager, uint16(latestForkId))
 
 			backend.syncStages = stages2.NewDefaultZkStages(
 				backend.sentryCtx,
@@ -1352,17 +1352,17 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Clien
 }
 
 // creates a datastream client with default parameters
-func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk, latestForkId uint16) dstypes.DatastreamClient {
-	if cfg.L2NatsHost != "" {
-		// Use NATS client if NATS host is configured
-		log.Info("Using NATS for datastream client", "host", cfg.L2NatsHost, "port", cfg.L2NatsPort)
+func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk, manager *natsstream.Manager, latestForkId uint16) dstypes.DatastreamClient {
+	if cfg.L2NatsUrl != "" {
+		// Use NATS client with L2NatsUrl
+		log.Info("Using NATS for datastream client", "url", cfg.L2NatsUrl)
 
 		return natsstream.CreateNATSDatastreamClient(
 			ctx,
-			fmt.Sprintf("%s:%d", cfg.L2NatsHost, cfg.L2NatsPort),
+			manager,
+			cfg.L2NatsUrl,
 			cfg.L2DataStreamerUseTLS,
 			cfg.L2DataStreamerTimeout,
-			latestForkId,
 			cfg.L2DataStreamerMaxEntryChan,
 		)
 	}

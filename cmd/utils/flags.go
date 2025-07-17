@@ -442,6 +442,11 @@ var (
 		Usage: "L2 datastreamer endpoint",
 		Value: "",
 	}
+	L2NatsURLFlag = cli.StringFlag{
+		Name:  "zkevm.l2-nats-url",
+		Usage: "L2 NATS datastreamer endpoint",
+		Value: "",
+	}
 	L2DataStreamerMaxEntryChanFlag = cli.Uint64Flag{
 		Name:  "zkevm.l2-datastreamer-max-entrychan",
 		Usage: "L2 datastreamer max entry channel size",
@@ -457,13 +462,13 @@ var (
 		Usage: "The time to wait for data to arrive from the stream before reporting an error (0s doesn't check)",
 		Value: "3s",
 	}
-	L2NatsHostFlag = cli.StringFlag{
-		Name:  "zkevm.l2-nats-host",
+	DataStreamNatsHostFlag = cli.StringFlag{
+		Name:  "zkevm.data-stream-nats-host",
 		Usage: "address to expose nats endpoint",
 		Value: "",
 	}
-	L2NatsPortFlag = cli.StringFlag{
-		Name:  "zkevm.l2-nats-port",
+	DataStreamNatsPortFlag = cli.StringFlag{
+		Name:  "zkevm.data-stream-nats-port",
 		Usage: "port to expose nats endpoint",
 		Value: "",
 	}

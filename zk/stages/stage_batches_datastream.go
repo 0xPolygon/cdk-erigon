@@ -26,14 +26,14 @@ func NewDatastreamClientRunner(dsClient types.DatastreamClient, logPrefix string
 }
 
 func (r *DatastreamClientRunner) StartRead(errorChan chan struct{}, diffBlock uint64) error {
+	if r.isReading.Load() {
+		return fmt.Errorf("tried starting datastream client runner thread while another is running")
+	}
+
 	if diffBlock > client.DefaultEntryChannelSize {
 		r.dsClient.RenewMaxEntryChannel()
 	} else {
 		r.dsClient.RenewEntryChannel()
-	}
-
-	if r.isReading.Load() {
-		return fmt.Errorf("tried starting datastream client runner thread while another is running")
 	}
 
 	r.stopRunner.Store(false)

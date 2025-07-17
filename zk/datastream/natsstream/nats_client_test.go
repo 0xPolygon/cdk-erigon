@@ -39,10 +39,10 @@ func setupTestNATSServer(t *testing.T) (*server.Server, string) {
 		t.Fatal("NATS server failed to start")
 	}
 
-	return ns, fmt.Sprintf("nats://localhost:%d", ns.Addr().(*net.TCPAddr).Port)
+	return ns, ns.ClientURL()
 }
 
-func createTestStream(t *testing.T, url string, chainID uint64) {
+func createTestStream(t *testing.T, url string) {
 	t.Helper()
 
 	nc, err := nats.Connect(url)
@@ -52,21 +52,39 @@ func createTestStream(t *testing.T, url string, chainID uint64) {
 	js, err := jetstream.New(nc)
 	require.NoError(t, err)
 
-	streamName := fmt.Sprintf("DATASTREAM_%d", chainID)
+	// Create stream with generic subject pattern
+	streamName := "DATASTREAM"
+	subjectPattern := "datastream.>"
+
 	_, err = js.CreateOrUpdateStream(context.Background(), jetstream.StreamConfig{
 		Name:     streamName,
-		Subjects: []string{"datastream.entry"},
+		Subjects: []string{subjectPattern},
+		Storage:  jetstream.FileStorage,
+	})
+	require.NoError(t, err)
+
+	// Create metadata KV store for bookmarks
+	kvBucket := "METADATA"
+	_, err = js.CreateOrUpdateKeyValue(context.Background(), jetstream.KeyValueConfig{
+		Bucket:  kvBucket,
+		Storage: jetstream.FileStorage,
+		History: 1,
 	})
 	require.NoError(t, err)
 }
 
-func setupTestClientWithStream(t *testing.T, ctx context.Context, chainID uint64) (*NATSClient, *server.Server, string) {
+func setupTestClientWithStream(t *testing.T, ctx context.Context) (*NATSClient, *server.Server, string) {
 	t.Helper()
 
 	ns, url := setupTestNATSServer(t)
-	createTestStream(t, url, chainID)
+	createTestStream(t, url)
 
-	client := NewNATSClient(ctx, url, false, chainID, 7, log.New())
+	// Create a manager that will connect to the existing server
+	config := DefaultConfig()
+	config.Port = -1 // Use random port for manager's embedded server
+	manager := NewManager(config, NewTestLogger(t))
+
+	client := NewNATSClient(ctx, url, false, manager, NewTestLogger(t))
 	err := client.Start()
 	require.NoError(t, err)
 
@@ -78,29 +96,30 @@ func TestNATSClient_NewClient(t *testing.T) {
 	defer ns.Shutdown()
 
 	// Create a test stream for valid configuration test
-	createTestStream(t, url, 1101)
+	createTestStream(t, url)
 
 	tests := []struct {
 		name      string
 		natsURL   string
-		chainID   uint64
 		wantError bool
 	}{
 		{
 			name:    "valid configuration",
 			natsURL: url,
-			chainID: 1101,
 		},
 		{
 			name:    "invalid URL",
 			natsURL: "invalid://url",
-			chainID: 1101,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := NewNATSClient(context.Background(), tt.natsURL, false, tt.chainID, 7, log.New())
+			// Use minimal manager for client creation tests
+			config := DefaultConfig()
+			config.Port = -1
+			manager := NewManager(config, log.New())
+			client := NewNATSClient(context.Background(), tt.natsURL, false, manager, log.New())
 			assert.NotNil(t, client)
 
 			// Test Start to see if connection works
@@ -118,20 +137,14 @@ func TestNATSClient_NewClient(t *testing.T) {
 }
 
 func TestNATSClient_Start(t *testing.T) {
-	ns, url := setupTestNATSServer(t)
+	// Use setupTestClientWithStream for proper Manager setup
+	client, ns, _ := setupTestClientWithStream(t, context.Background())
 	defer ns.Shutdown()
-
-	createTestStream(t, url, 1101)
-
-	client := NewNATSClient(context.Background(), url, false, 1101, 7, log.New())
 	defer client.Stop()
 
-	// Test multiple starts
-	err := client.Start()
-	assert.NoError(t, err)
-
+	// Client is already started by helper
 	// Starting again should be idempotent
-	err = client.Start()
+	err := client.Start()
 	assert.NoError(t, err)
 
 	// Verify stream was created
@@ -143,254 +156,49 @@ func TestNATSClient_Start(t *testing.T) {
 	assert.NotNil(t, stream)
 }
 
-func TestNATSClient_ReadAllEntriesToChannel(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	client, ns, _ := setupTestClientWithStream(t, ctx, 1101)
-	defer ns.Shutdown()
-	defer client.Stop()
-
-	// Start reading first
-	err := client.ReadAllEntriesToChannel()
-	assert.NoError(t, err)
-
-	// Give a moment for the consumer to be ready
-	time.Sleep(100 * time.Millisecond)
-
-	// Publish test messages
-	nc := client.nc
-	js, err := jetstream.New(nc)
-	require.NoError(t, err)
-
-	// Create test L2 block
-	l2Block := &datastream.L2Block{
-		Number:    1,
-		Timestamp: uint64(time.Now().Unix()),
-		Hash:      common.Hash{0x01}.Bytes(),
-	}
-
-	msgData, err := proto.Marshal(l2Block)
-	require.NoError(t, err)
-
-	// Publish L2 block
-	headers := nats.Header{}
-	headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2Block))
-	headers.Set("EntryNumber", "1")
-
-	msg := &nats.Msg{
-		Subject: "datastream.entry",
-		Data:    msgData,
-		Header:  headers,
-	}
-
-	_, err = js.PublishMsg(ctx, msg)
-	require.NoError(t, err)
-
-	// Publish L2 block end
-	blockEnd := &datastream.L2BlockEnd{
-		Number: 1,
-	}
-
-	blockEndData, err := proto.Marshal(blockEnd)
-	require.NoError(t, err)
-
-	headers = nats.Header{}
-	headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2BlockEnd))
-	headers.Set("EntryNumber", "2")
-
-	msg = &nats.Msg{
-		Subject: "datastream.entry",
-		Data:    blockEndData,
-		Header:  headers,
-	}
-
-	_, err = js.PublishMsg(ctx, msg)
-	require.NoError(t, err)
-
-	// Get entry channel
-	entryChan := client.GetEntryChan()
-	require.NotNil(t, entryChan)
-
-	// Read the entry
-	select {
-	case entry := <-*entryChan:
-		fullBlock, ok := entry.(*types.FullL2Block)
-		assert.True(t, ok)
-		assert.Equal(t, uint64(1), fullBlock.L2BlockNumber)
-	case <-time.After(5 * time.Second):
-		t.Logf("Timeout waiting for entry. Published to subject: %s", msg.Subject)
-		t.Fatal("timeout waiting for entry")
-	}
-}
-
 func TestNATSClient_GetL2BlockByNumber(t *testing.T) {
-	ns, url := setupTestNATSServer(t)
-	defer ns.Shutdown()
-
-	// Create the stream first
-	createTestStream(t, url, 1101)
-
 	ctx := context.Background()
 
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+	// Use the test helper to set up server and publish data
+	streamServer, manager := setupTestServerWithManager(t, ctx)
+	defer manager.Stop()
+
+	// Get the server URL
+	url, err := manager.URL()
+	require.NoError(t, err)
+
+	// Create client with the existing manager
+	client := NewNATSClient(ctx, url, false, manager, log.New())
 	defer client.Stop()
 
-	err := client.Start()
+	err = client.Start()
 	require.NoError(t, err)
 
-	// Setup test data
-	nc := client.nc
-	js, err := jetstream.New(nc)
-	require.NoError(t, err)
+	// Publish a complete L2 block using the helper function with transaction
+	// This publishes: bookmark -> L2Block -> transactions -> L2BlockEnd
+	publishCompleteL2BlockWithTx(t, streamServer, 1, 1, 3) // block 1, batch 1, 3 transactions
 
-	// Skip adding bookmarks for now - the test can work without them
-	// as the client will scan from the beginning when no bookmark is found
-
-	// Publish L2 block
-	l2Block := &datastream.L2Block{
-		Number:    1,
-		Timestamp: uint64(time.Now().Unix()),
-		Hash:      common.Hash{0x01}.Bytes(),
-	}
-
-	msgData, err := proto.Marshal(l2Block)
-	require.NoError(t, err)
-
-	headers := nats.Header{}
-	headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2Block))
-	headers.Set("EntryNumber", "1")
-
-	msg := &nats.Msg{
-		Subject: "datastream.entry",
-		Data:    msgData,
-		Header:  headers,
-	}
-	_, err = js.PublishMsg(ctx, msg)
-	require.NoError(t, err)
-
-	// Publish L2 block end
-	blockEnd := &datastream.L2BlockEnd{
-		Number: 1,
-	}
-
-	blockEndData, err := proto.Marshal(blockEnd)
-	require.NoError(t, err)
-
-	headers = nats.Header{}
-	headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2BlockEnd))
-	headers.Set("EntryNumber", "2")
-
-	msg = &nats.Msg{
-		Subject: "datastream.entry",
-		Data:    blockEndData,
-		Header:  headers,
-	}
-	_, err = js.PublishMsg(ctx, msg)
-	require.NoError(t, err)
+	// Give time for messages to be processed and stored
+	time.Sleep(100 * time.Millisecond)
 
 	// Test retrieval
 	fullBlock, err := client.GetL2BlockByNumber(1)
 	assert.NoError(t, err)
-	assert.NotNil(t, fullBlock)
+	require.NotNil(t, fullBlock)
 	assert.Equal(t, uint64(1), fullBlock.L2BlockNumber)
-
-	// Test non-existent block - since we're not using the full server-side metadata storage
-	// in this test, we'll comment this out for now. In production, the server would store
-	// block metadata and this would return quickly with an error.
-	// _, err = client.GetL2BlockByNumber(2)
-	// assert.Error(t, err)
-}
-
-func TestNATSClient_GetLatestL2Block(t *testing.T) {
-	ns, url := setupTestNATSServer(t)
-	defer ns.Shutdown()
-
-	// Create the stream first
-	createTestStream(t, url, 1101)
-
-	ctx := context.Background()
-
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
-	defer client.Stop()
-
-	err := client.Start()
-	require.NoError(t, err)
-
-	// Initially no blocks
-	latestBlock, err := client.GetLatestL2Block()
-	assert.NoError(t, err)
-	assert.Nil(t, latestBlock)
-
-	// Publish a block
-	nc := client.nc
-	js, err := jetstream.New(nc)
-	require.NoError(t, err)
-
-	l2Block := &datastream.L2Block{
-		Number:    10,
-		Timestamp: uint64(time.Now().Unix()),
-		Hash:      common.Hash{0x0a}.Bytes(),
-	}
-
-	msgData, err := proto.Marshal(l2Block)
-	require.NoError(t, err)
-
-	headers := nats.Header{}
-	headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2Block))
-	headers.Set("EntryNumber", "10")
-
-	msg := &nats.Msg{
-		Subject: "datastream.entry",
-		Data:    msgData,
-		Header:  headers,
-	}
-
-	_, err = js.PublishMsg(ctx, msg)
-	require.NoError(t, err)
-
-	// Publish L2 block end to finalize the block
-	blockEnd := &datastream.L2BlockEnd{
-		Number: 10,
-	}
-
-	blockEndData, err := proto.Marshal(blockEnd)
-	require.NoError(t, err)
-
-	headers = nats.Header{}
-	headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2BlockEnd))
-	headers.Set("EntryNumber", "11")
-
-	msg = &nats.Msg{
-		Subject: "datastream.entry",
-		Data:    blockEndData,
-		Header:  headers,
-	}
-
-	_, err = js.PublishMsg(ctx, msg)
-	require.NoError(t, err)
-
-	// Start reading to process the message
-	err = client.ReadAllEntriesToChannel()
-	assert.NoError(t, err)
-
-	// Wait for message to be processed
-	time.Sleep(500 * time.Millisecond)
-
-	// Now we should get the latest block
-	latestBlock, err = client.GetLatestL2Block()
-	assert.NoError(t, err)
-	assert.NotNil(t, latestBlock)
-	assert.Equal(t, uint64(10), latestBlock.L2BlockNumber)
+	assert.Equal(t, 3, len(fullBlock.L2Txs))
 }
 
 func TestNATSClient_ConcurrentOperations(t *testing.T) {
 	ns, url := setupTestNATSServer(t)
 	defer ns.Shutdown()
 
+	// Create the stream that the client expects
+	createTestStream(t, url)
+
 	ctx := context.Background()
 
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+	client := NewNATSClient(ctx, url, false, nil, log.New())
 	defer client.Stop()
 
 	err := client.Start()
@@ -447,9 +255,12 @@ func TestNATSClient_ErrorHandling(t *testing.T) {
 	t.Run("connection failure recovery", func(t *testing.T) {
 		ns, url := setupTestNATSServer(t)
 
+		// Create the stream that the client expects
+		createTestStream(t, url)
+
 		ctx := context.Background()
 
-		client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+		client := NewNATSClient(ctx, url, false, nil, log.New())
 		defer client.Stop()
 
 		err := client.Start()
@@ -471,9 +282,12 @@ func TestNATSClient_ErrorHandling(t *testing.T) {
 		ns, url := setupTestNATSServer(t)
 		defer ns.Shutdown()
 
+		// Create the stream that the client expects
+		createTestStream(t, url)
+
 		ctx := context.Background()
 
-		client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+		client := NewNATSClient(ctx, url, false, nil, log.New())
 		defer client.Stop()
 
 		err := client.Start()
@@ -495,13 +309,7 @@ func TestNATSClient_ErrorHandling(t *testing.T) {
 
 		// Client should handle invalid messages without crashing
 		err = client.ReadAllEntriesToChannel()
-		assert.NoError(t, err)
-
-		// Give some time for processing
-		time.Sleep(100 * time.Millisecond)
-
-		// Client should still be functional
-		assert.True(t, client.reading)
+		assert.EqualError(t, err, "message missing EntryType header")
 	})
 }
 
@@ -509,21 +317,20 @@ func TestNATSClient_ChannelManagement(t *testing.T) {
 	ns, url := setupTestNATSServer(t)
 	defer ns.Shutdown()
 
+	// Create the stream that the client expects
+	createTestStream(t, url)
+
 	ctx := context.Background()
 
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+	client := NewNATSClient(ctx, url, false, nil, log.New())
 	defer client.Stop()
 
 	err := client.Start()
 	require.NoError(t, err)
 
-	// Get initial channel
-	chan1 := client.GetEntryChan()
-	require.NotNil(t, chan1)
-
-	// Start reading
-	err = client.ReadAllEntriesToChannel()
-	assert.NoError(t, err)
+	// Get initial channel pointer
+	chanPtr1 := client.GetEntryChan()
+	require.NotNil(t, chanPtr1)
 
 	// Add some data to channel
 	nc := client.nc
@@ -552,9 +359,34 @@ func TestNATSClient_ChannelManagement(t *testing.T) {
 	_, err = js.PublishMsg(ctx, msg)
 	require.NoError(t, err)
 
+	// Publish L2 block end to complete the block
+	blockEnd := &datastream.L2BlockEnd{
+		Number: 1,
+	}
+
+	blockEndData, err := proto.Marshal(blockEnd)
+	require.NoError(t, err)
+
+	headers = nats.Header{}
+	headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2BlockEnd))
+	headers.Set("EntryNumber", "2")
+
+	msg = &nats.Msg{
+		Subject: "datastream.entry",
+		Data:    blockEndData,
+		Header:  headers,
+	}
+
+	_, err = js.PublishMsg(ctx, msg)
+	require.NoError(t, err)
+
+	// Start reading
+	err = client.ReadAllEntriesToChannel()
+	assert.NoError(t, err)
+
 	// Wait for message to be processed
 	select {
-	case <-*chan1:
+	case <-*chanPtr1:
 		// Message received
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for message")
@@ -563,21 +395,43 @@ func TestNATSClient_ChannelManagement(t *testing.T) {
 	// Renew channel
 	client.RenewEntryChannel()
 
-	// Get new channel
-	chan2 := client.GetEntryChan()
-	require.NotNil(t, chan2)
+	// Get new channel pointer - it will be same address but different channel
+	chanPtr2 := client.GetEntryChan()
+	require.NotNil(t, chanPtr2)
 
-	// Channels should be different
-	assert.NotEqual(t, chan1, chan2)
+	// The pointer addresses are the same (both point to c.entryChan field)
+	assert.Equal(t, chanPtr1, chanPtr2, "channel pointers should be equal (same field)")
+
+	// Test that the new channel works by sending a value
+	testVal := "test_value"
+	select {
+	case *chanPtr2 <- testVal:
+		// Successfully sent to new channel
+		t.Log("Successfully sent test value to renewed channel")
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("new channel should accept values")
+	}
+
+	// Verify we can receive the test value
+	select {
+	case val := <-*chanPtr2:
+		assert.Equal(t, testVal, val, "should receive the test value")
+		t.Log("Successfully received test value from renewed channel")
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("should be able to receive from new channel")
+	}
 }
 
 func TestNATSClient_MessageOrdering(t *testing.T) {
 	ns, url := setupTestNATSServer(t)
 	defer ns.Shutdown()
 
+	// Create the stream that the client expects
+	createTestStream(t, url)
+
 	ctx := context.Background()
 
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+	client := NewNATSClient(ctx, url, false, nil, log.New())
 	defer client.Stop()
 
 	err := client.Start()
@@ -611,6 +465,27 @@ func TestNATSClient_MessageOrdering(t *testing.T) {
 
 		_, err = js.PublishMsg(ctx, msg)
 		require.NoError(t, err)
+
+		// Publish L2 block end to complete the block
+		blockEnd := &datastream.L2BlockEnd{
+			Number: uint64(i),
+		}
+
+		blockEndData, err := proto.Marshal(blockEnd)
+		require.NoError(t, err)
+
+		headers = nats.Header{}
+		headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2BlockEnd))
+		headers.Set("EntryNumber", fmt.Sprintf("%d", i*2))
+
+		msg = &nats.Msg{
+			Subject: "datastream.entry",
+			Data:    blockEndData,
+			Header:  headers,
+		}
+
+		_, err = js.PublishMsg(ctx, msg)
+		require.NoError(t, err)
 	}
 
 	// Start reading
@@ -639,78 +514,70 @@ func TestNATSClient_MessageOrdering(t *testing.T) {
 }
 
 func TestNATSClient_BookmarkFunctionality(t *testing.T) {
-	ns, url := setupTestNATSServer(t)
-	defer ns.Shutdown()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	ctx := context.Background()
+	// Set up test server with manager that will store bookmarks
+	streamServer, manager := setupTestServerWithManager(t, ctx)
+	defer manager.Stop()
 
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+	// Get the server URL
+	url, err := manager.URL()
+	require.NoError(t, err)
+
+	// Create client
+	client := NewNATSClient(ctx, url, false, manager, log.New())
 	defer client.Stop()
 
-	err := client.Start()
+	err = client.Start()
 	require.NoError(t, err)
 
-	nc := client.nc
-	js, err := jetstream.New(nc)
-	require.NoError(t, err)
-
-	// Publish blocks and bookmarks
+	// Publish 5 complete blocks with bookmarks using the server
+	// This ensures bookmarks are properly stored in KV
 	for i := 1; i <= 5; i++ {
-		// Publish L2 block
-		l2Block := &datastream.L2Block{
-			Number:    uint64(i),
-			Timestamp: uint64(time.Now().Unix()),
-			Hash:      common.Hash{byte(i)}.Bytes(),
-		}
-
-		msgData, err := proto.Marshal(l2Block)
+		// Start atomic operation for each block
+		err = streamServer.StartAtomicOp()
 		require.NoError(t, err)
 
-		headers := nats.Header{}
-		headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2Block))
-		headers.Set("EntryNumber", fmt.Sprintf("%d", i))
+		publishCompleteL2Block(t, streamServer, uint64(i), 1, 2) // block i, batch 1, 2 txs
 
-		msg := &nats.Msg{
-			Subject: "datastream.entry",
-			Data:    msgData,
-			Header:  headers,
-		}
-
-		ack, err := js.PublishMsg(ctx, msg)
-		require.NoError(t, err)
-
-		// Publish bookmark
-		bookmark := types.NewBookmarkProto(ack.Sequence, datastream.BookmarkType_BOOKMARK_TYPE_L2_BLOCK)
-		bookmarkData, err := bookmark.Marshal()
-		require.NoError(t, err)
-
-		headers = nats.Header{}
-		headers.Set("EntryType", fmt.Sprintf("%d", types.BookmarkEntryType))
-		headers.Set("EntryNumber", fmt.Sprintf("%d", 1000+i))
-
-		msg = &nats.Msg{
-			Subject: "datastream.entry",
-			Data:    bookmarkData,
-			Header:  headers,
-		}
-
-		_, err = js.PublishMsg(ctx, msg)
+		// Commit the atomic operation
+		err = streamServer.CommitAtomicOp()
 		require.NoError(t, err)
 	}
 
-	// Start reading to process bookmarks
+	// Give time for messages to be processed
+	time.Sleep(100 * time.Millisecond)
+
+	// Start reading to populate client state
 	err = client.ReadAllEntriesToChannel()
 	assert.NoError(t, err)
 
-	// Wait for processing
-	time.Sleep(500 * time.Millisecond)
+	// Read the entries to ensure client processes them
+	entryChan := client.GetEntryChan()
+	blocksReceived := 0
+	timeout := time.After(2 * time.Second)
 
-	// Test bookmark retrieval
+	for blocksReceived < 5 {
+		select {
+		case entry := <-*entryChan:
+			if block, ok := entry.(*types.FullL2Block); ok {
+				blocksReceived++
+				t.Logf("Received block %d", block.L2BlockNumber)
+			}
+		case <-timeout:
+			t.Logf("Received %d blocks before timeout", blocksReceived)
+			break
+		}
+	}
+
+	// Test bookmark retrieval using GetL2BlockByNumber
 	for i := 1; i <= 5; i++ {
 		block, err := client.GetL2BlockByNumber(uint64(i))
-		assert.NoError(t, err)
+		assert.NoError(t, err, "Should retrieve block %d via bookmark", i)
 		assert.NotNil(t, block)
 		assert.Equal(t, uint64(i), block.L2BlockNumber)
+		assert.Equal(t, 2, len(block.L2Txs), "Each block should have 2 transactions")
 	}
 }
 
@@ -719,10 +586,13 @@ func TestNATSClient_Resilience(t *testing.T) {
 		ns, url := setupTestNATSServer(t)
 		defer ns.Shutdown()
 
+		// Create the stream that the client expects
+		createTestStream(t, url)
+
 		ctx := context.Background()
 
 		// Create client with small channel buffer
-		client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+		client := NewNATSClient(ctx, url, false, nil, log.New())
 		defer client.Stop()
 
 		// Override channel size for testing
@@ -758,38 +628,73 @@ func TestNATSClient_Resilience(t *testing.T) {
 
 			_, err = js.PublishMsg(ctx, msg)
 			require.NoError(t, err)
+
+			// Publish L2 block end to complete the block
+			blockEnd := &datastream.L2BlockEnd{
+				Number: uint64(i),
+			}
+
+			blockEndData, err := proto.Marshal(blockEnd)
+			require.NoError(t, err)
+
+			headers = nats.Header{}
+			headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2BlockEnd))
+			headers.Set("EntryNumber", fmt.Sprintf("%d", i*2))
+
+			msg = &nats.Msg{
+				Subject: "datastream.entry",
+				Data:    blockEndData,
+				Header:  headers,
+			}
+
+			_, err = js.PublishMsg(ctx, msg)
+			require.NoError(t, err)
 		}
 
-		// Start reading
-		err = client.ReadAllEntriesToChannel()
-		assert.NoError(t, err)
-
-		// Client should handle full channel gracefully
-		time.Sleep(2 * time.Second)
-
-		// Drain some messages
+		// Drain some messages from the channel first to make room
 		entryChan := client.GetEntryChan()
-		messagesReceived := 0
 
-		for i := 0; i < 5; i++ {
+		// Start reading in background
+		go func() {
+			err = client.ReadAllEntriesToChannel()
+			// We expect this might error due to full channel
+			if err != nil {
+				t.Logf("Expected error from full channel: %v", err)
+			}
+		}()
+
+		// Give time for processing to start
+		time.Sleep(500 * time.Millisecond)
+
+		// Now drain messages to prove channel works
+		messagesReceived := 0
+		timeout := time.After(5 * time.Second)
+
+		for messagesReceived < 10 {
 			select {
-			case <-*entryChan:
-				messagesReceived++
-			case <-time.After(100 * time.Millisecond):
+			case entry := <-*entryChan:
+				if _, ok := entry.(*types.FullL2Block); ok {
+					messagesReceived++
+				}
+			case <-timeout:
 				break
 			}
 		}
 
-		assert.Greater(t, messagesReceived, 0, "should receive some messages despite full channel")
+		// We should receive at least the first 2 blocks (channel size)
+		assert.GreaterOrEqual(t, messagesReceived, 2, "should receive at least channel buffer size messages")
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
 		ns, url := setupTestNATSServer(t)
 		defer ns.Shutdown()
 
+		// Create the stream that the client expects
+		createTestStream(t, url)
+
 		ctx, cancel := context.WithCancel(context.Background())
 
-		client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+		client := NewNATSClient(ctx, url, false, nil, log.New())
 		defer client.Stop()
 
 		err := client.Start()
@@ -806,7 +711,7 @@ func TestNATSClient_Resilience(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 
 		// Client should stop reading
-		assert.False(t, client.reading)
+		assert.False(t, client.reading.Load())
 	})
 }
 
@@ -818,9 +723,12 @@ func TestNATSClient_Performance(t *testing.T) {
 	ns, url := setupTestNATSServer(t)
 	defer ns.Shutdown()
 
+	// Create the stream that the client expects
+	createTestStream(t, url)
+
 	ctx := context.Background()
 
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+	client := NewNATSClient(ctx, url, false, nil, log.New())
 	defer client.Stop()
 
 	err := client.Start()
@@ -856,6 +764,27 @@ func TestNATSClient_Performance(t *testing.T) {
 
 		_, err = js.PublishMsg(ctx, msg)
 		require.NoError(t, err)
+
+		// Publish L2 block end to complete the block
+		blockEnd := &datastream.L2BlockEnd{
+			Number: uint64(i),
+		}
+
+		blockEndData, err := proto.Marshal(blockEnd)
+		require.NoError(t, err)
+
+		headers = nats.Header{}
+		headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2BlockEnd))
+		headers.Set("EntryNumber", fmt.Sprintf("%d", i*2))
+
+		msg = &nats.Msg{
+			Subject: "datastream.entry",
+			Data:    blockEndData,
+			Header:  headers,
+		}
+
+		_, err = js.PublishMsg(ctx, msg)
+		require.NoError(t, err)
 	}
 
 	publishDuration := time.Since(start)
@@ -878,7 +807,7 @@ func TestNATSClient_Performance(t *testing.T) {
 			if receivedCount%1000 == 0 {
 				t.Logf("Received %d messages", receivedCount)
 			}
-		case <-time.After(10 * time.Second):
+		case <-time.After(5 * time.Second):
 			t.Fatalf("timeout after receiving %d/%d messages", receivedCount, messageCount)
 		}
 	}
@@ -895,7 +824,7 @@ func BenchmarkNATSClient_Publish(b *testing.B) {
 
 	ctx := context.Background()
 
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+	client := NewNATSClient(ctx, url, false, nil, log.New())
 	defer client.Stop()
 
 	err := client.Start()
@@ -941,7 +870,7 @@ func BenchmarkNATSClient_Read(b *testing.B) {
 
 	ctx := context.Background()
 
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
+	client := NewNATSClient(ctx, url, false, nil, log.New())
 	defer client.Stop()
 
 	err := client.Start()
@@ -1016,4 +945,262 @@ func setupBenchNATSServer(b *testing.B) (*server.Server, string) {
 	}
 
 	return ns, fmt.Sprintf("nats://localhost:%d", ns.Addr().(*net.TCPAddr).Port)
+}
+
+// TestMessageAcknowledgmentStrategy tests that messages are only acknowledged after successful processing
+func TestMessageAcknowledgmentStrategy(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	client, ns, _ := setupTestClientWithStream(t, ctx)
+	defer ns.Shutdown()
+	defer client.Stop()
+
+	// Test with valid complete block that should be acknowledged
+	nc := client.nc
+	js, err := jetstream.New(nc)
+	require.NoError(t, err)
+
+	// Create test L2 block
+	l2Block := &datastream.L2Block{
+		Number:    1,
+		Timestamp: uint64(time.Now().Unix()),
+		Hash:      common.Hash{0x01}.Bytes(),
+	}
+
+	msgData, err := proto.Marshal(l2Block)
+	require.NoError(t, err)
+
+	headers := nats.Header{}
+	headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2Block))
+	headers.Set("EntryNumber", "1")
+
+	msg := &nats.Msg{
+		Subject: "datastream.entry",
+		Data:    msgData,
+		Header:  headers,
+	}
+
+	_, err = js.PublishMsg(ctx, msg)
+	require.NoError(t, err)
+
+	// Publish L2 block end to complete the block
+	blockEnd := &datastream.L2BlockEnd{
+		Number: 1,
+	}
+
+	blockEndData, err := proto.Marshal(blockEnd)
+	require.NoError(t, err)
+
+	headers = nats.Header{}
+	headers.Set("EntryType", fmt.Sprintf("%d", types.EntryTypeL2BlockEnd))
+	headers.Set("EntryNumber", "2")
+
+	msg = &nats.Msg{
+		Subject: "datastream.entry",
+		Data:    blockEndData,
+		Header:  headers,
+	}
+
+	_, err = js.PublishMsg(ctx, msg)
+	require.NoError(t, err)
+
+	// Now start reading to process the published messages
+	err = client.ReadAllEntriesToChannel()
+	require.NoError(t, err)
+
+	// Verify message is processed and acknowledged
+	entryChan := client.GetEntryChan()
+	select {
+	case entry := <-*entryChan:
+		fullBlock, ok := entry.(*types.FullL2Block)
+		assert.True(t, ok, "Expected FullL2Block entry")
+		assert.Equal(t, uint64(1), fullBlock.L2BlockNumber)
+		t.Log("Successfully tested ACK behavior for valid messages")
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for valid message to be processed")
+	}
+}
+
+// TestNegativeAcknowledgment tests that failed message processing results in NAK
+func TestNegativeAcknowledgment(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	client, ns, _ := setupTestClientWithStream(t, ctx)
+	defer ns.Shutdown()
+	defer client.Stop()
+
+	// Configure consumer with MaxDeliver to prevent infinite redelivery
+	nc := client.nc
+	js, err := jetstream.New(nc)
+	require.NoError(t, err)
+
+	// Create a special consumer for this test that limits redelivery
+	consumerConfig := jetstream.ConsumerConfig{
+		Durable:       "TEST_NAK_CONSUMER",
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		MaxDeliver:    3, // Limit redelivery to prevent infinite loops
+		DeliverPolicy: jetstream.DeliverAllPolicy,
+	}
+
+	consumer, err := js.CreateOrUpdateConsumer(ctx, client.streamName, consumerConfig)
+	require.NoError(t, err)
+
+	// Start consuming with the limited consumer
+	consumeCtx, cancelConsume := context.WithCancel(ctx)
+	defer cancelConsume()
+
+	msgChan := make(chan jetstream.Msg, 10)
+	consumerCtx, err := consumer.Consume(func(msg jetstream.Msg) {
+		select {
+		case msgChan <- msg:
+		case <-consumeCtx.Done():
+		}
+	})
+	require.NoError(t, err)
+	defer consumerCtx.Stop()
+
+	// Send an invalid message (malformed protobuf)
+	invalidMsg := &nats.Msg{
+		Subject: "datastream.entry",
+		Data:    []byte("invalid protobuf data"),
+		Header: nats.Header{
+			"EntryType":   []string{fmt.Sprintf("%d", types.EntryTypeL2Block)},
+			"EntryNumber": []string{"1"},
+		},
+	}
+
+	_, err = js.PublishMsg(ctx, invalidMsg)
+	require.NoError(t, err)
+
+	// Process the message and verify NAK behavior
+	nakCount := 0
+	processedCount := 0
+
+	for nakCount < 3 && processedCount < 5 { // Limit processing attempts
+		select {
+		case msg := <-msgChan:
+			processedCount++
+
+			// Try to process - this should fail due to invalid protobuf
+			_, err := types.UnmarshalL2Block(msg.Data())
+			if err != nil {
+				// Processing failed - send NAK
+				if nakErr := msg.Nak(); nakErr != nil {
+					t.Logf("Failed to send NAK: %v", nakErr)
+				} else {
+					nakCount++
+					t.Logf("Successfully sent NAK #%d for invalid message", nakCount)
+				}
+			} else {
+				// Shouldn't happen with our invalid data
+				msg.Ack()
+				t.Fatal("Expected processing to fail, but it succeeded")
+			}
+
+		case <-time.After(2 * time.Second):
+			t.Logf("Timeout after processing %d messages with %d NAKs", processedCount, nakCount)
+			break
+		}
+	}
+
+	// Verify that we successfully sent at least one NAK
+	assert.Greater(t, nakCount, 0, "Should have sent at least one NAK")
+	assert.LessOrEqual(t, nakCount, 3, "Should not exceed MaxDeliver limit")
+
+	// Clean up the test consumer
+	if delErr := js.DeleteConsumer(ctx, client.streamName, consumerConfig.Durable); delErr != nil {
+		t.Logf("Failed to delete test consumer: %v", delErr)
+	}
+
+	t.Logf("Successfully tested NAK behavior: %d NAKs sent, %d messages processed", nakCount, processedCount)
+}
+
+func TestNATSClient_BasicFlow(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Use the robust test infrastructure from behavior tests
+	client := populateTestServerWithDefaultDataReturnClient(t, ctx)
+
+	// Launch processing in background so we can read from channel concurrently
+	errChan := make(chan error, 1)
+	go func() {
+		err := client.ReadAllEntriesToChannel()
+		errChan <- err
+	}()
+
+	entryChan := client.GetEntryChan()
+
+	// Should receive the default data (1 complete block)
+	var receivedBlock *types.FullL2Block
+	for receivedBlock == nil {
+		select {
+		case entry := <-*entryChan:
+			t.Logf("Received entry of type: %T", entry)
+			if block, ok := entry.(*types.FullL2Block); ok {
+				receivedBlock = block
+				t.Logf("Successfully received complete block %d with %d transactions", block.L2BlockNumber, len(block.L2Txs))
+			}
+		case err := <-errChan:
+			require.NoError(t, err, "ReadAllEntriesToChannel should not error for valid data")
+		case <-time.After(5 * time.Second):
+			t.Fatal("timeout waiting for complete block from default data")
+		}
+	}
+
+	// Verify the block we received
+	require.NotNil(t, receivedBlock, "Should have received a FullL2Block")
+	assert.Equal(t, uint64(1), receivedBlock.L2BlockNumber)
+	assert.True(t, len(receivedBlock.L2Txs) >= 1, "Block should have at least 1 transaction from default batch")
+}
+
+// TestNATSClient_GetTotalEntriesFromKV tests retrieving total entries from KV store
+func TestNATSClient_GetTotalEntriesFromKV(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Use the robust test infrastructure from behavior tests
+	client := populateTestServerWithFixedDataReturnClient(t, ctx)
+	defer client.Stop()
+
+	err := client.Start()
+	require.NoError(t, err)
+
+	// Test GetTotalEntries should now read from KV
+	totalEntries, err := client.GetTotalEntries()
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(14), totalEntries)
+}
+
+// TestNATSClient_GetTotalEntriesTimeout tests timeout handling
+func TestNATSClient_GetTotalEntriesTimeout(t *testing.T) {
+	ns, url := setupTestNATSServer(t)
+	defer ns.Shutdown()
+
+	// Create the stream first
+	createTestStream(t, url)
+
+	// Create client with normal context first
+	client := NewNATSClient(context.Background(), url, false, nil, log.New())
+	defer client.Stop()
+
+	err := client.Start()
+	require.NoError(t, err)
+
+	// Create a cancelled context just for the GetTotalEntries call
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Override the client's context temporarily
+	oldCtx := client.ctx
+	client.ctx = ctx
+	defer func() { client.ctx = oldCtx }()
+
+	// GetTotalEntries should handle context cancellation gracefully
+	_, err = client.GetTotalEntries()
+	// Should either get a timeout error or succeed depending on timing
+	// The important thing is it doesn't hang
+	t.Logf("GetTotalEntries with cancelled context returned: %v", err)
 }

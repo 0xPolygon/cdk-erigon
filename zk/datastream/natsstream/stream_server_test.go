@@ -2,9 +2,9 @@ package natsstream
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -33,9 +33,8 @@ func TestNATSStreamServer_GetHeader(t *testing.T) {
 	logger := log.New()
 
 	config := DefaultConfig()
-	config.Port = -1 // Use random port
+	config.Port = 0 // Let OS assign port
 	config.StorageDir = filepath.Join(tempDir, "nats-data")
-	config.ChainId = 12345
 
 	// Create NATS manager
 	manager := NewManager(config, logger)
@@ -44,46 +43,93 @@ func TestNATSStreamServer_GetHeader(t *testing.T) {
 	defer manager.Stop()
 
 	// Initialize streams
-	err = manager.InitStreams()
+	err = manager.InitStreams(context.Background())
+	require.NoError(t, err)
+
+	// Create metadata manager
+	ctx := context.Background()
+	metadata, err := NewMetadataManager(ctx, manager, logger)
 	require.NoError(t, err)
 
 	// Create a mock delegate
 	mockDelegate := newMockStreamServer()
 
-	// Create NATSStreamServer
+	// Create NATSStreamServer with metadata manager
 	server := &NATSStreamServer{
 		delegate:    mockDelegate,
 		natsManager: manager,
 		logger:      logger,
-		chainId:     config.ChainId,
 		nextEntry:   0,
+		metadata:    metadata,
 	}
 
-	// Test GetHeader with no entries
+	// Initialize server to set up KV store
+	err = server.Start()
+	require.NoError(t, err)
+
+	// Test 1: GetHeader with no entries - should read from KV store after initialization
 	header := server.GetHeader()
 	assert.Equal(t, uint64(0), header.TotalEntries)
+	assert.Equal(t, uint8(1), header.Version)
+	assert.Equal(t, uint64(4334), header.SystemID)
 
-	// Manually publish some messages to the stream and verify counts
-	// Add 5 entries to test entry counting
+	// Test 2: Add entries using proper transaction flow
+	err = server.StartAtomicOp()
+	require.NoError(t, err)
+
+	// Add 3 entries
+	entryNum1, err := server.AddStreamEntry(1, []byte("test entry 1"))
+	require.NoError(t, err)
+	assert.Equal(t, uint64(0), entryNum1) // Placeholder until commit
+
+	entryNum2, err := server.AddStreamEntry(2, []byte("test entry 2"))
+	require.NoError(t, err)
+	assert.Equal(t, uint64(0), entryNum2) // Placeholder until commit
+
+	entryNum3, err := server.AddStreamEntry(3, []byte("test entry 3"))
+	require.NoError(t, err)
+	assert.Equal(t, uint64(0), entryNum3) // Placeholder until commit
+
+	// Commit the transaction - this should update KV store
+	err = server.CommitAtomicOp()
+	require.NoError(t, err)
+
+	// Give time for KV store update
+	time.Sleep(200 * time.Millisecond)
+
+	// Test 3: GetHeader should now read from KV store and return 3
+	header = server.GetHeader()
+	assert.Equal(t, uint64(3), header.TotalEntries, "GetHeader should read total entries from KV store")
+
+	// Test 4: Verify KV store was actually updated by reading directly
 	js, err := manager.getJetStream()
 	require.NoError(t, err)
 
-	// The subject should match what's expected in the implementation
-	// Typically datastream.entry for the default subject
-	subject := "datastream.entry"
+	kv, err := js.KeyValue(context.Background(), "METADATA")
+	require.NoError(t, err)
 
-	for i := 0; i < 5; i++ {
-		_, err = js.Publish(context.Background(), subject, []byte("test data"))
-		require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	entry, err := kv.Get(ctx, MetadataTotalEntriesKey)
+	require.NoError(t, err)
+
+	storedValue := binary.BigEndian.Uint64(entry.Value())
+	assert.Equal(t, uint64(3), storedValue, "KV store should contain correct total entries")
+
+	// Test 5: Test behavior when metadata unavailable - should return 0
+	// Create server without metadata manager
+	serverNoMetadata := &NATSStreamServer{
+		delegate:    mockDelegate,
+		natsManager: manager,
+		logger:      logger,
+		nextEntry:   0,
+		metadata:    nil, // No metadata manager
 	}
 
-	// Give some time for the messages to be processed
-	time.Sleep(100 * time.Millisecond)
-
-	// Test that GetHeader returns the correct number of entries
-	header = server.GetHeader()
-	assert.Equal(t, uint64(5), header.TotalEntries)
-	assert.Equal(t, config.ChainId, header.SystemID)
+	// Should return 0 when metadata unavailable (no fallback)
+	headerFallback := serverNoMetadata.GetHeader()
+	assert.Equal(t, uint64(0), headerFallback.TotalEntries, "Should return 0 when metadata unavailable")
 }
 
 // TestNATSStreamServer_AddEntry tests adding entries to the stream
@@ -95,7 +141,6 @@ func TestNATSStreamServer_AddEntry(t *testing.T) {
 	config := DefaultConfig()
 	config.Port = -1 // Use random port
 	config.StorageDir = filepath.Join(tempDir, "nats-data")
-	config.ChainId = 12345
 
 	// Create NATS manager
 	manager := NewManager(config, logger)
@@ -104,7 +149,7 @@ func TestNATSStreamServer_AddEntry(t *testing.T) {
 	defer manager.Stop()
 
 	// Initialize streams
-	err = manager.InitStreams()
+	err = manager.InitStreams(context.Background())
 	require.NoError(t, err)
 
 	// Create a mock delegate
@@ -115,7 +160,6 @@ func TestNATSStreamServer_AddEntry(t *testing.T) {
 		delegate:    mockDelegate,
 		natsManager: manager,
 		logger:      logger,
-		chainId:     config.ChainId,
 		nextEntry:   0,
 	}
 
@@ -130,12 +174,12 @@ func TestNATSStreamServer_AddEntry(t *testing.T) {
 	// Add a regular entry
 	entryNum, err := server.AddStreamEntry(1, []byte("test entry"))
 	require.NoError(t, err)
-	assert.Equal(t, uint64(1), entryNum)
+	assert.Equal(t, uint64(0), entryNum) // Placeholder until commit
 
 	// Add a bookmark entry
 	bookmarkNum, err := server.AddStreamBookmark([]byte("test bookmark"))
 	require.NoError(t, err)
-	assert.Equal(t, uint64(2), bookmarkNum)
+	assert.Equal(t, uint64(0), bookmarkNum) // Placeholder until commit
 
 	// Commit the transaction
 	err = server.CommitAtomicOp()
@@ -186,7 +230,6 @@ func TestNATSStreamServer_TruncateFile(t *testing.T) {
 	config := DefaultConfig()
 	config.Port = -1 // Use random port
 	config.StorageDir = filepath.Join(tempDir, "nats-data")
-	config.ChainId = 12345
 
 	// Create NATS manager
 	manager := NewManager(config, logger)
@@ -195,20 +238,19 @@ func TestNATSStreamServer_TruncateFile(t *testing.T) {
 	defer manager.Stop()
 
 	// Initialize streams
-	err = manager.InitStreams()
+	err = manager.InitStreams(context.Background())
 	require.NoError(t, err)
 
 	// Create a mock delegate
 	mockDelegate := newMockStreamServer()
 
-	// Create NATSStreamServer with a mock bookmark manager
+	// Create NATSStreamServer with a mock metadata manager
 	server := &NATSStreamServer{
 		delegate:    mockDelegate,
 		natsManager: manager,
 		logger:      logger,
-		chainId:     config.ChainId,
 		nextEntry:   0,
-		bookmark:    nil, // We'll test without bookmark functionality
+		metadata:    nil, // We'll test without metadata functionality
 	}
 
 	// Initialize server
@@ -247,10 +289,10 @@ func TestNATSStreamServer_TruncateFile(t *testing.T) {
 
 	// Verify entry count is reduced
 	header = server.GetHeader()
-	// The NATS implementation may work differently than the file-based one regarding truncate
-	// It might delete messages after entryNum, so remaining count would be entryNum+1
-	assert.LessOrEqual(t, header.TotalEntries, uint64(2),
-		"After truncating at entry 1, should have at most 2 entries (0 and 1)")
+	// The NATS implementation should delegate to the mock stream server for the count
+	// After truncating at entry 1, should have exactly 2 entries (0 and 1)
+	assert.Equal(t, uint64(2), header.TotalEntries,
+		"After truncating at entry 1, should have exactly 2 entries (0 and 1)")
 }
 
 // TestNATSStreamServer_Bookmarks tests the bookmark functionality
@@ -262,7 +304,6 @@ func TestNATSStreamServer_Bookmarks(t *testing.T) {
 	config := DefaultConfig()
 	config.Port = -1 // Use random port
 	config.StorageDir = filepath.Join(tempDir, "nats-data")
-	config.ChainId = 12345
 
 	// Create NATS manager
 	manager := NewManager(config, logger)
@@ -271,11 +312,12 @@ func TestNATSStreamServer_Bookmarks(t *testing.T) {
 	defer manager.Stop()
 
 	// Initialize streams
-	err = manager.InitStreams()
+	err = manager.InitStreams(context.Background())
 	require.NoError(t, err)
 
-	// Try to create a NATSBookmark
-	bookmark, err := NewNATSBookmark(manager, config.ChainId, logger)
+	// Try to create a NATSMetadata
+	ctx := context.Background()
+	metadata, err := NewMetadataManager(ctx, manager, logger)
 	if err != nil {
 		// If bookmark creation fails, log and skip test
 		t.Logf("Skipping bookmark test: %v", err)
@@ -291,9 +333,8 @@ func TestNATSStreamServer_Bookmarks(t *testing.T) {
 		delegate:    mockDelegate,
 		natsManager: manager,
 		logger:      logger,
-		chainId:     config.ChainId,
 		nextEntry:   0,
-		bookmark:    bookmark,
+		metadata:    metadata,
 	}
 
 	// Initialize server
@@ -312,7 +353,7 @@ func TestNATSStreamServer_Bookmarks(t *testing.T) {
 	bookmarkData := []byte("test-bookmark")
 	bookmarkNum, err := server.AddStreamBookmark(bookmarkData)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(1), bookmarkNum)
+	assert.Equal(t, uint64(0), bookmarkNum) // Placeholder until commit
 
 	// Add another entry after the bookmark
 	_, err = server.AddStreamEntry(1, []byte("entry after bookmark"))
@@ -326,7 +367,7 @@ func TestNATSStreamServer_Bookmarks(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Add a direct bookmark to verify it works
-	err = bookmark.AddBookmark(manager, bookmarkData, 1)
+	err = metadata.AddBookmark(ctx, bookmarkData, 1)
 	require.NoError(t, err)
 
 	// Test GetBookmark
@@ -347,85 +388,6 @@ func TestNATSStreamServer_Bookmarks(t *testing.T) {
 	// Test with a non-existent bookmark
 	_, err = server.GetBookmark([]byte("non-existent"))
 	assert.Error(t, err)
-}
-
-// TestGetFirstEventAfterBookmarkWithDeleted tests the behavior of GetFirstEventAfterBookmark
-// when messages between the bookmark and the next valid entry are deleted
-func TestGetFirstEventAfterBookmarkWithDeleted(t *testing.T) {
-	// Create a mock delegate that simulates deleted messages
-	mockDelegate := newMockStreamServer()
-
-	// Setup initial entries in the mock
-	// Entry 0: Regular entry
-	// Entry 1: Bookmark
-	// Entry 2: "Deleted" entry - we'll simulate this by making GetEntry return an error for this sequence
-	// Entry 3: Regular entry - this is what should be returned by GetFirstEventAfterBookmark
-
-	mockDelegate.StartAtomicOp()
-
-	// Add first entry
-	mockDelegate.AddStreamEntry(1, []byte("entry 0"))
-
-	// Add bookmark at position 1
-	bookmarkData := []byte("test-bookmark")
-	_, _ = mockDelegate.AddStreamBookmark(bookmarkData)
-
-	// Add entry that will be "deleted"
-	mockDelegate.AddStreamEntry(1, []byte("deleted entry"))
-
-	// Add entry that should be returned
-	mockDelegate.AddStreamEntry(1, []byte("entry after deleted"))
-
-	mockDelegate.CommitAtomicOp()
-
-	// Now create a custom version of the mock that overrides GetEntry to simulate deletion
-	customMock := &mockStreamServerWithDeletion{
-		mockStreamServer: mockDelegate,
-		deletedEntries:   map[uint64]bool{2: true}, // Mark entry 2 as deleted
-	}
-
-	// Create server with our custom mock
-	server := &NATSStreamServer{
-		delegate:  customMock,
-		logger:    log.New(),
-		chainId:   1,
-		nextEntry: 4, // We have 4 entries total
-	}
-
-	// Test GetFirstEventAfterBookmark - it should skip the deleted entry and return entry 3
-	entry, err := server.GetFirstEventAfterBookmark(bookmarkData)
-	require.NoError(t, err)
-
-	// Verify it's the correct entry (entry 3, not entry 2)
-	assert.Equal(t, uint64(3), entry.Number)
-	assert.Equal(t, []byte("entry after deleted"), entry.Data)
-}
-
-// Helper function to create an in-memory NATS server for testing
-func createTestNATSServer(t *testing.T) (*Manager, string) {
-	tempDir, err := os.MkdirTemp("", "nats-test-*")
-	require.NoError(t, err)
-
-	config := DefaultConfig()
-	config.Port = -1 // Random port
-	config.StorageDir = tempDir
-	config.ChainId = 1
-
-	logger := log.New()
-	manager := NewManager(config, logger)
-	err = manager.Start()
-	require.NoError(t, err)
-
-	// Initialize streams
-	err = manager.InitStreams()
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		manager.Stop()
-		os.RemoveAll(tempDir)
-	})
-
-	return manager, tempDir
 }
 
 // mockStreamServer implements a simple in-memory StreamServer for testing
@@ -597,4 +559,257 @@ func (m *mockStreamServerWithDeletion) GetEntry(entryNum uint64) (datastreamer.F
 		return datastreamer.FileEntry{}, fmt.Errorf("entry %d has been deleted", entryNum)
 	}
 	return m.mockStreamServer.GetEntry(entryNum)
+}
+
+// TestNATSStreamServer_UpdateTotalEntriesInKV tests the KV storage of total entries
+func TestNATSStreamServer_UpdateTotalEntriesInKV(t *testing.T) {
+	// Setup test environment
+	tempDir := t.TempDir()
+	logger := log.New()
+
+	config := DefaultConfig()
+	config.Port = -1 // Use random port
+	config.StorageDir = filepath.Join(tempDir, "nats-data")
+
+	// Create NATS manager
+	manager := NewManager(config, logger)
+	err := manager.Start()
+	require.NoError(t, err)
+	defer manager.Stop()
+
+	// Initialize streams
+	err = manager.InitStreams(context.Background())
+	require.NoError(t, err)
+
+	// Create metadata manager
+	ctx := context.Background()
+	metadata, err := NewMetadataManager(ctx, manager, logger)
+	require.NoError(t, err)
+
+	// Create a mock delegate
+	mockDelegate := newMockStreamServer()
+
+	// Create NATSStreamServer with bookmark manager
+	server := &NATSStreamServer{
+		delegate:    mockDelegate,
+		natsManager: manager,
+		logger:      logger,
+		nextEntry:   0,
+		metadata:    metadata,
+	}
+
+	// Initialize server
+	err = server.Start()
+	require.NoError(t, err)
+
+	// First do a commit operation to initialize the KV bucket naturally
+	err = server.StartAtomicOp()
+	require.NoError(t, err)
+
+	// Add an entry to trigger KV initialization during commit
+	_, err = server.AddStreamEntry(1, []byte("test entry"))
+	require.NoError(t, err)
+
+	err = server.CommitAtomicOp()
+	require.NoError(t, err)
+
+	// Now test setting total entries in KV directly using metadata manager
+	server.nextEntry = 42
+	err = server.metadata.SetTotalEntries(ctx, server.nextEntry)
+	require.NoError(t, err)
+
+	// Verify the value was stored correctly by reading it back
+	js, err := manager.getJetStream()
+	require.NoError(t, err)
+
+	bucketName := "METADATA"
+	kv, err := js.KeyValue(context.Background(), bucketName)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	entry, err := kv.Get(ctx, MetadataTotalEntriesKey)
+	require.NoError(t, err)
+
+	// Convert bytes back to uint64 and verify
+	storedValue := binary.BigEndian.Uint64(entry.Value())
+	assert.Equal(t, uint64(42), storedValue)
+}
+
+// TestNATSStreamServer_CommitUpdatesKV tests that CommitAtomicOp updates the KV store
+func TestNATSStreamServer_CommitUpdatesKV(t *testing.T) {
+	// Setup test environment
+	tempDir := t.TempDir()
+	logger := log.New()
+
+	config := DefaultConfig()
+	config.Port = -1 // Use random port
+	config.StorageDir = filepath.Join(tempDir, "nats-data")
+
+	// Create NATS manager
+	manager := NewManager(config, logger)
+	err := manager.Start()
+	require.NoError(t, err)
+	defer manager.Stop()
+
+	// Initialize streams
+	err = manager.InitStreams(context.Background())
+	require.NoError(t, err)
+
+	// Create metadata manager
+	ctx := context.Background()
+	metadata, err := NewMetadataManager(ctx, manager, logger)
+	require.NoError(t, err)
+
+	// Create a mock delegate
+	mockDelegate := newMockStreamServer()
+
+	// Create NATSStreamServer with bookmark manager
+	server := &NATSStreamServer{
+		delegate:    mockDelegate,
+		natsManager: manager,
+		logger:      logger,
+		nextEntry:   0,
+		metadata:    metadata,
+	}
+
+	// Initialize server
+	err = server.Start()
+	require.NoError(t, err)
+
+	// Add entries and commit to test KV update
+	err = server.StartAtomicOp()
+	require.NoError(t, err)
+
+	// Add 3 entries
+	_, err = server.AddStreamEntry(1, []byte("entry1"))
+	require.NoError(t, err)
+	_, err = server.AddStreamEntry(1, []byte("entry2"))
+	require.NoError(t, err)
+	_, err = server.AddStreamEntry(1, []byte("entry3"))
+	require.NoError(t, err)
+
+	// Commit should update KV store
+	err = server.CommitAtomicOp()
+	require.NoError(t, err)
+
+	// Give time for processing
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify KV was updated with correct total
+	js, err := manager.getJetStream()
+	require.NoError(t, err)
+
+	bucketName := "METADATA"
+	kv, err := js.KeyValue(context.Background(), bucketName)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	entry, err := kv.Get(ctx, MetadataTotalEntriesKey)
+	require.NoError(t, err)
+
+	// Convert bytes back to uint64 and verify
+	storedValue := binary.BigEndian.Uint64(entry.Value())
+	assert.Equal(t, uint64(3), storedValue)
+}
+
+// TestNATSStreamServer_TruncateUpdatesKV tests that TruncateFile updates the KV store
+func TestNATSStreamServer_TruncateUpdatesKV(t *testing.T) {
+	// Setup test environment
+	tempDir := t.TempDir()
+	logger := log.New()
+
+	config := DefaultConfig()
+	config.Port = -1 // Use random port
+	config.StorageDir = filepath.Join(tempDir, "nats-data")
+
+	// Create NATS manager
+	manager := NewManager(config, logger)
+	err := manager.Start()
+	require.NoError(t, err)
+	defer manager.Stop()
+
+	// Initialize streams
+	err = manager.InitStreams(context.Background())
+	require.NoError(t, err)
+
+	// Create metadata manager
+	ctx := context.Background()
+	metadata, err := NewMetadataManager(ctx, manager, logger)
+	require.NoError(t, err)
+
+	// Create a mock delegate
+	mockDelegate := newMockStreamServer()
+
+	// Create NATSStreamServer with bookmark manager
+	server := &NATSStreamServer{
+		delegate:    mockDelegate,
+		natsManager: manager,
+		logger:      logger,
+		nextEntry:   0,
+		metadata:    metadata,
+	}
+
+	// Initialize server
+	err = server.Start()
+	require.NoError(t, err)
+
+	// Add entries first
+	err = server.StartAtomicOp()
+	require.NoError(t, err)
+
+	for i := 0; i < 5; i++ {
+		_, err = server.AddStreamEntry(1, []byte(fmt.Sprintf("entry%d", i)))
+		require.NoError(t, err)
+	}
+
+	err = server.CommitAtomicOp()
+	require.NoError(t, err)
+
+	// Give time for processing
+	time.Sleep(100 * time.Millisecond)
+
+	// Truncate at entry 2 (keep entries 0, 1, 2)
+	err = server.TruncateFile(2)
+	require.NoError(t, err)
+
+	// Give time for processing
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify KV was updated after truncation
+	js, err := manager.getJetStream()
+	require.NoError(t, err)
+
+	bucketName := "METADATA"
+	kv, err := js.KeyValue(context.Background(), bucketName)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	entry, err := kv.Get(ctx, MetadataTotalEntriesKey)
+	require.NoError(t, err)
+
+	// Convert bytes back to uint64 and verify truncated count
+	storedValue := binary.BigEndian.Uint64(entry.Value())
+	assert.Equal(t, uint64(3), storedValue) // Should be 3 (entries 0, 1, 2)
+}
+
+// TestNATSStreamServer_UpdateKVErrorHandling tests error handling when context is canceled
+func TestNATSStreamServer_UpdateKVErrorHandling(t *testing.T) {
+	// Create NATS manager but don't start it
+	logger := log.New()
+	config := DefaultConfig()
+	config.Port = -1
+	manager := NewManager(config, logger)
+	// Don't start the manager to create error conditions
+
+	// Test that metadata manager creation fails with uninitialized manager
+	ctx := context.Background()
+	_, err := NewMetadataManager(ctx, manager, logger)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to initialize metadata manager")
 }

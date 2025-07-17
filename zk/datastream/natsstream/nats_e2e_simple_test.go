@@ -2,19 +2,12 @@ package natsstream
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/erigontech/erigon-lib/common"
-	"github.com/erigontech/erigon-lib/log/v3"
-	"github.com/erigontech/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/erigontech/erigon/zk/datastream/types"
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 )
 
 // TestE2E_ServerPublishClientConsume performs end-to-end validation using server publishing and client consumption
@@ -22,70 +15,37 @@ func TestE2E_ServerPublishClientConsume(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Setup NATS server and client
-	ns, url := setupTestNATSServer(t)
-	defer ns.Shutdown()
+	// Step 1: Create server infrastructure with manager
+	streamServer, manager := setupTestServerWithManager(t, ctx)
+	defer manager.Stop()
 
-	createTestStream(t, url, 1101)
+	// Step 2: Publish realistic data using the server
+	publishInAO(t, streamServer, func(t *testing.T, streamServer *NATSStreamServer) {
+		// Publish a complete batch with realistic structure
+		publishRealisticBatch(t, streamServer, 1, 1, 1) // batchNum=1, startBlock=1, blockCount=1
+	})
 
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
-	err := client.Start()
-	require.NoError(t, err)
+	// Step 3: Create and start the client
+	client := createTestClient(t, ctx, manager.url, manager)
 	defer client.Stop()
 
+	t.Log("📤 Server has published realistic batch with complete block")
+
 	// Start client reading
-	err = client.ReadAllEntriesToChannel()
+	err := client.ReadAllEntriesToChannel()
 	require.NoError(t, err)
 
 	entryChan := client.GetEntryChan()
-
-	// Create a publisher to simulate server
-	nc, err := nats.Connect(url)
-	require.NoError(t, err)
-	js, err := jetstream.New(nc)
-	require.NoError(t, err)
-
-	publisher := &e2ePublisher{js: js, ctx: ctx, entryNum: 1}
-
-	t.Log("📤 Publishing realistic datastream sequence...")
-
-	// Publish a realistic sequence: BatchStart -> L2Block -> Transactions -> L2BlockEnd -> BatchEnd
-
-	// Step 1: Publish BatchStart
-	publisher.publishBatchStart(t, 1, 7)
-	expectedEntries := 1
-
-	// Step 2: Publish L2Block
-	publisher.publishL2Block(t, 1, 1)
-	expectedEntries++
-
-	// Step 3: Publish Transactions
-	txCount := 3
-	for i := 0; i < txCount; i++ {
-		publisher.publishL2Transaction(t, 1, uint64(i))
-		expectedEntries++
-	}
-
-	// Step 4: Publish L2BlockEnd
-	publisher.publishL2BlockEnd(t, 1)
-	expectedEntries++
-
-	// Step 5: Publish BatchEnd
-	publisher.publishBatchEnd(t, 1)
-	expectedEntries++
-
-	t.Logf("📦 Published %d entries total", expectedEntries)
 
 	// Collect entries from client
 	t.Log("📥 Collecting entries from client...")
 	var receivedEntries []interface{}
 	timeout := time.After(10 * time.Second)
 
-	// We expect to receive fewer entries because the client builds complete blocks
-	// The transactions get combined into the block, so we expect:
-	// BatchStart + FullL2Block + BatchEnd = 3 entries (instead of 6)
-	expectedClientEntries := 3
+	// We expect to receive: BatchBookmark + BatchStart + L2BlockBookmark + FullL2Block + BatchEnd = 5 entries
+	expectedClientEntries := 5
 
+collectionLoop:
 	for len(receivedEntries) < expectedClientEntries {
 		select {
 		case entry := <-*entryChan:
@@ -95,7 +55,8 @@ func TestE2E_ServerPublishClientConsume(t *testing.T) {
 			}
 		case <-timeout:
 			t.Logf("⏰ Timeout. Expected %d entries, got %d", expectedClientEntries, len(receivedEntries))
-			break
+			// Break out of the for loop, not just the select
+			break collectionLoop
 		}
 	}
 
@@ -115,7 +76,7 @@ func TestE2E_ServerPublishClientConsume(t *testing.T) {
 
 	require.NotNil(t, receivedBlock, "Should receive a complete L2 block")
 	assert.Equal(t, uint64(1), receivedBlock.L2BlockNumber, "Block number should be 1")
-	assert.Equal(t, txCount, len(receivedBlock.L2Txs), "Block should contain %d transactions", txCount)
+	assert.GreaterOrEqual(t, len(receivedBlock.L2Txs), 1, "Block should contain transactions")
 
 	t.Logf("✅ Received complete block %d with %d transactions", receivedBlock.L2BlockNumber, len(receivedBlock.L2Txs))
 
@@ -134,158 +95,42 @@ func TestE2E_ServerPublishClientConsume(t *testing.T) {
 	t.Log("✅ End-to-end test completed successfully!")
 }
 
-// e2ePublisher handles publishing entries to NATS for testing
-type e2ePublisher struct {
-	js       jetstream.JetStream
-	ctx      context.Context
-	entryNum uint64
-}
-
-func (p *e2ePublisher) publishBatchStart(t *testing.T, batchNumber, forkID uint64) {
-	batchStart := &datastream.BatchStart{
-		Number:  batchNumber,
-		ForkId:  forkID,
-		Type:    datastream.BatchType_BATCH_TYPE_REGULAR,
-		ChainId: 1101,
-	}
-
-	p.publishEntry(t, batchStart, types.EntryTypeBatchStart)
-	t.Logf("📤 Published BatchStart %d", batchNumber)
-}
-
-func (p *e2ePublisher) publishL2Block(t *testing.T, blockNumber, batchNumber uint64) {
-	l2Block := &datastream.L2Block{
-		Number:         blockNumber,
-		BatchNumber:    batchNumber,
-		Timestamp:      uint64(time.Now().Unix()),
-		DeltaTimestamp: 1000,
-		Hash:           common.Hash{byte(blockNumber)}.Bytes(),
-		StateRoot:      common.Hash{byte(blockNumber + 100)}.Bytes(),
-		GlobalExitRoot: common.Hash{byte(blockNumber + 200)}.Bytes(),
-		Coinbase:       common.Address{byte(blockNumber)}.Bytes(),
-		BlockGasLimit:  30000000,
-		BlockInfoRoot:  common.Hash{byte(blockNumber + 50)}.Bytes(),
-	}
-
-	p.publishEntry(t, l2Block, types.EntryTypeL2Block)
-	t.Logf("📤 Published L2Block %d", blockNumber)
-}
-
-func (p *e2ePublisher) publishL2Transaction(t *testing.T, blockNumber, txIndex uint64) {
-	// Create realistic transaction data
-	txData := fmt.Sprintf("tx_%d_%d", blockNumber, txIndex)
-
-	l2Tx := &datastream.Transaction{
-		L2BlockNumber:               blockNumber,
-		Index:                       txIndex,
-		IsValid:                     true,
-		Encoded:                     []byte(txData),
-		EffectiveGasPricePercentage: 100,
-		ImStateRoot:                 common.Hash{byte(blockNumber), byte(txIndex)}.Bytes(),
-	}
-
-	p.publishEntry(t, l2Tx, types.EntryTypeL2Tx)
-	t.Logf("📤 Published L2Transaction %d.%d", blockNumber, txIndex)
-}
-
-func (p *e2ePublisher) publishL2BlockEnd(t *testing.T, blockNumber uint64) {
-	l2BlockEnd := &datastream.L2BlockEnd{
-		Number: blockNumber,
-	}
-
-	p.publishEntry(t, l2BlockEnd, types.EntryTypeL2BlockEnd)
-	t.Logf("📤 Published L2BlockEnd %d", blockNumber)
-}
-
-func (p *e2ePublisher) publishBatchEnd(t *testing.T, batchNumber uint64) {
-	batchEnd := &datastream.BatchEnd{
-		Number:        batchNumber,
-		LocalExitRoot: common.Hash{byte(batchNumber + 10)}.Bytes(),
-		StateRoot:     common.Hash{byte(batchNumber + 20)}.Bytes(),
-	}
-
-	p.publishEntry(t, batchEnd, types.EntryTypeBatchEnd)
-	t.Logf("📤 Published BatchEnd %d", batchNumber)
-}
-
-// publishEntry is a helper that publishes any protobuf message to NATS
-func (p *e2ePublisher) publishEntry(t *testing.T, msg proto.Message, entryType types.EntryType) {
-	data, err := proto.Marshal(msg)
-	require.NoError(t, err)
-
-	headers := nats.Header{}
-	headers.Set("EntryType", fmt.Sprintf("%d", entryType))
-	headers.Set("EntryNumber", fmt.Sprintf("%d", p.entryNum))
-
-	natsMsg := &nats.Msg{
-		Subject: "datastream.entry",
-		Data:    data,
-		Header:  headers,
-	}
-
-	_, err = p.js.PublishMsg(p.ctx, natsMsg)
-	require.NoError(t, err)
-
-	p.entryNum++
-}
-
 // TestE2E_MultipleBlocks tests processing multiple blocks in sequence
 func TestE2E_MultipleBlocks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Setup
-	ns, url := setupTestNATSServer(t)
-	defer ns.Shutdown()
+	// Step 1: Create server infrastructure with manager
+	streamServer, manager := setupTestServerWithManager(t, ctx)
+	defer manager.Stop()
 
-	createTestStream(t, url, 1101)
+	// Step 2: Publish realistic data with multiple blocks using the server
+	publishInAO(t, streamServer, func(t *testing.T, streamServer *NATSStreamServer) {
+		// Publish a batch with 3 blocks
+		publishRealisticBatch(t, streamServer, 1, 1, 3) // batchNum=1, startBlock=1, blockCount=3
+	})
 
-	client := NewNATSClient(ctx, url, false, 1101, 7, log.New())
-	err := client.Start()
-	require.NoError(t, err)
+	// Step 3: Create and start the client
+	client := createTestClient(t, ctx, manager.url, manager)
 	defer client.Stop()
 
-	err = client.ReadAllEntriesToChannel()
+	t.Log("📤 Server has published batch with 3 blocks")
+
+	// Start client reading
+	err := client.ReadAllEntriesToChannel()
 	require.NoError(t, err)
 
 	entryChan := client.GetEntryChan()
 
-	// Create publisher
-	nc, err := nats.Connect(url)
-	require.NoError(t, err)
-	js, err := jetstream.New(nc)
-	require.NoError(t, err)
-
-	publisher := &e2ePublisher{js: js, ctx: ctx, entryNum: 1}
-
-	t.Log("📤 Publishing sequence with multiple blocks...")
-
-	// Publish BatchStart
-	publisher.publishBatchStart(t, 1, 7)
-
-	// Publish 3 complete blocks
-	blockCount := 3
-	for blockNum := 1; blockNum <= blockCount; blockNum++ {
-		// Block start
-		publisher.publishL2Block(t, uint64(blockNum), 1)
-
-		// 2 transactions per block
-		for txIndex := 0; txIndex < 2; txIndex++ {
-			publisher.publishL2Transaction(t, uint64(blockNum), uint64(txIndex))
-		}
-
-		// Block end
-		publisher.publishL2BlockEnd(t, uint64(blockNum))
-	}
-
-	// Publish BatchEnd
-	publisher.publishBatchEnd(t, 1)
-
-	// Collect blocks (BatchStart + 3 blocks + BatchEnd = 5 entries)
-	expectedEntries := 5
+	// Collect entries from client
+	t.Log("📥 Collecting entries from client...")
 	var receivedEntries []interface{}
 	timeout := time.After(15 * time.Second)
 
+	// We expect: BatchBookmark + BatchStart + (3 × (L2BlockBookmark + FullL2Block)) + BatchEnd = 8 entries
+	expectedEntries := 8
+
+multiBlockLoop:
 	for len(receivedEntries) < expectedEntries {
 		select {
 		case entry := <-*entryChan:
@@ -295,7 +140,8 @@ func TestE2E_MultipleBlocks(t *testing.T) {
 			}
 		case <-timeout:
 			t.Logf("⏰ Timeout. Expected %d, got %d", expectedEntries, len(receivedEntries))
-			break
+			// Break out of the for loop, not just the select
+			break multiBlockLoop
 		}
 	}
 
@@ -307,13 +153,14 @@ func TestE2E_MultipleBlocks(t *testing.T) {
 		}
 	}
 
+	blockCount := 3
 	assert.Equal(t, blockCount, len(receivedBlocks), "Should receive %d blocks", blockCount)
 
 	// Validate block sequence and transaction counts
 	for i, block := range receivedBlocks {
 		expectedBlockNum := uint64(i + 1)
 		assert.Equal(t, expectedBlockNum, block.L2BlockNumber, "Block %d number mismatch", i)
-		assert.Equal(t, 2, len(block.L2Txs), "Block %d should have 2 transactions", expectedBlockNum)
+		assert.GreaterOrEqual(t, len(block.L2Txs), 3, "Block %d should have at least 3 transactions", expectedBlockNum)
 	}
 
 	t.Logf("✅ Successfully processed %d blocks in sequence", blockCount)

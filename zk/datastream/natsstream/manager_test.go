@@ -2,7 +2,6 @@ package natsstream
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -309,7 +308,6 @@ func TestManager_ChainStreamOperations(t *testing.T) {
 	config.HTTPPort = 0 // Disable HTTP monitoring for tests
 	config.JetStreamEnabled = true
 	config.StorageDir = tempDir
-	config.ChainId = 12345 // Set a specific chain ID
 
 	// Create manager
 	manager := NewManager(config, logger)
@@ -320,7 +318,7 @@ func TestManager_ChainStreamOperations(t *testing.T) {
 	defer manager.Stop()
 
 	// Test 1: InitStreams should create streams with chain ID in the name
-	err = manager.InitStreams()
+	err = manager.InitStreams(context.Background())
 	require.NoError(t, err, "Failed to initialize streams")
 
 	// Connect to verify stream was created correctly
@@ -332,7 +330,7 @@ func TestManager_ChainStreamOperations(t *testing.T) {
 	require.NoError(t, err)
 
 	// The stream name should include the chain ID
-	expectedStreamName := fmt.Sprintf("DATASTREAM_%d", config.ChainId)
+	expectedStreamName := "DATASTREAM"
 
 	// Verify stream exists and has correct configuration
 	ctx := context.Background()
@@ -347,7 +345,7 @@ func TestManager_ChainStreamOperations(t *testing.T) {
 		"Stream subjects don't include chain ID pattern")
 
 	// Test 2: GetOrCreateDataStream should return a JetStream instance that can publish
-	dataStream, err := manager.GetOrCreateDataStream()
+	dataStream, err := manager.GetOrCreateDataStream(ctx)
 	require.NoError(t, err, "Failed to get data stream")
 	assert.NotNil(t, dataStream, "Data stream should not be nil")
 
@@ -373,7 +371,7 @@ func TestManager_ChainStreamOperations(t *testing.T) {
 	defer sub.Stop()
 
 	// Publish a test message directly to the stream with proper subject
-	_, err = js.Publish(ctx, fmt.Sprintf("datastream.%d.test", config.ChainId), []byte("test message"))
+	_, err = js.Publish(ctx, "datastream.test", []byte("test message"))
 	require.NoError(t, err, "Failed to directly publish to stream")
 
 	// Wait for the message to be received
@@ -383,25 +381,4 @@ func TestManager_ChainStreamOperations(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Timed out waiting for message")
 	}
-
-	// Test 4: Error handling - Invalid chain ID
-	// Create a new manager with zero chain ID
-	invalidConfig := DefaultConfig()
-	invalidConfig.Port = -1
-	invalidConfig.ChainId = 0 // Invalid chain ID
-	invalidManager := NewManager(invalidConfig, logger)
-
-	err = invalidManager.Start()
-	require.NoError(t, err)
-	defer invalidManager.Stop()
-
-	// Attempt to initialize streams, which should fail due to missing chain ID
-	err = invalidManager.InitStreams()
-	assert.Error(t, err, "InitStreams should fail with zero chain ID")
-	assert.Contains(t, err.Error(), "chain ID not set",
-		"Error message should indicate chain ID issue")
-
-	// Attempt to get data stream, which should also fail
-	_, err = invalidManager.GetOrCreateDataStream()
-	assert.Error(t, err, "GetOrCreateDataStream should fail with zero chain ID")
 }

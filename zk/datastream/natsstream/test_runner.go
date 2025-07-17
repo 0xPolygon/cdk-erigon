@@ -146,8 +146,12 @@ func (ts *TestSuite) RunInterfaceTests(t *testing.T) {
 }
 
 // CreateTestClient creates a properly configured test client
-func (ts *TestSuite) CreateTestClient(ctx context.Context, chainID uint64) (*NATSClient, error) {
-	client := NewNATSClient(ctx, ts.natsURL, false, chainID, 7, ts.logger)
+func (ts *TestSuite) CreateTestClient(ctx context.Context) (*NATSClient, error) {
+	config := DefaultConfig()
+	config.Port = -1 // Use random port for manager's embedded server
+	manager := NewManager(config, ts.logger)
+
+	client := NewNATSClient(ctx, ts.natsURL, false, manager, ts.logger)
 
 	err := client.Start()
 	if err != nil {

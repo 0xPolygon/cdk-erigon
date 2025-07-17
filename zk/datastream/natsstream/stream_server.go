@@ -2,6 +2,7 @@ package natsstream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -11,6 +12,12 @@ import (
 	"github.com/erigontech/erigon/zk/datastream/server"
 	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
 	"github.com/nats-io/nats.go"
+)
+
+// Metadata keys for KV storage
+const (
+	MetadataTotalEntriesKey     = "METADATA_TOTAL_ENTRIES"
+	MetadataLatestBlockBookmark = "METADATA_LATEST_BLOCK_BOOKMARK"
 )
 
 // BookmarkTx represents a bookmark to be stored during transaction commit
@@ -29,52 +36,87 @@ type NATSStreamServer struct {
 	natsManager *Manager
 	// Logger
 	logger log.Logger
-	// Chain ID for subject construction
-	chainId uint64
-	// Bookmark manager
-	bookmark *NATSBookmark
+	// Metadata manager
+	metadata *MetadataManager
 
 	// Transaction related fields
-	txActive     bool
-	txMsgs       []*nats.Msg
-	txMutex      sync.RWMutex
-	txEntryCount uint64
-	nextEntry    uint64 // Tracks the number of entries in the stream
+	txActive          bool
+	txMsgs            []*nats.Msg
+	txMutex           sync.RWMutex
+	nextEntry         uint64
+	currentBlockStart uint64 // Entry number where current L2 block started
+	lastBookmark      []byte // Last bookmark seen in current transaction
 }
 
 // Start starts the underlying stream server
 func (n *NATSStreamServer) Start() error {
-	// Initialize bookmark manager if not already initialized
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Initialize next entry counter from NATS stream info - this is required
+	if n.natsManager == nil || n.natsManager.mainStream == nil {
+		return fmt.Errorf("NATS manager or main stream not initialized - cannot start server")
+	}
+
+	// Initialize metadata manager if not already initialized
 	var err error
-	if n.bookmark == nil {
-		n.bookmark, err = NewNATSBookmark(n.natsManager, n.chainId, n.logger)
+	if n.metadata == nil {
+		n.metadata, err = NewMetadataManager(ctx, n.natsManager, n.logger)
 		if err != nil {
-			n.logger.Error("Failed to initialize NATS bookmark manager", "error", err)
-			// Continue with underlying system as fallback
+			n.logger.Error("Failed to initialize NATS metadata manager", "error", err)
+			return fmt.Errorf("metadata manager initialization failed: %w", err)
 		}
 	}
 
-	// Initialize next entry counter from NATS stream info if available
-	if n.natsManager != nil && n.natsManager.mainStream != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
+	info, err := n.natsManager.mainStream.Info(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get NATS stream info for initialization: %w", err)
+	}
 
-		info, err := n.natsManager.mainStream.Info(ctx)
-		if err == nil {
-			// NATS sequences are 1-based, so LastSeq is the number of entries
-			n.nextEntry = info.State.LastSeq
-			n.logger.Info("Initialized nextEntry counter from NATS stream",
-				"count", n.nextEntry,
-				"lastMsgTime", info.State.LastTime)
+	// Get the current count from stream - this is our starting point
+	streamCount := info.State.LastSeq
+	n.logger.Info("NATS stream current state",
+		"streamMessages", streamCount,
+		"lastMsgTime", info.State.LastTime)
+
+	// Initialize total entries in KV store - this is required for consistency
+	if n.metadata == nil {
+		return fmt.Errorf("metadata manager not initialized - cannot start server")
+	}
+
+	// Check if we have an existing KV count - if so, verify consistency
+	existingCount, err := n.metadata.GetTotalEntries(ctx)
+	if err != nil && !errors.Is(err, ErrMetadataKeyNotFound) {
+		return fmt.Errorf("failed to check existing total entries in metadata store: %w", err)
+	}
+
+	// Determine the correct initialisation approach
+	if err != nil {
+		// No existing KV count
+		if streamCount == 0 {
+			// Fresh start - no stream, no KV
+			n.nextEntry = 0
+			n.logger.Info("Fresh start: no stream data, no KV data", "count", n.nextEntry)
+
+			// Set initial KV entry to 0
+			err = n.metadata.SetTotalEntries(ctx, n.nextEntry)
+			if err != nil {
+				return fmt.Errorf("failed to initialize total entries in metadata store: %w", err)
+			}
 		} else {
-			// Fall back to delegate header
-			n.logger.Warn("Could not get NATS stream info, falling back to delegate", "error", err)
-			n.nextEntry = n.delegate.GetHeader().TotalEntries
+			// Stream has data but no KV - this is an unknown/inconsistent state
+			return fmt.Errorf("stream has %d messages but no KV entry exists - unknown state, cannot continue", streamCount)
 		}
-	} else {
-		// Initialize from delegate as fallback
-		n.nextEntry = n.delegate.GetHeader().TotalEntries
 	}
+	// We have an existing KV count - use it as the source of truth
+	n.nextEntry = existingCount
+	n.logger.Info("Resuming: using KV metadata as source of truth",
+		"kvCount", existingCount,
+		"streamCount", streamCount,
+		"nextEntry", n.nextEntry)
+
+	n.logger.Info("Initialization complete", "totalEntries", n.nextEntry)
 
 	return n.delegate.Start()
 }
@@ -99,7 +141,6 @@ func (n *NATSStreamServer) StartAtomicOp() error {
 	// Reset transaction state
 	n.txActive = true
 	n.txMsgs = make([]*nats.Msg, 0, 100) // Pre-allocate space for 100 messages
-	n.txEntryCount = 0
 
 	n.logger.Debug("Started transaction")
 	return nil
@@ -107,10 +148,10 @@ func (n *NATSStreamServer) StartAtomicOp() error {
 
 // addStreamItem is a helper function that adds an item to the NATS cache
 // for later publication. It handles the common logic between AddStreamEntry and AddStreamBookmark.
-func (n *NATSStreamServer) addStreamItem(entryType string, data []byte, entryNum uint64, itemType string) (uint64, error) {
+func (n *NATSStreamServer) addStreamItem(entryType string, data []byte, delegateEntryNum uint64, itemType string) (uint64, error) {
 	if !n.txActive {
 		n.logger.Warn(itemType + " called outside of a transaction; item will not be cached for NATS")
-		return entryNum, fmt.Errorf("%s called outside of a transaction; item will not be cached for NATS", itemType)
+		return 0, fmt.Errorf("%s called outside of a transaction; item will not be cached for NATS", itemType)
 	}
 
 	// Store the item in our transaction buffer
@@ -118,35 +159,22 @@ func (n *NATSStreamServer) addStreamItem(entryType string, data []byte, entryNum
 	defer n.txMutex.Unlock()
 
 	// Create a NATS message for later publishing
+	// Entry number will be assigned during commit when we actually publish
 	msg := &nats.Msg{
 		Subject: "datastream.entry",
 		Data:    append([]byte(nil), data...), // Make a copy of data to avoid potential mutations
 		Header: nats.Header{
 			"EntryType": []string{entryType},
-			"EntryNum":  []string{fmt.Sprintf("%d", entryNum)},
 		},
 	}
 	n.txMsgs = append(n.txMsgs, msg)
 
-	//TODO remove this once we take DS out, its just a quick sense check whilst we transition
-	if entryNum != n.nextEntry+n.txEntryCount {
-		n.logger.Warn("Entry number does not match expected value",
-			"entryNum", entryNum,
-			"nextEntry", n.nextEntry,
-			"txEntryCount", n.txEntryCount,
-			"expected", n.nextEntry+n.txEntryCount)
-	}
-
-	// Calculate adjusted entry number that accounts for items in the current transaction
-	entryNum = n.nextEntry + n.txEntryCount
-	n.txEntryCount++ // Increment entry count
-
 	n.logger.Debug("Cached message for later publishing",
 		"type", itemType,
-		"entryNum",
 		"cacheSize", len(n.txMsgs))
 
-	return entryNum, nil
+	// Return placeholder since callers discard this value anyway
+	return 0, nil
 }
 
 // AddStreamEntry adds an entry to the stream and buffers it for NATS
@@ -203,40 +231,108 @@ func (n *NATSStreamServer) CommitAtomicOp() error {
 	if msgCount > 0 && n.natsManager != nil {
 		n.logger.Info("Publishing cached messages to NATS",
 			"count", msgCount,
-			"totalEntries", n.txEntryCount)
+			"currentNextEntry", n.nextEntry,
+			"expectedFinalEntry", n.nextEntry+uint64(msgCount))
 
 		// Get JetStream to publish messages
-		js, err := n.natsManager.GetOrCreateDataStream()
+		js, err := n.natsManager.GetOrCreateDataStream(context.Background())
 		if err != nil {
 			n.logger.Error("Failed to get JetStream for publishing", "error", err)
 			// Continue without publishing
 		} else {
-			// Publish all messages
+			// Create shared transaction context for all metadata operations
+			txCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			// Track if we see any L2 blocks in this transaction
+			var lastL2BlockBookmark []byte
+			var lastL2BlockFound bool
+
+			// Publish all messages and update KV atomically for each message
 			for i, msg := range n.txMsgs {
+				entryTypeHeader := msg.Header.Get("EntryType")
+
+				// Assign entry number now that we're actually publishing
+				currentEntryNum := n.nextEntry
+				msg.Header.Set("EntryNum", fmt.Sprintf("%d", currentEntryNum))
+
+				n.logger.Debug("Publishing message to NATS",
+					"index", i,
+					"entryType", entryTypeHeader,
+					"entryNum", currentEntryNum)
+
 				// Publish the message
 				_, err := js.PublishMsg(context.Background(), msg)
 				if err != nil {
 					n.logger.Error("Failed to publish message to NATS during commit",
 						"error", err,
-						"index", i)
-					// Continue with other messages even if one fails
+						"index", i,
+						"entryType", entryTypeHeader,
+						"entryNum", currentEntryNum)
+					// CRITICAL: Don't continue if publish fails - this would create inconsistency
+					return fmt.Errorf("failed to publish message %d: %w", i, err)
 				}
 
-				// Store bookmark if this is a bookmark entry (check EntryType header)
-				// We only do this after successful publishing so we have the correct entry number
-				entryTypeHeader := msg.Header.Get("EntryType")
-				if entryTypeHeader == "176" && n.bookmark != nil { // EntryType for bookmark
-					err = n.bookmark.AddBookmark(n.natsManager, msg.Data, n.nextEntry)
+				// Increment counter immediately after successful publish
+				n.nextEntry++
+
+				// Update total entries count in KV store immediately after each successful publish
+				// This ensures KV is always consistent with published messages
+				err = n.metadata.SetTotalEntries(txCtx, n.nextEntry)
+				if err != nil {
+					n.logger.Error("Failed to update total entries in metadata store after publish",
+						"error", err,
+						"entryNum", currentEntryNum,
+						"totalEntries", n.nextEntry,
+						"entryType", entryTypeHeader)
+					// This is critical - if we can't update KV, we have inconsistency
+					return fmt.Errorf("failed to update KV after publishing message %d: %w", i, err)
+				}
+
+				n.logger.Debug("Successfully published and updated KV",
+					"index", i,
+					"entryType", entryTypeHeader,
+					"entryNum", currentEntryNum,
+					"newTotalEntries", n.nextEntry)
+
+				// Store bookmark if this is a bookmark entry (already got entryTypeHeader above)
+				if entryTypeHeader == "176" && n.metadata != nil { // EntryType for bookmark
+					// Convert 0-based entry number to 1-based NATS sequence number
+					natsSequence := n.nextEntry
+					err = n.metadata.AddBookmark(txCtx, msg.Data, natsSequence)
 					if err != nil {
 						n.logger.Error("Failed to store bookmark in NATS KV",
 							"error", err,
-							"entryNum", n.nextEntry)
-						// Continue even if bookmark storage fails
+							"entryNum", n.nextEntry-1,
+							"natsSequence", natsSequence)
+						// Continue even if bookmark storage fails - this is less critical
+					} else {
+						n.logger.Debug("Stored bookmark in KV store",
+							"entryNum", n.nextEntry-1,
+							"natsSequence", natsSequence)
+					}
+					// Remember this bookmark in case it's before an L2 block
+					n.lastBookmark = msg.Data
+				} else if entryTypeHeader == "5" { // L2BlockStart
+					// When we see a block start, remember the current position
+					n.currentBlockStart = n.nextEntry - 1
+				} else if entryTypeHeader == "6" { // L2BlockEnd
+					// When we see a block end, we should update the latest block bookmark
+					// The bookmark for this block is the last bookmark we saw before the block start
+					if n.lastBookmark != nil && n.metadata != nil {
+						lastL2BlockBookmark = n.lastBookmark
+						lastL2BlockFound = true
 					}
 				}
+			}
 
-				// Increment the next entry number
-				n.nextEntry++
+			// After publishing all messages, update the latest block bookmark if we found one
+			if lastL2BlockFound && lastL2BlockBookmark != nil && n.metadata != nil {
+				err = n.metadata.SetLatestBlockBookmark(txCtx, lastL2BlockBookmark)
+				if err != nil {
+					n.logger.Error("Failed to update latest block bookmark",
+						"error", err)
+					// Continue even if metadata update fails
+				}
 			}
 		}
 	}
@@ -244,7 +340,6 @@ func (n *NATSStreamServer) CommitAtomicOp() error {
 	// Reset transaction state
 	n.txActive = false
 	n.txMsgs = nil
-	n.txEntryCount = 0 // Reset entry count
 
 	return nil
 }
@@ -268,13 +363,11 @@ func (n *NATSStreamServer) RollbackAtomicOp() error {
 
 	msgCount := len(n.txMsgs)
 	n.logger.Info("Rolling back transaction, discarding cached messages",
-		"count", msgCount,
-		"totalEntries", n.txEntryCount)
+		"count", msgCount)
 
 	// Reset transaction state
 	n.txActive = false
 	n.txMsgs = nil
-	n.txEntryCount = 0 // Reset entry count
 
 	return nil
 }
@@ -378,14 +471,27 @@ func (n *NATSStreamServer) TruncateFile(entryNum uint64) error {
 		}
 
 		// If we have bookmarks that point beyond the truncation point, they should be cleaned up
-		if n.bookmark != nil {
+		if n.metadata != nil {
+			// Create shared context for all truncation metadata operations
+			truncCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
 			// Since we now have TruncateBookmarksAfter method, use it
-			err = n.bookmark.TruncateBookmarksAfter(n.natsManager, entryNum)
+			err = n.metadata.TruncateBookmarksAfter(truncCtx, entryNum)
 			if err != nil {
 				n.logger.Error("Failed to truncate bookmarks after entry",
 					"error", err,
 					"entryNum", entryNum)
 				// Non-fatal error, continue
+			}
+
+			// Update total entries count in metadata store after truncation
+			err = n.metadata.SetTotalEntries(truncCtx, n.nextEntry)
+			if err != nil {
+				n.logger.Error("Failed to update total entries in metadata store after truncation",
+					"error", err,
+					"totalEntries", n.nextEntry)
+				// Continue even if metadata update fails
 			}
 		}
 	}
@@ -399,119 +505,100 @@ func (n *NATSStreamServer) UpdateEntryData(entryNum uint64, etype datastreamer.E
 	return fmt.Errorf("UpdateEntryData is not supported in NATSStreamServer, use AddStreamEntry instead")
 }
 
-// GetHeader gets the stream header from the underlying stream server
+// GetHeader gets the stream header - NATS is the authoritative source
 func (n *NATSStreamServer) GetHeader() datastreamer.HeaderEntry {
 	// Create a basic HeaderEntry with minimal required fields
 	header := datastreamer.HeaderEntry{
-		Version:      1,           // Use a default version
-		SystemID:     n.chainId,   // Use chainId as SystemID
-		TotalEntries: n.nextEntry, // Start with our tracked next entry as default
+		Version:  1,    // Use a default version
+		SystemID: 4334, // Example system ID
 	}
 
-	// If NATS is available, try to get the most accurate count
-	if n.natsManager != nil && n.natsManager.mainStream != nil {
-		// Get stream info to check current state
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-
-		info, err := n.natsManager.mainStream.Info(ctx)
-		if err == nil {
-			// NATS sequence is 1-based, but our entry counts are 0-based
-			// If no messages, LastSeq will be 0
-			if info.State.LastSeq > 0 {
-				// JetStream doesn't reindex sequences after deletion, so we need to
-				// adjust the count to match file-based behavior by subtracting the
-				// number of deleted messages to match file-based implementation behavior
-				numDeleted := uint64(len(info.State.Deleted))
-
-				// Calculate the effective total (accounting for deletions)
-				effectiveTotal := info.State.LastSeq
-				if numDeleted > 0 {
-					effectiveTotal = effectiveTotal - numDeleted
-				}
-
-				header.TotalEntries = effectiveTotal
-			}
-		} else {
-			n.logger.Debug("Failed to get stream info for header", "error", err)
-			// Fall back to our tracked nextEntry or the delegate
-		}
+	// Get authoritative count from KV store - this must work
+	if n.metadata == nil || n.natsManager == nil {
+		n.logger.Info("Cannot get header: metadata manager or NATS manager not initialized")
+		// This should not happen after Start() completes successfully
+		header.TotalEntries = 0
+		return header
 	}
 
-	// If we don't have any data yet and there's a delegate, try it as a fallback
-	if header.TotalEntries == 0 && n.delegate != nil {
-		delegateHeader := n.delegate.GetHeader()
-		header.TotalEntries = delegateHeader.TotalEntries
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	totalEntries, err := n.metadata.GetTotalEntries(ctx)
+	if err != nil {
+		n.logger.Info("Failed to get total entries from metadata store", "error", err)
+		// Return header with zero entries rather than crashing
+		header.TotalEntries = 0
+		return header
 	}
 
+	header.TotalEntries = totalEntries
 	return header
 }
 
-// GetEntry gets an entry from NATS JetStream or falls back to the underlying stream server
+// GetEntry gets an entry from NATS JetStream - NATS is the authoritative source
 func (n *NATSStreamServer) GetEntry(entryNum uint64) (datastreamer.FileEntry, error) {
-	// TODO: update return type once old ds has been retired
-	// Try to get the entry from NATS JetStream first
-	if n.natsManager != nil && n.natsManager.mainStream != nil {
-		// Get the stream consumer
-		ctx := context.Background()
+	// NATS must be available for this operation
+	if n.natsManager == nil || n.natsManager.mainStream == nil {
+		return datastreamer.FileEntry{}, fmt.Errorf("NATS manager or main stream not initialized")
+	}
 
-		// NATS sequence numbers are 1-based, but our entry numbers are 0-based
-		// We need to add 1 to convert our entry number to a NATS sequence number
-		seqNum := entryNum + 1
+	// NATS sequence numbers are 1-based, but our entry numbers are 0-based
+	// We need to add 1 to convert our entry number to a NATS sequence number
+	seqNum := entryNum + 1
 
-		// Try to fetch the message by sequence number
-		msg, err := n.natsManager.mainStream.GetMsg(ctx, seqNum)
+	// Get the message by sequence number
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	msg, err := n.natsManager.mainStream.GetMsg(ctx, seqNum)
+	if err != nil {
+		return datastreamer.FileEntry{}, fmt.Errorf("failed to get entry %d (seq %d) from NATS: %w", entryNum, seqNum, err)
+	}
+
+	// Convert NATS message to FileEntry
+	fileEntry := datastreamer.FileEntry{}
+
+	// Copy data
+	fileEntry.Data = msg.Data
+
+	// Set entry number
+	fileEntry.Number = entryNum
+
+	// Parse entry type from header
+	entryTypeStr := msg.Header.Get("EntryType")
+	if entryTypeStr != "" {
+		entryType, err := strconv.ParseUint(entryTypeStr, 10, 32)
 		if err == nil {
-			// Convert NATS message to FileEntry
-			fileEntry := datastreamer.FileEntry{}
-
-			// Copy data
-			fileEntry.Data = msg.Data
-
-			// Set entry number
-			fileEntry.Number = entryNum
-
-			// Try to parse entry type from header
-			entryTypeStr := msg.Header.Get("EntryType")
-			if entryTypeStr != "" {
-				entryType, err := strconv.ParseUint(entryTypeStr, 10, 32)
-				if err == nil {
-					fileEntry.Type = datastreamer.EntryType(entryType)
-				}
-			}
-
-			// Set length - calculate based on data size plus fixed header size
-			fileEntry.Length = uint32(len(fileEntry.Data)) + 1 + 4 + 4 + 8 // packetType(1) + Length(4) + Type(4) + Number(8)
-
-			return fileEntry, nil
+			fileEntry.Type = datastreamer.EntryType(entryType)
 		} else {
-			// If error occurred during NATS retrieval, log and fall back to delegate
-			n.logger.Debug("Failed to get entry from NATS, falling back to delegate",
+			n.logger.Warn("Failed to parse EntryType header, using default",
+				"entryTypeStr", entryTypeStr,
 				"entryNum", entryNum,
-				"seqNum", seqNum,
 				"error", err)
 		}
 	}
 
-	// Fall back to the underlying stream server
-	return n.delegate.GetEntry(entryNum)
+	// Set length - calculate based on data size plus fixed header size
+	fileEntry.Length = uint32(len(fileEntry.Data)) + 1 + 4 + 4 + 8 // packetType(1) + Length(4) + Type(4) + Number(8)
+
+	return fileEntry, nil
 }
 
-// GetBookmark gets a bookmark from the NATS KV store or falls back to the underlying stream server
+// GetBookmark gets a bookmark from the NATS KV store - NATS is the authoritative source
 func (n *NATSStreamServer) GetBookmark(bookmark []byte) (uint64, error) {
-	// Try NATS KV store first if available
-	if n.bookmark != nil {
-		entryNum, err := n.bookmark.GetBookmark(n.natsManager, bookmark)
-		if err == nil {
-			return entryNum, nil
-		}
-		// Log the error but fall back to delegate
-		n.logger.Debug("Failed to get bookmark from NATS KV, falling back to delegate",
-			"error", err)
+	// NATS metadata must be available for this operation
+	if n.metadata == nil {
+		return 0, fmt.Errorf("metadata manager not initialized")
 	}
 
-	// Fall back to delegate
-	return n.delegate.GetBookmark(bookmark)
+	bookmarkGetCtx, bookmarkGetCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer bookmarkGetCancel()
+	entryNum, err := n.metadata.GetBookmark(bookmarkGetCtx, bookmark)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get bookmark from NATS KV: %w", err)
+	}
+
+	return entryNum, nil
 }
 
 // GetFirstEventAfterBookmark gets the first event after a bookmark from the underlying stream server
@@ -540,6 +627,11 @@ func (n *NATSStreamServer) GetFirstEventAfterBookmark(bookmark []byte) (datastre
 			if entry.Type != datastreamer.EtBookmark {
 				return entry, nil
 			}
+		} else {
+			// Log warning but continue searching - entry might not exist due to deletions
+			n.logger.Warn("Failed to get entry while searching for first event after bookmark",
+				"entryNum", currentEntryNum,
+				"error", err)
 		}
 		// If entry doesn't exist or is a bookmark, try the next one
 		currentEntryNum++
@@ -556,19 +648,18 @@ func (n *NATSStreamServer) GetDataBetweenBookmarks(bookmarkFrom, bookmarkTo []by
 		"This method should be removed from the interface after datastreamer is fully retired.")
 }
 
-// BookmarkPrintDump prints the bookmark dump from NATS KV or the underlying stream server
+// BookmarkPrintDump prints the metadata dump from NATS KV - NATS is the authoritative source
 func (n *NATSStreamServer) BookmarkPrintDump() {
-	// Try to print from NATS KV if available
-	if n.bookmark != nil {
-		err := n.bookmark.PrintDump(n.natsManager)
-		if err == nil {
-			return
-		}
-		// Log error but continue with delegate
-		n.logger.Error("Failed to print bookmarks from NATS KV, falling back to delegate",
-			"error", err)
+	// NATS metadata must be available for this operation
+	if n.metadata == nil {
+		n.logger.Error("Cannot print bookmark dump: metadata manager not initialized")
+		return
 	}
 
-	// Fall back to delegate
-	n.delegate.BookmarkPrintDump()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := n.metadata.PrintDump(ctx)
+	if err != nil {
+		n.logger.Error("Failed to print metadata from NATS KV", "error", err)
+	}
 }

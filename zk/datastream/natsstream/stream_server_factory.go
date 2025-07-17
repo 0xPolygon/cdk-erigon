@@ -1,6 +1,7 @@
 package natsstream
 
 import (
+	"context"
 	"time"
 
 	"github.com/erigontech/erigon-lib/log/v3"
@@ -32,11 +33,8 @@ func (f *NATSDataStreamServerFactory) CreateStreamServer(port uint16, systemID u
 		return nil, err
 	}
 
-	// Set the chain ID in the manager config
-	f.natsManager.config.ChainId = chainId
-
 	// Initialize streams
-	err = f.natsManager.InitStreams()
+	err = f.natsManager.InitStreams(context.Background())
 	if err != nil {
 		f.logger.Error("Failed to initialize streams", "error", err)
 		return delegate, nil // Fallback to original if stream initialization fails
@@ -45,12 +43,10 @@ func (f *NATSDataStreamServerFactory) CreateStreamServer(port uint16, systemID u
 	return &NATSStreamServer{
 		delegate:    delegate,
 		natsManager: f.natsManager,
-		chainId:     chainId,
 		logger:      f.logger,
 		// Initialize transaction fields
-		txActive:     false,
-		txMsgs:       nil,
-		txEntryCount: 0,
+		txActive: false,
+		txMsgs:   nil,
 	}, nil
 }
 
@@ -60,7 +56,7 @@ func (f *NATSDataStreamServerFactory) CreateDataStreamServer(stream server.Strea
 	// If the stream is not already a NATS stream server, wrap it
 	if _, ok := stream.(*NATSStreamServer); !ok {
 		// Initialize streams
-		err := f.natsManager.InitStreams()
+		err := f.natsManager.InitStreams(context.Background())
 		if err != nil {
 			f.logger.Error("Failed to initialize streams", "error", err)
 			// Continue with the unwrapped stream
@@ -69,12 +65,10 @@ func (f *NATSDataStreamServerFactory) CreateDataStreamServer(stream server.Strea
 			stream = &NATSStreamServer{
 				delegate:    stream,
 				natsManager: f.natsManager,
-				chainId:     chainId,
 				logger:      f.logger,
 				// Initialize transaction fields
-				txActive:     false,
-				txMsgs:       nil,
-				txEntryCount: 0,
+				txActive: false,
+				txMsgs:   nil,
 			}
 		}
 	}
