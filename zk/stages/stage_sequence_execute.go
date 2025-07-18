@@ -128,7 +128,7 @@ func sequencingBatchStep(
 		return err
 	}
 
-	forkId, err := prepareForkId(lastBatch, executionAt, sdb.hermezDb)
+	forkId, err := prepareForkId(lastBatch, executionAt, sdb.hermezDb, cfg)
 	if err != nil {
 		return err
 	}
@@ -293,42 +293,6 @@ func sequencingBatchStep(
 		blockTimer := time.NewTimer(cfg.zk.SequencerBlockSealTime)
 		emptyBlockTimer := time.NewTimer(cfg.zk.SequencerEmptyBlockSealTime)
 		ethBlockGasPool := new(core.GasPool).AddGas(transactionGasLimit)
-
-		if batchState.isLimboRecovery() {
-			transactions, err := getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash, executionAt)
-			if err != nil {
-				return err
-			}
-			yielder = sequencer.NewLimboTransactionYielder(transactions, *cfg.zk)
-		} else if batchState.isResequence() {
-			transactions, effectivePercentages, err := batchState.resequenceBatchJob.YieldNextBlockTransactions(zktx.DecodeTx)
-			if err != nil {
-				return err
-			}
-			yielder, err = sequencer.NewRecoveryTransactionYielder(transactions, effectivePercentages)
-			if err != nil {
-				return err
-			}
-		} else if batchState.isL1Recovery() {
-			blockNumbersInBatchSoFar, err := batchContext.sdb.hermezDb.GetL2BlockNosByBatch(batchState.batchNumber)
-			if err != nil {
-				return err
-			}
-
-			decodedBatchL2Data, found := batchState.batchL1RecoveryData.getDecodedL1RecoveredBatchDataByIndex(uint64(len(blockNumbersInBatchSoFar)))
-			if !found {
-				log.Info(fmt.Sprintf("[%s] Block %d is not part of batch %d. Stopping blocks loop", logPrefix, blockNumber, batchState.batchNumber))
-				break
-			}
-
-			yielder, err = sequencer.NewRecoveryTransactionYielder(decodedBatchL2Data.Transactions, decodedBatchL2Data.EffectiveGasPricePercentages)
-			if err != nil {
-				return err
-			}
-		}
-
-		yielder.SetExecutionDetails(executionAt, batchState.forkId)
-		yielder.BeginYielding()
 
 		if batchState.isLimboRecovery() {
 			transactions, err := getLimboTransaction(ctx, cfg, batchState.limboRecoveryData.limboTxHash, executionAt)
