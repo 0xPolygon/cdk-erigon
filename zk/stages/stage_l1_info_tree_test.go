@@ -147,5 +147,5 @@ func TestSpawnL1InfoTreeStage(t *testing.T) {
 	// check SaveStageProgress
 	progress, err := stages.GetStageProgress(tx, stages.L1InfoTree)
 	require.NoError(t, err)
-	assert.Equal(t, latestBlockNumber.Uint64()+1, progress)
+	assert.Equal(t, latestBlockNumber.Uint64(), progress)
 }

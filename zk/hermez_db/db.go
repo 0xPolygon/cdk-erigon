@@ -55,6 +55,7 @@ const BATCH_ENDS = "batch_ends"                                         // batch
 const WITNESS_CACHE = "witness_cache"                                   // block number -> witness for 1 block
 const BAD_TX_HASHES = "bad_tx_hashes"                                   // tx hash -> integer counter
 const CONFIRMED_L1_INFO_TREE_UPDATE = "confirmed_l1_info_tree_update"   // 1 - > confirmed l1 info tree index information (fork 12 only)
+const PP_ROLLUP_TYPES = "pp_rollup_types"                               // rollup type id -> true
 
 var HermezDbTables = []string{
 	L1VERIFICATIONS,
@@ -2066,4 +2067,16 @@ func (db *HermezDbReader) GetConfirmedL1InfoTreeUpdate() (index, l1BlockNumber u
 		return 0, 0, nil
 	}
 	return BytesToUint64(v[:8]), BytesToUint64(v[8:]), nil
+}
+
+func (db *HermezDb) WritePPRollupType(rollupType uint64) error {
+	return db.tx.Put(PP_ROLLUP_TYPES, Uint64ToBytes(rollupType), []byte{1})
+}
+
+func (db *HermezDbReader) IsPPRollupType(rollupType uint64) (bool, error) {
+	v, err := db.tx.GetOne(PP_ROLLUP_TYPES, Uint64ToBytes(rollupType))
+	if err != nil {
+		return false, err
+	}
+	return len(v) > 0, nil
 }
