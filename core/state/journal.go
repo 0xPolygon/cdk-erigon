@@ -202,9 +202,7 @@ func (ch createObjectChange) dirtied() *libcommon.Address {
 }
 
 func (ch createObjectChange) collectChangeset(cs *realtimeTypes.Changeset) {
-	if _, exists := cs.DeletedAccounts[*ch.account]; exists {
-		delete(cs.DeletedAccounts, *ch.account)
-	}
+	delete(cs.DeletedAccounts, *ch.account)
 	cs.BalanceChanges[*ch.account] = uint256.NewInt(0)
 	cs.NonceChanges[*ch.account] = 0
 	cs.CodeHashChanges[*ch.account] = emptyCodeHashH

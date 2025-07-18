@@ -145,7 +145,7 @@ func (client *KafkaConsumer) ConsumeKafka(ctx context.Context, blockMsgsChan cha
 	topics := []string{client.config.TxTopic, client.config.BlockTopic, client.config.ErrorTopic}
 	err := client.consumer.Consume(ctx, topics, handler)
 	if err != nil {
-		errorChan <- fmt.Errorf("ConsumeKafkaTransactions error: %v", err)
+		errorChan <- fmt.Errorf("ConsumeKafka error: %v", err)
 		return
 	}
 }
