@@ -65,7 +65,7 @@ func ComparePendingBlockContext(a, b *PendingBlockContext) int {
 
 type RealtimeCache struct {
 	// Caches
-	State         *PlainStateCache
+	State         *StateCache
 	Stateless     *StatelessCache
 	CacheDumpPath string
 
@@ -83,7 +83,7 @@ type RealtimeCache struct {
 }
 
 func NewRealtimeCache(ctx context.Context, db kv.RoDB, cacheDumpPath string) (*RealtimeCache, error) {
-	stateCache, err := NewPlainStateCache(ctx, db, DefaultStateCacheSize)
+	stateCache, err := NewStateCache(ctx, db, DefaultStateCacheSize)
 	if err != nil {
 		return nil, err
 	}
