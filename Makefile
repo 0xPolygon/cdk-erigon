@@ -199,7 +199,7 @@ test-erigon-ext:
 ## test:                              run unit tests with a 100s timeout
 .PHONY: test
 test:
-	$(GOTEST) --timeout 10m -tags=skip_smoke
+	$(GOTEST) --timeout 10m -tags=skip_smoke,skip_smoke_realtime
 
 .PHONY: test3
 test3:

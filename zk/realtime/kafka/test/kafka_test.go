@@ -1,3 +1,6 @@
+//go:build !skip_smoke_realtime
+// +build !skip_smoke_realtime
+
 package test
 
 import (
@@ -10,7 +13,6 @@ import (
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/u256"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
-	types1 "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/zk/realtime/kafka"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
@@ -60,10 +62,10 @@ var (
 		},
 	}
 
-	accessListTx = &types1.AccessListTx{
+	accessListTx = &ethTypes.AccessListTx{
 		ChainID: u256.Num1,
-		LegacyTx: types1.LegacyTx{
-			CommonTx: types1.CommonTx{
+		LegacyTx: ethTypes.LegacyTx{
+			CommonTx: ethTypes.CommonTx{
 				Nonce: 3,
 				To:    &testToAddr,
 				Value: uint256.NewInt(10),
