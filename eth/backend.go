@@ -1313,7 +1313,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 					backend.finishChan = make(chan uint64)
 
 					if cfg.Zk.XLayer.Realtime.EnableSubscribe {
-						backend.realtimeSub = realtimeSub.NewRealtimeSubscription(ctx, logger)
+						backend.realtimeSub = realtimeSub.NewRealtimeSubscription(ctx)
 						backend.realtimeSub.Start(ctx)
 					}
 				}

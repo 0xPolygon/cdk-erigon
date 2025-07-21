@@ -9,7 +9,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/filters"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
-	"github.com/ledgerwatch/log/v3"
 )
 
 const (
@@ -29,15 +28,13 @@ type RealtimeSubscription struct {
 	rtSubs     *SyncMap[SubID, Sub[RealtimeSubMessage]]
 	logsSubs   *SyncMap[SubID, *LogsFilter]
 	newMsgChan chan RealtimeSubMessage
-	logger     log.Logger
 }
 
-func NewRealtimeSubscription(ctx context.Context, logger log.Logger) *RealtimeSubscription {
+func NewRealtimeSubscription(ctx context.Context) *RealtimeSubscription {
 	return &RealtimeSubscription{
 		rtSubs:     NewSyncMap[SubID, Sub[RealtimeSubMessage]](),
 		logsSubs:   NewSyncMap[SubID, *LogsFilter](),
 		newMsgChan: make(chan RealtimeSubMessage, DefaultChannelSize),
-		logger:     logger,
 	}
 }
 
