@@ -30,7 +30,7 @@ type RealtimeSubscription struct {
 	newMsgChan chan RealtimeSubMessage
 }
 
-func NewRealtimeSubscription(ctx context.Context) *RealtimeSubscription {
+func NewRealtimeSubscription() *RealtimeSubscription {
 	return &RealtimeSubscription{
 		rtSubs:     NewSyncMap[SubID, Sub[RealtimeSubMessage]](),
 		logsSubs:   NewSyncMap[SubID, *LogsFilter](),
