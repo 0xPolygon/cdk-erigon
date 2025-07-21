@@ -276,7 +276,6 @@ func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {
 }
 
 const blockBufferSize = 128
-const kafkaBufferSize = 10000
 
 // New creates a new Ethereum object (including the
 // initialisation of the common Ethereum object)
@@ -1242,8 +1241,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				} else {
 					backend.kafkaEnabled = true
 					backend.kafkaProducer = kafkaProducer
-					backend.blockInfoChan = make(chan *realtimeTypes.BlockInfo, kafkaBufferSize)
-					backend.txInfoChan = make(chan *state.TxInfo, kafkaBufferSize)
+					backend.blockInfoChan = make(chan *realtimeTypes.BlockInfo, realtimeKafka.DefaultKafkaBufferSize)
+					backend.txInfoChan = make(chan *state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
 				}
 			}
 
