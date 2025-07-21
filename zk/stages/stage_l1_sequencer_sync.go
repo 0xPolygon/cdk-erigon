@@ -121,7 +121,7 @@ Loop:
 					// StateTransition type rollup ids anything else we can write as a PP rollup type and ignore fork changes for these events
 					verifierType := l.Data[96:128] // 4th positioned item in the log data
 					verifierBig := new(big.Int).SetBytes(verifierType)
-					historyMap, err := hermezDb.GetAllForkIdBlock()
+					latestForkId, _, err := hermezDb.GetLatestForkHistory()
 					if err != nil {
 						return err
 					}
@@ -129,9 +129,9 @@ Loop:
 						if funcErr = hermezDb.WriteRollupType(rollupType, forkId); funcErr != nil {
 							return funcErr
 						}
-					} else if verifierBig.Uint64() != 0 && len(historyMap) == 0 {
+					} else if verifierBig.Uint64() != 0 && latestForkId == 0 {
 						// If the chain deployment is PP, we need to fill both of them
-						log.Warn("xlayer, historyMap is empty, received AddNewRollupTypeTopic", "rollupType", rollupType, "forkId", forkId)
+						log.Warn(fmt.Sprintf("xlayer, latestForkId is 0, received AddNewRollupTypeTopic, rollupType: %v, forkId: %v", rollupType, forkId))
 						if funcErr = hermezDb.WriteRollupType(rollupType, forkId); funcErr != nil {
 							return funcErr
 						}
