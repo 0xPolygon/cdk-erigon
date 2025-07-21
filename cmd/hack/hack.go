@@ -76,6 +76,8 @@ var (
 	// For X Layer, split db
 	pathSmtDb       = flag.String("smt-db-path", "smt", "path to the standalone SMT database file")
 	standaloneSmtDb = flag.Bool("standalone-smt-db", false, "specifies if the SMT DB is separate from the ChainDB")
+	key        = flag.Int("key", 1, "key to use from a table")
+	offset     = flag.Int("offset", 0, "offset to apply")
 )
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
@@ -1582,6 +1584,8 @@ func main() {
 		err = getOldAccInputHash(uint64(*block))
 	case "dumpAll":
 		err = dumpAll(*chaindata, *output)
+	case "infoTreeChange":
+		err = infoTreeChange(*chaindata, key, offset)
 	}
 
 	if err != nil {

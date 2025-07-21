@@ -596,6 +596,16 @@ var (
 		Usage: "Reuse the L1 info index for resequencing",
 		Value: true,
 	}
+	SequencerResequenceInfoTreeOffset = cli.StringFlag{
+		Name:  "zkevm.sequencer-resequence-info-tree-offset",
+		Usage: "A tuple describing an info tree offset to use during resequencing.  Designed to recover from a skipped leaf in the info tree.  Format <index>:<offset>:<expected_ger_hash>",
+		Value: "",
+	}
+	AlwaysGenerateBatchL2Data = cli.BoolFlag{
+		Name:  "zkevm.always-generate-batch-l2-data",
+		Usage: "Always generate the batch L2 data",
+		Value: true,
+	}
 	ExecutorEnabled = cli.BoolFlag{
 		Name:  "zkevm.executor-enabled",
 		Usage: "Enables the executor. Used for testing limbo, when executor-urls are set, but we don't want to use them, only in limbo to verify limbo transactions. For this case, set it to false. Defaulted to true",
