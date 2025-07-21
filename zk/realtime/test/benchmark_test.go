@@ -1,3 +1,6 @@
+//go:build !skip_smoke_realtime
+// +build !skip_smoke_realtime
+
 package test
 
 import (
