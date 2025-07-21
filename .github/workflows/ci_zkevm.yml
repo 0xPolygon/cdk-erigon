@@ -6,6 +6,7 @@ on:
       - zkevm
       - zkevm-2.60
       - stable/**
+      - dev-pp
   pull_request:
     branches:
       - dev
@@ -13,6 +14,7 @@ on:
       - zkevm-2.60
       - stable/**
       - feature/v0.6.0
+      - dev-pp
     types:
       - opened
       - reopened

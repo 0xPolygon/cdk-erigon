@@ -7,6 +7,7 @@ on:
       - zkevm-2.60
       - stable/**
       - feature/v0.6.0
+      - dev-pp
   workflow_dispatch:
 
 jobs:
