@@ -7,6 +7,7 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	dsTypes "github.com/ledgerwatch/erigon/zk/datastream/types"
 	zktx "github.com/ledgerwatch/erigon/zk/tx"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
@@ -162,6 +163,10 @@ func (m mockForkDb) WriteForkId(batch, forkId uint64) error {
 	return nil
 }
 
+func (m mockForkDb) WriteNewForkHistory(forkId, lastVerifiedBatch uint64) error {
+	return nil
+}
+
 func Test_PrepareForkId_DuringRecovery(t *testing.T) {
 	tests := map[string]struct {
 		lastBatch  uint64
@@ -201,7 +206,7 @@ func Test_PrepareForkId_DuringRecovery(t *testing.T) {
 				batchForks: test.batchForks,
 			}
 
-			forkId, err := prepareForkId(test.lastBatch, 1, mock)
+			forkId, err := prepareForkId(test.lastBatch, 1, mock, SequenceBlockCfg{zk: &ethconfig.Zk{PessimisticForkNumber: 12}})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
