@@ -849,6 +849,11 @@ var (
 		Usage: "The maximum number of times a transaction that consumes too many counters to fit into a batch will be attempted before it is rejected outright by eth_sendRawTransaction",
 		Value: 2,
 	}
+	PessimisticForkNumber = cli.Uint64Flag{
+		Name:  "zkevm.pessimistic-fork-number",
+		Usage: "The fork number to use for networks launched as PP networks with no FEP history. Default 12.",
+		Value: 12,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",

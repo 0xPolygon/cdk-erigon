@@ -273,6 +273,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		GasPriceHistoryCount:                   ctx.Uint64(utils.GasPriceHistoryCount.Name),
 		RejectLowGasPriceTransactions:          ctx.Bool(utils.RejectLowGasPriceTransactions.Name),
 		RejectLowGasPriceTolerance:             ctx.Float64(utils.RejectLowGasPriceTolerance.Name),
+		PessimisticForkNumber:                  ctx.Uint64(utils.PessimisticForkNumber.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)
