@@ -5,11 +5,13 @@ on:
       - zkevm
       - zkevm-2.60
       - stable/**
+      - project/**
   pull_request:
     branches:
       - zkevm
       - zkevm-2.60
       - stable/**
+      - project/**
     types:
       - opened
       - reopened
@@ -67,7 +69,8 @@ jobs:
         run: make test
       
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+      # pinned to v5 commit
+        uses: SonarSource/sonarcloud-github-action@ffc3010689be73b8e5ae0c57ce35968afd7909e8
         if: ${{ matrix.os == 'ubuntu-20.04' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
@@ -105,7 +108,7 @@ jobs:
       - name: Monitor verified batches
         working-directory: ./kurtosis-cdk
         shell: bash
-        run: timeout 900s .github/scripts/monitor-verified-batches.sh --enclave zdk-v1 --rpc-url $(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc) --target 20 --timeout 900
+        run: timeout 900s .github/scripts/monitor-verified-batches.sh --enclave cdk-v1 --rpc-url $(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc) --target 20 --timeout 900
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -117,8 +120,15 @@ jobs:
           echo "ETH_RPC_URL=$(kurtosis port print cdk-v1 el-1-geth-lighthouse rpc)" >> $GITHUB_ENV
           echo "BRIDGE_API_URL=$(kurtosis port print cdk-v1 zkevm-bridge-service-001 rpc)" >> $GITHUB_ENV
           echo "L2_RPC_URL=$(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc)" >> $GITHUB_ENV
-      - name: Clone bridge repository
-        run:  git clone --recurse-submodules -j8 https://github.com/0xPolygonHermez/zkevm-bridge-service.git -b develop  bridge
+
+      - name: Check out bridge at specific commit
+        uses: actions/checkout@v4
+        with:
+          repository: 0xPolygonHermez/zkevm-bridge-service
+          ref: aad1026d7e119f13da322af8ec7f1d420025574b
+          submodules: recursive
+          fetch-depth: 0       # fetch full history, so the SHA is available
+          path: bridge
 
       - name: Build docker image
         run: |
@@ -167,6 +177,78 @@ jobs:
         with:
           name: logs_${{ github.run_id }}
           path: ./kurtosis-cdk/ci_logs
+
+  kurtosis-cdk-type-1-pectra-pmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cdk-erigon
+        uses: actions/checkout@v4
+
+      - name: Setup kurtosis
+        uses: ./.github/actions/setup-kurtosis-type1
+
+      - name: Run polycli load test
+        run: /usr/local/bin/polycli loadtest --rpc-url $(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc) --private-key "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625" --verbosity 700 --requests 500 --rate-limit 50 --concurrency 2 --mode t
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Set up envs
+        run: |
+          kurtosis files download cdk-v1 bridge-config-artifact
+          echo "BRIDGE_ADDRESS=$(/usr/local/bin/yq '.NetworkConfig.PolygonBridgeAddress' bridge-config-artifact/bridge-config.toml)" >> $GITHUB_ENV
+          echo "BridgeAddress: $BRIDGE_ADDRESS"
+          echo "ETH_RPC_URL=$(kurtosis port print cdk-v1 el-1-geth-lighthouse rpc)" >> $GITHUB_ENV
+          echo "BRIDGE_API_URL=$(kurtosis port print cdk-v1 zkevm-bridge-service-001 rpc)" >> $GITHUB_ENV
+          echo "L2_RPC_URL=$(kurtosis port print cdk-v1 cdk-erigon-rpc-001 rpc)" >> $GITHUB_ENV
+
+      - name: Clone bridge repository
+        run:  git clone --recurse-submodules -j8 https://github.com/0xPolygonHermez/zkevm-bridge-service.git -b develop  bridge
+
+      - name: Build docker image
+        run: |
+          cd bridge
+          make build-docker-e2e-real_network
+
+      - name: Run test ERC20 Bridge
+        run: |
+          #!/bin/bash
+          cd bridge
+          mkdir tmp
+          cat <<EOF > ./tmp/test.toml
+          TestL1AddrPrivate="0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625"
+          TestL2AddrPrivate="0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625"
+          [ConnectionConfig]
+          L1NodeURL="http://${ETH_RPC_URL}"
+          L2NodeURL="${L2_RPC_URL}"
+          BridgeURL="${BRIDGE_API_URL}"
+          L1BridgeAddr="${BRIDGE_ADDRESS}"
+          L2BridgeAddr="${BRIDGE_ADDRESS}"
+          EOF
+          echo "Running test with config:"
+          cat ./tmp/test.toml
+          docker run --network=host  --volume "./tmp/:/config/" --env BRIDGE_TEST_CONFIG_FILE=/config/test.toml bridge-e2e-realnetwork-erc20
+
+      - name: Prepare logs
+        working-directory: ./kurtosis-cdk
+        if: failure()
+        run: |
+          mkdir -p ci_logs
+          cd ci_logs
+          kurtosis service logs cdk-v1 cdk-erigon-rpc-001 --all > cdk-erigon-rpc-001.log
+          kurtosis service logs cdk-v1 cdk-erigon-sequencer-001 --all > cdk-erigon-sequencer-001.log
+          kurtosis service logs cdk-v1 zkevm-agglayer-001 --all > zkevm-agglayer-001.log
+          kurtosis service logs cdk-v1 zkevm-prover-001 --all > zkevm-prover-001.log
+          kurtosis service logs cdk-v1 cdk-node-001 --all > cdk-node-001.log
+          kurtosis service logs cdk-v1 zkevm-bridge-service-001 --all > zkevm-bridge-service-001.log
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs_${{ github.run_id }}
+          path: ./kurtosis-cdk/ci_logs
+
 
   kurtosis-cdk-post-london:
     runs-on: ubuntu-latest

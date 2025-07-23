@@ -45,6 +45,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"math"
+
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/chain/networkname"
 	"github.com/erigontech/erigon-lib/chain/snapcfg"
@@ -142,7 +144,6 @@ import (
 	"github.com/erigontech/erigon/zk/witness"
 	"github.com/erigontech/erigon/zkevm/etherman"
 	"github.com/hashicorp/golang-lru/v2/expirable"
-	"math"
 )
 
 var dataStreamServerFactory = server.NewZkEVMDataStreamServerFactory()
@@ -324,6 +325,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 	var chainConfig *chain.Config
 	var genesis *types.Block
+
 	if err := backend.chainDB.Update(context.Background(), func(tx kv.RwTx) error {
 		h, err := rawdb.ReadCanonicalHash(tx, 0)
 		if err != nil {
@@ -334,7 +336,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			genesisSpec = nil
 		}
 		var genesisErr error
-		chainConfig, genesis, genesisErr = core.WriteGenesisBlock(tx, genesisSpec, config.OverridePragueTime, tmpdir, logger)
+		chainConfig, genesis, genesisErr = core.WriteGenesisBlock(tx, genesisSpec, config.OverridePragueTime, config.OverrideNormalcyBlock, config.OverrideLondonBlock, config.OverrideShanghaiTime, tmpdir, logger)
 		if _, ok := genesisErr.(*chain.ConfigCompatError); genesisErr != nil && !ok {
 			return genesisErr
 		}
@@ -1025,6 +1027,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		backend.chainConfig.AllowFreeTransactions = cfg.AllowFreeTransactions
 		backend.chainConfig.ZkDefaultGasPrice = cfg.DefaultGasPrice
+		backend.chainConfig.FreeInjectedBatch = cfg.FreeInjectedBatch
+		backend.chainConfig.Type1 = cfg.Zk.Commitment.IsType1()
 		l1Urls := strings.Split(cfg.L1RpcUrl, ",")
 
 		if cfg.Zk.L1CacheEnabled {
@@ -1442,14 +1446,14 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 }
 
 func (s *Ethereum) PreStart() error {
-	if s.preStartTasks.WarmUpDataStream {
-		log.Info("[PreStart] warming up data stream")
-		tx, err := s.chainDB.BeginRw(context.Background())
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
+	tx, err := s.chainDB.BeginRw(context.Background())
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 
+	if s.preStartTasks.WarmUpDataStream {
+		log.Info("[PreStart] Warming up data stream")
 		// we don't know when the server has actually started as it doesn't expose a signal that is has spun up
 		// so here we loop and take a brief pause waiting for it to be ready
 		attempts := 0
@@ -1470,44 +1474,28 @@ func (s *Ethereum) PreStart() error {
 				break
 			}
 		}
-		if err = tx.Commit(); err != nil {
-			return err
-		}
 	}
 
 	if s.preStartTasks.PurgeWitnessCache {
-		log.Warn("[PreStart] purge witness cache enabled, purging...", "zkevm.witness-cache-purge", s.config.WitnessCachePurge)
-		tx, err := s.chainDB.BeginRw(context.Background())
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
+		log.Warn("[PreStart] Purge witness cache enabled, purging...", "zkevm.witness-cache-purge", s.config.WitnessCachePurge)
 		hermezDb := hermez_db.NewHermezDb(tx)
 		if err := hermezDb.PurgeWitnessCaches(); err != nil {
 			return fmt.Errorf("failed to purge witness caches: %w", err)
 		}
-		if err = tx.Commit(); err != nil {
-			return fmt.Errorf("tx.Commit: %w", err)
-		}
 	}
 
 	if s.preStartTasks.PurgeBadTxs {
-		log.Warn("[PreStart] purge bad transactions cache enabled, purging...", "zkevm.bad-tx-purge", s.config.BadTxPurge)
-		tx, err := s.chainDB.BeginRw(context.Background())
-		if err != nil {
-			return err
+		if s.config.BadTxPurge {
+			log.Warn("[PreStart] Purge bad transactions cache enabled, purging...", "zkevm.bad-tx-purge", s.config.BadTxPurge)
 		}
-		defer tx.Rollback()
+
 		hermezDb := hermez_db.NewHermezDb(tx)
 		if err = hermezDb.PurgeBadTxHashes(); err != nil {
 			return fmt.Errorf("failed to purge bad transactions: %w", err)
 		}
-		if err = tx.Commit(); err != nil {
-			return fmt.Errorf("tx.Commit: %w", err)
-		}
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (s *Ethereum) APIs() []rpc.API {

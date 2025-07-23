@@ -99,7 +99,7 @@ func TestCalculateMetrics(t *testing.T) {
 			require.NotNil(t, txPoolDB)
 			require.NotNil(t, aclsDB)
 
-			pool, err := New(ch, coreDB, txpoolcfg.DefaultConfig, kvcache.New(kvcache.DefaultCoherentConfig), uint256.Int(*u256.N1), nil, nil, nil, nil, nil, nil, &ethconfig.Defaults, aclsDB)
+			pool, err := New(ch, coreDB, txpoolcfg.DefaultConfig, kvcache.New(kvcache.DefaultCoherentConfig), uint256.Int(*u256.N1), nil, nil, nil, nil, nil, nil, nil, &ethconfig.Defaults, aclsDB, nil)
 			assert.NoError(err)
 			require.True(pool != nil)
 
@@ -228,7 +228,7 @@ func TestMedianTimeMetrics(t *testing.T) {
 			search:           &metaTx{Tx: &types.TxSlot{}},
 			senderIDTxnCount: map[uint64]int{},
 		},
-		pending: NewPendingSubPool(PendingSubPool, 100),
+		pending: NewPendingSubPool(PendingSubPool, 100, false),
 		baseFee: NewSubPool(BaseFeeSubPool, 100),
 		queued:  NewSubPool(QueuedSubPool, 100),
 		metrics: &Metrics{},

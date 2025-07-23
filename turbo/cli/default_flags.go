@@ -31,6 +31,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.TxPoolCommitEveryFlag,
 	&utils.TxpoolPurgeEveryFlag,
 	&utils.TxpoolPurgeDistanceFlag,
+	&utils.TxPoolEnableTimsort,
 	&PruneFlag,
 	&PruneHistoryFlag,
 	&PruneReceiptFlag,
@@ -173,6 +174,9 @@ var DefaultFlags = []cli.Flag{
 	&utils.PolygonSyncFlag,
 	&utils.EthStatsURLFlag,
 	&utils.OverridePragueFlag,
+	&utils.OverrideNormalcyBlockFlag,
+	&utils.OverrideLondonBlockFlag,
+	&utils.OverrideShanghaiTimeFlag,
 
 	&utils.LightClientDiscoveryAddrFlag,
 	&utils.LightClientDiscoveryPortFlag,
@@ -237,6 +241,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.ExecutorMaxConcurrentRequests,
 	&utils.Limbo,
 	&utils.AllowFreeTransactions,
+	&utils.FreeInjectedBatch,
 	&utils.AllowPreEIP155Transactions,
 	&utils.EffectiveGasPriceForEthTransfer,
 	&utils.EffectiveGasPriceForErc20Transfer,
@@ -314,6 +319,7 @@ var DefaultFlags = []cli.Flag{
 
 	&utils.ACLPrintHistory,
 	&utils.ACLJsonLocation,
+	&utils.PrioritySendersJsonLocation,
 	&utils.InfoTreeUpdateInterval,
 	&utils.SealBatchImmediatelyOnOverflow,
 	&utils.MockWitnessGeneration,
@@ -331,7 +337,10 @@ var DefaultFlags = []cli.Flag{
 	&utils.BadTxPurge,
 	&utils.ZkevmLogExcludeFlags,
 
-	&utils.Hardfork,
 	&utils.Commitment,
+	&utils.HonourChainspec,
 	&utils.InjectGers,
+	&utils.SkipSmt,
+	&utils.OnlySmtV2,
+	&utils.SequencerBlockGasLimit,
 }
