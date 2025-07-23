@@ -806,8 +806,8 @@ var (
 	}
 	PessimisticForkNumber = cli.Uint64Flag{
 		Name:  "zkevm.pessimistic-fork-number",
-		Usage: "The fork number to use for networks launched as PP networks with no FEP history. Default 12.",
-		Value: 12,
+		Usage: "The fork number to use for networks launched as PP networks with no FEP history. Default 13.",
+		Value: 13,
 	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
