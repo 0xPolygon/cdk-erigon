@@ -103,6 +103,7 @@ type Zk struct {
 	AlwaysGenerateBatchL2Data      bool
 	RejectLowGasPriceTransactions  bool
 	RejectLowGasPriceTolerance     float64
+	PessimisticForkNumber          uint64
 }
 
 var DefaultZkConfig = Zk{

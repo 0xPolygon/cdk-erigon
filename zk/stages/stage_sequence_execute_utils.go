@@ -196,8 +196,10 @@ func (sCfg *SequenceBlockCfg) toErigonExecuteBlockCfg() stagedsync.ExecuteBlockC
 
 func validateIfDatastreamIsAheadOfExecution(
 	s *stagedsync.StageState,
+	// u stagedsync.Unwinder,
 	ctx context.Context,
 	cfg SequenceBlockCfg,
+	// historyCfg stagedsync.HistoryCfg,
 ) error {
 	roTx, err := cfg.db.BeginRo(ctx)
 	if err != nil {
@@ -228,9 +230,10 @@ type forkDb interface {
 	GetForkId(batch uint64) (uint64, error)
 	WriteForkIdBlockOnce(forkId, block uint64) error
 	WriteForkId(batch, forkId uint64) error
+	WriteNewForkHistory(forkId, lastVerifiedBatch uint64) error
 }
 
-func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, error) {
+func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb, cfg SequenceBlockCfg) (uint64, error) {
 	var err error
 	var latest uint64
 
@@ -241,6 +244,31 @@ func prepareForkId(lastBatch, executionAt uint64, hermezDb forkDb) (uint64, erro
 	}
 
 	nextBatch := lastBatch + 1
+
+	if len(allForks) == 1 && allForks[0] == 0 {
+		// we are running on a network that has never had an FEP rollup type
+		// assigned to it, so there is no fork history to use here.  So we fall back
+		// to the fork number specified in the config.  If this config isn't set then
+		// we return an error to notify that the flag must be set.
+		log.Info("No fork history found, checking for PP fork number", "batch", nextBatch)
+
+		ppFork := cfg.zk.PessimisticForkNumber
+		if ppFork == 0 {
+			return 0, fmt.Errorf("zkevm.pessimistic-fork-number flag must be set when running on a network that has never had an FEP rollup type assigned to it")
+		}
+
+		log.Info("Upgrading fork id", "from", 0, "to", ppFork, "batch", nextBatch)
+		if err := hermezDb.WriteForkIdBlockOnce(ppFork, executionAt+1); err != nil {
+			return latest, err
+		}
+
+		if err := hermezDb.WriteNewForkHistory(ppFork, nextBatch); err != nil {
+			return latest, err
+		}
+		log.Info("Written fork history for PP fork", "fork", ppFork, "batch", nextBatch)
+
+		return ppFork, nil
+	}
 
 	// iterate over the batch boundaries and find the latest fork that applies
 	for idx, batch := range allBatches {

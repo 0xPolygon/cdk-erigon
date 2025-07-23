@@ -186,7 +186,7 @@ func sequencingBatchStep(
 		return err
 	}
 
-	forkId, err := prepareForkId(lastBatch, executionAt, sdb.hermezDb)
+	forkId, err := prepareForkId(lastBatch, executionAt, sdb.hermezDb, cfg)
 	if err != nil {
 		return err
 	}
