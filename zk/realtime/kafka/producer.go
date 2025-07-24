@@ -1,7 +1,6 @@
 package kafka
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/IBM/sarama"
@@ -36,7 +35,7 @@ func NewKafkaProducer(config KafkaConfig) (*KafkaProducer, error) {
 	}, nil
 }
 
-func (client *KafkaProducer) SendKafkaTransaction(ctx context.Context, blockNumber uint64, tx types.Transaction, receipt *types.Receipt, innerTxs []*zktypes.InnerTx, changeset *realtimeTypes.Changeset) error {
+func (client *KafkaProducer) SendKafkaTransaction(blockNumber uint64, tx types.Transaction, receipt *types.Receipt, innerTxs []*zktypes.InnerTx, changeset *realtimeTypes.Changeset) error {
 	msg, err := kafkaTypes.ToKafkaTransactionMessage(tx, receipt, innerTxs, changeset, blockNumber)
 	if err != nil {
 		return fmt.Errorf("SendKafkaTransaction error: %v", err)
@@ -68,7 +67,7 @@ func (client *KafkaProducer) Close() error {
 	return client.producer.Close()
 }
 
-func (client *KafkaProducer) SendKafkaBlockInfo(ctx context.Context, header *types.Header, prevBlockTxCount int64) error {
+func (client *KafkaProducer) SendKafkaBlockInfo(header *types.Header, prevBlockTxCount int64) error {
 	msg, err := kafkaTypes.ToKafkaBlockMessage(header, prevBlockTxCount)
 	if err != nil {
 		return fmt.Errorf("SendKafkaBlockInfo error: %v", err)
@@ -96,7 +95,7 @@ func (client *KafkaProducer) SendKafkaBlockInfo(ctx context.Context, header *typ
 	return nil
 }
 
-func (client *KafkaProducer) SendKafkaErrorTrigger(ctx context.Context, blockNumber uint64) error {
+func (client *KafkaProducer) SendKafkaErrorTrigger(blockNumber uint64) error {
 	// Create error trigger message
 	msg := kafkaTypes.ErrorTriggerMessage{
 		BlockNumber: blockNumber,

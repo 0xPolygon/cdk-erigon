@@ -8,7 +8,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/filters"
 	"github.com/ledgerwatch/erigon/rpc"
-	realtimeRpc "github.com/ledgerwatch/erigon/zk/realtime/jsonrpc"
+	realtimeSub "github.com/ledgerwatch/erigon/zk/realtime/subscription"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/log/v3"
 )
@@ -22,7 +22,7 @@ type RealtimeResult struct {
 }
 
 // Realtime send a notification each time when a transaction was received in real-time.
-func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeRpc.StreamCriteria) (*rpc.Subscription, error) {
+func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.StreamCriteria) (*rpc.Subscription, error) {
 	if !api.enableFlag || api.cacheDB == nil {
 		return &rpc.Subscription{}, ErrRealtimeNotEnabled
 	}

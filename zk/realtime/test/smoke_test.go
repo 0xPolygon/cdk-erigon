@@ -49,7 +49,7 @@ func TestRealtimeRPC(t *testing.T) {
 	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(DefaultL2AdminPrivateKey, "0x"))
 	require.NoError(t, err)
 	fromAddress := common.HexToAddress(DefaultL2AdminAddress)
-	log.Infof("Sender: %s", fromAddress)
+	log.Info(fmt.Sprintf("Sender: %s", fromAddress))
 
 	// Default test address for tests that require an address
 	testAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
@@ -70,54 +70,54 @@ func TestRealtimeRPC(t *testing.T) {
 	t.Run("RealtimeGetBlockTransactionCountByNumber", func(t *testing.T) {
 		transactionCount, err := RealtimeGetBlockTransactionCountByNumber(blockNumber)
 		require.NoError(t, err)
-		log.Infof("RealtimeGetBlockTransactionCountByNumber result: %d", transactionCount)
+		log.Info(fmt.Sprintf("RealtimeGetBlockTransactionCountByNumber result: %d", transactionCount))
 	})
 
 	t.Run("RealtimeGetTransactionByHash", func(t *testing.T) {
 		includeExtraInfo := true
 		result, err := RealtimeGetTransactionByHash(common.HexToHash(txHash), &includeExtraInfo)
 		require.NoError(t, err)
-		log.Infof("RealtimeGetTransactionByHash result type: %T", result)
+		log.Info(fmt.Sprintf("RealtimeGetTransactionByHash result type: %T", result))
 	})
 
 	t.Run("RealtimeGetRawTransactionByHash", func(t *testing.T) {
 		result, err := RealtimeGetRawTransactionByHash(common.HexToHash(txHash))
 		require.NoError(t, err)
-		log.Infof("RealtimeGetRawTransactionByHash result type: %T", result)
+		log.Info(fmt.Sprintf("RealtimeGetRawTransactionByHash result type: %T", result))
 	})
 
 	t.Run("RealtimeGetTransactionReceipt", func(t *testing.T) {
 		receipt, err := RealtimeGetTransactionReceipt(common.HexToHash(txHash))
 		require.NoError(t, err)
 		require.NotNil(t, receipt)
-		log.Infof("RealtimeGetTransactionReceipt result type: %T", receipt)
+		log.Info(fmt.Sprintf("RealtimeGetTransactionReceipt result type: %T", receipt))
 	})
 
 	t.Run("RealtimeGetInternalTransactions", func(t *testing.T) {
 		tx, err := RealtimeGetInternalTransactions(common.HexToHash(txHash))
 		require.NoError(t, err)
-		log.Infof("RealtimeGetInternalTransactions result type: %T", tx)
+		log.Info(fmt.Sprintf("RealtimeGetInternalTransactions result type: %T", tx))
 	})
 
 	t.Run("RealtimeGetBalance", func(t *testing.T) {
 		balance, err := RealtimeGetBalance(testAddress)
 		require.NoError(t, err)
 		require.Equal(t, originBalance.Add(originBalance, big.NewInt(encoding.Gwei)).String(), balance.String(), "Balance should increase by 1 Gwei")
-		log.Infof("RealtimeGetBalance result for test address: %s", balance.String())
+		log.Info(fmt.Sprintf("RealtimeGetBalance result for test address: %s", balance.String()))
 	})
 
 	t.Run("RealtimeGetTransactionCount", func(t *testing.T) {
 		nonce, err := RealtimeGetTransactionCount(fromAddress)
 		require.NoError(t, err)
 		require.Equal(t, originNonce+2, nonce)
-		log.Infof("RealtimeGetTransactionCount result for sender address: %d", nonce)
+		log.Info(fmt.Sprintf("RealtimeGetTransactionCount result for sender address: %d", nonce))
 	})
 
 	t.Run("RealtimeGetCode", func(t *testing.T) {
 		code, err := RealtimeGetCode(erc20Address)
 		require.NoError(t, err)
 		require.NotEmpty(t, code, "Contract code should not be empty")
-		log.Infof("RealtimeGetCode result for erc20 contract %s: %s", erc20Address, code)
+		log.Info(fmt.Sprintf("RealtimeGetCode result for erc20 contract %s: %s", erc20Address, code))
 	})
 
 	t.Run("RealtimeGetStorageAt", func(t *testing.T) {
@@ -125,7 +125,7 @@ func TestRealtimeRPC(t *testing.T) {
 		value, err := RealtimeGetStorageAt(erc20Address, "0x2")
 		require.NoError(t, err)
 		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2dcc80cd2e4000000", value, "Storage at index 0x2 should be equal to 1000000000000000000000")
-		log.Infof("RealtimeGetStorageAt result for erc20 contract %s at index %s: %s", erc20Address, "0x2", value)
+		log.Info(fmt.Sprintf("RealtimeGetStorageAt result for erc20 contract %s at index %s: %s", erc20Address, "0x2", value))
 	})
 
 	t.Run("RealtimeCall", func(t *testing.T) {
@@ -134,7 +134,7 @@ func TestRealtimeRPC(t *testing.T) {
 		value, err := RealtimeCall(testAddress, erc20Address, "0x100000", "0x1", "0x0", fmt.Sprintf("0x%x", data))
 		require.NoError(t, err)
 		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2dcc80cd2e4000000", value, fmt.Sprintf("Balance of %s should be equal to 1000000000000000000000", fromAddress))
-		log.Infof("RealtimeCall result for erc20 contract %s calling method balanceOf %s: %s", erc20Address, fromAddress, value)
+		log.Info(fmt.Sprintf("RealtimeCall result for erc20 contract %s calling method balanceOf %s: %s", erc20Address, fromAddress, value))
 	})
 }
 
@@ -155,7 +155,7 @@ func TestRealtimeStateIsConsistent(t *testing.T) {
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	require.True(t, ok)
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
-	log.Infof("Sender: %s", fromAddress)
+	log.Info(fmt.Sprintf("Sender: %s", fromAddress))
 
 	erc20ABI, err := abi.JSON(strings.NewReader(erc20ABIJson))
 	require.NoError(t, err)
@@ -197,7 +197,7 @@ func TestRealtimeStateIsConsistent(t *testing.T) {
 		receipt, err := RealtimeGetTransactionReceipt(signedTx.Hash())
 		require.NoError(t, err)
 		require.NotNil(t, receipt)
-		log.Infof("receipt: %+v", receipt)
+		log.Info(fmt.Sprintf("receipt: %+v", receipt))
 	}
 
 	// Dump state cache for further checking

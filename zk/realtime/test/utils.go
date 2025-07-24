@@ -201,8 +201,8 @@ func transTokenWithFrom(t *testing.T, ctx context.Context, client *ethclient.Cli
 		Value: amount,
 	})
 	require.NoError(t, err)
-	log.Infof("gas: %d", gas)
-	log.Infof("gasPrice: %d", gasPrice)
+	log.Info(fmt.Sprintf("gas: %d", gas))
+	log.Info(fmt.Sprintf("gasPrice: %d", gasPrice))
 
 	var tx types.Transaction = &types.LegacyTx{
 		CommonTx: types.CommonTx{

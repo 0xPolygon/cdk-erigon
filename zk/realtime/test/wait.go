@@ -189,7 +189,7 @@ func WaitTxToBeMined(parentCtx context.Context, client ethClienter, tx types.Tra
 	if errors.Is(err, context.DeadlineExceeded) {
 		return err
 	} else if err != nil {
-		log.Errorf("error waiting tx %s to be mined: %v", tx.Hash(), err)
+		log.Error(fmt.Sprintf("error waiting tx %s to be mined. error: %v", tx.Hash(), err))
 		return err
 	}
 	if receipt.Status == types.ReceiptStatusFailed {
@@ -200,6 +200,6 @@ func WaitTxToBeMined(parentCtx context.Context, client ethClienter, tx types.Tra
 		}
 		return fmt.Errorf("transaction has failed, reason: %s, receipt: %+v. tx: %+v, gas: %v", reason, receipt, tx, tx.GetGas())
 	}
-	log.Debugf("Transaction successfully mined: %v", tx.Hash())
+	log.Debug(fmt.Sprintf("Transaction successfully mined: %v", tx.Hash()))
 	return nil
 }

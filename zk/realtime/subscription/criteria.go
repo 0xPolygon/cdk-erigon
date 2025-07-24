@@ -1,4 +1,4 @@
-package jsonrpc
+package subscription
 
 type StreamCriteria struct {
 	NewHeads             bool

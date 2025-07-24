@@ -210,11 +210,16 @@ func (cache *RealtimeCache) tryApplyBlockTxMsgs(blockContext *PendingBlockContex
 	// Process pending txs
 	processed := 0
 	for _, txMsg := range blockContext.pendingTxs.Items() {
-		if txMsg.Receipt.TransactionIndex != blockContext.nextTxIndex {
+		txIndex := txMsg.Receipt.TransactionIndex
+		if txIndex < blockContext.nextTxIndex {
+			// Duplicate tx received. Skip
+			processed++
+			continue
+		} else if txIndex > blockContext.nextTxIndex {
 			break
 		}
 
-		// Apply tx msg
+		// Tx is the next tx to be processed. Apply tx msg
 		tx, _, err := txMsg.GetTransaction()
 		if err != nil {
 			return fmt.Errorf("failed to get tx. Block number: %d, tx index: %d, error: %v", txMsg.BlockNumber, blockContext.nextTxIndex, err)
@@ -271,6 +276,7 @@ func (cache *RealtimeCache) tryCreateNewPendingBlockContext(blockNum uint64) err
 	cache.pendingBlocks.Add(newPendingBlockContext)
 	cache.pendingBlocks.Sort()
 	cache.PutHighestPendingHeight(blockNum)
+	log.Debug(fmt.Sprintf("[Realtime] Opened block %d, pending blocks queue size: %d", blockNum, cache.pendingBlocks.Size()))
 
 	return nil
 }

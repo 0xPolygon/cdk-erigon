@@ -1,4 +1,4 @@
-package jsonrpc
+package realtimeapi
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/ledgerwatch/erigon/eth/filters"
 	"github.com/ledgerwatch/erigon/rpc"
 	ethapi2 "github.com/ledgerwatch/erigon/turbo/adapter/ethapi"
+	realtimeSub "github.com/ledgerwatch/erigon/zk/realtime/subscription"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 )
 
@@ -36,11 +37,11 @@ type RealtimeAPI interface {
 
 	// Debug related (see ./realtime_debug.go)
 	DebugDumpCache(ctx context.Context) error
-	DebugCompareStateCache(ctx context.Context) ([]string, error)
+	DebugCompareStateCache(ctx context.Context) (*DebugResult, error)
 }
 
 type RealtimeSubscriptionAPI interface {
 	// Ws subscription related (see ./realtime_filters_xlayer.go)
-	RealtimeTransactions(ctx context.Context, criteria StreamCriteria) (*rpc.Subscription, error)
+	RealtimeTransactions(ctx context.Context, criteria realtimeSub.StreamCriteria) (*rpc.Subscription, error)
 	Logs(ctx context.Context, crit filters.FilterCriteria) (*rpc.Subscription, error)
 }

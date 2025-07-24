@@ -6,6 +6,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
+	"github.com/ledgerwatch/erigon/zk/realtime/realtimeapi"
 	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
@@ -22,7 +23,7 @@ func (api *RealtimeAPIImpl) DebugDumpCache(ctx context.Context) error {
 	return nil
 }
 
-func (api *RealtimeAPIImpl) DebugCompareStateCache(ctx context.Context) ([]string, error) {
+func (api *RealtimeAPIImpl) DebugCompareStateCache(ctx context.Context) (*realtimeapi.DebugResult, error) {
 	if !api.enableFlag || api.cacheDB == nil || api.cacheDB.State == nil {
 		return nil, ErrRealtimeNotEnabled
 	}
@@ -38,6 +39,9 @@ func (api *RealtimeAPIImpl) DebugCompareStateCache(ctx context.Context) ([]strin
 		return nil, err
 	}
 
-	mismatches := api.cacheDB.State.DebugCompare(reader)
-	return mismatches, nil
+	return &realtimeapi.DebugResult{
+		ConfirmHeight:   api.cacheDB.GetHighestConfirmHeight(),
+		ExecutionHeight: api.cacheDB.GetExecutionHeight(),
+		Mismatches:      api.cacheDB.State.DebugCompare(reader),
+	}, nil
 }

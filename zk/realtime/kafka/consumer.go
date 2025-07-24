@@ -7,7 +7,7 @@ import (
 
 	"github.com/IBM/sarama"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
-	"github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
 type KafkaConsumer struct {
@@ -44,7 +44,6 @@ type consumerGroupHandler struct {
 	txMsgsChan    chan kafkaTypes.TransactionMessage
 	errorMsgsChan chan kafkaTypes.ErrorTriggerMessage
 	errorChan     chan error
-	logger        log.Logger
 	txTopic       string
 	blockTopic    string
 	errorTopic    string
@@ -59,7 +58,7 @@ func (h *consumerGroupHandler) Cleanup(_ sarama.ConsumerGroupSession) error {
 }
 
 func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	h.logger.Info("Starting kafka consumption", "topic", claim.Topic(), "partition", claim.Partition(), "offset", claim.InitialOffset())
+	log.Info(fmt.Sprintf("Starting kafka consumption. topic: %s, partition: %d, offset: %d", claim.Topic(), claim.Partition(), claim.InitialOffset()))
 	for {
 		select {
 		case <-h.ctx.Done():
@@ -74,7 +73,7 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 			case h.blockTopic:
 				var blockMsg kafkaTypes.BlockMessage
 				if err := json.Unmarshal(msg.Value, &blockMsg); err != nil {
-					h.logger.Warn("consume claim error, unmarshaling block message", "error", err)
+					log.Warn(fmt.Sprintf("consume claim error, unmarshaling block message. error: %v", err))
 					continue
 				}
 
@@ -90,7 +89,7 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 			case h.txTopic:
 				var txMsg kafkaTypes.TransactionMessage
 				if err := json.Unmarshal(msg.Value, &txMsg); err != nil {
-					h.logger.Warn("consume claim error, unmarshaling transaction message", "error", err)
+					log.Warn(fmt.Sprintf("consume claim error, unmarshaling transaction message. error: %v", err))
 					continue
 				}
 
@@ -106,7 +105,7 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 			case h.errorTopic:
 				var errorMsg kafkaTypes.ErrorTriggerMessage
 				if err := json.Unmarshal(msg.Value, &errorMsg); err != nil {
-					h.logger.Warn("consume claim error, unmarshaling error trigger message", "error", err)
+					log.Warn(fmt.Sprintf("consume claim error, unmarshaling error trigger message. error: %v", err))
 					continue
 				}
 
@@ -129,14 +128,13 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 }
 
 // ConsumeKafka starts consuming kafka messages from the specified topics
-func (client *KafkaConsumer) ConsumeKafka(ctx context.Context, blockMsgsChan chan kafkaTypes.BlockMessage, txMsgsChan chan kafkaTypes.TransactionMessage, errorMsgsChan chan kafkaTypes.ErrorTriggerMessage, errorChan chan error, logger log.Logger) {
+func (client *KafkaConsumer) ConsumeKafka(ctx context.Context, blockMsgsChan chan kafkaTypes.BlockMessage, txMsgsChan chan kafkaTypes.TransactionMessage, errorMsgsChan chan kafkaTypes.ErrorTriggerMessage, errorChan chan error) {
 	handler := &consumerGroupHandler{
 		ctx:           ctx,
 		blockMsgsChan: blockMsgsChan,
 		txMsgsChan:    txMsgsChan,
 		errorMsgsChan: errorMsgsChan,
 		errorChan:     errorChan,
-		logger:        logger,
 		txTopic:       client.config.TxTopic,
 		blockTopic:    client.config.BlockTopic,
 		errorTopic:    client.config.ErrorTopic,
