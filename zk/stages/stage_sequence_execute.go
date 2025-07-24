@@ -354,7 +354,7 @@ func sequencingBatchStep(
 
 			select {
 			case <-infoTreeTicker.C:
-				processedLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
+				processedLogs, _, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
 				if err != nil {
 					return err
 				}

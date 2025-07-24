@@ -47,11 +47,7 @@ func SpawnL1InfoTreeStage(
 		defer tx.Rollback()
 	}
 
-	if err := cfg.updater.WarmUp(tx); err != nil {
-		return fmt.Errorf("cfg.updater.WarmUp: %w", err)
-	}
-
-	processedLogs, err := cfg.updater.CheckForInfoTreeUpdates(logPrefix, tx)
+	processedLogs, err := cfg.updater.CheckForInfoTreeUpdatesWithRetry(logPrefix, tx)
 	if err != nil {
 		return fmt.Errorf("CheckForInfoTreeUpdates: %w", err)
 	}
