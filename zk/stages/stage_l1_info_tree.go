@@ -51,7 +51,7 @@ func SpawnL1InfoTreeStage(
 		return fmt.Errorf("cfg.updater.WarmUp: %w", err)
 	}
 
-	allLogs, err := cfg.updater.CheckForInfoTreeUpdates(logPrefix, tx)
+	processedLogs, err := cfg.updater.CheckForInfoTreeUpdates(logPrefix, tx)
 	if err != nil {
 		return fmt.Errorf("CheckForInfoTreeUpdates: %w", err)
 	}
@@ -61,7 +61,8 @@ func SpawnL1InfoTreeStage(
 	if latestUpdate != nil {
 		latestIndex = latestUpdate.Index
 	}
-	log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(allLogs), "latestIndex", latestIndex)
+
+	log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", processedLogs, "latestIndex", latestIndex)
 
 	if freshTx {
 		if funcErr = tx.Commit(); funcErr != nil {

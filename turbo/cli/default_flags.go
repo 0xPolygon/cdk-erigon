@@ -71,6 +71,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.WSEnabledFlag,
 	&utils.WSListenAddrFlag,
 	&utils.WSApiFlag,
+	&utils.WSSubscribeLogsChannelSize,
 	&utils.WsCompressionFlag,
 	&utils.HTTPTraceFlag,
 	&utils.HTTPDebugSingleFlag,
@@ -215,6 +216,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.SequencerResequence,
 	&utils.SequencerResequenceStrict,
 	&utils.SequencerResequenceReuseL1InfoIndex,
+	&utils.SequencerResequenceInfoTreeOffset,
+	&utils.AlwaysGenerateBatchL2Data,
 	&utils.ExecutorRequestTimeout,
 	&utils.ExecutorEnabled,
 	&utils.DatastreamNewBlockTimeout,
@@ -380,4 +383,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.RealtimeKafkaSyncClientID,
 	&utils.RealtimeKafkaSyncGroupID,
 	&utils.RealtimeCacheDumpPath,
+	&utils.PessimisticForkNumber,
 }

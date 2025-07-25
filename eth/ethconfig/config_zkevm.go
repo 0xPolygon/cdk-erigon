@@ -46,6 +46,7 @@ type Zk struct {
 	SequencerResequence                    bool
 	SequencerResequenceStrict              bool
 	SequencerResequenceReuseL1InfoIndex    bool
+	SequencerResequenceInfoTreeOffset      *L1InfoTreeOffset
 	ExecutorRequestTimeout                 time.Duration
 	ExecutorEnabled                        bool
 	DatastreamNewBlockTimeout              time.Duration
@@ -99,8 +100,10 @@ type Zk struct {
 	SealBatchImmediatelyOnOverflow bool
 	WitnessContractInclusion       []common.Address
 	BadTxAllowance                 uint64
+	AlwaysGenerateBatchL2Data      bool
 	RejectLowGasPriceTransactions  bool
 	RejectLowGasPriceTolerance     float64
+	PessimisticForkNumber          uint64
 }
 
 var DefaultZkConfig = Zk{
@@ -111,4 +114,10 @@ var DefaultZkConfig = Zk{
 // ShouldImportInitialBatch returns true in case initial batch config file name is non-empty string.
 func (c *Zk) ShouldImportInitialBatch() bool {
 	return c.InitialBatchCfgFile != ""
+}
+
+type L1InfoTreeOffset struct {
+	Index           uint64
+	Offset          int64
+	ExpectedGerHash common.Hash
 }

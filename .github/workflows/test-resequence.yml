@@ -5,12 +5,14 @@ on:
       - dev
       - zkevm
       - stable/**
+      - dev-pp
   pull_request:
     branches:
       - dev
       - zkevm
       - stable/**
       - feature/v0.6.0
+      - dev-pp
     types:
       - opened
       - reopened

@@ -130,3 +130,5 @@ cmd/smt-db-split/smt-db-split
 test/app
 bridge-config-artifact
 kurtosis-cli.tar.gz
+zk/debug_tools/rpc-cache/cache.db
+zk/debug_tools/rpc-cache/rpc-cache

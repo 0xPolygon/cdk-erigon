@@ -186,7 +186,7 @@ func sequencingBatchStep(
 		return err
 	}
 
-	forkId, err := prepareForkId(lastBatch, executionAt, sdb.hermezDb)
+	forkId, err := prepareForkId(lastBatch, executionAt, sdb.hermezDb, cfg)
 	if err != nil {
 		return err
 	}
@@ -425,7 +425,7 @@ BatchLoop:
 		// timer: evm + smt
 		t := utils.StartTimer("stage_sequence_execute", "evm", "smt")
 
-		infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, shouldWriteGerToContract, err := prepareL1AndInfoTreeRelatedStuff(sdb, batchState, header.Time, cfg.zk.SequencerResequenceReuseL1InfoIndex)
+		infoTreeIndexProgress, l1TreeUpdate, l1TreeUpdateIndex, l1BlockHash, ger, shouldWriteGerToContract, err := prepareL1AndInfoTreeRelatedStuff(logPrefix, sdb, batchState, header.Time, cfg.zk.SequencerResequenceReuseL1InfoIndex, cfg.zk.SequencerResequenceInfoTreeOffset)
 		if err != nil {
 			return err
 		}
@@ -502,7 +502,7 @@ BatchLoop:
 
 			select {
 			case <-infoTreeTicker.C:
-				newLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
+				processedLogs, err := cfg.infoTreeUpdater.CheckForInfoTreeUpdates(logPrefix, sdb.tx)
 				if err != nil {
 					return err
 				}
@@ -511,7 +511,7 @@ BatchLoop:
 				if latest != nil {
 					latestIndex = latest.Index
 				}
-				log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", len(newLogs), "latestIndex", latestIndex)
+				log.Info(fmt.Sprintf("[%s] Info tree updates", logPrefix), "count", processedLogs, "latestIndex", latestIndex)
 			default:
 			}
 
