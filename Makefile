@@ -136,6 +136,7 @@ COMMANDS += rpcdaemon
 COMMANDS += rpctest
 COMMANDS += sentry
 COMMANDS += state
+COMMANDS += state-check
 COMMANDS += txpool
 COMMANDS += verkle
 COMMANDS += evm

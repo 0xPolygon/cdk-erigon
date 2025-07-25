@@ -23,6 +23,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
+	"github.com/ledgerwatch/erigon/smt/pkg/utils"
+	"github.com/schollz/progressbar/v3"
 
 	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 
@@ -64,7 +66,6 @@ import (
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rlp"
 	"github.com/ledgerwatch/erigon/turbo/debug"
-	"github.com/ledgerwatch/erigon/turbo/logging"
 	"github.com/ledgerwatch/erigon/turbo/services"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync/freezeblocks"
 )
@@ -86,6 +87,8 @@ var (
 	pathSmtDb       = flag.String("smt-db-path", "smt", "path to the standalone SMT database file")
 	standaloneSmtDb = flag.Bool("standalone-smt-db", false, "specifies if the SMT DB is separate from the ChainDB")
 	incremental     = flag.Bool("incremental", false, "use incremental  mode")
+	ignoreScalable  = flag.Bool("ignore-scalable", false, "ignore scalable account")
+	deleteScalable  = flag.Bool("delete-scalable", false, "delete scalable account")
 	debugPrint      = flag.Bool("debugPrint", false, "print debug info")
 )
 
@@ -397,7 +400,7 @@ func dumpAll(chaindata, output string) error {
 			return err
 		}
 		dbsmt := mdbx.MustOpen(*pathSmtDb)
-		defer db.Close()
+		defer dbsmt.Close()
 		err = dbsmt.View(context.Background(), fdumper)
 		if err != nil {
 			return err
@@ -425,7 +428,9 @@ func migrateGenesis(chaindata, input, output string) error {
 	db := mdbx.MustOpen(chaindata)
 	defer db.Close()
 
-	var jsonData map[string]interface{}
+	var genesisData map[string]interface{}
+	var allocData map[string]interface{}
+
 	if input == "" {
 		input = "genesis.json"
 	}
@@ -437,13 +442,20 @@ func migrateGenesis(chaindata, input, output string) error {
 			return err
 		}
 	} else {
-		if err := json.Unmarshal(fileData, &jsonData); err != nil {
+		if err := json.Unmarshal(fileData, &genesisData); err != nil {
 			fmt.Println("Error decoding JSON:", err)
 			return err
 		}
 	}
 
-	current := make(map[string]interface{})
+	if _, ok := genesisData["alloc"]; !ok {
+		fmt.Println("No alloc field found in genesis stub.")
+		allocData = make(map[string]interface{})
+	} else {
+		allocData = genesisData["alloc"].(map[string]interface{})
+	}
+
+	var current map[string]interface{}
 
 	var count uint64
 	var keys []string
@@ -452,7 +464,7 @@ func migrateGenesis(chaindata, input, output string) error {
 		return tx.ForEach(kv.PlainState, nil, func(k, v []byte) error {
 			if len(k) == 20 {
 				count++
-				keys = append(keys, "0x"+common.Bytes2Hex(k))
+				keys = append(keys, common.Bytes2Hex(k))
 			}
 			return nil
 		})
@@ -460,7 +472,7 @@ func migrateGenesis(chaindata, input, output string) error {
 		return err
 	}
 
-	fmt.Printf("count=%d\n", count)
+	fmt.Printf("Keys count: %d\n", count)
 	sort.Strings(keys)
 	tx, txErr := db.BeginRo(context.Background())
 	if txErr != nil {
@@ -479,19 +491,13 @@ func migrateGenesis(chaindata, input, output string) error {
 		return err
 	}
 	defer cc.Close()
-	// Get alloc map for easier access
-	alloc := jsonData["alloc"].(map[string]interface{})
-
 	for _, acc_hex := range keys {
-		// Remove 0x prefix if present for the key
-		acc_key := acc_hex
-		if strings.HasPrefix(acc_hex, "0x") {
-			acc_key = acc_hex[2:]
+		if *ignoreScalable && strings.ToLower(acc_hex) == "000000000000000000000000000000005ca1ab1e" {
+			continue
 		}
-
 		acc_addr := libcommon.HexToAddress(acc_hex)
-		log.Debug("acc_addr: %s\n", acc_addr)
-		if _, exists := alloc[acc_key]; exists {
+		log.Debug("acc_addr: %s\n", acc_hex)
+		if _, exists := allocData[acc_hex]; exists {
 			// Fixme: if xlayer account conflict with target node(such as op-geth), use which as new regenesis account?
 			a, err := plainStateReader.ReadAccountData(acc_addr)
 			if err != nil {
@@ -499,14 +505,14 @@ func migrateGenesis(chaindata, input, output string) error {
 			}
 
 			if hex.EncodeToString(a.CodeHash.Bytes()) != "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" {
-				fmt.Println("Adding exist contract: ", acc_hex)
+				fmt.Println("Adding existing contract: ", acc_hex)
 			} else {
-				fmt.Println("Adding exist account:", acc_hex)
+				fmt.Println("Adding existing account:", acc_hex)
 			}
 			continue
 		}
-		alloc[acc_key] = make(map[string]interface{})
-		switch node := alloc[acc_key].(type) {
+		allocData[acc_hex] = make(map[string]interface{})
+		switch node := allocData[acc_hex].(type) {
 		case map[string]interface{}:
 			current = node
 		default:
@@ -523,52 +529,50 @@ func migrateGenesis(chaindata, input, output string) error {
 		current["balance"] = a.Balance.Hex()
 
 		log.Debug("CodeHash:%x\nIncarnation:%d\nNonce:%d\nblance:%s\n", a.CodeHash, a.Incarnation, a.Nonce, a.Balance.String())
-		if hex.EncodeToString(a.CodeHash.Bytes()) != "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" {
-			code, err := tx.GetOne(kv.Code, a.CodeHash[:])
-			if err != nil {
-				return err
-			}
-			current["code"] = hexutil.Encode(code)
-			log.Debug("acc: %s => %s\n", acc_addr, hexutil.Encode(code))
-			acc_bytes := common.FromHex(acc_hex)
-			first_storage := false
-			for k, v, e := c.Seek(acc_bytes); k != nil; k, v, e = c.Next() {
-				if e != nil {
-					return e
-				}
-				if !bytes.HasPrefix(k, acc_bytes) {
-					break
-				}
-				// todo: make sure if exist same address have diff Incarnation? seem no
-				if len(k) > 28 {
-					if !first_storage {
-						if _, exists := current["storage"]; !exists {
-							current["storage"] = make(map[string]interface{})
-						}
 
-						switch node := current["storage"].(type) {
-						case map[string]interface{}:
-							current = node
-						default:
-							panic("unhandled json type")
-						}
-						first_storage = true
+		// otherwise, get code and storage
+		code, err := tx.GetOne(kv.Code, a.CodeHash[:])
+		if err != nil {
+			return err
+		}
+		current["code"] = hexutil.Encode(code)
+		log.Debug("acc: %s => %s\n", acc_addr, hexutil.Encode(code))
+		acc_bytes := common.FromHex(acc_hex)
+		first_storage := false
+		for k, v, e := c.Seek(acc_bytes); k != nil; k, v, e = c.Next() {
+			if e != nil {
+				return e
+			}
+			if !bytes.HasPrefix(k, acc_bytes) {
+				break
+			}
+			// todo: make sure if exist same address have diff Incarnation? seem no
+			if len(k) > 28 {
+				if !first_storage {
+					if _, exists := current["storage"]; !exists {
+						current["storage"] = make(map[string]interface{})
 					}
-					current[hexutil.Encode(k[28:])] = BytesToPaddedHex(v, 64)
-					log.Debug("%x slot => %x\n", k[28:], v)
+
+					switch node := current["storage"].(type) {
+					case map[string]interface{}:
+						current = node
+					default:
+						panic("unhandled json type")
+					}
+					first_storage = true
 				}
+				current[hexutil.Encode(k[28:])] = BytesToPaddedHex(v, 64)
+				log.Debug("%x slot => %x\n", k[28:], v)
 			}
-			if first_storage == false {
-				current["storage"] = make(map[string]interface{})
-			}
-		} else {
-			current["code"] = "0x"
+		}
+		if !first_storage {
 			current["storage"] = make(map[string]interface{})
 		}
-
 	}
 
-	updatedData, err := json.MarshalIndent(jsonData, "", "  ")
+	genesisData["alloc"] = allocData
+
+	updatedData, err := json.MarshalIndent(genesisData, "", "  ")
 	if err != nil {
 		fmt.Println("Error encoding JSON:", err)
 		return err
@@ -1633,6 +1637,7 @@ type accInfo struct {
 	Storage map[string]string `json:"storage"`
 }
 
+/*
 func decodeAccInfo(accoutStr string, value accInfo, accChanges map[libcommon.Address]*accounts.Account,
 	codeChanges map[libcommon.Address]string, storageChanges map[libcommon.Address]map[string]string) {
 	acc_bytes, err := hexutil.Decode(accoutStr)
@@ -1664,7 +1669,30 @@ func decodeAccInfo(accoutStr string, value accInfo, accChanges map[libcommon.Add
 	}
 }
 
-func checkStateroot(chaindata, input string, incremental, debug bool) error {
+func newMDBX(dbdir string, ctx context.Context) (kv.RwDB, error) {
+	label := kv.SmtDB
+	name := kv.SmtDB.String()
+	dbPath := filepath.Join(dbdir, name)
+
+	hackLogger.Info("Opening Database", "label", name, "path", dbPath)
+
+	roTxLimit := int64(32)
+	roTxsLimiter := semaphore.NewWeighted(roTxLimit) // 1 less than max to allow unlocking to happen
+	opts := mdbx.NewMDBX(hackLogger).
+		Path(dbPath).Label(label).
+		GrowthStep(16 * datasize.MB).
+		SyncPeriod(30 * time.Second).
+		RoTxsLimiter(roTxsLimiter)
+	opts = opts.DirtySpace(uint64(512 * datasize.MB))
+	return opts.Open(ctx)
+}
+*/
+
+func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) error {
+	if *deleteScalable && *ignoreScalable {
+		return fmt.Errorf("you cannot use --delete-scalable=true and --ignore-scalable=true flags together")
+	}
+
 	var jsonData map[string]accInfo
 	if input == "" {
 		input = "genesis.json"
@@ -1687,13 +1715,13 @@ func checkStateroot(chaindata, input string, incremental, debug bool) error {
 	codeChanges := make(map[libcommon.Address]string)
 	storageChanges := make(map[libcommon.Address]map[string]string)
 
-	fmt.Printf("begin decode")
+	fmt.Println("Begin json decode")
 	for acc, value := range jsonData {
-		acc_bytes, err := hexutil.Decode(acc)
+		accBytes := common.FromHex(acc)
 		if err != nil {
 			panic("acc decoding error")
 		}
-		address := libcommon.BytesToAddress(acc_bytes)
+		address := libcommon.BytesToAddress(accBytes)
 		acc := accounts.NewAccount()
 		balance, err := uint256.FromHex(value.Balance)
 		if err != nil {
@@ -1709,57 +1737,25 @@ func checkStateroot(chaindata, input string, incremental, debug bool) error {
 
 		if value.Code != "0x" {
 			codeChanges[address] = value.Code
-			if value.Storage != nil {
-				storageChanges[address] = make(map[string]string)
+		}
+		if *ignoreScalable && address == libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e") {
+			fmt.Printf("Ignoring scalable address: %s\n", address.String())
+			continue
+		}
+		if value.Storage != nil {
+			storageChanges[address] = make(map[string]string)
+			if *deleteScalable && address == libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e") {
+				for k := range value.Storage {
+					storageChanges[address][k] = "0"
+				}
+			} else {
 				for k, v := range value.Storage {
 					storageChanges[address][k] = v
 				}
 			}
 		}
 	}
-
-	if incremental {
-		smtIncremental := smt.NewSMT(nil, false)
-
-		fmt.Printf("begin SetAccountStorage")
-
-		for addr, acc := range accChanges {
-			if err := smtIncremental.SetAccountStorage(addr, acc); err != nil {
-				panic("SetAccountStorage")
-			}
-		}
-
-		fmt.Printf("begin SetContractBytecode")
-
-		for addr, code := range codeChanges {
-			if err := smtIncremental.SetContractBytecode(addr.String(), code); err != nil {
-				panic("SetContractBytecode")
-			}
-		}
-
-		fmt.Printf("begin SetContractStorage")
-
-		for addr, storage := range storageChanges {
-			if _, err := smtIncremental.SetContractStorage(addr.String(), storage, nil); err != nil {
-				panic("SetContractStorage")
-			}
-		}
-
-		fmt.Printf("begin GetLastRoot")
-
-		smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
-		fmt.Printf("smtIncrementalRootHash: %x\n", smtIncrementalRootHash)
-	}
-
-	ctx := context.Background()
-	//smtBatch := smt.NewSMT(nil, false)
-	db := mdbx.MustOpen(chaindata)
-	defer db.Close()
-	tx, _ := db.BeginRw(context.Background())
-	eridb := db2.NewEriDb(tx, nil)
-	smtBatch := smt.NewSMT(eridb, false)
-	smtBatchRootHashOrigin, _ := smtBatch.Db.GetLastRoot()
-	fmt.Printf("smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
+	fmt.Println("End json decode")
 
 	if debug {
 		for acc, acc_info := range accChanges {
@@ -1767,7 +1763,7 @@ func checkStateroot(chaindata, input string, incremental, debug bool) error {
 		}
 
 		for acc, code := range codeChanges {
-			fmt.Printf("addr: %s, balance: %s, nonce: %d \n", acc.String(), code)
+			fmt.Printf("addr: %s, code %s \n", acc.String(), code)
 		}
 
 		for acc, st := range storageChanges {
@@ -1777,16 +1773,138 @@ func checkStateroot(chaindata, input string, incremental, debug bool) error {
 		}
 	}
 
-	fmt.Printf("begin SetStorage")
+	fmt.Printf("Number of accounts: %d\n", len(accChanges))
+	fmt.Printf("Number of code: %d\n", len(codeChanges))
+	fmt.Printf("Number of storage: %d\n", len(storageChanges))
+	fmt.Printf("Total number of keys: %d\n", len(accChanges)+len(codeChanges)+len(storageChanges))
+
+	ctx := context.Background()
+	db := mdbx.MustOpen(chaindata)
+	defer db.Close()
+	tx, err := db.BeginRw(ctx)
+	if err != nil {
+		panic(err)
+	}
+	var txsmt kv.RwTx = nil
+	if smtdata != "" {
+		fmt.Printf("Using split DB: %s\n", smtdata)
+		dbsmt := mdbx.MustOpen(*pathSmtDb)
+		defer dbsmt.Close()
+		txsmt, err = dbsmt.BeginRw(ctx)
+		if err != nil {
+			panic(err)
+		}
+	}
+	eridb := db2.NewEriDb(txsmt, tx)
+	smtBatch := smt.NewSMT(eridb, false)
+	if *deleteScalable {
+		fmt.Println("Deleting scalable address storage ...")
+		smtBatchRootHashOrigin, _ := smtBatch.Db.GetLastRoot()
+		fmt.Printf("*** (before delete) smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
+		ethAddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+		ethAddrBigInt := utils.ConvertHexToBigInt(ethAddr.String())
+		ethAddrBigIngArray := utils.ScalarToArrayBig(ethAddrBigInt)
+		for k := range storageChanges[ethAddr] {
+			// fmt.Printf("Deleting scalable address storage key: %s\n", k)
+			keyStoragePosition := utils.KeyContractStorage(ethAddrBigIngArray, k)
+			if err = smtBatch.DeleteKeySource(&keyStoragePosition); err != nil {
+				panic("DeleteKeySource: " + err.Error())
+			}
+		}
+		_, _, err := smtBatch.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
+		if err != nil {
+			panic("SetStorage: " + err.Error())
+		}
+		fmt.Println("Done deleting scalable address.")
+	}
+	smtBatchRootHashOrigin, _ := smtBatch.Db.GetLastRoot()
+	fmt.Printf("*** smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
+
+	if incremental {
+		fmt.Println("Begin incremental SMT buidling...")
+
+		smtIncremental := smt.NewSMT(nil, false)
+
+		/*
+			mdb, err := newMDBX("tmp", ctx)
+			if err != nil {
+				panic(fmt.Sprintf("Failed to open MDBX: %v", err))
+			}
+			defer mdb.Close()
+			txn, err := mdb.BeginRw(ctx)
+			if err != nil {
+				panic(err)
+			}
+			defer txn.Rollback()
+			smtIncremental := smt.NewSMT(db2.NewEriDb(txn, tx), false)
+		*/
+
+		fmt.Println("Begin SetAccountStorage")
+		bar := progressbar.NewOptions(len(accChanges), progressbar.OptionSetPredictTime(true))
+		for addr, acc := range accChanges {
+			if err := smtIncremental.SetAccountStorage(addr, acc); err != nil {
+				panic("SetAccountStorage")
+			}
+			bar.Add(1)
+		}
+		bar.Finish()
+		fmt.Println()
+
+		fmt.Println("Begin SetContractBytecode")
+		bar = progressbar.NewOptions(len(codeChanges), progressbar.OptionSetPredictTime(true))
+		for addr, code := range codeChanges {
+			if err := smtIncremental.SetContractBytecode(addr.String(), code); err != nil {
+				panic("SetContractBytecode")
+			}
+			bar.Add(1)
+		}
+		bar.Finish()
+		fmt.Println()
+
+		fmt.Println("Begin SetContractStorage")
+		totalStorage := 0
+		for _, storage := range storageChanges {
+			totalStorage += len(storage)
+		}
+		bar = progressbar.NewOptions(totalStorage, progressbar.OptionSetPredictTime(true))
+		for addr, storage := range storageChanges {
+			if _, err := smtIncremental.SetContractStorage(addr.String(), storage, nil); err != nil {
+				panic("SetContractStorage")
+			}
+			bar.Add(len(storage))
+		}
+		bar.Finish()
+		fmt.Println()
+
+		smtIncrementalRootHash, _ := smtIncremental.Db.GetLastRoot()
+		fmt.Printf("*** smtIncrementalRootHash: %x\n", smtIncrementalRootHash)
+		if smtIncrementalRootHash.Text(16) == smtBatchRootHashOrigin.Text(16) {
+			fmt.Println("Incremental check: Pass")
+		} else {
+			fmt.Println("Incremental check: Failed")
+		}
+
+		fmt.Println("Done incremental SMT buidling.")
+	}
+
+	fmt.Println("Begin SetStorage")
 	_, _, err = smtBatch.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
+	if err != nil {
+		panic("SetStorage: " + err.Error())
+	}
+	fmt.Println("End SetStorage")
 	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
-	fmt.Printf("smtBatchRootHash: %x\n", smtBatchRootHash)
+
+	fmt.Printf("*** smtBatchRootHash: %x\n", smtBatchRootHash)
 	if smtBatchRootHash.Text(16) == smtBatchRootHashOrigin.Text(16) {
-		fmt.Printf("State check pass\n")
+		fmt.Println("State check: Pass")
 	} else {
-		fmt.Printf("State check failed\n")
+		fmt.Println("State check: Failed")
 	}
 	tx.Rollback()
+	if txsmt != nil {
+		txsmt.Rollback()
+	}
 
 	return nil
 }
@@ -1815,8 +1933,6 @@ func main() {
 
 	// For X Layer, split db
 	kv.InitStandaloneSMT(*standaloneSmtDb)
-
-	logging.SetupLogger("hack")
 
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
@@ -1957,10 +2073,17 @@ func main() {
 		err = dumpAll(*chaindata, *output)
 	case "migrateGenesis":
 		err = migrateGenesis(*chaindata, *input, *output)
-	case "checkStateroot":
-		err = checkStateroot(*chaindata, *input, *incremental, *debugPrint)
+	case "checkStateRoot":
+		if *standaloneSmtDb {
+			err = checkStateRoot(*chaindata, *pathSmtDb, *input, *incremental, *debugPrint)
+		} else {
+			err = checkStateRoot(*chaindata, "", *input, *incremental, *debugPrint)
+		}
 	case "getSmtroot":
 		err = getSmtroot(*chaindata)
+	default:
+		fmt.Printf("Unknown action: %s\n", *action)
+		return
 	}
 
 	if err != nil {
