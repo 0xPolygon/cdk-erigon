@@ -66,18 +66,20 @@ func verifyAccountState(address string, accountData AccountState, client *ethcli
 		return fmt.Errorf("address: %s nonce is invalid: %v", address, err)
 	}
 
-	nonceStr := strings.TrimPrefix(accountData.Nonce, "0x")
-	nonceDump, ok := new(big.Int).SetString(nonceStr, 16)
-	if !ok {
-		return fmt.Errorf("address: %s invalid nonce format in dump: %s", address, accountData.Nonce)
-	}
+	if accountData.Nonce != "" {
+		nonceStr := strings.TrimPrefix(accountData.Nonce, "0x")
+		nonceDump, ok := new(big.Int).SetString(nonceStr, 16)
+		if !ok {
+			return fmt.Errorf("address: %s invalid nonce format in dump: %s", address, accountData.Nonce)
+		}
 
-	if new(big.Int).SetUint64(nonceRPC).Cmp(nonceDump) != 0 {
-		return fmt.Errorf("address: %s nonce not match: %v (RPC) != %s (dump)", address, nonceRPC, nonceDump.String())
+		if new(big.Int).SetUint64(nonceRPC).Cmp(nonceDump) != 0 {
+			return fmt.Errorf("address: %s nonce not match: %v (RPC) != %s (dump)", address, nonceRPC, nonceDump.String())
+		}
 	}
 
 	// 3. Verify code (if not empty)
-	if accountData.Code != "0x" {
+	if accountData.Code != "" && accountData.Code != "0x" {
 		code, err := client.CodeAt(ctx, addr, nil)
 		if err != nil {
 			return fmt.Errorf("address: %s code is invalid: %v", address, err)
