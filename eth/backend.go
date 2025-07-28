@@ -2109,8 +2109,10 @@ func (s *Ethereum) Stop() error {
 
 	// For X Layer, realtime
 	if sequencer.IsSequencer() {
-		if err := s.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
-			log.Error(fmt.Sprintf("[Realtime] Failed to send kafka error trigger message. error: %v", err))
+		if s.config.Zk.XLayer.Realtime.Enable && s.kafkaEnabled {
+			if err := s.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
+				log.Error(fmt.Sprintf("[Realtime] Failed to send kafka error trigger message. error: %v", err))
+			}
 		}
 	}
 
