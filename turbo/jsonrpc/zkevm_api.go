@@ -118,12 +118,13 @@ func NewZkEvmAPI(
 
 // FinalizedBatchNumber returns the highest verified batch number
 func (api *ZkEvmAPIImpl) FinalizedBatchNumber(ctx context.Context) (hexutil.Uint64, error) {
-	var highestVerifiedBatchNo uint64
-	var err error
-	api.db.View(ctx, func(tx kv.Tx) error {
-		highestVerifiedBatchNo, err = stages.GetStageProgress(tx, stages.AnalysisGroupVerifiedBatchNo)
-		return err
-	})
+	tx, err := api.db.BeginRo(ctx)
+	if err != nil {
+		return hexutil.Uint64(0), err
+	}
+	defer tx.Rollback()
+
+	highestVerifiedBatchNo, err := rpchelper.GetFinalizedBatchNumber(tx)
 	if err != nil {
 		return hexutil.Uint64(0), err
 	}
