@@ -69,7 +69,7 @@ db.read.concurrency: 20000
 txpool.globalslots: 1000000
 txpool.globalbasefeeslots: 1000000
 txpool.globalqueue: 1000000
-txpool.packbatchspeciallist : ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"]
+txpool.packbatchspeciallist : ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534", "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"]
 txpool.gaspricemultiple : 2
 txpool.blockedlist: ["0xdD2FD4581271e230360230F9337D5c0430Bf44C0"]
 txpool.enablefreegasbynonce : true

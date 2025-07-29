@@ -1,0 +1,125 @@
+PathRWData = "/tmp/"
+L1URL="http://xlayer-mock-l1-network:8545"
+
+L2URL="http://xlayer-rpc:8545"
+
+AggLayerURL="xlayer-agglayer:4443"
+
+ForkId = 13
+ContractVersions = "banana"
+IsValidiumMode = true
+NetworkID = 1
+
+L2Coinbase =  "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
+SequencerPrivateKeyPath = "/etc/aggkit/sequencer.keystore"
+SequencerPrivateKeyPassword  = "testonly"
+
+AggregatorPrivateKeyPath = "/etc/aggkit/aggregator.keystore"
+AggregatorPrivateKeyPassword  = "testonly"
+SenderProofToL1Addr = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+polygonBridgeAddr = "0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA"
+
+RPCURL = "http://xlayer-rpc:8545"
+
+WitnessURL = ""
+
+rollupCreationBlockNumber = "1"
+rollupManagerCreationBlockNumber = "1"
+genesisBlockNumber = "1"
+[L1Config]
+chainId = "1337"
+polygonZkEVMGlobalExitRootAddress = "0xB8cedD4B9eF683f0887C44a6E4312dC7A6e2fcdB"
+polygonRollupManagerAddress = "0xE96dBF374555C6993618906629988d39184716B3"
+polTokenAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+polygonZkEVMAddress = "0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd"
+
+[L2Config]
+GlobalExitRootAddr = "0xa40d5f56745a118d0906a34e69aec8c0db1cb8fa"
+
+[Log]
+Environment = "development"
+Level = "info"
+Outputs = ["stderr"]
+
+[RPC]
+Port = 5576
+
+[AggSender]
+StoragePath = "/tmp/aggsender.sqlite"
+AggsenderPrivateKey = {Path = "/etc/aggkit/sequencer.keystore", Password = "testonly"}
+CheckStatusCertificateInterval = "1s"
+Mode="PessimisticProof"
+UseAgglayerTLS = false
+MaxCertSize = 0
+MaxL2BlockNumber = 0
+StopOnFinishedSendingAllCertificates = false
+
+[AggSender.MaxSubmitCertificateRate]
+NumRequests = 20
+Interval = "1m"
+BlockFinality = "FinalizedBlock"
+SaveCertificatesToFilesPath = "/tmp/certificates"
+KeepCertificatesHistory = true
+[AggOracle]
+BlockFinality = "FinalizedBlock"
+WaitPeriodNextGER = "10s"
+
+[AggOracle.EVMSender]
+GlobalExitRootL2 = "0xa40d5f56745a118d0906a34e69aec8c0db1cb8fa"
+WaitPeriodMonitorTx = "10s"
+
+[AggOracle.EVMSender.EthTxManager]
+PrivateKeys = [{Path = "/etc/aggkit/aggoracle.keystore", Password = ""}]
+[AggOracle.EVMSender.EthTxManager.Etherman]
+L1ChainID = "1337"
+
+[BridgeL1Sync]
+BlockFinality = "FinalizedBlock"
+
+[BridgeL2Sync]
+BridgeAddr = "0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA"
+
+DBPath = "/tmp/bridgel2sync.sqlite"
+BlockFinality = "FinalizedBlock"
+
+SyncBlockChunkSize = 1000
+
+[ReorgDetectorL1]
+DBPath = "/tmp/reorgdetectorl1.sqlite"
+FinalizedBlock="FinalizedBlock"
+
+[ReorgDetectorL2]
+DBPath = "/tmp/reorgdetectorl2.sqlite"
+FinalizedBlock="FinalizedBlock"
+
+[L1InfoTreeSync]
+InitialBlock = "1"
+BlockFinality = "FinalizedBlock"
+
+[LastGERSync]
+BlockFinality = "FinalizedBlock"
+
+[ClaimSponsor]
+DBPath = "/tmp/claimsponsor.sqlite"
+Enabled = false
+
+SenderAddr = "0x5f5dB0D4D58310F53713eF4Df80ba6717868A9f8"
+
+BridgeAddrL2 = "0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA"
+
+[ClaimSponsor.EthTxManager]
+PrivateKeys = [
+    {Path = "/etc/aggkit/claimtxmanager.keystore", Password = ""},
+]
+
+StoragePath = ""
+
+[ClaimSponsor.EthTxManager.Etherman]
+URL = ""
+
+L1ChainID = "195"
+
+[Profiling]
+ProfilingHost = "0.0.0.0"
+
+ProfilingPort = 6060
