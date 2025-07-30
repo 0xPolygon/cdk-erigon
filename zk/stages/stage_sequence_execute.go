@@ -234,10 +234,13 @@ func sequencingBatchStep(
 				log.Error(fmt.Sprintf("[%s] Failed to get smt max block number", logPrefix), "error", err, "smtMaxBlockNumber", smtMaxBlockNumber)
 				return err
 			}
-			if smtMaxBlockNumber != 0 && smtMaxBlockNumber+1 < executionAt {
-				targetBlock, err := getTargetBlockForSMTAlignment(sdb, logPrefix, executionAt, smtMaxBlockNumber)
-				if err != nil {
-					return err
+			if smtMaxBlockNumber+1 < executionAt {
+				targetBlock := uint64(0)
+				if smtMaxBlockNumber != 0 {
+					targetBlock, err = getTargetBlockForSMTAlignment(sdb, logPrefix, executionAt, smtMaxBlockNumber)
+					if err != nil {
+						return err
+					}
 				}
 
 				isUnwinding, err := unwindExecutionToSMT(batchContext, executionAt, targetBlock, u)
