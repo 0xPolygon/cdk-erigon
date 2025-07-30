@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "create2Salt": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "appliedIntent": null,
+  "prestateManifest": null,
+  "superchainContracts": null,
+  "superchainRoles": null,
+  "implementationsDeployment": null,
+  "opChainDeployments": null,
+  "l1StateDump": null,
+  "DeploymentCalldata": null
+}
+

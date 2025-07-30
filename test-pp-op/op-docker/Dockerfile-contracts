@@ -1,0 +1,46 @@
+# Contracts build stage
+FROM golang:1.24 AS contracts-builder
+
+# Install dependencies for contract building
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    bash \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install foundry
+RUN curl -L https://foundry.paradigm.xyz | bash && \
+    /root/.foundry/bin/foundryup && \
+    mv /root/.foundry/bin/* /usr/local/bin/ && \
+    rm -rf /root/.foundry
+
+WORKDIR /app
+
+# Copy the entire project (needed for git submodules)
+COPY . .
+
+# Initialize submodules and build contracts
+WORKDIR /app/packages/contracts-bedrock
+RUN git submodule update --init --recursive || echo "No submodules found"
+RUN forge build
+
+# Build op-deployer
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+RUN go build -o /app/op-deployer/bin/op-deployer ./op-deployer/cmd/op-deployer
+
+# Create final contracts image with artifacts, foundry tools, and op-deployer
+FROM debian:bookworm-slim
+WORKDIR /app
+
+# Copy foundry tools for runtime use
+COPY --from=contracts-builder /usr/local/bin/forge /usr/local/bin/cast /usr/local/bin/anvil /usr/local/bin/
+
+# Copy op-deployer binary
+COPY --from=contracts-builder /app/op-deployer/bin/ ./op-deployer/bin/
+
+# Copy contract artifacts and config (copy essential files only)
+COPY --from=contracts-builder /app/packages/contracts-bedrock/ ./packages/contracts-bedrock/ 
+
+CMD ["echo", "Contracts and op-deployer ready"] 

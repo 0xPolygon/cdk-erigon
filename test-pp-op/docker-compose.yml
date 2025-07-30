@@ -406,7 +406,7 @@ services:
       - --http.vhosts=*
       - --http.port=8545
       - --http.addr=0.0.0.0
-      - --http.api=web3,debug,eth,txpool,net,engine
+      - --http.api=web3,debug,eth,txpool,net,engine,miner
       - --ws
       - --ws.addr=0.0.0.0
       - --ws.port=7546
@@ -429,11 +429,13 @@ services:
     volumes:
       - ./config-op/rollup.json:/rollup.json
       - ./config-op/jwt.txt:/jwt.txt
+      - ./data/op-node:/data
     ports:
       - "9545:9545"
       - "7070:7070"
     command:
       - /app/op-node/bin/op-node
+      - --log.level=debug
       - --l2=http://op-geth:8552
       - --l2.jwt-secret=/jwt.txt
       - --sequencer.enabled
@@ -447,6 +449,7 @@ services:
       - --l1=${L1_RPC_URL_IN_DOCKER}
       - --l1.beacon=${L1_BEACON_URL_IN_DOCKER}
       - --l1.rpckind=standard
+      - --safedb.path=/data/safedb
     depends_on:
       - op-geth
 
@@ -455,6 +458,7 @@ services:
     container_name: op-batcher
     command:
       - /app/op-batcher/bin/op-batcher
+      - --log.level=debug
       - --l2-eth-rpc=http://op-geth:8545
       - --rollup-rpc=http://op-node:9545
       - --poll-interval=1s
@@ -470,20 +474,24 @@ services:
       - --private-key=${OP_BATCHER_PRIVATE_KEY}
     depends_on:
       - op-node
-
+      
   op-proposer:
     image: "${OP_STACK_IMAGE_TAG}"
     container_name: op-proposer
     environment:
-      - L2OO_ADDRESS=${L2OO_ADDRESS}
+      - DISPUTE_GAME_FACTORY_ADDRESS=${DISPUTE_GAME_FACTORY_ADDRESS}
     command:
       - /app/op-proposer/bin/op-proposer
-      - --poll-interval=12s
+      - --log.level=debug
+      - --poll-interval=2s
       - --rpc.port=8560
       - --rollup-rpc=http://op-node:9545
-      - --l2oo-address=${L2OO_ADDRESS}
+      - --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
+      - --proposal-interval=1m
       - --private-key=${OP_PROPOSER_PRIVATE_KEY}
       - --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER}
+      - --game-type=${GAME_TYPE}
+      - --allow-non-finalized
     depends_on:
       - op-batcher
 
@@ -498,3 +506,49 @@ services:
     ports:
       - 15576:5576
     command: ["run", "--cfg=/etc/aggkit/aggkit.toml", "--components=aggoracle"]
+
+  op-challenger:
+    image: "${OP_STACK_IMAGE_TAG}"
+    container_name: op-challenger
+    environment:
+      - L1_RPC_URL_IN_DOCKER=${L1_RPC_URL_IN_DOCKER}
+      - L1_BEACON_URL_IN_DOCKER=${L1_BEACON_URL_IN_DOCKER}
+      - DISPUTE_GAME_FACTORY_ADDRESS=${DISPUTE_GAME_FACTORY_ADDRESS}
+    volumes:
+      - ./data/cannon-data:/data
+      - ./config-op/rollup.json:/rollup.json
+      - ./config-op/genesis.json:/l2-genesis.json
+    depends_on:
+      - op-node
+    command:
+      - /app/op-challenger/bin/op-challenger
+      - --log.level=debug
+      - --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER}
+      - --l1-beacon=${L1_BEACON_URL_IN_DOCKER}
+      - --l2-eth-rpc=http://op-geth:8545
+      - --rollup-rpc=http://op-node:9545
+      - --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
+      - --cannon-bin=/app/cannon/bin/cannon
+      - --cannon-server=/data/op-program
+      - --cannon-prestate=/data/prestate-mt64.bin.gz
+      - --cannon-rollup-config=/rollup.json
+      - --cannon-l2-genesis=/l2-genesis.json
+      - --private-key=${OP_PROPOSER_PRIVATE_KEY}
+      - --trace-type=cannon,permissioned
+      - --datadir=/data
+      - --game-window=${GAME_WINDOW}s
+
+  op-dispute-mon:
+    image: "${OP_STACK_IMAGE_TAG}"
+    container_name: op-dispute-mon
+    depends_on:
+      - op-challenger
+      - op-proposer
+    command:
+      - /app/op-dispute-mon/bin/op-dispute-mon
+      - --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER}
+      - --rollup-rpc=http://op-node:9545
+      - --game-factory-address=${DISPUTE_GAME_FACTORY_ADDRESS}
+      - --game-window=${GAME_WINDOW}s
+      - --honest-actors=${PROPOSER_ADDRESS}
+

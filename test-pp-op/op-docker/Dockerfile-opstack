@@ -1,10 +1,22 @@
-FROM golang:1.24 as builder
+# Single stage build with Go
+FROM golang:1.24
 WORKDIR /app
 
+# Install all dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    jq \
+    docker.io \
+    make \
+    gcc \
+    nodejs \
+    npm \
+    bash \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install just
 ARG TARGETARCH
-
-RUN apt-get update && apt-get install -y curl git jq
-
 RUN case ${TARGETARCH} in \
         "amd64") JUST_ARCH="x86_64" ;; \
         "arm64") JUST_ARCH="aarch64" ;; \
@@ -13,33 +25,24 @@ RUN case ${TARGETARCH} in \
     curl -sSL "https://github.com/casey/just/releases/download/1.36.0/just-1.36.0-${JUST_ARCH}-unknown-linux-musl.tar.gz" | tar -xz -C /usr/local/bin just && \
     chmod +x /usr/local/bin/just
 
-
-RUN apt-get install -y nodejs npm && \
-curl -L https://foundry.paradigm.xyz | bash && \
-/root/.foundry/bin/foundryup && \
-mv /root/.foundry/bin/* /usr/local/bin/ && \
-apt-get clean && rm -rf /var/lib/apt/lists/* /root/.foundry
-
+# Cache go dependencies first
 COPY go.mod go.sum ./
 RUN go mod download
+
+# Copy source code
 COPY . .
 
-# Build op-program first
-RUN make op-program
+# Build Go binaries
+RUN make build-go
 
-# Build cannon
-RUN make cannon
+# Copy foundry tools and artifacts from contracts image
+COPY --from=op-contracts:v1.13.4 /usr/local/bin/forge /usr/local/bin/cast /usr/local/bin/anvil /usr/local/bin/
 
-# Generate prestate files
-RUN make cannon-prestate || echo "cannon-prestate failed, trying alternative approach"
+# Verify installations
+RUN echo "🔍 Verifying installations:" && \
+    which go && go version && \
+    which docker && docker --version && \
+    which forge && forge --version && \
+    which just && just --version || echo "⚠️ Some tools not found"
 
-# Alternative approach: create dummy prestate files if generation fails
-RUN if [ ! -f "op-program/bin/prestate-proof.json" ]; then \
-        mkdir -p op-program/bin && \
-        echo '{"pre":"0x03c7ae758795765c6664a5d39bf63841c71ff191e9189522bad8ebff5d4eca98","post":"0x0000000000000000000000000000000000000000000000000000000000000000","vm":"cannon"}' > op-program/bin/prestate-proof.json && \
-        echo '{"timestamp":0,"blockhash":"0x0000000000000000000000000000000000000000000000000000000000000000","offset":0}' > op-program/bin/meta.json && \
-        echo '{"pre":"0x03c7ae758795765c6664a5d39bf63841c71ff191e9189522bad8ebff5d4eca98"}' > op-program/bin/prestate.json; \
-    fi
-
-# Build everything else
-RUN make build
+WORKDIR /app

@@ -22,9 +22,9 @@ polygonBridgeAddr = "0xb2fAc1CE54bb9BF77A7FE106fA69F81453b72851"
 RPCURL = "http://xlayer-rpc8545"
 WitnessURL = "http://xlayer-rpc:8545"
 
-rollupCreationBlockNumber = "156"
-rollupManagerCreationBlockNumber = "162"
-genesisBlockNumber = "156"
+rollupCreationBlockNumber = "75"
+rollupManagerCreationBlockNumber = "84"
+genesisBlockNumber = "75"
 
 [Common]
 NetworkID = 1
