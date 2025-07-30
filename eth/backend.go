@@ -1243,6 +1243,11 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 					backend.kafkaProducer = kafkaProducer
 					backend.blockInfoChan = make(chan *realtimeTypes.BlockInfo, realtimeKafka.DefaultKafkaBufferSize)
 					backend.txInfoChan = make(chan *state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
+
+					// Send error trigger message on sequencer restart
+					if err := backend.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
+						log.Error(fmt.Sprintf("[Realtime] Failed to send kafka error trigger message. error: %v", err))
+					}
 				}
 			}
 
