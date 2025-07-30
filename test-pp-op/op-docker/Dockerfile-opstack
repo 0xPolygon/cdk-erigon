@@ -27,6 +27,7 @@ RUN case ${TARGETARCH} in \
 
 # Cache go dependencies first
 COPY go.mod go.sum ./
+COPY op-geth/ ./op-geth/
 RUN go mod download
 
 # Copy source code
