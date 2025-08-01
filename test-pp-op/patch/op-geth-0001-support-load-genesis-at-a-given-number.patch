@@ -1,4 +1,4 @@
-From ef6105a05d9c1399812c15f740e1b47adafc0e23 Mon Sep 17 00:00:00 2001
+From c0308891304462768e9b1f662c35e77b614a427e Mon Sep 17 00:00:00 2001
 From: JimmyShi <jimmyshixiang22@gmail.com>
 Date: Tue, 8 Jul 2025 14:29:46 +0800
 Subject: [PATCH] support load genesis at a given number
@@ -7,7 +7,9 @@ Subject: [PATCH] support load genesis at a given number
  core/blockchain_reader.go     |  7 ++++++-
  core/genesis.go               | 13 ++++++++++---
  core/rawdb/accessors_chain.go | 17 +++++++++++++++++
- 3 files changed, 33 insertions(+), 4 deletions(-)
+ core/rawdb/chain_freezer.go   |  6 ++++--
+ core/rawdb/database.go        | 36 ++++++++++++++++++++++++++++++-----
+ 5 files changed, 68 insertions(+), 11 deletions(-)
 
 diff --git a/core/blockchain_reader.go b/core/blockchain_reader.go
 index f53ddfa4c..1aa3caf90 100644
@@ -86,6 +88,100 @@ index 59c73aa99..e77733f78 100644
  // DeleteHeader removes all block header data associated with a hash.
  func DeleteHeader(db ethdb.KeyValueWriter, hash common.Hash, number uint64) {
  	deleteHeaderWithoutNumber(db, hash, number)
+diff --git a/core/rawdb/chain_freezer.go b/core/rawdb/chain_freezer.go
+index f3c671f45..ebebc9c95 100644
+--- a/core/rawdb/chain_freezer.go
++++ b/core/rawdb/chain_freezer.go
+@@ -212,7 +212,8 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
+ 		batch := db.NewBatch()
+ 		for i := 0; i < len(ancients); i++ {
+ 			// Always keep the genesis block in active database
+-			if first+uint64(i) != 0 {
++			trueGenesisNumber := getGenesisBlockNumber(db)
++			if first+uint64(i) != trueGenesisNumber {
+ 				DeleteBlockWithoutNumber(batch, ancients[i], first+uint64(i))
+ 				DeleteCanonicalHash(batch, first+uint64(i))
+ 			}
+@@ -225,9 +226,10 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
+ 		// Wipe out side chains also and track dangling side chains
+ 		var dangling []common.Hash
+ 		frozen, _ = f.Ancients() // Needs reload after during freezeRange
++		trueGenesisNumber := getGenesisBlockNumber(db)
+ 		for number := first; number < frozen; number++ {
+ 			// Always keep the genesis block in active database
+-			if number != 0 {
++			if number != trueGenesisNumber {
+ 				dangling = ReadAllHashes(db, number)
+ 				for _, hash := range dangling {
+ 					log.Trace("Deleting side chain", "number", number, "hash", hash)
+diff --git a/core/rawdb/database.go b/core/rawdb/database.go
+index 7ab6dbdc6..835df8167 100644
+--- a/core/rawdb/database.go
++++ b/core/rawdb/database.go
+@@ -28,10 +28,12 @@ import (
+ 	"time"
+ 
+ 	"github.com/ethereum/go-ethereum/common"
++	"github.com/ethereum/go-ethereum/core/types"
+ 	"github.com/ethereum/go-ethereum/crypto"
+ 	"github.com/ethereum/go-ethereum/ethdb"
+ 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+ 	"github.com/ethereum/go-ethereum/log"
++	"github.com/ethereum/go-ethereum/rlp"
+ 	"github.com/olekukonko/tablewriter"
+ )
+ 
+@@ -265,17 +267,19 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
+ 			// store deletion, but that's fine).
+ 		} else {
+ 			// If the freezer is empty, ensure nothing was moved yet from the key-value
+-			// store, otherwise we'll end up missing data. We check block #1 to decide
+-			// if we froze anything previously or not, but do take care of databases with
+-			// only the genesis block.
++			// store, otherwise we'll end up missing data. We check the block after the
++			// true genesis block to decide if we froze anything previously or not.
+ 			if ReadHeadHeaderHash(db) != common.BytesToHash(kvgenesis) {
+ 				// Key-value store contains more data than the genesis block, make sure we
+ 				// didn't freeze anything yet.
+-				if kvblob, _ := db.Get(headerHashKey(1)); len(kvblob) == 0 {
++				trueGenesisNumber := getGenesisBlockNumber(db)
++				nextBlockNumber := trueGenesisNumber + 1
++
++				if kvblob, _ := db.Get(headerHashKey(nextBlockNumber)); len(kvblob) == 0 {
+ 					printChainMetadata(db)
+ 					return nil, errors.New("ancient chain segments already extracted, please set --datadir.ancient to the correct path")
+ 				}
+-				// Block #1 is still in the database, we're allowed to init a new freezer
++				// Block after true genesis is still in the database, we're allowed to init a new freezer
+ 			}
+ 			// Otherwise, the head header is still the genesis, we're allowed to init a new
+ 			// freezer.
+@@ -680,3 +684,25 @@ func SafeDeleteRange(db ethdb.KeyValueStore, start, end []byte, hashScheme bool,
+ 	}
+ 	return batch.Write()
+ }
++
++// getGenesisBlockNumber returns the actual genesis block number from the database.
++// This is needed for custom genesis logic where the genesis block might not be at block 0.
++func getGenesisBlockNumber(db ethdb.KeyValueStore) uint64 {
++	// First check if there's a genesis block at block 0
++	if genesisHashData, _ := db.Get(headerHashKey(0)); len(genesisHashData) > 0 {
++		genesisHash := common.BytesToHash(genesisHashData)
++		// Try to read the block header to get the number
++		if headerData, _ := db.Get(headerKey(0, genesisHash)); len(headerData) > 0 {
++			var header types.Header
++			if err := rlp.DecodeBytes(headerData, &header); err == nil {
++				// Check if this block has a custom number field
++				if header.Number.Uint64() != 0 {
++					return header.Number.Uint64()
++				}
++			}
++		}
++	}
++
++	// If no custom number found, return 0 as default
++	return 0
++}
 -- 
-2.39.5 (Apple Git-154)
+2.50.1
 
