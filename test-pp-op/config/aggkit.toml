@@ -1,7 +1,7 @@
 PathRWData = "/tmp/"
 L1URL="http://l1-geth:8545"
 
-L2URL="http://xlayer-rpc:8545"
+L2URL="http://op-geth-rpc:8545"
 
 AggLayerURL="xlayer-agglayer:4443"
 
@@ -20,18 +20,18 @@ SenderProofToL1Addr = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
 polygonBridgeAddr = "0xb2fAc1CE54bb9BF77A7FE106fA69F81453b72851"
 
 RPCURL = "http://xlayer-rpc8545"
-WitnessURL = "http://xlayer-rpc:8545"
+WitnessURL = "http://op-geth-rpc:8545"
 
-rollupCreationBlockNumber = "75"
-rollupManagerCreationBlockNumber = "84"
-genesisBlockNumber = "75"
+rollupCreationBlockNumber = "102"
+rollupManagerCreationBlockNumber = "117"
+genesisBlockNumber = "102"
 
 [Common]
 NetworkID = 1
 IsValidiumMode = false
 ContractVersions = "banana"
 # TODO, should we config with base
-L2RPC = { Mode = "basic", URL = "http://xlayer-rpc:8545", OpNodeURL = "http://op-node:8545" }
+L2RPC = { Mode = "basic", URL = "http://op-geth-rpc:8545", OpNodeURL = "http://op-node:8545" }
 
 [L1Config]
 chainId = "1337"

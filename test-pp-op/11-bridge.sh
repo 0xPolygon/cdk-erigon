@@ -20,7 +20,7 @@ L2_WETH="0xd80e5a44dc9628fae9b432eac67873238504ea29"
 # RPC Endpoint Configuration
 # =============================================================================
 L1RPC=http://127.0.0.1:8545
-L2RPC=http://127.0.0.1:8123
+L2RPC=http://127.0.0.1:8124
 BRIDGE_SERVICE1=http://127.0.0.1:8080
 
 # Get Global Exit Root Manager address

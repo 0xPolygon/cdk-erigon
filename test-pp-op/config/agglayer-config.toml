@@ -6,7 +6,7 @@ mock-verifier = true
 
 [full-node-rpcs]
 # TODO switch this to permissionless
-1 = "http://xlayer-rpc:8545"
+1 = "http://op-geth-rpc:8545"
 
 [proof-signers]
 1 = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"

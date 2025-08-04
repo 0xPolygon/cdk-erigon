@@ -336,20 +336,32 @@ fi
 
 echo "🎉 OP Stack deployment preparation completed!"
 
-# init op-geth
-OP_GETH_DATADIR="$(pwd)/data/op-geth"
+# init op-geth-seq and op-geth-rpc
+OP_GETH_DATADIR="$(pwd)/data/op-geth-seq"
 rm -rf "$OP_GETH_DATADIR"
 mkdir -p "$OP_GETH_DATADIR"
 docker compose run --no-deps \
   -v "$(pwd)/$CONFIG_DIR/genesis.json:/genesis.json" \
-  op-geth \
+  op-geth-seq \
   --datadir "/datadir" \
   --gcmode=archive \
   init \
   --state.scheme=hash \
   /genesis.json
 
-echo "finished init op-geth"
+OP_GETH_DATADIR="$(pwd)/data/op-geth-rpc"
+rm -rf "$OP_GETH_DATADIR"
+mkdir -p "$OP_GETH_DATADIR"
+docker compose run --no-deps \
+  -v "$(pwd)/$CONFIG_DIR/genesis.json:/genesis.json" \
+  op-geth-rpc \
+  --datadir "/datadir" \
+  --gcmode=archive \
+  init \
+  --state.scheme=hash \
+  /genesis.json
+
+echo "finished init op-geth-seq and op-geth-rpc"
 
 # Ensure prestate files exist and devnetL1.json is consistent before deploying contracts
 EXPORT_DIR="$PWD_DIR/data/cannon-data"
