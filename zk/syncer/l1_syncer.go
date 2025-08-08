@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"sync"
@@ -12,8 +13,7 @@ import (
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/iden3/go-iden3-crypto/keccak256"
-
-	"encoding/binary"
+	"golang.org/x/sync/errgroup"
 
 	ethTypes "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/rpc"
@@ -177,6 +177,7 @@ func (s *L1Syncer) RunQueryBlocks(lastCheckedBlock uint64) {
 		log.Info("Starting L1 syncer thread")
 		defer log.Info("Stopping L1 syncer thread")
 
+		errors := 0
 		for {
 			if s.flagStop.Load() {
 				return
@@ -185,6 +186,11 @@ func (s *L1Syncer) RunQueryBlocks(lastCheckedBlock uint64) {
 			latestL1Block, err := s.getLatestL1Block()
 			if err != nil {
 				log.Error("Error getting latest L1 block", "err", err)
+				errors++
+				if errors > 5 {
+					log.Error("exceeded retries fetching latest l1 block")
+					return
+				}
 			} else {
 				if latestL1Block > s.lastCheckedL1Block.Load() {
 					s.isDownloading.Store(true)
@@ -253,56 +259,94 @@ func (s *L1Syncer) GetL1BlockTimeStampByTxHash(ctx context.Context, txHash commo
 }
 
 func (s *L1Syncer) L1QueryHeaders(logs []ethTypes.Log) (map[uint64]*ethTypes.Header, error) {
-	logsSize := len(logs)
-
-	// queue up all the logs
-	logQueue := make(chan *ethTypes.Log, logsSize)
-	defer close(logQueue)
-	for i := 0; i < logsSize; i++ {
-		logQueue <- &logs[i]
+	if len(logs) == 0 {
+		return make(map[uint64]*ethTypes.Header), nil
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(logsSize)
+	logChan := make(chan *ethTypes.Log, len(logs))
+	for _, log := range logs {
+		logChan <- &log
+	}
+	close(logChan)
 
-	headersQueue := make(chan *ethTypes.Header, logsSize)
+	results := make(chan *ethTypes.Header, len(logs))
 
-	process := func(em IEtherman) {
-		ctx := context.Background()
-		for {
-			l, ok := <-logQueue
-			if !ok {
-				break
-			}
-			header, err := em.HeaderByNumber(ctx, new(big.Int).SetUint64(l.BlockNumber))
-			if err != nil {
-				log.Error("Error getting block", "err", err)
-				// assume a transient error and try again
-				time.Sleep(1 * time.Second)
-				logQueue <- l
-				continue
-			}
-			headersQueue <- header
-			wg.Done()
-		}
+	g, ctx := errgroup.WithContext(context.Background())
+
+	for _, man := range s.etherMans {
+		g.Go(func() error {
+			return s.startEthermanWorker(ctx, man, logChan, results)
+		})
 	}
 
-	// launch the workers - some endpoints might be faster than others so will consume more of the queue
-	// but, we really don't care about that.  We want the data as fast as possible
-	mans := s.etherMans
-	for i := 0; i < len(mans); i++ {
-		go process(mans[i])
+	// Wait for all to complete or first error
+	if err := g.Wait(); err != nil {
+		close(results)
+		return nil, err
 	}
+	close(results)
 
-	wg.Wait()
-	close(headersQueue)
-
-	headersMap := map[uint64]*ethTypes.Header{}
-	for header := range headersQueue {
+	// Collect results
+	headersMap := make(map[uint64]*ethTypes.Header, len(logs))
+	for header := range results {
 		headersMap[header.Number.Uint64()] = header
 	}
 
 	return headersMap, nil
+}
+
+func (s *L1Syncer) startEthermanWorker(ctx context.Context, man IEtherman, logChan <-chan *ethTypes.Log, results chan<- *ethTypes.Header) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case log, ok := <-logChan:
+			if !ok {
+				return nil
+			}
+
+			err := s.fetchHeaderWithRetry(ctx, man, log.BlockNumber, results)
+			if err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (s *L1Syncer) fetchHeaderWithRetry(ctx context.Context, em IEtherman, blockNumber uint64, results chan<- *ethTypes.Header) error {
+	const maxRetries = 5
+
+	for retries := 0; retries < maxRetries; retries++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		header, err := s.headerByNumberWithTimeout(em, blockNumber)
+		if err != nil {
+			log.Warn("[L1Syncer] error getting block", "block", blockNumber, "retries", retries, "err", err)
+			if retries < maxRetries-1 {
+				time.Sleep(time.Second)
+				continue
+			}
+			return fmt.Errorf("failed to get block %d after %d retries: %w", blockNumber, maxRetries, err)
+		}
+
+		select {
+		case results <- header:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
+func (s *L1Syncer) headerByNumberWithTimeout(em IEtherman, number uint64) (*ethTypes.Header, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	return em.HeaderByNumber(ctx, new(big.Int).SetUint64(number))
 }
 
 func (s *L1Syncer) getLatestL1Block() (uint64, error) {
@@ -375,7 +419,7 @@ func (s *L1Syncer) queryBlocks() error {
 	}
 	close(jobs)
 
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	var err error
@@ -443,29 +487,32 @@ func (s *L1Syncer) getSequencedLogs(jobs <-chan fetchJob, results chan jobResult
 			var err error
 			retry := 0
 			for {
-				em := s.getNextEtherman()
-				logs, err = em.FilterLogs(context.Background(), query)
+				logs, err = s.filterLogs(query)
 				if err != nil {
-					log.Debug("getSequencedLogs retry error", "err", err)
-					retry++
 					if retry > 5 {
-						log.Error("L1 syncer (getSequencedLogs) exceeded 5 retries", "retry", retry, "err", err)
+						err = fmt.Errorf("[L1Syncer] exceeded maximum retries getting logs (%v): %w", retry, err)
+						break
 					}
-					if retry > 20 {
-						panic("L1 syncer (getSequencedLogs) exceeded 20 retries")
-					}
-					time.Sleep(time.Duration(retry*2) * time.Second)
+					log.Warn("[L1Syncer] error whilst getting logs - retrying", "err", err)
+					retry++
 					continue
 				}
 				break
 			}
 			results <- jobResult{
 				Size:  j.To - j.From,
-				Error: nil,
+				Error: err,
 				Logs:  logs,
 			}
 		}
 	}
+}
+
+func (s *L1Syncer) filterLogs(query ethereum.FilterQuery) ([]ethTypes.Log, error) {
+	em := s.getNextEtherman()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	return em.FilterLogs(ctx, query)
 }
 
 // calls the old rollup contract to get the accInputHash for a certain batch
