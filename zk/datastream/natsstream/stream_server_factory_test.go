@@ -21,7 +21,7 @@ type simpleMockFactory struct {
 	dataServerToReturn server.DataStreamServer
 }
 
-func (m *simpleMockFactory) CreateStreamServer(port uint16, systemID uint64, streamType datastreamer.StreamType, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config, chainId uint64) (server.StreamServer, error) {
+func (m *simpleMockFactory) CreateStreamServer(port uint16, systemID uint64, streamType datastreamer.StreamType, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config) (server.StreamServer, error) {
 	if m.shouldReturnError {
 		return nil, m.errorToReturn
 	}
@@ -78,7 +78,7 @@ func TestCreateStreamServer(t *testing.T) {
 
 	// Test successful creation
 	result, err := factory.CreateStreamServer(8080, 4334, 1, "test.dat",
-		time.Second, time.Second, time.Second, nil, 1101)
+		time.Second, time.Second, time.Second, nil)
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -110,7 +110,7 @@ func TestCreateStreamServer_DelegateError(t *testing.T) {
 
 	// Test error propagation
 	result, err := factory.CreateStreamServer(8080, 4334, 1, "test.dat",
-		time.Second, time.Second, time.Second, nil, 1101)
+		time.Second, time.Second, time.Second, nil)
 
 	assert.Error(t, err)
 	assert.Equal(t, expectedErr, err)
@@ -134,7 +134,7 @@ func TestCreateStreamServer_StreamInitError(t *testing.T) {
 
 	// Test fallback behavior when stream init fails
 	result, err := factory.CreateStreamServer(8080, 4334, 1, "test.dat",
-		time.Second, time.Second, time.Second, nil, 1101)
+		time.Second, time.Second, time.Second, nil)
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)

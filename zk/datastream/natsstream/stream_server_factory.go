@@ -27,8 +27,8 @@ func NewNATSDataStreamServerFactory(delegateFactory server.DataStreamServerFacto
 }
 
 // CreateStreamServer forwards to the delegate factory and wraps the result with a NATS-enabled stream server
-func (f *NATSDataStreamServerFactory) CreateStreamServer(port uint16, systemID uint64, streamType datastreamer.StreamType, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config, chainId uint64) (server.StreamServer, error) {
-	delegate, err := f.delegateFactory.CreateStreamServer(port, systemID, streamType, fileName, writeTimeout, inactivityTimeout, inactivityCheckInterval, cfg, chainId)
+func (f *NATSDataStreamServerFactory) CreateStreamServer(port uint16, systemID uint64, streamType datastreamer.StreamType, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config) (server.StreamServer, error) {
+	delegate, err := f.delegateFactory.CreateStreamServer(port, systemID, streamType, fileName, writeTimeout, inactivityTimeout, inactivityCheckInterval, cfg)
 	if err != nil {
 		return nil, err
 	}

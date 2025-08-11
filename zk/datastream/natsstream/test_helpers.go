@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"math/rand"
+	"runtime/debug"
 	"sync"
 	"testing"
 	"time"
@@ -38,6 +39,11 @@ func NewTestLogger(t *testing.T) log.Logger {
 			t.Logf("[%s] [%s] %s %s", r.Time.Format("01-02|15:04:05.000"), r.Lvl, r.Msg, ctx)
 		} else {
 			t.Logf("[%s] [%s] %s", r.Time.Format("01-02|15:04:05.000"), r.Lvl, r.Msg)
+		}
+		if r.Lvl == log.LvlError {
+			// If it's an error, also print the stack trace
+			t.Logf("Stack trace:\n%s", debug.Stack())
+
 		}
 		return nil
 	})

@@ -1323,7 +1323,7 @@ func (c *NATSClient) Stop() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if c.js != nil {
+	if c.consumer != nil {
 		consumerName := fmt.Sprintf("DATASTREAM_CONSUMER_%s", c.clientID)
 		if err := c.js.DeleteConsumer(c.ctx, c.streamName, consumerName); err != nil {
 			c.logger.Warn("Failed to delete durable consumer (may not exist)",

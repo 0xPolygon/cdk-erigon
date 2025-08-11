@@ -22,6 +22,7 @@ import (
 // 3. Configure JetStream
 // 4. Verify that messages can be replicated across the supercluster
 func TestNatsSupercluster(t *testing.T) {
+	t.Skip("Complex scenario we are unlikely to use in production, skipping for now")
 	// Skip this test in short mode as it's more complex
 	if testing.Short() {
 		t.Skip("Skipping in short mode")

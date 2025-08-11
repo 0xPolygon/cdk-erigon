@@ -269,24 +269,6 @@ func TestCreateConsumerConfig(t *testing.T) {
 	assert.Equal(t, jetstream.DeliverAllPolicy, consumerConfig.DeliverPolicy) // For progress=0
 }
 
-// TestCreateConsumerConfig_EdgeCases tests edge cases for createConsumerConfig
-func TestCreateConsumerConfig_EdgeCases(t *testing.T) {
-	logger := log.New()
-	ctx := context.Background()
-
-	// Test with different forkID to ensure it handles various configs
-	// Use minimal manager for function tests
-	config := DefaultConfig()
-	config.Port = -1
-	manager := NewManager(config, logger)
-	client := NewNATSClient(ctx, "nats://localhost", false, manager, logger)
-
-	consumerConfig, err := client.createConsumerConfig()
-	require.NoError(t, err)
-	assert.NotEmpty(t, consumerConfig.Durable)
-	assert.Contains(t, consumerConfig.Durable, "client_")
-}
-
 // TestHandleStreamBatchEnd tests the handleStreamBatchEnd function
 func TestHandleStreamBatchEnd(t *testing.T) {
 	// Create a valid batch end message

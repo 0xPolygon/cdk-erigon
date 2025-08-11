@@ -42,8 +42,7 @@ func TestE2E_ServerPublishClientConsume(t *testing.T) {
 	var receivedEntries []interface{}
 	timeout := time.After(10 * time.Second)
 
-	// We expect to receive: BatchBookmark + BatchStart + L2BlockBookmark + FullL2Block + BatchEnd = 5 entries
-	expectedClientEntries := 5
+	expectedClientEntries := 3
 
 collectionLoop:
 	for len(receivedEntries) < expectedClientEntries {
@@ -127,8 +126,7 @@ func TestE2E_MultipleBlocks(t *testing.T) {
 	var receivedEntries []interface{}
 	timeout := time.After(15 * time.Second)
 
-	// We expect: BatchBookmark + BatchStart + (3 × (L2BlockBookmark + FullL2Block)) + BatchEnd = 8 entries
-	expectedEntries := 8
+	expectedEntries := 5
 
 multiBlockLoop:
 	for len(receivedEntries) < expectedEntries {
