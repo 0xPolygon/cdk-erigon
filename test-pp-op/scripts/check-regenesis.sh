@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# This should be run in the root directory of the repo
+ROOT_DIR=$(git rev-parse --show-toplevel)
+TEST_DIR="$ROOT_DIR/test-pp-op"
+TMP_DIR="$TEST_DIR/tmp"
+SA_BENCH_DIR="$TMP_DIR/SA-Benchmark"
+
+RPC_URL="http://localhost:8123"
+
+TIME_STAMP=$(date +%Y%m%d-%H%M%S)
+RESULT_FILE="check-regenesis-result-$TIME_STAMP.txt"
+
+source .env
+TX_VALUE=200000
+if [ $# -gt 0 ] && [ "$1" == "mainnet" ]; then
+    TX_VALUE=1
+fi
+
+# Load nvm
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+nvm install v22
+nvm use v22
+npm install -g yarn
+
+# 1. Run state-check state0
+cd $ROOT_DIR
+go install ./cmd/state-check/
+cd $TEST_DIR
+echo "*** State 0 ***" > $RESULT_FILE
+state-check -dump-state-file config-op/state0.json -rpc-url $RPC_URL --progress-bar=false | tee $RESULT_FILE
+
+# 8. Run state-check state1
+cd $SA_BENCH_DIR
+PRIVATE_KEY=$(cat .env | grep "PRIVATE_KEY" | cut -d '=' -f 2)
+GAS_PRICE=$(cat .env | grep "GAS_PRICE" | cut -d '=' -f 2)
+cast send 0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E --value $TX_VALUE \
+--private-key 0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2 \
+--legacy --gas-price 1 \
+--rpc-url $RPC_URL
+sleep 5
+echo -e "\n\n*** State 1 ***" >> $RESULT_FILE
+state-check -dump-state-file config-op/state1.json -rpc-url $RPC_URL --progress-bar=false | tee -a $RESULT_FILE
+
+# 9. Run state-check state2
+cd $SA_BENCH_DIR
+yarn
+yarn run senduop:deterministicop
+sleep 5
+cd $TEST_DIR
+echo -e "\n\n*** State 2 ***" >> $RESULT_FILE
+state-check -dump-state-file config-op/state2.json -rpc-url $RPC_URL --progress-bar=false | tee -a $RESULT_FILE
