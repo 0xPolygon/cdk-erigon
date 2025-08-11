@@ -65,6 +65,13 @@ run: stop build-docker
 	
 	$(DOCKER_COMPOSE) up -d xlayer-agg-sender
 
+.PHONY: mainnet
+mainnet: build-docker
+	@echo "🚀 Starting XLayer Fake Mainnet ..."
+	$(DOCKER_COMPOSE) up -d l1-validator
+	sleep 5
+	$(DOCKER_COMPOSE) up -d xlayer-mainnet-seq
+
 .PHONY: stop
 stop: ## Stops all services
 	$(STOP)

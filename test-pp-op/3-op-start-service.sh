@@ -12,6 +12,9 @@ sed_inplace() {
 # Load environment variables early
 source .env
 
+PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$PWD_DIR")"
+
 # Function to add game type via Transactor
 add_game_type_via_transactor() {
     local GAME_TYPE=$1
@@ -322,3 +325,7 @@ export GAME_TYPE=0
 
 sleep $TEMP_GAME_WINDOW
 docker compose up -d op-proposer op-challenger op-dispute-mon
+
+if [ $CHECK_REGENESIS = "true" ]; then
+  ./scripts/check-regenesis.sh
+fi

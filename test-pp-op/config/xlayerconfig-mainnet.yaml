@@ -1,0 +1,87 @@
+datadir: /home/erigon/data/
+chain: xlayer-mainnet
+http: true
+private.api.addr: localhost:9091
+zkevm.l2-chain-id: 196
+zkevm.l2-sequencer-rpc-url: https://rpc.xlayer.tech
+zkevm.l2-datastreamer-url: stream.xlayer.tech:8800
+zkevm.l1-chain-id: 1
+# `zkevm.l1-rpc-url` must be changed before running.
+# using a wrong default value so it can report and error and remind you to change this value.
+zkevm.l1-rpc-url: https://rpc.ankr.com/eth/
+#zkevm.increment-tree-always: true
+
+#debug.limit: 8554110
+
+zkevm.sequencer-block-seal-time: "1s"
+zkevm.sequencer-max-block-seal-time: "3s"
+zkevm.sequencer-batch-seal-time: "10s"
+zkevm.sequencer-batch-sleep-duration: "0s"
+
+zkevm.data-stream-host: "localhost"
+zkevm.data-stream-port: 6900
+zkevm.default-gas-price: 1
+zkevm.max-gas-price: 0
+zkevm.gas-price-factor: 0.000001
+zkevm.allow-free-transactions: true
+
+txpool.packbatchspeciallist : ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534", "0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E"]
+txpool.globalslots: 1000000
+txpool.globalbasefeeslots: 1000000
+txpool.globalqueue: 1000000
+txpool.commit.every: "10m"
+
+zkevm.address-sequencer: "0xAF9d27ffe4d51eD54AC8eEc78f2785D7E11E5ab1"
+zkevm.address-zkevm: "0x2B0ee28D4D51bC9aDde5E58E295873F61F4a0507"
+zkevm.address-rollup: "0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2"
+zkevm.address-ger-manager: "0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb"
+
+zkevm.l1-rollup-id: 3
+zkevm.l1-first-block: 19218658
+zkevm.l1-block-range: 2000
+zkevm.l1-query-delay: 1000
+zkevm.datastream-version: 3
+
+http.api: [eth, debug, net, trace, web3, erigon, txpool, zkevm]
+http.addr: 0.0.0.0
+http.port: 8545
+
+gpo.type: "follower"
+gpo.update-period: "300s"
+gpo.factor: 0.01
+gpo.kafka-url: "0.0.0.0"
+gpo.topic: "explorer"
+gpo.group-id: "web3"
+gpo.blocks: 3
+gpo.default-l1-coin-price: 2000
+gpo.default-l2-coin-price: 50
+gpo.gas-price-usdt: 0.000000476190476
+gpo.congestion-threshold: 0
+
+pprof: true
+pprof.port: 6060
+pprof.addr: 0.0.0.0
+
+metrics: true
+metrics.addr: "0.0.0.0"
+metrics.port: 9095
+
+yieldsize: 35
+zkevm.seal-batch-immediately-on-overflow: true
+zkevm.sequencer-timeout-on-empty-tx-pool: 1ms
+zkevm.pre-run-address-list: [""]
+zkevm.block-info-concurrent: true
+zkevm.standalone-smt-db: true
+zkevm.enable-async-commit: true
+
+# to reduce lock race in stress test
+txpool.enabletimsort: true
+zkevm.bulk-add-txs: true
+zkevm.enable-add-tx-notify: true
+
+zkevm.verification-batch-delay: 2
+zkevm.skip-analysis-group-api: true
+# zkevm.analysis-group-nacos-urls: "url1:80,url2:80"
+# zkevm.analysis-group-nacos-namespace: "ns-global"
+# zkevm.analysis-group-service-name: "analysis-group"
+# zkevm.analysis-group-api-path: "api/v1/196/validHeight"
