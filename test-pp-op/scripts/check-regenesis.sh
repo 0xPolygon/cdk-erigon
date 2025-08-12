@@ -43,6 +43,7 @@ cast send 0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E --value $TX_VALUE \
 --legacy --gas-price $GAS_PRICE \
 --rpc-url $RPC_URL
 sleep 5
+cd $TEST_DIR
 echo -e "\n\n*** State 1 ***" >> $RESULT_FILE
 state-check -dump-state-file config-op/state1.json -rpc-url $RPC_URL --progress-bar=false | tee -a $RESULT_FILE
 
