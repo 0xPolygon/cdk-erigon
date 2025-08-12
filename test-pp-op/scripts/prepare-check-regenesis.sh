@@ -74,6 +74,7 @@ cp -a -P $DATA_DIR data_state1
 cd $TEST_DIR
 docker compose start $SEQ_NAME
 sleep $SLEEP_TIME
+cast balance 0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534 --rpc-url=http://localhost:8123 > balance.txt
 cd $SA_BENCH_DIR
 git checkout dumi/senddet
 TX_RESULT_FILE="$TEST_DIR/sa-tx-before.txt"
@@ -81,6 +82,7 @@ FEE_FILE="$TEST_DIR/tx-fee-before.txt"
 yarn run senduop:local > $TX_RESULT_FILE
 sleep 5
 cd $TEST_DIR
+cast balance 0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534 --rpc-url=http://localhost:8123 >> balance.txt
 scripts/calc-total-fee-and-value.sh $TX_RESULT_FILE > $FEE_FILE
 docker compose stop $SEQ_NAME
 cp -a -P $DATA_DIR data_state2
