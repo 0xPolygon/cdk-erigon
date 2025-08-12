@@ -7,7 +7,6 @@ ROOT_DIR=$(git rev-parse --show-toplevel)
 TEST_DIR="$ROOT_DIR/test-pp-op"
 TMP_DIR="$TEST_DIR/tmp"
 SA_BENCH_DIR="$TMP_DIR/SA-Benchmark"
-TX_RESULT_FILE="$TEST_DIR/sa-tx-after.txt"
 
 RPC_URL="http://localhost:8123"
 
@@ -50,9 +49,12 @@ state-check -dump-state-file config-op/state1.json -rpc-url $RPC_URL --progress-
 
 # 9. Run state-check state2
 cd $SA_BENCH_DIR
+TX_RESULT_FILE="$TEST_DIR/sa-tx-after.txt"
+FEE_FILE="$TEST_DIR/tx-fee-after.txt"
 yarn
 yarn run senduop:deterministicop > $TX_RESULT_FILE
 sleep 5
 cd $TEST_DIR
+scripts/calc-total-fee-and-value.sh $FEE_FILE
 echo -e "\n\n*** State 2 ***" >> $RESULT_FILE
 state-check -dump-state-file config-op/state2.json -rpc-url $RPC_URL --progress-bar=false | tee -a $RESULT_FILE
