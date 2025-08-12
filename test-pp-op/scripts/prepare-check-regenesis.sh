@@ -53,7 +53,6 @@ sleep 5
 cd $TEST_DIR
 docker compose stop $SEQ_NAME
 cp -a -P $DATA_DIR data_state0
-ln -s $DATA_DIR/op-geth-seq/geth.ipc data_state0/op-geth-seq/geth.ipc
 
 # 2. Send one tx and save state1.json
 cd $TEST_DIR
@@ -67,7 +66,6 @@ sleep 5
 cd $TEST_DIR
 docker compose stop $SEQ_NAME
 cp -a -P $DATA_DIR data_state1
-ln -s $DATA_DIR/op-geth-seq/geth.ipc data_state1/op-geth-seq/geth.ipc
 
 # 3. Send deterministic tx and save state2.json
 cd $TEST_DIR
@@ -80,4 +78,3 @@ sleep 5
 cd $TEST_DIR
 docker compose stop $SEQ_NAME
 cp -a -P $DATA_DIR data_state2
-ln -s $DATA_DIR/op-geth-seq/geth.ipc data_state2/op-geth-seq/geth.ipc
