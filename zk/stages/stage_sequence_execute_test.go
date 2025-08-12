@@ -75,7 +75,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 	err = stages.SaveStageProgress(tx, stages.HighestSeenBatchNumber, latestBatchNumber)
 	require.NoError(t, err)
 
-	err = stages.SaveStageProgress(tx, stages.Execution, latestL1BlockNumber.Uint64())
+	err = stages.SaveStageProgress(tx, stages.Execution, latestL2BlockNumber.Uint64())
 	require.NoError(t, err)
 
 	hDB.WriteL1InfoTreeUpdate(&zkTypes.L1InfoTreeUpdate{
@@ -85,7 +85,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 		RollupExitRoot:  common.HexToHash("0x3"),
 		ParentHash:      common.HexToHash("0x4"),
 		Timestamp:       100,
-		BlockNumber:     latestL2BlockNumber.Uint64(),
+		BlockNumber:     latestL1BlockNumber.Uint64(),
 	})
 
 	latestL2BlockParentHash := common.HexToHash("0x123456789")

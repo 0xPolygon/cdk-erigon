@@ -227,7 +227,7 @@ func sequencingBatchStep(
 	}
 
 	// For X Layer, for auto recovery
-	if shouldCheckForExecutionAndSMTAlignment == SMTAlignmentInit {
+	if cfg.zk.XLayer.StandaloneSMTDatabase && shouldCheckForExecutionAndSMTAlignment == SMTAlignmentInit {
 		if !batchState.isAnyRecovery() {
 			smtMaxBlockNumber, err := sdb.eridb.GetLastHeight()
 			if err != nil {
