@@ -13,8 +13,10 @@ RESULT_FILE="check-regenesis-result-$TIME_STAMP.txt"
 
 source .env
 TX_VALUE=200000
+GAS_PRICE=1000000000
 if [ $# -gt 0 ] && [ "$1" == "mainnet" ]; then
     TX_VALUE=1
+    GAS_PRICE=1
 fi
 
 # Load nvm
@@ -34,10 +36,10 @@ state-check -dump-state-file config-op/state0.json -rpc-url $RPC_URL --progress-
 # 8. Run state-check state1
 cd $SA_BENCH_DIR
 PRIVATE_KEY=$(cat .env | grep "PRIVATE_KEY" | cut -d '=' -f 2)
-GAS_PRICE=$(cat .env | grep "GAS_PRICE" | cut -d '=' -f 2)
+#GAS_PRICE=$(cat .env | grep "GAS_PRICE" | cut -d '=' -f 2)
 cast send 0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E --value $TX_VALUE \
 --private-key 0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2 \
---legacy --gas-price 1 \
+--legacy --gas-price $GAS_PRICE \
 --rpc-url $RPC_URL
 sleep 5
 echo -e "\n\n*** State 1 ***" >> $RESULT_FILE
