@@ -14,10 +14,9 @@ TIME_STAMP=$(date +%Y%m%d-%H%M%S)
 RESULT_FILE="check-regenesis-result-$TIME_STAMP.txt"
 
 source .env
-TX_VALUE=200000
+TX_VALUE=10
 GAS_PRICE=1000000000
 if [ $# -gt 0 ] && [ "$1" == "mainnet" ]; then
-    TX_VALUE=1
     GAS_PRICE=1
 fi
 

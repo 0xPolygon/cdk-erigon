@@ -13,11 +13,13 @@ SLEEP_TIME=5
 DATA_DIR="data"
 EXENV_FILE="example.env"
 TX_VALUE=10
+GAS_PRICE=1000000000
 if [ $# -gt 0 ] && [ "$1" == "mainnet" ]; then
   SEQ_NAME="xlayer-mainnet-seq"
   SLEEP_TIME=30
   DATA_DIR="mainnet"
   EXENV_FILE="example-fm.env"
+  GAS_PRICE=1
 fi
 
 # Clone relevant repos
@@ -42,7 +44,6 @@ cleanup
 cd $SA_BENCH_DIR
 cp $EXENV_FILE .env
 PRIVATE_KEY=$(cat .env | grep "PRIVATE_KEY" | cut -d '=' -f 2)
-GAS_PRICE=$(cat .env | grep "GAS_PRICE" | cut -d '=' -f 2)
 export NVM_DIR="$HOME/.nvm"
 if ! [ -s "$NVM_DIR/nvm.sh" ]; then
     echo "nvm not found, installing..."
