@@ -81,6 +81,6 @@ FEE_FILE="$TEST_DIR/tx-fee-before.txt"
 yarn run senduop:local > $TX_RESULT_FILE
 sleep 5
 cd $TEST_DIR
-scripts/calc-total-fee-and-value.sh $FEE_FILE
+scripts/calc-total-fee-and-value.sh $TX_RESULT_FILE > $FEE_FILE
 docker compose stop $SEQ_NAME
 cp -a -P $DATA_DIR data_state2

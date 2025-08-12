@@ -55,6 +55,6 @@ yarn
 yarn run senduop:deterministicop > $TX_RESULT_FILE
 sleep 5
 cd $TEST_DIR
-scripts/calc-total-fee-and-value.sh $FEE_FILE
+scripts/calc-total-fee-and-value.sh $TX_RESULT_FILE > $FEE_FILE
 echo -e "\n\n*** State 2 ***" >> $RESULT_FILE
 state-check -dump-state-file config-op/state2.json -rpc-url $RPC_URL --progress-bar=false | tee -a $RESULT_FILE
