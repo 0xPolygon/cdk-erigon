@@ -5,7 +5,6 @@ txhashes=$(grep -o '0x[a-fA-F0-9]\{64\}' $1)
 
 total_l2_fee=0
 total_l1_fee=0
-total_value=0
 
 # 十六进制转十进制的函数
 hex_to_dec() {
@@ -36,22 +35,13 @@ for hash in $txhashes; do
     l1_fee=$(hex_to_dec $l1_fee_hex)
     total_l1_fee=$((total_l1_fee + l1_fee))
 
-    # 提取value
-    value_hex=$(cast tx $hash --rpc-url http://127.0.0.1:8123 --json | jq -r .value)
-    value=$(hex_to_dec $value_hex)
-    total_value=$((total_value + value))
-
     echo "Gas Used: $gas_used ($gas_used_hex)"
     echo "Gas Price: $gas_price ($gas_price_hex)"
     echo "L2 Fee: $l2_fee"
     echo "L1 Fee: $l1_fee ($l1_fee_hex)"
-    if (( value != 0 )); then
-        echo "Value: $value"
-    fi
     echo "-------------------"
 done
 
 echo "Total L2 Fee: $total_l2_fee"
 echo "Total L1 Fee: $total_l1_fee"
 echo "Total Fee: $((total_l2_fee + total_l1_fee))"
-echo "Total value: $total_value"
