@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+set -x
 
 # This should be run in the root directory of the repo
 ROOT_DIR=$(git rev-parse --show-toplevel)
