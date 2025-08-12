@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+set -e
 # This should be run in the root directory of the repo
 ROOT_DIR=$(git rev-parse --show-toplevel)
 TEST_DIR="$ROOT_DIR/test-pp-op"
