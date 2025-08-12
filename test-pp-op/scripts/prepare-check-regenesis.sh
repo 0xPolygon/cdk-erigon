@@ -52,13 +52,7 @@ fi
 . "$NVM_DIR/nvm.sh"
 nvm use v22
 ./1-setup.sh
-sleep 3
-source .env
-cast send $ENTRYPOINT --value 2000ether \
---private-key $PRIVATE_KEY \
---legacy --gas-price $GAS_PRICE \
---rpc-url http://localhost:8123
-sleep 3
+sleep 5
 cd $TEST_DIR
 docker compose stop $SEQ_NAME
 cp -a -P $DATA_DIR data_state0
