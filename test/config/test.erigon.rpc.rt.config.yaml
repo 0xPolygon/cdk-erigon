@@ -85,9 +85,9 @@ zkevm.standalone-smt-db: true  # true: enalbe split smt db, false: not split
 zkevm.enable-trace-log: true
 zkevm.trace-log-path: /home/erigon/data/logs/trace.log
 
-# Disable RT for default RPC node
-realtime.enable-flag: false
-realtime.enable-subscribe-flag: false
+# Enable RT for realtime RPC node
+realtime.enable-flag: true
+realtime.enable-subscribe-flag: true
 realtime.cache-height-threshold: 10
 realtime.kafka-sync-bootstrap-servers: "xlayer-kafka:9092"
 realtime.kafka-sync-tx-topic: xlayer-tx

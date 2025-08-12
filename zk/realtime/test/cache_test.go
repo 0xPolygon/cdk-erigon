@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"math/big"
 	"sync"
 	"testing"
@@ -21,30 +22,49 @@ func TestBlockInfoMap(t *testing.T) {
 		Number: big.NewInt(int64(blockNum)),
 		Time:   1000,
 	}
+	hash := common.HexToHash("0x123")
 	prevTxCount := int64(10)
+	prevHeader := &ethTypes.Header{
+		Number: big.NewInt(int64(blockNum - 1)),
+		Time:   50,
+	}
 
-	t.Run("PutHeader and Get", func(t *testing.T) {
-		bm.PutHeader(blockNum, header, prevTxCount)
-		gotHeader, gotTxCount, exists := bm.Get(blockNum)
+	t.Run("BlockInfoMapPutAndGet", func(t *testing.T) {
+		bm.PutHeader(blockNum, header, &realtimeTypes.BlockInfo{
+			Header:  prevHeader,
+			TxCount: prevTxCount,
+			Hash:    hash,
+		})
+
+		// Check current header
+		cacheHeader, cacheTxCount, cacheHash, exists := bm.Get(blockNum)
 		assert.True(t, exists)
-		assert.Equal(t, header, gotHeader)
+		assert.Equal(t, header, cacheHeader)
+		assert.Equal(t, cacheHash, common.Hash{})
 		// Init txCount is -1
-		assert.Equal(t, int64(-1), gotTxCount)
+		assert.Equal(t, int64(-1), cacheTxCount)
+
+		// Check previous header should not exist
+		cacheHeader, cacheTxCount, cacheHash, exists = bm.Get(blockNum - 1)
+		assert.True(t, exists)
+		assert.Equal(t, prevHeader, cacheHeader)
+		assert.Equal(t, prevTxCount, cacheTxCount)
+		assert.Equal(t, hash, cacheHash)
 	})
 
-	t.Run("Get non-existent", func(t *testing.T) {
+	t.Run("BlockInfoMapGetNonExistent", func(t *testing.T) {
 		nonExistentNum := uint64(888)
-		_, _, exists := bm.Get(nonExistentNum)
+		_, _, _, exists := bm.Get(nonExistentNum)
 		assert.False(t, exists)
 	})
 
-	t.Run("Delete", func(t *testing.T) {
+	t.Run("BlockInfoMapDelete", func(t *testing.T) {
 		bm.Delete(blockNum)
-		_, _, exists := bm.Get(blockNum)
+		_, _, _, exists := bm.Get(blockNum)
 		assert.False(t, exists)
 	})
 
-	t.Run("Incremental operations", func(t *testing.T) {
+	t.Run("BlockInfoMapIncrementalOperations", func(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			blockNum := uint64(i)
 			prevBlockNum := blockNum - 1
@@ -53,31 +73,40 @@ func TestBlockInfoMap(t *testing.T) {
 				Time:   uint64(i * 1000),
 			}
 			prevTxCount := int64(i * 5)
+			prevHash := common.HexToHash(fmt.Sprintf("0x%x", i))
+			prevHeader := &ethTypes.Header{
+				Number: big.NewInt(int64(prevBlockNum)),
+				Time:   uint64(prevBlockNum * 50),
+			}
 
 			// Test PutHeader
-			bm.PutHeader(blockNum, header, prevTxCount)
-			gotHeader, gotTxCount, exists := bm.Get(blockNum)
+			bm.PutHeader(blockNum, header, &realtimeTypes.BlockInfo{
+				Header:  prevHeader,
+				TxCount: prevTxCount,
+				Hash:    prevHash,
+			})
+			cacheHeader, cacheTxCount, cacheHash, exists := bm.Get(blockNum)
 			assert.True(t, exists)
-			assert.NotNil(t, gotHeader)
-			assert.Equal(t, big.NewInt(int64(i)), gotHeader.Number)
-			assert.Equal(t, uint64(i*1000), gotHeader.Time)
+			assert.NotNil(t, cacheHeader)
+			assert.Equal(t, big.NewInt(int64(i)), cacheHeader.Number)
+			assert.Equal(t, uint64(i*1000), cacheHeader.Time)
 			// Init txCount is -1
-			assert.Equal(t, int64(-1), gotTxCount)
+			assert.Equal(t, int64(-1), cacheTxCount)
+			assert.Equal(t, common.Hash{}, cacheHash)
 
 			// Check previous block txCount
-			if i == 0 {
-				continue
-			}
-			_, gotTxCount, exists = bm.Get(prevBlockNum)
+			cacheHeader, cacheTxCount, cacheHash, exists = bm.Get(prevBlockNum)
 			assert.True(t, exists)
-			assert.Equal(t, gotTxCount, prevTxCount)
+			assert.Equal(t, prevHeader, cacheHeader)
+			assert.Equal(t, prevTxCount, cacheTxCount)
+			assert.Equal(t, prevHash, cacheHash)
 		}
 
 		// Test delete
 		for i := 0; i < 10; i++ {
 			blockNum := uint64(i)
 			bm.Delete(blockNum)
-			_, _, exists := bm.Get(blockNum)
+			_, _, _, exists := bm.Get(blockNum)
 			assert.False(t, exists)
 		}
 	})
@@ -135,7 +164,7 @@ func TestTxInfoMap(t *testing.T) {
 		},
 	}
 
-	t.Run("Put and Get", func(t *testing.T) {
+	t.Run("TxInfoMapPutAndGet", func(t *testing.T) {
 		tm.Put(blockNumber, txHash, tx, receipt, innerTxs)
 		gotTx, gotReceipt, _, gotInnerTxs, exists := tm.GetTx(txHash)
 		assert.True(t, exists)
@@ -147,20 +176,20 @@ func TestTxInfoMap(t *testing.T) {
 		assert.Equal(t, txHashes, []common.Hash{txHash})
 	})
 
-	t.Run("Get non-existent", func(t *testing.T) {
+	t.Run("TxInfoMapGetNonExistent", func(t *testing.T) {
 		nonExistentHash := common.HexToHash("0x456")
 		_, _, _, _, exists := tm.GetTx(nonExistentHash)
 		assert.False(t, exists)
 	})
 
-	t.Run("Delete", func(t *testing.T) {
+	t.Run("TxInfoMapDelete", func(t *testing.T) {
 		tm.Delete(blockNumber)
 		_, _, _, _, exists := tm.GetTx(txHash)
 		assert.False(t, exists)
 	})
 
 	blockNumber = 10
-	t.Run("Concurrent operations", func(t *testing.T) {
+	t.Run("TxInfoMapConcurrentOperations", func(t *testing.T) {
 		const goroutines = 10
 		var wg sync.WaitGroup
 		hashes := make([]common.Hash, 0, goroutines)

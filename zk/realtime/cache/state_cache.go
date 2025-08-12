@@ -16,7 +16,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
-	"github.com/ledgerwatch/erigon/turbo/trie"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	"github.com/ledgerwatch/erigon/zkevm/log"
 )
@@ -26,50 +25,23 @@ var (
 	emptyCodeHash = crypto.Keccak256(nil)
 )
 
-// StateCache implements the plain state reader with a changeset cache layer.
-// The cache holds the chainstate db, with a changeset cache layer that stores
-// in-memory the state changes.
-type StateCache struct {
-	ctx        context.Context
-	db         kv.RoDB
-	initHeight atomic.Uint64
-
-	cacheLock           sync.RWMutex
+type stateCache struct {
 	accountCache        map[libcommon.Address]*accounts.Account
 	storageCache        map[string]*uint256.Int
 	codeCache           map[libcommon.Hash][]byte
 	incarnationMapCache map[libcommon.Address]uint64
 }
 
-func NewStateCache(ctx context.Context, db kv.RoDB, size int) (*StateCache, error) {
-	return &StateCache{
-		ctx:                 ctx,
-		db:                  db,
-		initHeight:          atomic.Uint64{},
+func newStateCache(size int) *stateCache {
+	return &stateCache{
 		accountCache:        make(map[libcommon.Address]*accounts.Account, size),
 		storageCache:        make(map[string]*uint256.Int, size),
 		codeCache:           make(map[libcommon.Hash][]byte, size),
 		incarnationMapCache: make(map[libcommon.Address]uint64, size),
-	}, nil
-}
-
-func (cache *StateCache) TryInitCache(executionHeight uint64) error {
-	cache.cacheLock.Lock()
-	defer cache.cacheLock.Unlock()
-
-	if cache.initHeight.Load() != 0 {
-		return fmt.Errorf("state cache already initialized")
 	}
-	cache.initHeight.Store(executionHeight)
-
-	return nil
 }
 
-func (cache *StateCache) Clear() {
-	cache.cacheLock.Lock()
-	defer cache.cacheLock.Unlock()
-
-	// Clear all caches
+func (cache *stateCache) Clear() {
 	for k := range cache.accountCache {
 		delete(cache.accountCache, k)
 	}
@@ -82,167 +54,94 @@ func (cache *StateCache) Clear() {
 	for k := range cache.incarnationMapCache {
 		delete(cache.incarnationMapCache, k)
 	}
+}
+
+// GlobalStateCache implements the plain state reader with a changeset cache layer.
+// The global cache holds the latest chainstate - it holds the chainstate db,
+// with a changeset cache layer that stores in-memory the latest state changes.
+type GlobalStateCache struct {
+	ctx        context.Context
+	db         kv.RoDB
+	initHeight atomic.Uint64
+
+	cacheLock sync.RWMutex
+	cache     *stateCache
+}
+
+func NewGlobalStateCache(ctx context.Context, db kv.RoDB, size int) (*GlobalStateCache, error) {
+	return &GlobalStateCache{
+		ctx:        ctx,
+		db:         db,
+		initHeight: atomic.Uint64{},
+		cache:      newStateCache(size),
+	}, nil
+}
+
+func (cache *GlobalStateCache) TryInitCache(executionHeight uint64) error {
+	cache.cacheLock.Lock()
+	defer cache.cacheLock.Unlock()
+
+	if cache.initHeight.Load() != 0 {
+		return fmt.Errorf("state cache already initialized")
+	}
+	cache.initHeight.Store(executionHeight)
+
+	return nil
+}
+
+func (cache *GlobalStateCache) Clear() {
+	cache.cacheLock.Lock()
+	defer cache.cacheLock.Unlock()
+
+	// Clear all caches
+	cache.cache.Clear()
 	cache.initHeight.Store(0)
 }
 
-func (cache *StateCache) GetInitHeight() uint64 {
+func (cache *GlobalStateCache) GetInitHeight() uint64 {
 	return cache.initHeight.Load()
 }
 
 // -------------- Cache operations --------------
-func (cache *StateCache) ApplyChangeset(changeset *realtimeTypes.Changeset, blockNumber uint64, txIndex uint) error {
-	// Handle account data changes
-	addressChanges := make(map[libcommon.Address]*accounts.Account)
-	cache.applyChangesetToAccountData(changeset, addressChanges)
-
+func (cache *GlobalStateCache) FlushState(stateCache *stateCache) error {
 	cache.cacheLock.Lock()
 	defer cache.cacheLock.Unlock()
 
+	// Apply account changes
+	for address, account := range stateCache.accountCache {
+		delete(cache.cache.accountCache, address)
+		cache.cache.accountCache[address] = account
+	}
+
 	// Apply code changes
-	for codeHash, code := range changeset.CodeChanges {
-		cache.codeCache[codeHash] = code
+	for codeHash, code := range stateCache.codeCache {
+		delete(cache.cache.codeCache, codeHash)
+		cache.cache.codeCache[codeHash] = code
 	}
 
 	// Apply storage changes
-	for address, storage := range changeset.StorageChanges {
-		account, err := cache.getOrCreateAccount(address, addressChanges)
-		if err != nil {
-			return fmt.Errorf("apply storage changes failed: %v", err)
-		}
-
-		for key, value := range storage {
-			compositeKey := dbutils.PlainGenerateCompositeStorageKey(address.Bytes(), account.Incarnation, key.Bytes())
-			cache.storageCache[string(compositeKey)] = value
-		}
+	for key, value := range stateCache.storageCache {
+		delete(cache.cache.storageCache, key)
+		cache.cache.storageCache[key] = value
 	}
 
 	// Apply incarnation map changes
-	for address, incarnation := range changeset.IncarnationMapChanges {
-		cache.incarnationMapCache[address] = incarnation
-	}
-
-	// Apply deleted accounts changes
-	for address := range changeset.DeletedAccounts {
-		// Non-existent / deleted accounts are set to nil
-		addressChanges[address] = nil
-	}
-
-	// Apply account changes
-	for address, account := range addressChanges {
-		delete(cache.accountCache, address)
-		cache.accountCache[address] = account
-		log.Debug("[Realtime] ApplyChangeset: ", address)
-	}
-
-	log.Debug(fmt.Sprintf("[Realtime] Apply changeset from tx with height: %d, txIndex: %d\n", blockNumber, txIndex))
-
-	return nil
-}
-
-func (cache *StateCache) applyChangesetToAccountData(changeset *realtimeTypes.Changeset, addressChanges map[libcommon.Address]*accounts.Account) (err error) {
-	// Apply balance changes
-	for address, balance := range changeset.BalanceChanges {
-		if _, ok := changeset.DeletedAccounts[address]; ok {
-			continue
-		}
-
-		account, err := cache.getOrCreateAccount(address, addressChanges)
-		if err != nil {
-			return fmt.Errorf("apply balance changes failed: %v", err)
-		}
-		account.Balance.Set(balance)
-	}
-
-	// Apply nonce changes
-	for address, nonce := range changeset.NonceChanges {
-		if _, ok := changeset.DeletedAccounts[address]; ok {
-			continue
-		}
-
-		account, err := cache.getOrCreateAccount(address, addressChanges)
-		if err != nil {
-			return fmt.Errorf("apply nonce changes failed: %v", err)
-		}
-		account.Nonce = nonce
-	}
-
-	// Apply code hash changes
-	for address, codeHash := range changeset.CodeHashChanges {
-		if _, ok := changeset.DeletedAccounts[address]; ok {
-			continue
-		}
-
-		account, err := cache.getOrCreateAccount(address, addressChanges)
-		if err != nil {
-			return fmt.Errorf("apply code hash changes failed: %v", err)
-		}
-		account.CodeHash = codeHash
-	}
-
-	// Apply incarnation changes
-	for address, incarnation := range changeset.IncarnationChanges {
-		if _, ok := changeset.DeletedAccounts[address]; ok {
-			continue
-		}
-
-		account, err := cache.getOrCreateAccount(address, addressChanges)
-		if err != nil {
-			return fmt.Errorf("apply incarnation changes failed: %v", err)
-		}
-		account.Incarnation = incarnation
+	for address, incarnation := range stateCache.incarnationMapCache {
+		delete(cache.cache.incarnationMapCache, address)
+		cache.cache.incarnationMapCache[address] = incarnation
 	}
 
 	return nil
-}
-
-func (cache *StateCache) getOrCreateAccount(address libcommon.Address, addressChanges map[libcommon.Address]*accounts.Account) (*accounts.Account, error) {
-	account, ok := addressChanges[address]
-	if !ok {
-		var err error
-		account, err = cache.unsafeReadAccountData(address)
-		if err != nil {
-			return nil, err
-		}
-
-		if account == nil {
-			// Non-existent account, create new account
-			account, err = cache.createAccount()
-			if err != nil {
-				return nil, err
-			}
-		}
-		addressChanges[address] = account
-	}
-
-	return account, nil
-}
-
-func (cache *StateCache) unsafeReadAccountData(address libcommon.Address) (*accounts.Account, error) {
-	acc, ok := cache.accountCache[address]
-	if ok {
-		return acc, nil
-	}
-
-	// Cache miss, read from chainstate db
-	return cache.GetAccountFromChainDb(address)
-}
-
-func (cache *StateCache) createAccount() (*accounts.Account, error) {
-	return &accounts.Account{
-		Initialised: true,
-		Root:        libcommon.BytesToHash(trie.EmptyRoot[:]),
-		CodeHash:    libcommon.BytesToHash(emptyCodeHash),
-	}, nil
 }
 
 // -------------- StateReader implementation --------------
-func (cache *StateCache) ReadAccountData(address libcommon.Address) (*accounts.Account, error) {
+func (cache *GlobalStateCache) ReadAccountData(address libcommon.Address) (*accounts.Account, error) {
 	if cache.initHeight.Load() == 0 {
 		return nil, ErrNotReady
 	}
 
 	cache.cacheLock.RLock()
-	acc, ok := cache.accountCache[address]
+	acc, ok := cache.cache.accountCache[address]
 	if ok {
 		accCopy := accounts.DeepCopyAccount(acc)
 		cache.cacheLock.RUnlock()
@@ -254,7 +153,7 @@ func (cache *StateCache) ReadAccountData(address libcommon.Address) (*accounts.A
 	return cache.GetAccountFromChainDb(address)
 }
 
-func (cache *StateCache) ReadAccountStorage(address libcommon.Address, incarnation uint64, key *libcommon.Hash) ([]byte, error) {
+func (cache *GlobalStateCache) ReadAccountStorage(address libcommon.Address, incarnation uint64, key *libcommon.Hash) ([]byte, error) {
 	if cache.initHeight.Load() == 0 {
 		return nil, ErrNotReady
 	}
@@ -262,7 +161,7 @@ func (cache *StateCache) ReadAccountStorage(address libcommon.Address, incarnati
 	compositeKey := dbutils.PlainGenerateCompositeStorageKey(address.Bytes(), incarnation, key.Bytes())
 
 	cache.cacheLock.RLock()
-	storage, ok := cache.storageCache[string(compositeKey)]
+	storage, ok := cache.cache.storageCache[string(compositeKey)]
 	if ok {
 		storageCopy := libcommon.Copy(storage.Bytes())
 		cache.cacheLock.RUnlock()
@@ -274,7 +173,7 @@ func (cache *StateCache) ReadAccountStorage(address libcommon.Address, incarnati
 	return cache.GetAccountStorageFromChainDb(address, incarnation, key)
 }
 
-func (cache *StateCache) ReadAccountCode(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) ([]byte, error) {
+func (cache *GlobalStateCache) ReadAccountCode(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) ([]byte, error) {
 	if bytes.Equal(codeHash.Bytes(), emptyCodeHash) {
 		return nil, nil
 	}
@@ -284,7 +183,7 @@ func (cache *StateCache) ReadAccountCode(address libcommon.Address, incarnation 
 	}
 
 	cache.cacheLock.RLock()
-	code, ok := cache.codeCache[codeHash]
+	code, ok := cache.cache.codeCache[codeHash]
 	if ok {
 		codeCopy := libcommon.Copy(code)
 		cache.cacheLock.RUnlock()
@@ -296,18 +195,18 @@ func (cache *StateCache) ReadAccountCode(address libcommon.Address, incarnation 
 	return cache.GetAccountCodeFromChainDb(address, incarnation, codeHash)
 }
 
-func (cache *StateCache) ReadAccountCodeSize(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) (int, error) {
+func (cache *GlobalStateCache) ReadAccountCodeSize(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) (int, error) {
 	code, err := cache.ReadAccountCode(address, incarnation, codeHash)
 	return len(code), err
 }
 
-func (cache *StateCache) ReadAccountIncarnation(address libcommon.Address) (uint64, error) {
+func (cache *GlobalStateCache) ReadAccountIncarnation(address libcommon.Address) (uint64, error) {
 	if cache.initHeight.Load() == 0 {
 		return 0, ErrNotReady
 	}
 
 	cache.cacheLock.RLock()
-	incarnation, ok := cache.incarnationMapCache[address]
+	incarnation, ok := cache.cache.incarnationMapCache[address]
 	cache.cacheLock.RUnlock()
 	if ok {
 		return incarnation, nil
@@ -318,7 +217,7 @@ func (cache *StateCache) ReadAccountIncarnation(address libcommon.Address) (uint
 }
 
 // -------------- Chainstate db reader operations --------------
-func (cache *StateCache) GetAccountFromChainDb(address libcommon.Address) (*accounts.Account, error) {
+func (cache *GlobalStateCache) GetAccountFromChainDb(address libcommon.Address) (*accounts.Account, error) {
 	tx, err := cache.db.BeginRo(cache.ctx)
 	if err != nil {
 		return nil, err
@@ -329,7 +228,7 @@ func (cache *StateCache) GetAccountFromChainDb(address libcommon.Address) (*acco
 	return reader.ReadAccountData(address)
 }
 
-func (cache *StateCache) GetAccountStorageFromChainDb(address libcommon.Address, incarnation uint64, key *libcommon.Hash) ([]byte, error) {
+func (cache *GlobalStateCache) GetAccountStorageFromChainDb(address libcommon.Address, incarnation uint64, key *libcommon.Hash) ([]byte, error) {
 	tx, err := cache.db.BeginRo(cache.ctx)
 	if err != nil {
 		return nil, err
@@ -340,7 +239,7 @@ func (cache *StateCache) GetAccountStorageFromChainDb(address libcommon.Address,
 	return reader.ReadAccountStorage(address, incarnation, key)
 }
 
-func (cache *StateCache) GetAccountCodeFromChainDb(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) ([]byte, error) {
+func (cache *GlobalStateCache) GetAccountCodeFromChainDb(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) ([]byte, error) {
 	tx, err := cache.db.BeginRo(cache.ctx)
 	if err != nil {
 		return nil, err
@@ -351,7 +250,7 @@ func (cache *StateCache) GetAccountCodeFromChainDb(address libcommon.Address, in
 	return reader.ReadAccountCode(address, incarnation, codeHash)
 }
 
-func (cache *StateCache) GetAccountIncarnationFromChainDb(address libcommon.Address) (uint64, error) {
+func (cache *GlobalStateCache) GetAccountIncarnationFromChainDb(address libcommon.Address) (uint64, error) {
 	tx, err := cache.db.BeginRo(cache.ctx)
 	if err != nil {
 		return 0, err
@@ -363,12 +262,12 @@ func (cache *StateCache) GetAccountIncarnationFromChainDb(address libcommon.Addr
 }
 
 // -------------- Debug operations --------------
-func (cache *StateCache) DebugDumpToFile(cacheDumpPath string) error {
+func (cache *GlobalStateCache) DebugDumpToFile(cacheDumpPath string) error {
 	cache.cacheLock.RLock()
 	defer cache.cacheLock.RUnlock()
 
 	accountData := make(map[string]string)
-	for addr, acc := range cache.accountCache {
+	for addr, acc := range cache.cache.accountCache {
 		value := make([]byte, acc.EncodingLengthForStorage())
 		acc.EncodeForStorage(value)
 		accountData[hex.EncodeToString(addr[:])] = hex.EncodeToString(value)
@@ -378,7 +277,7 @@ func (cache *StateCache) DebugDumpToFile(cacheDumpPath string) error {
 	}
 
 	storageData := make(map[string]string)
-	for key, value := range cache.storageCache {
+	for key, value := range cache.cache.storageCache {
 		storageData[hex.EncodeToString([]byte(key))] = hex.EncodeToString(value.Bytes())
 	}
 	if err := realtimeTypes.WriteToJSON(filepath.Join(cacheDumpPath, "storage_cache.json"), storageData); err != nil {
@@ -386,7 +285,7 @@ func (cache *StateCache) DebugDumpToFile(cacheDumpPath string) error {
 	}
 
 	codeData := make(map[string]string)
-	for hash, code := range cache.codeCache {
+	for hash, code := range cache.cache.codeCache {
 		codeData[hex.EncodeToString(hash[:])] = hex.EncodeToString(code)
 	}
 	if err := realtimeTypes.WriteToJSON(filepath.Join(cacheDumpPath, "code_cache.json"), codeData); err != nil {
@@ -394,7 +293,7 @@ func (cache *StateCache) DebugDumpToFile(cacheDumpPath string) error {
 	}
 
 	incarnationData := make(map[string]uint64)
-	for addr, incarnation := range cache.incarnationMapCache {
+	for addr, incarnation := range cache.cache.incarnationMapCache {
 		incarnationData[hex.EncodeToString(addr[:])] = incarnation
 	}
 	if err := realtimeTypes.WriteToJSON(filepath.Join(cacheDumpPath, "incarnation_cache.json"), incarnationData); err != nil {
@@ -406,12 +305,12 @@ func (cache *StateCache) DebugDumpToFile(cacheDumpPath string) error {
 
 // DebugCompare compares the state cache with the chain-state db, and returns the
 // list of account addresses that have differing states.
-func (cache *StateCache) DebugCompare(reader state.StateReader) []string {
+func (cache *GlobalStateCache) DebugCompare(reader state.StateReader) []string {
 	cache.cacheLock.RLock()
 	defer cache.cacheLock.RUnlock()
 
 	mismatches := []string{}
-	for addr, accCache := range cache.accountCache {
+	for addr, accCache := range cache.cache.accountCache {
 		log.Info("[Realtime] Comparing account", "address", addr.String())
 		accDb, err := reader.ReadAccountData(addr)
 		if err != nil {

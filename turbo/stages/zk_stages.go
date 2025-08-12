@@ -9,6 +9,7 @@ import (
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/core/rawdb/blockio"
 	state2 "github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/eth/stagedsync"
@@ -43,7 +44,7 @@ func NewDefaultZkStages(ctx context.Context,
 	infoTreeUpdater *l1infotree.Updater,
 	// For X Layer, realtime
 	realtimeCache *realtimeCache.RealtimeCache,
-	realtimeFinishChan chan uint64,
+	realtimeFinishChan chan realtimeTypes.FinishedEntry,
 ) []*stagedsync.Stage {
 	dirs := cfg.Dirs
 	blockWriter := blockio.NewBlockWriter(cfg.HistoryV3)
@@ -116,8 +117,8 @@ func NewSequencerZkStages(ctx context.Context,
 	txPoolDb kv.RwDB,
 	infoTreeUpdater *l1infotree.Updater,
 	hook *Hook,
-	kafkaBlockInfoChan chan *realtimeTypes.BlockInfo,
-	kafkaTxInfoChan chan *state2.TxInfo,
+	kafkaBlockInfoChan chan *types.Header,
+	kafkaTxInfoChan chan state2.TxInfo,
 ) []*stagedsync.Stage {
 	dirs := cfg.Dirs
 	blockReader := freezeblocks.NewBlockReader(snapshots, nil)

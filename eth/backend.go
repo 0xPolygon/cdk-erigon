@@ -137,6 +137,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/realtime"
 	realtimeCache "github.com/ledgerwatch/erigon/zk/realtime/cache"
 	realtimeKafka "github.com/ledgerwatch/erigon/zk/realtime/kafka"
+	"github.com/ledgerwatch/erigon/zk/realtime/realtimeapi"
 	realtimeSub "github.com/ledgerwatch/erigon/zk/realtime/subscription"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
@@ -259,9 +260,9 @@ type Ethereum struct {
 	kafkaProducer *realtimeKafka.KafkaProducer
 	kafkaConsumer *realtimeKafka.KafkaConsumer
 	realtimeCache *realtimeCache.RealtimeCache
-	blockInfoChan chan *realtimeTypes.BlockInfo
-	txInfoChan    chan *state.TxInfo
-	finishChan    chan uint64
+	blockInfoChan chan *types.Header
+	txInfoChan    chan state.TxInfo
+	finishChan    chan realtimeTypes.FinishedEntry
 	realtimeSub   *realtimeSub.RealtimeSubscription
 }
 
@@ -1234,15 +1235,15 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			// For X Layer, realtime
 			if cfg.Zk.XLayer.Realtime.Enable {
-				kafkaProducer, err := realtimeKafka.NewKafkaProducer(cfg.Zk.XLayer.Realtime.Kafka)
+				kafkaProducer, err := realtimeKafka.NewKafkaProducer(cfg.Zk.XLayer.Realtime.Kafka, backend.sentryCtx, backend.chainDB)
 				if err != nil {
 					backend.kafkaEnabled = false
 					log.Warn("[Realtime] Failed to initialize kafka producer", "error", err)
 				} else {
 					backend.kafkaEnabled = true
 					backend.kafkaProducer = kafkaProducer
-					backend.blockInfoChan = make(chan *realtimeTypes.BlockInfo, realtimeKafka.DefaultKafkaBufferSize)
-					backend.txInfoChan = make(chan *state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
+					backend.blockInfoChan = make(chan *types.Header, realtimeKafka.DefaultKafkaBufferSize)
+					backend.txInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
 
 					// Send error trigger message on sequencer restart
 					if err := backend.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
@@ -1315,7 +1316,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 						return nil, err
 					}
 
-					backend.finishChan = make(chan uint64)
+					backend.finishChan = make(chan realtimeTypes.FinishedEntry)
 
 					if cfg.Zk.XLayer.Realtime.EnableSubscribe {
 						backend.realtimeSub = realtimeSub.NewRealtimeSubscription()
@@ -1461,7 +1462,7 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 
 	var gpCache *jsonrpc.GasPriceCache
 	// For X Layer, split db
-	s.apiList, gpCache = jsonrpc.APIList(chainKv, s.smtDB, ethRpcClient, txPoolRpcClient, s.txPool2, miningRpcClient, ff, stateCache, blockReader, s.agg, &httpRpcCfg, s.engine, config, s.l1Syncer, s.logger, dataStreamServer, s.gasTracker, s.stagedSync.GetCache(), config.Zk.XLayer.Realtime.Enable && s.kafkaEnabled, s.realtimeCache, s.realtimeSub)
+	s.apiList, gpCache = jsonrpc.APIList(chainKv, s.smtDB, ethRpcClient, txPoolRpcClient, s.txPool2, miningRpcClient, ff, stateCache, blockReader, s.agg, &httpRpcCfg, s.engine, config, s.l1Syncer, s.logger, dataStreamServer, s.gasTracker, s.stagedSync.GetCache(), config.Zk.XLayer.Realtime.Enable && s.kafkaEnabled, s.realtimeCache, s.realtimeSub, realtimeapi.NewRealtimeAPI, realtimeapi.NewRealtimeDebugApi)
 
 	// For X Layer
 	if s.txPool2 != nil && gpCache != nil {

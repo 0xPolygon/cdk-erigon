@@ -94,6 +94,7 @@ var (
 		AuRaStep:    13078,
 		AuRaSeal:    common.FromHex("0x75bda30f85541be059646e1acd3613fd100846e42308df2dad8ed79b9a9e91c9db994386599a683820a1394684d41fc139c4805684142e6b15a722a2e9cc51f7ee"),
 	}
+	testHash = libcommon.HexToHash("0x1234567890abcdef")
 )
 
 func TestKafka(t *testing.T) {
@@ -106,14 +107,29 @@ func TestKafka(t *testing.T) {
 		ClientID:         "xlayer-test-consumer",
 		GroupID:          "xlayer-test-consumer-1",
 	}
-	producer, err := kafka.NewKafkaProducer(cfg)
+	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), nil)
 	assert.NilError(t, err)
 
-	for i := 0; i < 10; i++ {
+	currBlockHeader := ethTypes.CopyHeader(blockHeader)
+	for i := 1; i <= 10; i++ {
 		err = producer.SendKafkaTransaction(uint64(i), rightvrsTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset)
 		assert.NilError(t, err)
 
-		err = producer.SendKafkaBlockInfo(blockHeader, 10)
+		var prevBlockHeader *ethTypes.Header
+		if i != 1 {
+			prevBlockHeader = ethTypes.CopyHeader(currBlockHeader)
+		}
+		currBlockHeader.Number = big.NewInt(int64(i))
+		blockMsg := kafkaTypes.BlockMessage{
+			Header: currBlockHeader,
+			PrevBlockInfo: &realtimeTypes.BlockInfo{
+				Header:  prevBlockHeader,
+				TxCount: int64(i),
+				Hash:    testHash,
+			},
+		}
+		assert.NilError(t, err)
+		err = producer.SendKafkaBlockMessage(blockMsg)
 		assert.NilError(t, err)
 
 		err = producer.SendKafkaErrorTrigger(uint64(i))
@@ -121,7 +137,7 @@ func TestKafka(t *testing.T) {
 	}
 
 	accessListTx.SetSender(testFromAddr)
-	for i := 10; i < 20; i++ {
+	for i := 11; i <= 20; i++ {
 		err = producer.SendKafkaTransaction(uint64(i), accessListTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset)
 
 		assert.NilError(t, err)
@@ -140,7 +156,7 @@ func TestKafka(t *testing.T) {
 	go consumer.ConsumeKafka(ctx, headersChan, txMsgsChan, errorMsgsChan, errorChan)
 
 	// Verify tx messages
-	for i := 0; i < 10; i++ {
+	for i := 1; i <= 10; i++ {
 		select {
 		case err := <-errorChan:
 			t.Fatalf("Received error from consumer: %v", err)
@@ -152,7 +168,7 @@ func TestKafka(t *testing.T) {
 		}
 	}
 
-	for i := 10; i < 20; i++ {
+	for i := 11; i <= 20; i++ {
 		select {
 		case err := <-errorChan:
 			t.Fatalf("Received error from consumer: %v", err)
@@ -166,19 +182,28 @@ func TestKafka(t *testing.T) {
 	}
 
 	// Verify header messages
-	for i := 0; i < 10; i++ {
+	currBlockHeader = ethTypes.CopyHeader(blockHeader)
+	for i := 1; i <= 10; i++ {
 		select {
 		case err := <-errorChan:
 			t.Fatalf("Received error from consumer: %v", err)
 		case rcvHeader := <-headersChan:
-			header, _, err := rcvHeader.GetBlockInfo()
+			var prevBlockHeader *ethTypes.Header
+			if i != 1 {
+				prevBlockHeader = ethTypes.CopyHeader(currBlockHeader)
+			}
+			currBlockHeader.Number = big.NewInt(int64(i))
+			header, prevBlockInfo, err := rcvHeader.GetBlockInfo()
 			assert.NilError(t, err)
-			AssertHeader(t, blockHeader, header)
+			AssertHeader(t, currBlockHeader, header)
+			AssertHeader(t, prevBlockHeader, prevBlockInfo.Header)
+			assert.Equal(t, prevBlockInfo.TxCount, int64(i))
+			assert.Equal(t, prevBlockInfo.Hash, testHash)
 		}
 	}
 
 	// Verify error trigger messages
-	for i := 0; i < 10; i++ {
+	for i := 1; i <= 10; i++ {
 		select {
 		case err := <-errorChan:
 			t.Fatalf("Received error from consumer: %v", err)

@@ -17,7 +17,7 @@ type TxInfo struct {
 	Entries     Entries
 }
 
-func (sdb *IntraBlockState) GenerateChangesetSinceSnapshotAndSendTxInfo(revid int, txInfoChan chan *TxInfo, tx types.Transaction, receipt *types.Receipt, innerTxs []*zktypes.InnerTx) {
+func (sdb *IntraBlockState) GenerateChangesetSinceSnapshotAndSendTxInfo(revid int, txInfoChan chan TxInfo, tx types.Transaction, receipt *types.Receipt, innerTxs []*zktypes.InnerTx) {
 	// Find the snapshot in the stack of valid snapshots.
 	idx := sort.Search(len(sdb.validRevisions), func(i int) bool {
 		return sdb.validRevisions[i].id >= revid
@@ -36,7 +36,7 @@ func (sdb *IntraBlockState) GenerateChangesetSinceSnapshotAndSendTxInfo(revid in
 	// 	entry.collectChangeset(changeset)
 	// }
 
-	txInfoChan <- &TxInfo{
+	txInfoChan <- TxInfo{
 		BlockNumber: receipt.BlockNumber.Uint64(),
 		Tx:          tx,
 		Receipt:     receipt,

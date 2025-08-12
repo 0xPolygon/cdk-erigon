@@ -6,11 +6,19 @@ import (
 	"math/big"
 	"slices"
 	"sync"
+	"time"
 
+	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/common/math"
+	"github.com/ledgerwatch/erigon/consensus"
+	"github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/eth/gasprice/gaspricecfg"
+	"github.com/ledgerwatch/erigon/rpc"
+	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/zk/apollo"
 )
 
@@ -55,6 +63,44 @@ func (apii *APIImpl) listenApollo(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func (api *APIImpl) RealtimeEnabled(ctx context.Context) (bool, error) {
+	return false, nil
+}
+
+func (apii *APIImpl) GetDB() kv.RoDB {
+	return apii.db
+}
+
+func (apii *APIImpl) GetEngine() consensus.EngineReader {
+	return apii.engine()
+}
+
+func (apii *APIImpl) GetChainConfig(ctx context.Context, tx kv.Tx) (*chain.Config, error) {
+	return apii.chainConfig(ctx, tx)
+}
+
+func (apii *APIImpl) GetEvmCallTimeout() time.Duration {
+	return apii.evmCallTimeout
+}
+
+func (apii *APIImpl) CreateLatestStateReader(ctx context.Context) (state.StateReader, kv.Tx, error) {
+	tx, err := apii.db.BeginRo(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot open tx: %w", err)
+	}
+	blockNumber := rpc.LatestBlockNumber
+	reader, err := rpchelper.CreateStateReader(ctx, tx, rpc.BlockNumberOrHash{BlockNumber: &blockNumber}, 0, apii.filters, apii.stateCache, apii.historyV3(tx), "")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return reader, tx, nil
+}
+
+func MarshalReceipt(receipt *types.Receipt, txn types.Transaction, chainConfig *chain.Config, header *types.Header, txnHash common.Hash, signed bool) map[string]interface{} {
+	return marshalReceipt(receipt, txn, chainConfig, header, txnHash, signed)
 }
 
 const (

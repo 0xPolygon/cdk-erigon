@@ -10,6 +10,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/ethclient"
+	"github.com/ledgerwatch/erigon/zk/realtime/rtclient"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,8 +20,9 @@ func TestIterativeCreate2AndDestroy(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	client, err := ethclient.Dial(DefaultL2NetworkURL)
+	ec, err := ethclient.Dial(DefaultL2NetworkRealtimeURL)
 	require.NoError(t, err)
+	client := rtclient.NewRealtimeClient(ec, DefaultL2NetworkRealtimeURL)
 
 	privateKey, err := crypto.HexToECDSA(DefaultL2AdminPrivateKey[2:])
 	require.NoError(t, err)
@@ -34,13 +36,13 @@ func TestIterativeCreate2AndDestroy(t *testing.T) {
 		SendDeployDestroyContractTx(t, ctx, client, privateKey, factoryAddr, salt)
 
 		destroyAddr := GetContractAddressFromFactory(t, ctx, client, factoryAddr, salt)
-		code, err := RealtimeGetCode(destroyAddr)
+		code, err := client.RealtimeGetCode(destroyAddr)
 		require.NoError(t, err)
 		require.NotEmpty(t, code, "Destroy contract code should exist after deploy")
 
 		SendDestroyContractTx(t, ctx, client, privateKey, destroyAddr)
 
-		code, err = RealtimeGetCode(destroyAddr)
+		code, err = client.RealtimeGetCode(destroyAddr)
 		require.NoError(t, err)
 		require.Equal(t, code, "0x", "Destroy contract code should not exist after destroy")
 	}
@@ -52,8 +54,9 @@ func TestMultipleCreate2AndDestroy(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	client, err := ethclient.Dial(DefaultL2NetworkURL)
+	ec, err := ethclient.Dial(DefaultL2NetworkRealtimeURL)
 	require.NoError(t, err)
+	client := rtclient.NewRealtimeClient(ec, DefaultL2NetworkRealtimeURL)
 
 	privateKey, err := crypto.HexToECDSA(DefaultL2AdminPrivateKey[2:])
 	require.NoError(t, err)
@@ -68,13 +71,13 @@ func TestMultipleCreate2AndDestroy(t *testing.T) {
 		SendDeployDestroyContractTx(t, ctx, client, privateKey, factoryAddr, salt)
 
 		destroyAddr := GetContractAddressFromFactory(t, ctx, client, factoryAddr, salt)
-		code, err := RealtimeGetCode(destroyAddr)
+		code, err := client.RealtimeGetCode(destroyAddr)
 		require.NoError(t, err)
 		require.NotEmpty(t, code, "Destroy contract code should exist after deploy")
 
 		SendDestroyContractTx(t, ctx, client, privateKey, destroyAddr)
 
-		code, err = RealtimeGetCode(destroyAddr)
+		code, err = client.RealtimeGetCode(destroyAddr)
 		require.NoError(t, err)
 		require.Equal(t, code, "0x", "Destroy contract code should not exist after destroy")
 	}
@@ -86,8 +89,9 @@ func TestCreate2AndDestroyInSameTx(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	client, err := ethclient.Dial(DefaultL2NetworkURL)
+	ec, err := ethclient.Dial(DefaultL2NetworkRealtimeURL)
 	require.NoError(t, err)
+	client := rtclient.NewRealtimeClient(ec, DefaultL2NetworkRealtimeURL)
 
 	privateKey, err := crypto.HexToECDSA(DefaultL2AdminPrivateKey[2:])
 	require.NoError(t, err)
@@ -102,7 +106,7 @@ func TestCreate2AndDestroyInSameTx(t *testing.T) {
 		SendCreateAndDestroyTx(t, ctx, client, privateKey, createDestroyAddr, salt)
 
 		destroyAddr := GetContractAddressFromCreateDestroy(t, ctx, client, createDestroyAddr, salt)
-		code, err := RealtimeGetCode(destroyAddr)
+		code, err := client.RealtimeGetCode(destroyAddr)
 		require.NoError(t, err)
 		require.Equal(t, code, "0x", "Destroyable contract code should not exist")
 	}

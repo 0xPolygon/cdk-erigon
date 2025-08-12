@@ -4,24 +4,21 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/holiman/uint256"
-	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
-	"github.com/ledgerwatch/erigon/ethclient"
 	"github.com/ledgerwatch/erigon/test/operations"
+	"github.com/ledgerwatch/erigon/zk/realtime/rtclient"
 	"github.com/ledgerwatch/erigon/zkevm/log"
 	"github.com/stretchr/testify/require"
 )
@@ -34,12 +31,12 @@ var (
 )
 
 // setupRealtimeTestEnvironment creates a test environment with necessary data for tests
-func setupRealtimeTestEnvironment(t *testing.T) uint64 {
+func setupRealtimeTestEnvironment(t *testing.T, client *rtclient.RealtimeClient) uint64 {
 	// Wait for at least one block to be available
 	var blockNumber uint64
 	var err error
 	for i := 0; i < 30; i++ {
-		blockNumber, err = RealtimeBlockNumber()
+		blockNumber, err = client.RealtimeBlockNumber()
 		require.NoError(t, err)
 		fmt.Printf("Realtime block number: %d, attempt: %v\n", blockNumber, i)
 		if blockNumber > 0 {
@@ -60,22 +57,18 @@ func setupRealtimeTestEnvironment(t *testing.T) uint64 {
 	return blockNumber
 }
 
-func nativeTransferTx(t *testing.T, ctx context.Context, client *ethclient.Client, amount *uint256.Int, toAddress string) types.Transaction {
+func nativeTransferTx(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, amount *uint256.Int, toAddress string) types.Transaction {
 	chainID, err := client.ChainID(ctx)
 	require.NoError(t, err)
 	auth, err := operations.GetAuth(DefaultL2AdminPrivateKey, chainID.Uint64())
 	require.NoError(t, err)
-	nonce, err := client.PendingNonceAt(ctx, auth.From)
+	nonce, err := client.RealtimeGetTransactionCount(auth.From)
 	require.NoError(t, err)
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
 
 	to := common.HexToAddress(toAddress)
-	gas, err := client.EstimateGas(ctx, ethereum.CallMsg{
-		From:  auth.From,
-		To:    &to,
-		Value: amount,
-	})
+	gas := uint64(21000)
 	require.NoError(t, err)
 
 	var tx types.Transaction = &types.LegacyTx{
@@ -105,7 +98,7 @@ func deployERC20Contract(
 	t *testing.T,
 	ctx context.Context,
 	privateKey *ecdsa.PrivateKey,
-	client *ethclient.Client,
+	client *rtclient.RealtimeClient,
 ) common.Address {
 	publicKey := privateKey.Public()
 	tmpPublicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
@@ -113,7 +106,7 @@ func deployERC20Contract(
 	fromAddress := crypto.PubkeyToAddress(*tmpPublicKeyECDSA)
 	fmt.Printf("Sender: %s\n", fromAddress)
 
-	nonce, err := client.PendingNonceAt(ctx, fromAddress)
+	nonce, err := client.RealtimeGetTransactionCount(fromAddress)
 	require.NoError(t, err)
 
 	// Define gas parameters
@@ -135,9 +128,10 @@ func deployERC20Contract(
 	erc20Address, tx, _, err := bind.DeployContract(auth, erc20ABI, erc20Bytecode, client)
 	require.NoError(t, err)
 
-	fmt.Printf("ERC20 Contract deployed at: %s, transaction hash: %s\n", erc20Address.Hex(), tx.Hash().Hex())
 	// Wait for contract deployment to be mined
-	bind.WaitDeployed(ctx, client, tx)
+	err = WaitTxToBeMined(ctx, client, tx, DefaultTimeoutTxToBeMined)
+	require.NoError(t, err)
+	fmt.Printf("ERC20 Contract deployed at: %s, transaction hash: %s\n", erc20Address.Hex(), tx.Hash().Hex())
 
 	return erc20Address
 }
@@ -146,7 +140,7 @@ func erc20TransferTx(
 	t *testing.T,
 	ctx context.Context,
 	privateKey *ecdsa.PrivateKey,
-	client *ethclient.Client,
+	client *rtclient.RealtimeClient,
 	amount *big.Int,
 	toAddress common.Address,
 	erc20Address common.Address,
@@ -180,26 +174,80 @@ func erc20TransferTx(
 	return signedTx
 }
 
-func transToken(t *testing.T, ctx context.Context, client *ethclient.Client, amount *uint256.Int, toAddress string) string {
+func transToken(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, amount *uint256.Int, toAddress string) string {
 	return transTokenWithFrom(t, ctx, client, operations.DefaultL2AdminPrivateKey, amount, toAddress)
 }
 
-func transTokenWithFrom(t *testing.T, ctx context.Context, client *ethclient.Client, fromPrivateKey string, amount *uint256.Int, toAddress string) string {
+// Creates multiple transactions in a batch and waits for them all to be mined
+// If fromPrivateKey is empty, uses the default admin private key
+func transTokenBatch(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, amount *uint256.Int, toAddress string, batchSize int, fromPrivateKey ...string) []string {
+	privateKey := operations.DefaultL2AdminPrivateKey
+	if len(fromPrivateKey) > 0 && fromPrivateKey[0] != "" {
+		privateKey = fromPrivateKey[0]
+	}
+	var txHashes []string
+	var transactions []types.Transaction
+
+	// Create all transactions first
+	for i := 0; i < batchSize; i++ {
+		chainID, err := client.ChainID(ctx)
+		require.NoError(t, err)
+		auth, err := operations.GetAuth(privateKey, chainID.Uint64())
+		require.NoError(t, err)
+		nonce, err := client.RealtimeGetTransactionCount(auth.From)
+		require.NoError(t, err)
+		gasPrice, err := client.SuggestGasPrice(ctx)
+		require.NoError(t, err)
+
+		to := common.HexToAddress(toAddress)
+		gas := uint64(21000)
+
+		var tx types.Transaction = &types.LegacyTx{
+			CommonTx: types.CommonTx{
+				Nonce: nonce,
+				To:    &to,
+				Gas:   gas,
+				Value: amount,
+			},
+			GasPrice: uint256.MustFromBig(gasPrice),
+		}
+
+		privKey, err := crypto.HexToECDSA(strings.TrimPrefix(privateKey, "0x"))
+		require.NoError(t, err)
+
+		signer := types.MakeSigner(operations.GetTestChainConfig(operations.DefaultL2ChainID), 1, 0)
+		signedTx, err := types.SignTx(tx, *signer, privKey)
+		require.NoError(t, err)
+
+		err = client.SendTransaction(ctx, signedTx)
+		require.NoError(t, err)
+
+		txHashes = append(txHashes, signedTx.Hash().String())
+		transactions = append(transactions, signedTx)
+	}
+
+	// Wait for all transactions to be mined
+	for _, tx := range transactions {
+		err := WaitTxToBeMined(ctx, client, tx, DefaultTimeoutTxToBeMined)
+		require.NoError(t, err)
+	}
+
+	log.Info(fmt.Sprintf("All %d transactions have been mined successfully", len(transactions)))
+	return txHashes
+}
+
+func transTokenWithFrom(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, fromPrivateKey string, amount *uint256.Int, toAddress string) string {
 	chainID, err := client.ChainID(ctx)
 	require.NoError(t, err)
 	auth, err := operations.GetAuth(fromPrivateKey, chainID.Uint64())
 	require.NoError(t, err)
-	nonce, err := client.PendingNonceAt(ctx, auth.From)
+	nonce, err := client.RealtimeGetTransactionCount(auth.From)
 	require.NoError(t, err)
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
 
 	to := common.HexToAddress(toAddress)
-	gas, err := client.EstimateGas(ctx, ethereum.CallMsg{
-		From:  auth.From,
-		To:    &to,
-		Value: amount,
-	})
+	gas := uint64(21000)
 	require.NoError(t, err)
 	log.Info(fmt.Sprintf("gas: %d", gas))
 	log.Info(fmt.Sprintf("gasPrice: %d", gasPrice))
@@ -224,19 +272,19 @@ func transTokenWithFrom(t *testing.T, ctx context.Context, client *ethclient.Cli
 	err = client.SendTransaction(ctx, signedTx)
 	require.NoError(t, err)
 
-	err = operations.WaitTxToBeMined(ctx, client, signedTx, operations.DefaultTimeoutTxToBeMined)
+	err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
 	require.NoError(t, err)
 
 	return signedTx.Hash().String()
 }
 
-func DeployFactoryContract(t *testing.T, ctx context.Context, client *ethclient.Client) common.Address {
+func DeployFactoryContract(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient) common.Address {
 	// Deploy Factory contract
 	chainID, err := client.ChainID(ctx)
 	require.NoError(t, err)
 	auth, err := operations.GetAuth(DefaultL2AdminPrivateKey, chainID.Uint64())
 	require.NoError(t, err)
-	nonce, err := client.PendingNonceAt(ctx, auth.From)
+	nonce, err := client.RealtimeGetTransactionCount(auth.From)
 	require.NoError(t, err)
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
@@ -257,13 +305,13 @@ func DeployFactoryContract(t *testing.T, ctx context.Context, client *ethclient.
 	return factoryAddr
 }
 
-func SendDeployDestroyContractTx(t *testing.T, ctx context.Context, client *ethclient.Client, privateKey *ecdsa.PrivateKey, factoryAddr common.Address, salt *big.Int) {
+func SendDeployDestroyContractTx(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, privateKey *ecdsa.PrivateKey, factoryAddr common.Address, salt *big.Int) {
 	destroyBytecode, err := hex.DecodeString(destroyBytecodeStr)
 	require.NoError(t, err)
 	data, err := factoryABI.Pack("deploy", destroyBytecode, salt)
 	require.NoError(t, err)
 
-	nonce, err := client.PendingNonceAt(ctx, common.HexToAddress(DefaultL2AdminAddress))
+	nonce, err := client.RealtimeGetTransactionCount(common.HexToAddress(DefaultL2AdminAddress))
 	require.NoError(t, err)
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
@@ -286,11 +334,11 @@ func SendDeployDestroyContractTx(t *testing.T, ctx context.Context, client *ethc
 	require.NoError(t, err)
 }
 
-func SendDestroyContractTx(t *testing.T, ctx context.Context, client *ethclient.Client, privateKey *ecdsa.PrivateKey, destroyAddr common.Address) {
+func SendDestroyContractTx(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, privateKey *ecdsa.PrivateKey, destroyAddr common.Address) {
 	data, err := destroyABI.Pack("destroy", common.HexToAddress(DefaultL2AdminAddress))
 	require.NoError(t, err)
 
-	nonce, err := client.PendingNonceAt(ctx, common.HexToAddress(DefaultL2AdminAddress))
+	nonce, err := client.RealtimeGetTransactionCount(common.HexToAddress(DefaultL2AdminAddress))
 	require.NoError(t, err)
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
@@ -313,27 +361,27 @@ func SendDestroyContractTx(t *testing.T, ctx context.Context, client *ethclient.
 	require.NoError(t, err)
 }
 
-func GetContractAddressFromFactory(t *testing.T, ctx context.Context, client *ethclient.Client, factoryAddr common.Address, salt *big.Int) common.Address {
+func GetContractAddressFromFactory(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, factoryAddr common.Address, salt *big.Int) common.Address {
 	destroyBytecode, err := hex.DecodeString(destroyBytecodeStr)
 	require.NoError(t, err)
 
 	// Pack the call to computeAddress
 	computeInput, err := factoryABI.Pack("computeAddress", destroyBytecode, salt)
 	require.NoError(t, err)
-	result, err := RealtimeCall(common.HexToAddress(DefaultL2AdminAddress), factoryAddr, "0x300000", "0x1", "0x0", fmt.Sprintf("0x%x", computeInput))
+	result, err := client.RealtimeCall(common.HexToAddress(DefaultL2AdminAddress), factoryAddr, "0x300000", "0x1", "0x0", fmt.Sprintf("0x%x", computeInput))
 	require.NoError(t, err)
 
 	// Unpack the result
 	return common.HexToAddress(result)
 }
 
-func DeployCreateDestroyContract(t *testing.T, ctx context.Context, client *ethclient.Client) common.Address {
+func DeployCreateDestroyContract(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient) common.Address {
 	// Deploy Factory contract
 	chainID, err := client.ChainID(ctx)
 	require.NoError(t, err)
 	auth, err := operations.GetAuth(DefaultL2AdminPrivateKey, chainID.Uint64())
 	require.NoError(t, err)
-	nonce, err := client.PendingNonceAt(ctx, auth.From)
+	nonce, err := client.RealtimeGetTransactionCount(auth.From)
 	require.NoError(t, err)
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
@@ -354,11 +402,11 @@ func DeployCreateDestroyContract(t *testing.T, ctx context.Context, client *ethc
 	return createDestroyAddr
 }
 
-func SendCreateAndDestroyTx(t *testing.T, ctx context.Context, client *ethclient.Client, privateKey *ecdsa.PrivateKey, createDestroyAddr common.Address, salt *big.Int) {
+func SendCreateAndDestroyTx(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, privateKey *ecdsa.PrivateKey, createDestroyAddr common.Address, salt *big.Int) {
 	data, err := createDestroyABI.Pack("createAndDestroy", salt, common.HexToAddress(DefaultL2AdminAddress))
 	require.NoError(t, err)
 
-	nonce, err := client.PendingNonceAt(ctx, common.HexToAddress(DefaultL2AdminAddress))
+	nonce, err := client.RealtimeGetTransactionCount(common.HexToAddress(DefaultL2AdminAddress))
 	require.NoError(t, err)
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
@@ -381,46 +429,37 @@ func SendCreateAndDestroyTx(t *testing.T, ctx context.Context, client *ethclient
 	require.NoError(t, err)
 }
 
-func GetContractAddressFromCreateDestroy(t *testing.T, ctx context.Context, client *ethclient.Client, createDestroyAddr common.Address, salt *big.Int) common.Address {
+func GetContractAddressFromCreateDestroy(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, createDestroyAddr common.Address, salt *big.Int) common.Address {
 	destroyBytecode, err := hex.DecodeString(destroyBytecodeStr)
 	require.NoError(t, err)
 
 	// Pack the call to computeAddress
 	computeInput, err := factoryABI.Pack("computeAddress", destroyBytecode, salt)
 	require.NoError(t, err)
-	result, err := RealtimeCall(common.HexToAddress(DefaultL2AdminAddress), createDestroyAddr, "0x300000", "0x1", "0x0", fmt.Sprintf("0x%x", computeInput))
+	result, err := client.RealtimeCall(common.HexToAddress(DefaultL2AdminAddress), createDestroyAddr, "0x300000", "0x1", "0x0", fmt.Sprintf("0x%x", computeInput))
 	require.NoError(t, err)
 
 	// Unpack the result
 	return common.HexToAddress(result)
 }
 
-// RevertReason returns the revert reason for a tx that has a receipt with failed status
-func RevertReason(
+// RevertReasonRealtime returns the revert reason for a tx that has a receipt with failed status
+func RevertReasonRealtime(
 	ctx context.Context,
-	c ethClienter,
+	client *rtclient.RealtimeClient,
 	tx types.Transaction,
-	blockNumber *big.Int,
 ) (string, error) {
 	if tx == nil {
 		return "", nil
 	}
 
 	from, _ := tx.GetSender()
-	msg := ethereum.CallMsg{
-		From: from,
-		To:   tx.GetTo(),
-		Gas:  tx.GetGas(),
-
-		Value: tx.GetValue(),
-		Data:  tx.GetData(),
-	}
-	hex, err := c.CallContract(ctx, msg, blockNumber)
+	hex, err := client.RealtimeCall(from, *tx.GetTo(), fmt.Sprintf("0x%x", tx.GetGas()), fmt.Sprintf("0x%x", tx.GetPrice()), fmt.Sprintf("0x%x", tx.GetValue()), fmt.Sprintf("0x%x", tx.GetData()))
 	if err != nil {
 		return "", err
 	}
 
-	unpackedMsg, err := abi.UnpackRevert(hex)
+	unpackedMsg, err := abi.UnpackRevert(common.FromHex(hex))
 	if err != nil {
 		fmt.Printf("failed to get the revert message for tx %v: %v\n", tx.Hash(), err)
 		return "", errors.New("execution reverted")
@@ -429,29 +468,108 @@ func RevertReason(
 	return unpackedMsg, nil
 }
 
-func transHexToUint64(hex json.RawMessage) (uint64, error) {
-	var result string
-	err := json.Unmarshal(hex, &result)
-	if err != nil {
-		return 0, err
+// CompareBlockData compares two block data maps and returns true if identical
+func CompareBlock(realtimeBlock, nonRealtimeBlock map[string]interface{}, testName string) error {
+	if realtimeBlock == nil && nonRealtimeBlock == nil {
+		return nil
+	}
+	if realtimeBlock == nil || nonRealtimeBlock == nil {
+		return fmt.Errorf("one response is nil: realtime=%v, non-realtime=%v", realtimeBlock == nil, nonRealtimeBlock == nil)
 	}
 
-	if len(result) > 1 && (result[:2] == "0x" || result[:2] == "0X") {
-		result = result[2:]
+	for key, realtimeValue := range realtimeBlock {
+		nonRealtimeValue, exists := nonRealtimeBlock[key]
+		if !exists {
+			return fmt.Errorf("field '%s' missing in non-realtime response", key)
+		}
+
+		if !DeepEqual(realtimeValue, nonRealtimeValue) {
+			return fmt.Errorf("field '%s' differs: realtime=%v, non-realtime=%v", key, realtimeValue, nonRealtimeValue)
+		}
 	}
 
-	result1, err := strconv.ParseUint(result, 16, 64)
-	if err != nil {
-		return 0, err
+	// Check for fields that exist in non-realtime but not in realtime
+	for key := range nonRealtimeBlock {
+		if _, exists := realtimeBlock[key]; !exists {
+			return fmt.Errorf("field '%s' missing in realtime response", key)
+		}
 	}
 
-	return result1, nil
+	return nil
 }
 
-func toLogFilterArg(q ethereum.FilterQuery) (interface{}, error) {
-	arg := map[string]interface{}{
-		"address": q.Addresses,
-		"topics":  q.Topics,
+// DeepEqual performs deep comparison of two interface{} values
+func DeepEqual(a, b interface{}) bool {
+	switch aVal := a.(type) {
+	case map[string]interface{}:
+		bMap, ok := b.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		if len(aVal) != len(bMap) {
+			return false
+		}
+		for key, aValue := range aVal {
+			bValue, exists := bMap[key]
+			if !exists || !DeepEqual(aValue, bValue) {
+				return false
+			}
+		}
+		return true
+	case []interface{}:
+		bSlice, ok := b.([]interface{})
+		if !ok || len(aVal) != len(bSlice) {
+			return false
+		}
+		for i, aValue := range aVal {
+			if !DeepEqual(aValue, bSlice[i]) {
+				return false
+			}
+		}
+		return true
+	default:
+		return a == b
 	}
-	return arg, nil
+}
+
+// convertBlockParam converts string block parameters to uint64 for realtime client
+func convertBlockParam(client *rtclient.RealtimeClient, blockParam string) (uint64, error) {
+	switch blockParam {
+	case "latest", "pending":
+		return client.RealtimeBlockNumber()
+	case "earliest":
+		return 0, nil
+	default:
+		if strings.HasPrefix(blockParam, "0x") {
+			bigInt := new(big.Int)
+			_, ok := bigInt.SetString(blockParam[2:], 16)
+			if !ok {
+				return 0, fmt.Errorf("invalid hex block number: %s", blockParam)
+			}
+			return bigInt.Uint64(), nil
+		}
+		return 0, fmt.Errorf("unsupported block parameter: %s", blockParam)
+	}
+}
+
+// extractBlockHash extracts a valid block hash from a block response
+// Returns the hash and a boolean indicating if extraction was successful
+func extractBlockHash(blockByNumber map[string]interface{}, blockParam string) (common.Hash, bool) {
+	// Extract the block hash
+	hashInterface, exists := blockByNumber["hash"]
+	if !exists {
+		return common.Hash{}, false
+	}
+
+	hashStr, ok := hashInterface.(string)
+	if !ok {
+		return common.Hash{}, false
+	}
+
+	if hashStr == "" || hashStr == "0x0000000000000000000000000000000000000000000000000000000000000000" {
+		return common.Hash{}, false
+	}
+
+	blockHash := common.HexToHash(hashStr)
+	return blockHash, true
 }
