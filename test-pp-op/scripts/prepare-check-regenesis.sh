@@ -8,6 +8,8 @@ TEST_DIR="$ROOT_DIR/test-pp-op"
 TMP_DIR="$TEST_DIR/tmp"
 SA_BENCH_DIR="$TMP_DIR/SA-Benchmark"
 
+TX_RESULT_FILE="$TEST_DIR/sa-tx-before.txt"
+
 SEQ_NAME="xlayer-seq"
 SLEEP_TIME=5
 DATA_DIR="data"
@@ -76,7 +78,7 @@ docker compose start $SEQ_NAME
 sleep $SLEEP_TIME
 cd $SA_BENCH_DIR
 git checkout dumi/senddet
-yarn run senduop:local
+yarn run senduop:local > $TX_RESULT_FILE
 sleep 5
 cd $TEST_DIR
 docker compose stop $SEQ_NAME

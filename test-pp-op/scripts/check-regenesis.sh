@@ -7,6 +7,7 @@ ROOT_DIR=$(git rev-parse --show-toplevel)
 TEST_DIR="$ROOT_DIR/test-pp-op"
 TMP_DIR="$TEST_DIR/tmp"
 SA_BENCH_DIR="$TMP_DIR/SA-Benchmark"
+TX_RESULT_FILE="$TEST_DIR/sa-tx-after.txt"
 
 RPC_URL="http://localhost:8123"
 
@@ -50,7 +51,7 @@ state-check -dump-state-file config-op/state1.json -rpc-url $RPC_URL --progress-
 # 9. Run state-check state2
 cd $SA_BENCH_DIR
 yarn
-yarn run senduop:deterministicop
+yarn run senduop:deterministicop > $TX_RESULT_FILE
 sleep 5
 cd $TEST_DIR
 echo -e "\n\n*** State 2 ***" >> $RESULT_FILE
