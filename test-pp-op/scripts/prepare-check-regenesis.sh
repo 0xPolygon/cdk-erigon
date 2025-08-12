@@ -52,7 +52,13 @@ fi
 . "$NVM_DIR/nvm.sh"
 nvm use v22
 ./1-setup.sh
-sleep 5
+sleep 3
+source .env
+cast send $ENTRYPOINT --value 2000ether \
+--private-key $PRIVATE_KEY \
+--legacy --gas-price $GAS_PRICE \
+--rpc-url http://localhost:8123
+sleep 3
 cd $TEST_DIR
 docker compose stop $SEQ_NAME
 cp -a -P $DATA_DIR data_state0
@@ -65,7 +71,7 @@ cast send 0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E --value $TX_VALUE \
 --private-key $PRIVATE_KEY \
 --legacy --gas-price $GAS_PRICE \
 --rpc-url http://localhost:8123
-sleep 5
+sleep 3
 cd $TEST_DIR
 docker compose stop $SEQ_NAME
 cp -a -P $DATA_DIR data_state1
@@ -74,7 +80,6 @@ cp -a -P $DATA_DIR data_state1
 cd $TEST_DIR
 docker compose start $SEQ_NAME
 sleep $SLEEP_TIME
-cast balance 0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534 --rpc-url=http://localhost:8123 > balance.txt
 cd $SA_BENCH_DIR
 git checkout dumi/senddet
 TX_RESULT_FILE="$TEST_DIR/sa-tx-before.txt"
@@ -82,7 +87,6 @@ FEE_FILE="$TEST_DIR/tx-fee-before.txt"
 yarn run senduop:local > $TX_RESULT_FILE
 sleep 5
 cd $TEST_DIR
-cast balance 0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534 --rpc-url=http://localhost:8123 >> balance.txt
 scripts/calc-total-fee-and-value.sh $TX_RESULT_FILE > $FEE_FILE
 docker compose stop $SEQ_NAME
 cp -a -P $DATA_DIR data_state2
