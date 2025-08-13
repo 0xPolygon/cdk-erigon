@@ -167,8 +167,9 @@ func (s *SMT) InsertStorage(ethAddr string, storage *map[string]string, chm *map
 
 	a := utils.ConvertHexToBigInt(ethAddr)
 	add := utils.ScalarToArrayBig(a)
-
+	fmt.Println("before get last storage root")
 	or, err := s.getLastRoot()
+	fmt.Println("end get last storage root")
 	if err != nil {
 		return nil, err
 	}

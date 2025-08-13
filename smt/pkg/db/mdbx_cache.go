@@ -83,6 +83,7 @@ func (m *EriCacheDb) RollbackBatch() {
 }
 
 func (m *EriCacheDb) GetLastRoot() (*big.Int, error) {
+	fmt.Printf("ericachedb")
 	data, err := m.kvTxRoSMT.GetOne(TableStats, []byte(MetaLastRoot))
 	if err != nil {
 		return big.NewInt(0), err

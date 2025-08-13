@@ -127,6 +127,7 @@ func (m *EriDb) RollbackBatch() {
 }
 
 func (m *EriRoDb) GetLastRoot() (*big.Int, error) {
+	fmt.Printf("erirodb")
 	data, err := m.kvTxRoSMT.GetOne(TableStats, []byte(MetaLastRoot))
 	if err != nil {
 		return big.NewInt(0), err
