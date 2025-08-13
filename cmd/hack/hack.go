@@ -1890,7 +1890,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		smtBatchRebuild := smt.NewSMT(nil, false)
 		insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "", false)
 
-		chunkSize := 1 << 2
+		chunkSize := 1 << 12
 
 		// Note: go map does not preserver the iteration order; so, we need to put it into a slice to iterate
 		entries := make([]struct {
