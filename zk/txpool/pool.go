@@ -926,7 +926,8 @@ func (p *TxPool) validateTx(txn *types.TxSlot, isLocal bool, stateCache kvcache.
 	}
 
 	// check nonce and balance
-	senderNonce, senderBalance, _ := p.senders.info(stateCache, txn.SenderID)
+	senderNonce, _ := p.all.nonce(txn.SenderID)
+	_, senderBalance, _ := p.senders.info(stateCache, txn.SenderID)
 	if senderNonce > txn.Nonce {
 		if txn.Traced {
 			log.Info(fmt.Sprintf("TX TRACING: validateTx nonce too low idHash=%x nonce in state=%d, txn.nonce=%d", txn.IDHash, senderNonce, txn.Nonce))
