@@ -505,22 +505,24 @@ func migrateGenesis(chaindata, input, output string) error {
 			}
 			account := v.(map[string]interface{})
 			if hex.EncodeToString(a.CodeHash.Bytes()) != "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" {
-				codeBytes, err := hex.DecodeString(account["code"].(string))
-				if err != nil {
-					panic(err)
-				}
 				fmt.Println("Adding existing contract: ", acc_hex)
-				fmt.Println("op:")
-				fmt.Printf("  balance: %s\n", account["balance"])
-				fmt.Printf("  nonce: %s\n", account["nonce"])
-				fmt.Printf("  codeHash: %s\n", crypto.Keccak256Hash(codeBytes).String())
-				fmt.Println("xlayer:")
-				fmt.Printf("  balance: %s\n", a.Balance.Hex())
-				fmt.Printf("  nonce: %s\n", "0x"+strconv.FormatUint(a.Nonce, 16))
-				fmt.Printf("  codeHash: %s\n", a.CodeHash)
+				codeHash := libcommon.BigToHash(utils.HashContractBytecodeBigInt(hex.EncodeToString(hexutility.FromHex(account["code"].(string)))))
+				isCodeEqual := codeHash == a.CodeHash
+				isBalanceEqual := account["balance"].(string) == a.Balance.Hex()
+				isNonceEqual := account["nonce"].(string) == "0x"+strconv.FormatUint(a.Nonce, 16)
+				if !isBalanceEqual {
+					fmt.Printf("	  balance: %s ==> %s\n", account["balance"].(string), a.Balance.Hex())
+				}
+				if !isNonceEqual {
+					fmt.Printf("	  nonce: %s ==> %s\n", account["nonce"].(string), "0x"+strconv.FormatUint(a.Nonce, 16))
+				}
+				if !isCodeEqual {
+					fmt.Println("	 code not equal")
+				}
 			} else {
 				fmt.Println("Adding existing account:", acc_hex)
 			}
+			// use nonce and balance from xlayer, but use code and storage from op stack
 			account["nonce"] = "0x" + strconv.FormatUint(a.Nonce, 16)
 			account["balance"] = a.Balance.Hex()
 			continue
