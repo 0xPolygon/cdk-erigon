@@ -1693,7 +1693,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		return fmt.Errorf("you cannot use --delete-scalable=true and --ignore-scalable=true flags together")
 	}
 
-	var jsonData map[string]accInfo
+	var jsonData map[string]map[string]accInfo
 	if input == "" {
 		input = "genesis.json"
 	}
@@ -1716,7 +1716,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 	storageChanges := make(map[libcommon.Address]map[string]string)
 
 	fmt.Println("Begin json decode")
-	for acc, value := range jsonData {
+	for acc, value := range jsonData["alloc"] {
 		accBytes := common.FromHex(acc)
 		if err != nil {
 			panic("acc decoding error")
@@ -1725,7 +1725,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		acc := accounts.NewAccount()
 		balance, err := uint256.FromHex(value.Balance)
 		if err != nil {
-			panic("balance decoding error")
+			panic(fmt.Sprintf("acc decoding error for acct: %s, err: %v", address, err))
 		}
 		acc.Balance = *balance
 		nonce, err := hexutil.DecodeUint64(value.Nonce)

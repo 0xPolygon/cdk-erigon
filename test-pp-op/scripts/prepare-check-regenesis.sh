@@ -26,7 +26,7 @@ fi
 function clone_repos {
     cd $TMP_DIR
     if [ ! -d $SA_BENCH_DIR ]; then
-        git clone -b dumi/senddet git@github.com:okx/SA-Benchmark.git
+        git clone -b dumi/senddet https://github.com/okx/SA-Benchmark.git
     fi
     cd $ROOT_DIR
 }
