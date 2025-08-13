@@ -497,18 +497,32 @@ func migrateGenesis(chaindata, input, output string) error {
 		}
 		acc_addr := libcommon.HexToAddress(acc_hex)
 		log.Debug("acc_addr: %s\n", acc_hex)
-		if _, exists := allocData[acc_hex]; exists {
+		if v, exists := allocData[acc_hex]; exists {
 			// Fixme: if xlayer account conflict with target node(such as op-geth), use which as new regenesis account?
 			a, err := plainStateReader.ReadAccountData(acc_addr)
 			if err != nil {
 				return err
 			}
-
+			account := v.(map[string]interface{})
 			if hex.EncodeToString(a.CodeHash.Bytes()) != "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" {
+				codeBytes, err := hex.DecodeString(account["code"].(string))
+				if err != nil {
+					panic(err)
+				}
 				fmt.Println("Adding existing contract: ", acc_hex)
+				fmt.Println("op:")
+				fmt.Printf("  balance: %s\n", account["balance"])
+				fmt.Printf("  nonce: %s\n", account["nonce"])
+				fmt.Printf("  codeHash: %s\n", crypto.Keccak256Hash(codeBytes).String())
+				fmt.Println("xlayer:")
+				fmt.Printf("  balance: %s\n", a.Balance.Hex())
+				fmt.Printf("  nonce: %s\n", "0x"+strconv.FormatUint(a.Nonce, 16))
+				fmt.Printf("  codeHash: %s\n", a.CodeHash)
 			} else {
 				fmt.Println("Adding existing account:", acc_hex)
 			}
+			account["nonce"] = "0x" + strconv.FormatUint(a.Nonce, 16)
+			account["balance"] = a.Balance.Hex()
 			continue
 		}
 		allocData[acc_hex] = make(map[string]interface{})
