@@ -398,6 +398,10 @@ func appendToValuesBatchStorageBigInt(valuesBatchStorage []*utils.NodeValue8, va
 	return append(valuesBatchStorage, nodeValue), nodeValue.IsZero(), nil
 }
 
+func HackWrapConvertBytecodeToBigInt(bytecode string) (*big.Int, int, error) {
+	return convertBytecodeToBigInt(bytecode)
+}
+
 func convertBytecodeToBigInt(bytecode string) (*big.Int, int, error) {
 	bi := utils.HashContractBytecodeBigInt(bytecode)
 	parsedBytecode := strings.TrimPrefix(bytecode, "0x")

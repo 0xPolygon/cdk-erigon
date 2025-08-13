@@ -1885,22 +1885,151 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		}
 
 		fmt.Println("Done incremental SMT buidling.")
-	}
-
-	fmt.Println("Begin SetStorage")
-	_, _, err = smtBatch.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
-	if err != nil {
-		panic("SetStorage: " + err.Error())
-	}
-	fmt.Println("End SetStorage")
-	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
-
-	fmt.Printf("*** smtBatchRootHash: %x\n", smtBatchRootHash)
-	if smtBatchRootHash.Text(16) == smtBatchRootHashOrigin.Text(16) {
-		fmt.Println("State check: Pass")
 	} else {
-		fmt.Println("State check: Failed")
+		// batch mode
+		smtBatchRebuild := smt.NewSMT(nil, false)
+		insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "", false)
+
+		chunkSize := 1 << 2
+
+		// Note: go map does not preserver the iteration order; so, we need to put it into a slice to iterate
+		entries := make([]struct {
+			addr libcommon.Address
+			acc  *accounts.Account
+		}, 0, len(accChanges))
+
+		for addr, acc := range accChanges {
+			entries = append(entries, struct {
+				addr libcommon.Address
+				acc  *accounts.Account
+			}{addr, acc})
+		}
+
+		totalEntries := len(entries)
+		fmt.Printf("Processing %d entries in chunks of %d\n", totalEntries, chunkSize)
+
+		// Process chunks one by one
+		for i := 0; i < totalEntries; i += chunkSize {
+			end := i + chunkSize
+			if end > totalEntries {
+				end = totalEntries
+			}
+
+			chunk := entries[i:end]
+			chunkNum := (i / chunkSize) + 1
+			totalChunks := (totalEntries + chunkSize - 1) / chunkSize
+
+			keyPointers := []*utils.NodeKey{}
+			valuePointers := []*utils.NodeValue8{}
+
+			fmt.Printf("Processing chunk %d/%d (entries %d-%d)\n", chunkNum, totalChunks, i+1, end)
+
+			for _, entry := range chunk {
+				acctBalanceKey := utils.KeyEthAddrBalance(entry.addr.String())
+				acctBalanceVal, err := utils.NodeValue8FromBigIntArray(utils.ScalarToArrayBig(entry.acc.Balance.ToBig()))
+
+				acctNonceKey := utils.KeyEthAddrNonce(entry.addr.String())
+				acctNonceVal, err := utils.NodeValue8FromBigIntArray(utils.ScalarToArrayBig(new(big.Int).SetUint64(entry.acc.Nonce)))
+
+				if err != nil {
+					panic("convert acct balance to smt nodes error: " + err.Error())
+				}
+				keyPointers = append(keyPointers, &acctBalanceKey)
+				valuePointers = append(valuePointers, acctBalanceVal)
+
+				keyPointers = append(keyPointers, &acctNonceKey)
+				valuePointers = append(valuePointers, acctNonceVal)
+			}
+
+			smtBatchRebuild.InsertBatch(insertBatchCfg, keyPointers, valuePointers, nil, nil)
+			fmt.Printf("Completed chunk %d/%d\n", chunkNum, totalChunks)
+		}
+
+		fmt.Println("Begin SetContractBytecode")
+		codeEntries := make([]struct {
+			addr libcommon.Address
+			code string
+		}, 0, len(codeChanges))
+
+		for addr, code := range codeChanges {
+			codeEntries = append(codeEntries, struct {
+				addr libcommon.Address
+				code string
+			}{addr, code})
+		}
+
+		totalCodeEntries := len(codeEntries)
+		totalCodeChunks := (totalCodeEntries + chunkSize - 1) / chunkSize
+
+		fmt.Printf("Processing %d contract bytecode entries in chunks of %d\n", totalCodeEntries, chunkSize)
+
+		for i := 0; i < totalCodeEntries; i += chunkSize {
+			end := i + chunkSize
+			if end > totalCodeEntries {
+				end = totalCodeEntries
+			}
+
+			chunk := codeEntries[i:end]
+			chunkNum := (i / chunkSize) + 1
+
+			keyPointers := []*utils.NodeKey{}
+			valuePointers := []*utils.NodeValue8{}
+
+			fmt.Printf("Processing contract bytecode chunk %d/%d (entries %d-%d)\n", chunkNum, totalCodeChunks, i+1, end)
+
+			for _, entry := range chunk {
+				keyContractCode := utils.KeyContractCode(entry.addr.String())
+				keyContractLength := utils.KeyContractLength(entry.addr.String())
+
+				bi, bytecodeLength, err := smt.HackWrapConvertBytecodeToBigInt(entry.code)
+				if err != nil {
+					panic("convert acct bytecode error: " + err.Error())
+				}
+
+				byteCodeNode8, err := utils.NodeValue8FromBigIntArray(utils.ScalarToArrayBig(bi))
+				if err != nil {
+					panic("convert acct bytecode error: " + err.Error())
+				}
+
+				byteCodeLengthNode8, err := utils.NodeValue8FromBigIntArray(utils.ScalarToArrayBig(big.NewInt(int64(bytecodeLength))))
+				if err != nil {
+					panic("convert acct bytecode error: " + err.Error())
+				}
+
+				keyPointers = append(keyPointers, &keyContractCode)
+				valuePointers = append(valuePointers, byteCodeNode8)
+
+				keyPointers = append(keyPointers, &keyContractLength)
+				valuePointers = append(valuePointers, byteCodeLengthNode8)
+			}
+
+			smtBatchRebuild.InsertBatch(insertBatchCfg, keyPointers, valuePointers, nil, nil)
+			fmt.Printf("Completed contract bytecode chunk %d/%d\n", chunkNum, totalCodeChunks)
+		}
+
+		fmt.Println("Begin SetContractStorage")
+		totalStorage := 0
+		for _, storage := range storageChanges {
+			totalStorage += len(storage)
+		}
+		for addr, storage := range storageChanges {
+			if _, err := smtBatchRebuild.SetContractStorage(addr.String(), storage, nil); err != nil {
+				panic("SetContractStorage")
+			}
+		}
+
+		smtBatchRebuildRootHash, _ := smtBatchRebuild.Db.GetLastRoot()
+		fmt.Printf("*** smtBatchRebuildRootHash: %x\n", smtBatchRebuildRootHash)
+		if smtBatchRebuildRootHash.Text(16) == smtBatchRootHashOrigin.Text(16) {
+			fmt.Println("batch check: Pass")
+		} else {
+			fmt.Println("batch check: Failed")
+		}
+
+		fmt.Println("Done batch SMT buidling.")
+
 	}
+
 	tx.Rollback()
 	if txsmt != nil {
 		txsmt.Rollback()
