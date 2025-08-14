@@ -183,6 +183,7 @@ func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string, prog
 		}
 
 	} else {
+		fmt.Println("before calcHash")
 		for _, k := range storageKeys {
 			v := storage[k]
 			if v == "" {
@@ -198,12 +199,17 @@ func (s *SMT) SetContractStorage(ethAddr string, storage map[string]string, prog
 		}
 	}
 
+	fmt.Println("begin set storage")
 	auxRes, err := s.InsertStorage(ethAddr, &storage, &chm, &vhm, progressChan)
+	fmt.Println("end set storage")
 	if err != nil {
+		fmt.Println("insert storage error:", err)
 		return nil, err
 	}
-
-	return auxRes.NewRootScalar.ToBigInt(), nil
+	fmt.Println("before toBigInt")
+	tmp := auxRes.NewRootScalar.ToBigInt()
+	fmt.Println("after toBigInt")
+	return tmp, nil
 }
 
 func (s *SMT) SetStorage(ctx context.Context, logPrefix string, accChanges map[libcommon.Address]*accounts.Account, codeChanges map[libcommon.Address]string, storageChanges map[libcommon.Address]map[string]string) ([]*utils.NodeKey, []*utils.NodeValue8, error) {
@@ -396,6 +402,10 @@ func appendToValuesBatchStorageBigInt(valuesBatchStorage []*utils.NodeValue8, va
 		return nil, false, err
 	}
 	return append(valuesBatchStorage, nodeValue), nodeValue.IsZero(), nil
+}
+
+func HackWrapConvertBytecodeToBigInt(bytecode string) (*big.Int, int, error) {
+	return convertBytecodeToBigInt(bytecode)
 }
 
 func convertBytecodeToBigInt(bytecode string) (*big.Int, int, error) {

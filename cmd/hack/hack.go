@@ -1704,12 +1704,44 @@ func newMDBX(dbdir string, ctx context.Context) (kv.RwDB, error) {
 }
 */
 
+// const TableSmt = "HermezSmt"
+// const TableStats = "HermezSmtStats"
+// const TableAccountValues = "HermezSmtAccountValues"
+// const TableMetadata = "HermezSmtMetadata"
+// const TableHashKey = "HermezSmtHashKey"
+func createSMTTables(db kv.RwDB, tx kv.RwTx) error {
+	// List of SMT-related buckets that need to be created
+	buckets := []string{
+		db2.TableSmt,      // Main SMT table
+		db2.TableMetadata, // SMT metadata
+		db2.TableStats,    // SMT statistics
+		//"HermezSmtNodes",    // SMT nodes
+		//"HermezSmtRoots",    // SMT roots
+		//"HermezSmtCode",     // Contract code
+		//"HermezSmtStorage",  // Contract storage
+		//"HermezSmtAccounts", // Account information
+		//"HermezSmtNonces",   // Account nonces
+		//"HermezSmtBalances", // Account balances
+		db2.TableHashKey,
+		// Add other buckets as needed
+	}
+
+	for _, bucketName := range buckets {
+		if err := tx.CreateBucket(bucketName); err != nil {
+			return fmt.Errorf("failed to create bucket %s: %w", bucketName, err)
+		}
+		fmt.Printf("Created bucket: %s\n", bucketName)
+	}
+
+	return nil
+}
+
 func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) error {
 	if *deleteScalable && *ignoreScalable {
 		return fmt.Errorf("you cannot use --delete-scalable=true and --ignore-scalable=true flags together")
 	}
 
-	var jsonData map[string]accInfo
+	var jsonData map[string]map[string]accInfo
 	if input == "" {
 		input = "genesis.json"
 	}
@@ -1732,7 +1764,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 	storageChanges := make(map[libcommon.Address]map[string]string)
 
 	fmt.Println("Begin json decode")
-	for acc, value := range jsonData {
+	for acc, value := range jsonData["alloc"] {
 		accBytes := common.FromHex(acc)
 		if err != nil {
 			panic("acc decoding error")
@@ -1741,7 +1773,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		acc := accounts.NewAccount()
 		balance, err := uint256.FromHex(value.Balance)
 		if err != nil {
-			panic("balance decoding error")
+			panic(fmt.Sprintf("acc decoding error for acct: %s, err: %v", address, err))
 		}
 		acc.Balance = *balance
 		nonce, err := hexutil.DecodeUint64(value.Nonce)
@@ -1901,22 +1933,52 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		}
 
 		fmt.Println("Done incremental SMT buidling.")
-	}
-
-	fmt.Println("Begin SetStorage")
-	_, _, err = smtBatch.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
-	if err != nil {
-		panic("SetStorage: " + err.Error())
-	}
-	fmt.Println("End SetStorage")
-	smtBatchRootHash, _ := smtBatch.Db.GetLastRoot()
-
-	fmt.Printf("*** smtBatchRootHash: %x\n", smtBatchRootHash)
-	if smtBatchRootHash.Text(16) == smtBatchRootHashOrigin.Text(16) {
-		fmt.Println("State check: Pass")
 	} else {
-		fmt.Println("State check: Failed")
+		start := time.Now() // record start time
+		dbRebuild := mdbx.MustOpen("./chaindata_rebuild")
+		defer dbRebuild.Close()
+		txRebuild, err := dbRebuild.BeginRw(ctx)
+		if err != nil {
+			panic(err)
+		}
+
+		dbsmtRebuild := mdbx.MustOpenInMem(4)
+		defer dbsmtRebuild.Close()
+		var txsmtRebuild kv.RwTx = nil
+		txsmtRebuild, err = dbsmtRebuild.BeginRw(ctx)
+		if err != nil {
+			panic(err)
+		}
+
+		//kv.InitStandaloneSMT(true)
+		// Create the SMT buckets in the new database
+		if err := createSMTTables(dbsmtRebuild, txsmtRebuild); err != nil {
+			panic("Failed to create SMT tables: " + err.Error())
+		}
+
+		eridbRebuild := db2.NewEriDb(txsmtRebuild, txRebuild)
+		smtBatchRebuild := smt.NewSMT(eridbRebuild, false)
+
+		_, _, err = smtBatchRebuild.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
+		if err != nil {
+			fmt.Println("SetStorage error ", err)
+			panic("SetStorage: " + err.Error())
+		}
+		fmt.Println("before check root")
+		smtBatchRebuildRootHash, _ := smtBatchRebuild.Db.GetLastRoot()
+		fmt.Printf("*** smtBatchRebuildRootHash: %x\n", smtBatchRebuildRootHash)
+		if smtBatchRebuildRootHash.Text(16) == smtBatchRootHashOrigin.Text(16) {
+			fmt.Println("batch check: Pass")
+		} else {
+			fmt.Println("batch check: Failed")
+		}
+
+		fmt.Println("Done batch SMT buidling.")
+		elapsed := time.Since(start).Minutes() // compute elapsed duration
+		fmt.Printf("Elapsed time: %s minutes \n", elapsed)
+
 	}
+
 	tx.Rollback()
 	if txsmt != nil {
 		txsmt.Rollback()
@@ -1963,7 +2025,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 	go func() {
-		if err := http.ListenAndServe("localhost:6960", nil); err != nil {
+		if err := http.ListenAndServe("localhost:6961", nil); err != nil {
 			log.Error("Failure in running pprof server", "err", err)
 		}
 	}()

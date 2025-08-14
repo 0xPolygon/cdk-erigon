@@ -48,6 +48,7 @@ RUN_DOCKER_APOLLO_RPC := $(DOCKER_COMPOSE_APOLLO) up -d $(DOCKER_RPC)
 STOP_DOCKER_SEQ := $(DOCKER_COMPOSE) stop $(DOCKER_SEQ)
 STOP_DOCKER_RPC := $(DOCKER_COMPOSE) stop $(DOCKER_RPC)
 STOP := $(DOCKER_COMPOSE) down --remove-orphans; sleep 3; rm -rf data
+PAUSE := $(DOCKER_COMPOSE) down --remove-orphans;
 
 INIT_BRIDGE_ACCOUNT := cast send -f 0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534  --private-key 0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2 --value 0.01ether 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266 --legacy --rpc-url http://127.0.0.1:8123 --async
 INIT_POLYGON_ZKEVM_BRIDGE_ACCOUNT := cast send -f 0x8943545177806ed17b9f23f0a21ee5948ecaa776  --private-key 0xbcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31 --value 0.01ether 0x3b59731225d8567ad89343a4669509fa91ba37ee --legacy --rpc-url http://127.0.0.1:8127 --async
@@ -111,8 +112,12 @@ all: run ## Runs a full node
 stop: ## Stops all services
 	$(STOP)
 
+.PHONY: pause
+pause: ## Stops all services, but keep the data
+	$(PAUSE)
+
 .PHONY: min-run
-min-run: build-docker ## Runs a minimal node
+min-run: stop build-docker ## Runs a minimal node
 	$(RUN_DOCKER_L1_NETWORK)
 	sleep 3
 	$(RUN_DOCKER_SEQ)

@@ -391,6 +391,8 @@ docker run --rm \
     "${OP_STACK_IMAGE_TAG}" \
     bash -c "
         echo '📊 Verifying Docker connection:'
+        apt-get update
+        apt-get install docker.io -y
         docker --version
         docker ps --format 'table {{.Names}}\t{{.Status}}' | head -3
         

@@ -50,6 +50,7 @@ func (m *MemDb) RollbackBatch() {
 }
 
 func (m *MemDb) GetLastRoot() (*big.Int, error) {
+	fmt.Printf("memdb")
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 

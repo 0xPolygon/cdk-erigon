@@ -1359,6 +1359,7 @@ func (tx *MdbxTx) Cursor(bucket string) (kv.Cursor, error) {
 }
 
 func (tx *MdbxTx) stdCursor(bucket string) (kv.RwCursor, error) {
+	fmt.Printf("cursor with bucket: %s\n", bucket)
 	b := tx.db.buckets[bucket]
 	c := &MdbxCursor{bucketName: bucket, tx: tx, bucketCfg: b, dbi: mdbx.DBI(tx.db.buckets[bucket].DBI), id: tx.cursorID}
 	tx.cursorID++
