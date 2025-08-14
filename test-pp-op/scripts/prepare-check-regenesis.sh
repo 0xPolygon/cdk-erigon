@@ -30,6 +30,7 @@ function clone_repos {
     if [ ! -d $SA_BENCH_DIR ]; then
         git clone -b $SA_BENCH_BRANCH https://github.com/okx/SA-Benchmark.git
     fi
+    git checkout $SA_BENCH_BRANCH
     cd $ROOT_DIR
 }
 
