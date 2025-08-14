@@ -18,6 +18,7 @@ package mdbx
 
 import (
 	"context"
+	"github.com/c2h5oh/datasize"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
@@ -31,8 +32,8 @@ func MustOpen(path string) kv.RwDB {
 	return db
 }
 
-func MustOpenInMem() kv.RwDB {
-	opts := NewMDBX(log.New()).InMem("")
+func MustOpenInMem(sz datasize.ByteSize) kv.RwDB {
+	opts := NewMDBX(log.New()).InMem("").MapSize(sz)
 
 	db, err := opts.Open(context.Background())
 

@@ -1926,7 +1926,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 			panic(err)
 		}
 
-		dbsmtRebuild := mdbx.MustOpenInMem()
+		dbsmtRebuild := mdbx.MustOpenInMem(96 << 30) // map to 96 GB
 		defer dbsmtRebuild.Close()
 		var txsmtRebuild kv.RwTx = nil
 		txsmtRebuild, err = dbsmtRebuild.BeginRw(ctx)
