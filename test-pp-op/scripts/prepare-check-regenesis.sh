@@ -56,7 +56,7 @@ nvm use v22
 ./1-setup.sh
 sleep 5
 cd $TEST_DIR
-docker compose stop $SEQ_NAME
+docker compose stop $SEQ_NAME --timeout 600
 cp -a -P $DATA_DIR data_state0
 
 # 2. Send one tx and save state1.json
@@ -69,7 +69,7 @@ cast send 0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E --value $TX_VALUE \
 --rpc-url http://localhost:8123
 sleep 3
 cd $TEST_DIR
-docker compose stop $SEQ_NAME
+docker compose stop $SEQ_NAME --timeout 600
 cp -a -P $DATA_DIR data_state1
 
 # 3. Send deterministic tx and save state2.json
@@ -84,5 +84,5 @@ yarn run senduop:local > $TX_RESULT_FILE
 sleep 5
 cd $TEST_DIR
 scripts/calc-total-fee-and-value.sh $TX_RESULT_FILE > $FEE_FILE
-docker compose stop $SEQ_NAME
+docker compose stop $SEQ_NAME --timeout 600
 cp -a -P $DATA_DIR data_state2

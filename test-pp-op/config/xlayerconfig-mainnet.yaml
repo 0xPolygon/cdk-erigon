@@ -79,8 +79,8 @@ txpool.enabletimsort: true
 zkevm.bulk-add-txs: true
 zkevm.enable-add-tx-notify: true
 
-zkevm.verification-batch-delay: 2
-zkevm.skip-analysis-group-api: true
+#zkevm.verification-batch-delay: 2
+#zkevm.skip-analysis-group-api: true
 # zkevm.analysis-group-nacos-urls: "url1:80,url2:80"
 # zkevm.analysis-group-nacos-namespace: "ns-global"
 # zkevm.analysis-group-service-name: "analysis-group"
