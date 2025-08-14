@@ -3,7 +3,7 @@ package utils
 const (
 	PreForkId7BlockGasLimit = 30_000_000
 	ForkId7BlockGasLimit    = 18446744073709551615 // 0xffffffffffffffff
-	ForkId8BlockGasLimit    = 1125899906842624     // 0x4000000000000
+	ForkId8BlockGasLimit    = 30000000             // 30000000
 )
 
 func GetBlockGasLimitForFork(forkId uint64) uint64 {
