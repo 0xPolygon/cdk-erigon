@@ -1688,11 +1688,11 @@ func newMDBX(dbdir string, ctx context.Context) (kv.RwDB, error) {
 }
 */
 
-//const TableSmt = "HermezSmt"
-//const TableStats = "HermezSmtStats"
-//const TableAccountValues = "HermezSmtAccountValues"
-//const TableMetadata = "HermezSmtMetadata"
-//const TableHashKey = "HermezSmtHashKey"
+// const TableSmt = "HermezSmt"
+// const TableStats = "HermezSmtStats"
+// const TableAccountValues = "HermezSmtAccountValues"
+// const TableMetadata = "HermezSmtMetadata"
+// const TableHashKey = "HermezSmtHashKey"
 func createSMTTables(db kv.RwDB, tx kv.RwTx) error {
 	// List of SMT-related buckets that need to be created
 	buckets := []string{
@@ -1926,7 +1926,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 			panic(err)
 		}
 
-		dbsmtRebuild := mdbx.MustOpen("./smt_rebuild")
+		dbsmtRebuild := mdbx.MustOpenInMem()
 		defer dbsmtRebuild.Close()
 		var txsmtRebuild kv.RwTx = nil
 		txsmtRebuild, err = dbsmtRebuild.BeginRw(ctx)
@@ -2007,7 +2007,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 	go func() {
-		if err := http.ListenAndServe("localhost:6960", nil); err != nil {
+		if err := http.ListenAndServe("localhost:6961", nil); err != nil {
 			log.Error("Failure in running pprof server", "err", err)
 		}
 	}()

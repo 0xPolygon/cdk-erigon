@@ -31,6 +31,17 @@ func MustOpen(path string) kv.RwDB {
 	return db
 }
 
+func MustOpenInMem() kv.RwDB {
+	opts := NewMDBX(log.New()).InMem("")
+
+	db, err := opts.Open(context.Background())
+
+	if err != nil {
+		panic(err)
+	}
+	return db
+}
+
 // Open - main method to open database.
 func Open(ctx context.Context, path string, logger log.Logger, accede bool) (kv.RwDB, error) {
 	var db kv.RwDB
