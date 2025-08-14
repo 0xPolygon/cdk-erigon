@@ -1837,7 +1837,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		ethAddrBigInt := utils.ConvertHexToBigInt(ethAddr.String())
 		ethAddrBigIngArray := utils.ScalarToArrayBig(ethAddrBigInt)
 		for k := range storageChanges[ethAddr] {
-			// fmt.Printf("Deleting scalable address storage key: %s\n", k)
+			fmt.Printf("Deleting scalable address storage key: %s\n", k)
 			keyStoragePosition := utils.KeyContractStorage(ethAddrBigIngArray, k)
 			if err = smtBatch.DeleteKeySource(&keyStoragePosition); err != nil {
 				panic("DeleteKeySource: " + err.Error())
