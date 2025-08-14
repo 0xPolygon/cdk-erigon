@@ -32,8 +32,8 @@ func MustOpen(path string) kv.RwDB {
 	return db
 }
 
-func MustOpenInMem(sz datasize.ByteSize) kv.RwDB {
-	opts := NewMDBX(log.New()).InMem("").MapSize(sz)
+func MustOpenInMem(dirtySpaceInGb uint64) kv.RwDB {
+	opts := NewMDBX(log.New()).InMem("").MapSize(DefaultMapSize).DirtySpace(dirtySpaceInGb * uint64(1*datasize.GB)).GrowthStep(1 * datasize.GB)
 
 	db, err := opts.Open(context.Background())
 

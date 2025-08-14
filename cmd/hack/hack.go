@@ -1918,7 +1918,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 
 		fmt.Println("Done incremental SMT buidling.")
 	} else {
-
+		start := time.Now() // record start time
 		dbRebuild := mdbx.MustOpen("./chaindata_rebuild")
 		defer dbRebuild.Close()
 		txRebuild, err := dbRebuild.BeginRw(ctx)
@@ -1926,7 +1926,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 			panic(err)
 		}
 
-		dbsmtRebuild := mdbx.MustOpenInMem(96 << 30) // map to 96 GB
+		dbsmtRebuild := mdbx.MustOpenInMem(4)
 		defer dbsmtRebuild.Close()
 		var txsmtRebuild kv.RwTx = nil
 		txsmtRebuild, err = dbsmtRebuild.BeginRw(ctx)
@@ -1958,6 +1958,8 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		}
 
 		fmt.Println("Done batch SMT buidling.")
+		elapsed := time.Since(start).Minutes() // compute elapsed duration
+		fmt.Printf("Elapsed time: %s minutes \n", elapsed)
 
 	}
 
