@@ -24,7 +24,7 @@ hard compilation fail when rebasing from upstream further down the line.
 */
 
 const (
-	transactionGasLimit = utils.PreForkId7BlockGasLimit
+	transactionGasLimit = utils.ForkId8BlockGasLimit
 )
 
 func calcProtocolBaseFee(baseFee uint64) uint64 {
