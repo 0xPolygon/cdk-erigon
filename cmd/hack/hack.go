@@ -1789,7 +1789,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		if value.Code != "0x" {
 			codeChanges[address] = value.Code
 		}
-		if *ignoreScalable && address == libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e") {
+		if *ignoreScalable && address == state.ADDRESS_SCALABLE_L2 {
 			fmt.Printf("Ignoring scalable address: %s\n", address.String())
 
 			if value.Storage != nil {
@@ -1812,7 +1812,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 			continue
 		}
 		if value.Storage != nil {
-			//storageChanges[address] = make(map[string]string)
+			storageChanges[address] = make(map[string]string)
 			//if *deleteScalable && address == libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e") {
 			//	for k := range value.Storage {
 			//		storageChanges[address][k] = "0"
