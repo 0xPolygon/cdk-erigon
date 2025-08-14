@@ -1743,10 +1743,29 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		}
 	}
 
+	ctx := context.Background()
+	db := mdbx.MustOpen(chaindata)
+	defer db.Close()
+	tx, err := db.BeginRw(ctx)
+	if err != nil {
+		panic(err)
+	}
+	var txsmt kv.RwTx = nil
+	if smtdata != "" {
+		fmt.Printf("Using split DB: %s\n", smtdata)
+		dbsmt := mdbx.MustOpen(*pathSmtDb)
+		defer dbsmt.Close()
+		txsmt, err = dbsmt.BeginRw(ctx)
+		if err != nil {
+			panic(err)
+		}
+	}
+	eridb := db2.NewEriDb(txsmt, tx)
+	smtOrigin := smt.NewSMT(eridb, false)
+
 	accChanges := make(map[libcommon.Address]*accounts.Account)
 	codeChanges := make(map[libcommon.Address]string)
 	storageChanges := make(map[libcommon.Address]map[string]string)
-
 	fmt.Println("Begin json decode")
 	for acc, value := range jsonData["alloc"] {
 		accBytes := common.FromHex(acc)
@@ -1772,6 +1791,23 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		}
 		if *ignoreScalable && address == libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e") {
 			fmt.Printf("Ignoring scalable address: %s\n", address.String())
+
+			if value.Storage != nil {
+				//storageChanges[address] = make(map[string]string)
+				for k, v := range value.Storage {
+					//storageChanges[address][k] = v
+					keyHash := libcommon.HexToHash(k)
+					valInSmt, err := smtOrigin.ReadAccountStorage(address, 0, &keyHash)
+					//.ReadAccountStorage(address, 0, k)
+
+					if err != nil {
+						fmt.Printf("Error reading scalable account storage: %s\n", err)
+					}
+					fmt.Println("valInSmt:", valInSmt, "valInGenesise: ", v)
+				}
+
+			}
+
 			continue
 		}
 		if value.Storage != nil {
@@ -1810,28 +1846,9 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 	fmt.Printf("Number of storage: %d\n", len(storageChanges))
 	fmt.Printf("Total number of keys: %d\n", len(accChanges)+len(codeChanges)+len(storageChanges))
 
-	ctx := context.Background()
-	db := mdbx.MustOpen(chaindata)
-	defer db.Close()
-	tx, err := db.BeginRw(ctx)
-	if err != nil {
-		panic(err)
-	}
-	var txsmt kv.RwTx = nil
-	if smtdata != "" {
-		fmt.Printf("Using split DB: %s\n", smtdata)
-		dbsmt := mdbx.MustOpen(*pathSmtDb)
-		defer dbsmt.Close()
-		txsmt, err = dbsmt.BeginRw(ctx)
-		if err != nil {
-			panic(err)
-		}
-	}
-	eridb := db2.NewEriDb(txsmt, tx)
-	smtBatch := smt.NewSMT(eridb, false)
 	if *deleteScalable {
 		fmt.Println("Deleting scalable address storage ...")
-		smtBatchRootHashOrigin, _ := smtBatch.Db.GetLastRoot()
+		smtBatchRootHashOrigin, _ := smtOrigin.Db.GetLastRoot()
 		fmt.Printf("*** (before delete) smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
 		ethAddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 		ethAddrBigInt := utils.ConvertHexToBigInt(ethAddr.String())
@@ -1839,17 +1856,17 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		for k := range storageChanges[ethAddr] {
 			fmt.Printf("Deleting scalable address storage key: %s\n", k)
 			keyStoragePosition := utils.KeyContractStorage(ethAddrBigIngArray, k)
-			if err = smtBatch.DeleteKeySource(&keyStoragePosition); err != nil {
+			if err = smtOrigin.DeleteKeySource(&keyStoragePosition); err != nil {
 				panic("DeleteKeySource: " + err.Error())
 			}
 		}
-		//_, _, err := smtBatch.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
+		//_, _, err := smtOrigin.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
 		//if err != nil {
 		//	panic("SetStorage: " + err.Error())
 		//}
 		fmt.Println("Done deleting scalable address.")
 	}
-	smtBatchRootHashOrigin := smtBatch.LastRoot()
+	smtBatchRootHashOrigin := smtOrigin.LastRoot()
 	fmt.Printf("*** smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
 
 	if incremental {
