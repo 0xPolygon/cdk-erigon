@@ -30,7 +30,6 @@ function clone_repos {
     if [ ! -d $SA_BENCH_DIR ]; then
         git clone -b $SA_BENCH_BRANCH https://github.com/okx/SA-Benchmark.git
     fi
-    git checkout $SA_BENCH_BRANCH
     cd $ROOT_DIR
 }
 
@@ -45,6 +44,7 @@ cleanup
 
 # 1. Run SA-Benchmark setup only for state0
 cd $SA_BENCH_DIR
+git checkout $SA_BENCH_BRANCH
 cp $EXENV_FILE .env
 PRIVATE_KEY=$(cat .env | grep "PRIVATE_KEY" | cut -d '=' -f 2)
 export NVM_DIR="$HOME/.nvm"
