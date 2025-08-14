@@ -1688,20 +1688,25 @@ func newMDBX(dbdir string, ctx context.Context) (kv.RwDB, error) {
 }
 */
 
+//const TableSmt = "HermezSmt"
+//const TableStats = "HermezSmtStats"
+//const TableAccountValues = "HermezSmtAccountValues"
+//const TableMetadata = "HermezSmtMetadata"
+//const TableHashKey = "HermezSmtHashKey"
 func createSMTTables(db kv.RwDB, tx kv.RwTx) error {
 	// List of SMT-related buckets that need to be created
 	buckets := []string{
-		"HermezSmt",         // Main SMT table
-		"HermezSmtMetadata", // SMT metadata
-		"HermezSmtStats",    // SMT statistics
-		"HermezSmtNodes",    // SMT nodes
-		"HermezSmtRoots",    // SMT roots
-		"HermezSmtCode",     // Contract code
-		"HermezSmtStorage",  // Contract storage
-		"HermezSmtAccounts", // Account information
-		"HermezSmtNonces",   // Account nonces
-		"HermezSmtBalances", // Account balances
-		"HermezSmtHashKey",
+		db2.TableSmt,      // Main SMT table
+		db2.TableMetadata, // SMT metadata
+		db2.TableStats,    // SMT statistics
+		//"HermezSmtNodes",    // SMT nodes
+		//"HermezSmtRoots",    // SMT roots
+		//"HermezSmtCode",     // Contract code
+		//"HermezSmtStorage",  // Contract storage
+		//"HermezSmtAccounts", // Account information
+		//"HermezSmtNonces",   // Account nonces
+		//"HermezSmtBalances", // Account balances
+		db2.TableHashKey,
 		// Add other buckets as needed
 	}
 
@@ -1936,142 +1941,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		}
 
 		eridbRebuild := db2.NewEriDb(txsmtRebuild, txRebuild)
-		//// batch mode
 		smtBatchRebuild := smt.NewSMT(eridbRebuild, false)
-		//insertBatchCfg := smt.NewInsertBatchConfig(context.Background(), "", false)
-		//
-		//chunkSize := 1 << 12
-		//
-		//// Note: go map does not preserver the iteration order; so, we need to put it into a slice to iterate
-		//entries := make([]struct {
-		//	addr libcommon.Address
-		//	acc  *accounts.Account
-		//}, 0, len(accChanges))
-		//
-		//for addr, acc := range accChanges {
-		//	entries = append(entries, struct {
-		//		addr libcommon.Address
-		//		acc  *accounts.Account
-		//	}{addr, acc})
-		//}
-		//
-		//totalEntries := len(entries)
-		//fmt.Printf("Processing %d entries in chunks of %d\n", totalEntries, chunkSize)
-		//
-		//// Process chunks one by one
-		//for i := 0; i < totalEntries; i += chunkSize {
-		//	end := i + chunkSize
-		//	if end > totalEntries {
-		//		end = totalEntries
-		//	}
-		//
-		//	chunk := entries[i:end]
-		//	chunkNum := (i / chunkSize) + 1
-		//	totalChunks := (totalEntries + chunkSize - 1) / chunkSize
-		//
-		//	keyPointers := []*utils.NodeKey{}
-		//	valuePointers := []*utils.NodeValue8{}
-		//
-		//	fmt.Printf("Processing chunk %d/%d (entries %d-%d)\n", chunkNum, totalChunks, i+1, end)
-		//
-		//	for _, entry := range chunk {
-		//		acctBalanceKey := utils.KeyEthAddrBalance(entry.addr.String())
-		//		acctBalanceVal, err := utils.NodeValue8FromBigIntArray(utils.ScalarToArrayBig(entry.acc.Balance.ToBig()))
-		//
-		//		acctNonceKey := utils.KeyEthAddrNonce(entry.addr.String())
-		//		acctNonceVal, err := utils.NodeValue8FromBigIntArray(utils.ScalarToArrayBig(new(big.Int).SetUint64(entry.acc.Nonce)))
-		//
-		//		if err != nil {
-		//			panic("convert acct balance to smt nodes error: " + err.Error())
-		//		}
-		//		keyPointers = append(keyPointers, &acctBalanceKey)
-		//		valuePointers = append(valuePointers, acctBalanceVal)
-		//
-		//		keyPointers = append(keyPointers, &acctNonceKey)
-		//		valuePointers = append(valuePointers, acctNonceVal)
-		//	}
-		//
-		//	smtBatchRebuild.InsertBatch(insertBatchCfg, keyPointers, valuePointers, nil, nil)
-		//	fmt.Printf("Completed chunk %d/%d\n", chunkNum, totalChunks)
-		//}
-		//
-		//fmt.Println("Begin SetContractBytecode")
-		//codeEntries := make([]struct {
-		//	addr libcommon.Address
-		//	code string
-		//}, 0, len(codeChanges))
-		//
-		//for addr, code := range codeChanges {
-		//	codeEntries = append(codeEntries, struct {
-		//		addr libcommon.Address
-		//		code string
-		//	}{addr, code})
-		//}
-		//
-		//totalCodeEntries := len(codeEntries)
-		//totalCodeChunks := (totalCodeEntries + chunkSize - 1) / chunkSize
-		//
-		//fmt.Printf("Processing %d contract bytecode entries in chunks of %d\n", totalCodeEntries, chunkSize)
-		//
-		//for i := 0; i < totalCodeEntries; i += chunkSize {
-		//	end := i + chunkSize
-		//	if end > totalCodeEntries {
-		//		end = totalCodeEntries
-		//	}
-		//
-		//	chunk := codeEntries[i:end]
-		//	chunkNum := (i / chunkSize) + 1
-		//
-		//	keyPointers := []*utils.NodeKey{}
-		//	valuePointers := []*utils.NodeValue8{}
-		//
-		//	fmt.Printf("Processing contract bytecode chunk %d/%d (entries %d-%d)\n", chunkNum, totalCodeChunks, i+1, end)
-		//
-		//	for _, entry := range chunk {
-		//		keyContractCode := utils.KeyContractCode(entry.addr.String())
-		//		keyContractLength := utils.KeyContractLength(entry.addr.String())
-		//
-		//		bi, bytecodeLength, err := smt.HackWrapConvertBytecodeToBigInt(entry.code)
-		//		if err != nil {
-		//			panic("convert acct bytecode error: " + err.Error())
-		//		}
-		//
-		//		byteCodeNode8, err := utils.NodeValue8FromBigIntArray(utils.ScalarToArrayBig(bi))
-		//		if err != nil {
-		//			panic("convert acct bytecode error: " + err.Error())
-		//		}
-		//
-		//		byteCodeLengthNode8, err := utils.NodeValue8FromBigIntArray(utils.ScalarToArrayBig(big.NewInt(int64(bytecodeLength))))
-		//		if err != nil {
-		//			panic("convert acct bytecode error: " + err.Error())
-		//		}
-		//
-		//		keyPointers = append(keyPointers, &keyContractCode)
-		//		valuePointers = append(valuePointers, byteCodeNode8)
-		//
-		//		keyPointers = append(keyPointers, &keyContractLength)
-		//		valuePointers = append(valuePointers, byteCodeLengthNode8)
-		//	}
-		//
-		//	smtBatchRebuild.InsertBatch(insertBatchCfg, keyPointers, valuePointers, nil, nil)
-		//	fmt.Printf("Completed contract bytecode chunk %d/%d\n", chunkNum, totalCodeChunks)
-		//}
-		//
-		//fmt.Println("Begin SetContractStorage")
-		//totalStorage := 0
-		//for _, storage := range storageChanges {
-		//	totalStorage += len(storage)
-		//}
-		//fmt.Printf("Total storage num %d\n", totalStorage)
-		//for addr, storage := range storageChanges {
-		//	fmt.Printf("set Storage for %s/%d\n", addr.String(), len(storage))
-		//	if _, err := smtBatchRebuild.SetContractStorage(addr.String(), storage, nil); err != nil {
-		//		panic("SetContractStorage")
-		//	} else {
-		//		fmt.Printf("SUCCESS")
-		//	}
-		//}
-		//
 
 		_, _, err = smtBatchRebuild.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
 		if err != nil {
