@@ -1794,16 +1794,17 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 
 			if value.Storage != nil {
 				//storageChanges[address] = make(map[string]string)
+				fmt.Printf("number of Storage items for account %s: %d\n", address.Hex(), len(value.Storage))
 				for k, v := range value.Storage {
 					//storageChanges[address][k] = v
 					keyHash := libcommon.HexToHash(k)
 					valInSmt, err := smtOrigin.ReadAccountStorage(address, 0, &keyHash)
-					//.ReadAccountStorage(address, 0, k)
+					valInSmtHex := hexutility.Encode(common.LeftPadBytes(valInSmt, 32))
 
 					if err != nil {
 						fmt.Printf("Error reading scalable account storage: %s\n", err)
 					}
-					fmt.Println("valInSmt:", valInSmt, "valInGenesise: ", v)
+					fmt.Printf("key: %s, valInSmt: %s, valInGenesise: %s \n", k, valInSmtHex, v)
 				}
 
 			}
