@@ -1843,13 +1843,13 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 				panic("DeleteKeySource: " + err.Error())
 			}
 		}
-		_, _, err := smtBatch.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
-		if err != nil {
-			panic("SetStorage: " + err.Error())
-		}
+		//_, _, err := smtBatch.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
+		//if err != nil {
+		//	panic("SetStorage: " + err.Error())
+		//}
 		fmt.Println("Done deleting scalable address.")
 	}
-	smtBatchRootHashOrigin, _ := smtBatch.Db.GetLastRoot()
+	smtBatchRootHashOrigin := smtBatch.LastRoot()
 	fmt.Printf("*** smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
 
 	if incremental {
@@ -1959,7 +1959,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 
 		fmt.Println("Done batch SMT buidling.")
 		elapsed := time.Since(start).Minutes() // compute elapsed duration
-		fmt.Printf("Elapsed time: %s minutes \n", elapsed)
+		fmt.Printf("Elapsed time: %.3f minutes\n", elapsed)
 
 	}
 
