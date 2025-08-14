@@ -1796,32 +1796,26 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 				storageChanges[address] = make(map[string]string)
 				fmt.Printf("number of Storage items for account %s: %d\n", address.Hex(), len(value.Storage))
 				for k, _ := range value.Storage {
-					//storageChanges[address][k] = v
 					keyHash := libcommon.HexToHash(k)
 					valInSmt, err := smtOrigin.ReadAccountStorage(address, 0, &keyHash)
-					valInSmtHex := hexutility.Encode(common.LeftPadBytes(valInSmt, 32))
-					storageChanges[address][k] = valInSmtHex
 					if err != nil {
 						fmt.Printf("Error reading scalable account storage: %s\n", err)
+						return err
 					}
+					valInSmtHex := hexutility.Encode(common.LeftPadBytes(valInSmt, 32))
+					storageChanges[address][k] = valInSmtHex
 					//fmt.Printf("key: %s, valInSmt: %s, valInGenesise: %s \n", k, valInSmtHex, v)
 				}
-
 			}
-
+			fmt.Printf("Finish override scalable storages with original storage\n")
 			continue
 		}
 		if value.Storage != nil {
 			storageChanges[address] = make(map[string]string)
-			//if *deleteScalable && address == libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e") {
-			//	for k := range value.Storage {
-			//		storageChanges[address][k] = "0"
-			//	}
-			//} else {
+			/// Fixme: use maps.Clone, which is more efficient
 			for k, v := range value.Storage {
 				storageChanges[address][k] = v
 			}
-			//}
 		}
 	}
 	fmt.Println("End json decode")
@@ -1960,7 +1954,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 
 		eridbRebuild := db2.NewEriDb(txsmtRebuild, txRebuild)
 		smtBatchRebuild := smt.NewSMT(eridbRebuild, false)
-
+		fmt.Println("Begin set storage of rebuilt smt")
 		_, _, err = smtBatchRebuild.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
 		if err != nil {
 			fmt.Println("SetStorage error ", err)
