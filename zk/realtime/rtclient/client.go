@@ -155,7 +155,7 @@ func (rc *RealtimeClient) RealtimeCall(from, to common.Address, gas string, gasP
 	return result, nil
 }
 
-// RealtimeEstimateGas estimates gas for a transaction using realtime cache
+// RealtimeEstimateGas estimates gas for a transaction in real-time
 func (rc *RealtimeClient) RealtimeEstimateGas(args map[string]interface{}) (uint64, error) {
 	response, err := client.JSONRPCCall(rc.url, "eth_estimateGas", args)
 	if err != nil {

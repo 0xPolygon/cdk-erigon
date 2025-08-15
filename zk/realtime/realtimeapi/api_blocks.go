@@ -126,7 +126,6 @@ func (api *RealtimeAPIImpl) GetBlockByHash(ctx context.Context, numberOrHash rpc
 	}
 
 	return response, nil
-
 }
 
 func (api *RealtimeAPIImpl) GetBlockInternalTransactions(ctx context.Context, blockNr rpc.BlockNumber) (map[libcommon.Hash][]*zktypes.InnerTx, error) {

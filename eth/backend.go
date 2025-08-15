@@ -1082,6 +1082,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		// entering ZK territory!
 		cfg := backend.config
+		vm.InitEnvConfig(cfg.Zk.AddressRollup)
 
 		// For X Layer
 		if len(cfg.XLayer.Nacos.URLs) > 0 {

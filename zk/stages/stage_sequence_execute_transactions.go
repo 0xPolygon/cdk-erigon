@@ -283,6 +283,13 @@ func attemptAddTransaction(
 		return nil, nil, nil, overflowGas, nil
 	}
 
+	// ==================== BridgeEvent Interception Check ====================
+	if err := interceptBridgeTransactionIfNeeded(receipt, transaction, &cfg.zk.XLayer.BridgeIntercept); err != nil {
+		// Revert state and reject transaction
+		ibs.RevertToSnapshot(snapshot)
+		return nil, nil, nil, overflowNone, err
+	}
+
 	log.Debug("Transaction added", "txHash", transaction.Hash())
 
 	// add the gas only if not reverted

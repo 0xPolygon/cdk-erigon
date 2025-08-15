@@ -8,7 +8,7 @@ import (
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 )
 
-// GetTransactionReceipt implements realtime_getTransactionReceipt.
+// GetTransactionReceipt implements the realtime eth_getTransactionReceipt.
 // Returns the receipt of a transaction given the transaction's hash.
 func (api *RealtimeAPIImpl) GetTransactionReceipt(ctx context.Context, hash common.Hash) (map[string]interface{}, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
@@ -44,7 +44,7 @@ func (api *RealtimeAPIImpl) GetTransactionReceipt(ctx context.Context, hash comm
 	return jsonrpc.MarshalReceipt(receipt, txn, cc, header, txn.Hash(), true), nil
 }
 
-// GetInternalTransactions implements realtime_getInternalTransactions.
+// GetInternalTransactions implements the realtime eth_getInternalTransactions.
 // Returns the internal transactions of a transaction given the transaction's hash.
 func (api *RealtimeAPIImpl) GetInternalTransactions(ctx context.Context, hash common.Hash) ([]*zktypes.InnerTx, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {

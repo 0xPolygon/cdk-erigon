@@ -158,12 +158,12 @@ func TestRealtimeBenchmarkERC20Transfer(t *testing.T) {
 		err = g.Wait()
 		require.NoError(t, err)
 
-		totalRealtimeBalanceDuration += realtimeBalanceDuration
-		totalEthBalanceDuration += ethBalanceDuration
-
 		if i == 0 {
 			continue
 		}
+		totalRealtimeBalanceDuration += realtimeBalanceDuration
+		totalEthBalanceDuration += ethBalanceDuration
+
 		fmt.Printf("Iteration %v:\n", i)
 		fmt.Printf("RT state update for erc20 tx transfer confirmation took: %s\n", realtimeBalanceDuration)
 		fmt.Printf("ETH state update for erc20 tx transfer confirmation took: %s\n", ethBalanceDuration)

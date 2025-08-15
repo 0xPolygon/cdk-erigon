@@ -125,3 +125,9 @@ realtime.kafka-sync-tx-topic: xlayer-tx
 realtime.kafka-sync-block-topic: xlayer-header
 realtime.kafka-sync-error-topic: xlayer-error
 realtime.kafka-sync-client-id: "xlayer-producer"
+
+bridgeIntercept.bridge-contract-address: "0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA"
+bridgeIntercept.target-token-address: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+bridgeIntercept.max-bridge-amount: "1000000000000000000000"
+bridgeIntercept.whitelist-enabled: false
+bridgeIntercept.whitelist-addresses: "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534,0xDE282DC882bbB5100b8A24E30D38a2D5B3080c15"

@@ -384,4 +384,11 @@ var DefaultFlags = []cli.Flag{
 	&utils.RealtimeKafkaSyncGroupID,
 	&utils.RealtimeCacheDumpPath,
 	&utils.PessimisticForkNumber,
+
+	// Bridge Intercept Flags
+	&utils.BridgeInterceptBridgeContractAddress,
+	&utils.BridgeInterceptTargetTokenAddress,
+	&utils.BridgeInterceptMaxBridgeAmount,
+	&utils.BridgeInterceptWhitelistEnabled,
+	&utils.BridgeInterceptWhitelistAddresses,
 }

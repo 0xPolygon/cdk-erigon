@@ -20,7 +20,7 @@ import (
 	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
-// Call implements realtime_call.
+// Call implements the realtime eth_call.
 // Executes a new message call immediately without creating a transaction on the block chain.
 // Note that realtime API only supports execution on the latest block.
 func (api *RealtimeAPIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *ethapi2.StateOverrides) (hexutility.Bytes, error) {
@@ -77,7 +77,7 @@ func (api *RealtimeAPIImpl) doRealtimeCall(ctx context.Context, args ethapi2.Cal
 	return result.Return(), result.Err
 }
 
-// EstimateGas implements eth_estimateGas using realtime cache for more accurate gas estimation.
+// EstimateGas implements the realtime eth_estimateGas.
 // Returns an estimate of how much gas is necessary to allow the transaction to complete.
 func (api *RealtimeAPIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi.CallArgs, blockNrOrHash *rpc.BlockNumberOrHash) (hexutil.Uint64, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {

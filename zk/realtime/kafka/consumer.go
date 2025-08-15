@@ -58,7 +58,7 @@ func (h *consumerGroupHandler) Cleanup(_ sarama.ConsumerGroupSession) error {
 }
 
 func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	log.Info(fmt.Sprintf("Starting kafka consumption. topic: %s, partition: %d, offset: %d", claim.Topic(), claim.Partition(), claim.InitialOffset()))
+	log.Info(fmt.Sprintf("[Realtime] Starting kafka consumption. topic: %s, partition: %d, offset: %d", claim.Topic(), claim.Partition(), claim.InitialOffset()))
 	for {
 		select {
 		case <-h.ctx.Done():
@@ -67,13 +67,14 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 			return err
 		case msg, ok := <-claim.Messages():
 			if !ok {
-				return nil
+				log.Debug("[Realtime] kafka consumer failed to get claim messages")
+				continue
 			}
 			switch msg.Topic {
 			case h.blockTopic:
 				var blockMsg kafkaTypes.BlockMessage
 				if err := json.Unmarshal(msg.Value, &blockMsg); err != nil {
-					log.Warn(fmt.Sprintf("consume claim error, unmarshaling block message. error: %v", err))
+					log.Warn(fmt.Sprintf("[Realtime] consume claim error, unmarshaling block message. error: %v", err))
 					continue
 				}
 
@@ -89,7 +90,7 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 			case h.txTopic:
 				var txMsg kafkaTypes.TransactionMessage
 				if err := json.Unmarshal(msg.Value, &txMsg); err != nil {
-					log.Warn(fmt.Sprintf("consume claim error, unmarshaling transaction message. error: %v", err))
+					log.Warn(fmt.Sprintf("[Realtime] consume claim error, unmarshaling transaction message. error: %v", err))
 					continue
 				}
 
@@ -105,7 +106,7 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 			case h.errorTopic:
 				var errorMsg kafkaTypes.ErrorTriggerMessage
 				if err := json.Unmarshal(msg.Value, &errorMsg); err != nil {
-					log.Warn(fmt.Sprintf("consume claim error, unmarshaling error trigger message. error: %v", err))
+					log.Warn(fmt.Sprintf("[Realtime] consume claim error, unmarshaling error trigger message. error: %v", err))
 					continue
 				}
 
@@ -119,9 +120,8 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 					return err
 				}
 			default:
-				err := fmt.Errorf("unknown topic: %s", msg.Topic)
-				h.errorChan <- err
-				return err
+				log.Warn(fmt.Sprintf("[Realtime] unknown topic: %s", msg.Topic))
+				continue
 			}
 		}
 	}

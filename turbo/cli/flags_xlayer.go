@@ -2,9 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"math/big"
 	"os"
 	"strings"
 	"time"
+
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 
 	"github.com/ledgerwatch/erigon/cmd/utils"
 	"github.com/ledgerwatch/erigon/core/vm"
@@ -88,6 +91,16 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 				GroupID:          groupID,
 			},
 		},
+		BridgeIntercept: ethconfig.BridgeInterceptConfig{
+			BridgeContractAddress: ctx.String(utils.BridgeInterceptBridgeContractAddress.Name),
+			TargetTokenAddress:    ctx.String(utils.BridgeInterceptTargetTokenAddress.Name),
+			MaxBridgeAmount: func() *big.Int {
+				amount, _ := new(big.Int).SetString(ctx.String(utils.BridgeInterceptMaxBridgeAmount.Name), 10)
+				return amount
+			}(),
+			WhitelistEnabled:   ctx.Bool(utils.BridgeInterceptWhitelistEnabled.Name),
+			WhitelistAddresses: []libcommon.Address{},
+		},
 	}
 	if cfg.XLayer.BlockInfoConcurrent {
 		blockinfo.SetUseBlockInfoTree(true)
@@ -104,6 +117,8 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		}
 		cfg.XLayer.Apollo.NamespaceName = strings.Join(ns, ",")
 	}
+
+	utils.SetInterceptWhitelist(ctx, cfg)
 }
 
 func ApplyFlagsForNodeXLayerConfig(ctx *cli.Context, cfg *nodecfg.Config) {

@@ -1,6 +1,7 @@
 package ethconfig
 
 import (
+	"math/big"
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -64,6 +65,9 @@ type XLayerConfig struct {
 	AnalysisGroupVerification AnalysisGroupVerificationConfig
 
 	Realtime realtime.RealtimeConfig
+
+	// Bridge Transaction Interception
+	BridgeIntercept BridgeInterceptConfig
 }
 
 var DefaultXLayerConfig = XLayerConfig{}
@@ -82,4 +86,22 @@ type ApolloClientConfig struct {
 	IP            string
 	AppID         string
 	NamespaceName string
+}
+
+// BridgeInterceptConfig represents the configuration for bridge transaction interception
+type BridgeInterceptConfig struct {
+	// PolygonZkEVMBridge contract address
+	BridgeContractAddress string `json:"bridge_contract_address"`
+
+	// Target token address (originTokenAddress to intercept)
+	TargetTokenAddress string `json:"target_token_address"`
+
+	// Maximum bridge amount (as big.Int to avoid overflow)
+	MaxBridgeAmount *big.Int `json:"max_bridge_amount"`
+
+	// Whether whitelist is enabled
+	WhitelistEnabled bool `json:"whitelist_enabled"`
+
+	// Whitelist addresses (as common.Address to avoid conversion)
+	WhitelistAddresses []common.Address `json:"whitelist_addresses"`
 }

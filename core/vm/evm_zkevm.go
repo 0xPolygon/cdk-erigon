@@ -286,6 +286,12 @@ func (evm *EVM) call_zkevm(typ OpCode, caller ContractRef, addr libcommon.Addres
 				return nil, gas, ErrInvalidCode
 			}
 		}
+	} else {
+		// Set caller for custom precompiles that need caller validation
+		if tokenManager, ok := p.(*tokenManagerPrecompile); ok {
+			tokenManager.SetEVM(evm)
+			tokenManager.SetCaller(caller.Address())
+		}
 	}
 
 	snapshot := evm.intraBlockState.Snapshot()
