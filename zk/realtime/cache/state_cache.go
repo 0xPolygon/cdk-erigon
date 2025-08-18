@@ -311,7 +311,7 @@ func (cache *GlobalStateCache) DebugCompare(reader state.StateReader) []string {
 
 	mismatches := []string{}
 	for addr, accCache := range cache.cache.accountCache {
-		log.Info("[Realtime] Comparing account", "address", addr.String())
+		log.Info(fmt.Sprintf("[Realtime] Comparing account address: %s", addr.String()))
 		accDb, err := reader.ReadAccountData(addr)
 		if err != nil {
 			mismatch := fmt.Sprintf("chain-state db reader error, failed to read account. address: %s, error: %v", addr.String(), err)

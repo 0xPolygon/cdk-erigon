@@ -24,10 +24,11 @@ import (
 )
 
 var (
-	erc20ABI, _         = abi.JSON(strings.NewReader(erc20ABIJson))
-	factoryABI, _       = abi.JSON(strings.NewReader(factoryABIJson))
-	destroyABI, _       = abi.JSON(strings.NewReader(destroyABIJson))
-	createDestroyABI, _ = abi.JSON(strings.NewReader(createDestroyABIJson))
+	erc20ABI, _            = abi.JSON(strings.NewReader(erc20ABIJson))
+	factoryABI, _          = abi.JSON(strings.NewReader(factoryABIJson))
+	destroyABI, _          = abi.JSON(strings.NewReader(destroyABIJson))
+	createDestroyABI, _    = abi.JSON(strings.NewReader(createDestroyABIJson))
+	precompileCallerABI, _ = abi.JSON(strings.NewReader(precompileCallerABIJson))
 )
 
 // setupRealtimeTestEnvironment creates a test environment with necessary data for tests
@@ -441,6 +442,63 @@ func GetContractAddressFromCreateDestroy(t *testing.T, ctx context.Context, clie
 
 	// Unpack the result
 	return common.HexToAddress(result)
+}
+
+func DeployPrecompileCallerContract(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient) common.Address {
+	chainID, err := client.ChainID(ctx)
+	require.NoError(t, err)
+	auth, err := operations.GetAuth(DefaultL2AdminPrivateKey, chainID.Uint64())
+	require.NoError(t, err)
+	nonce, err := client.RealtimeGetTransactionCount(auth.From)
+	require.NoError(t, err)
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
+
+	auth.Nonce = big.NewInt(int64(nonce))
+	auth.Value = big.NewInt(0)
+	auth.GasLimit = uint64(3000000)
+	auth.GasPrice = gasPrice
+
+	precompileCallerBytecode, err := hex.DecodeString(precompileCallerBytecodeStr)
+	require.NoError(t, err)
+	precompileCallerAddr, tx, _, err := bind.DeployContract(auth, precompileCallerABI, precompileCallerBytecode, client)
+	require.NoError(t, err)
+
+	fmt.Printf("Precompile caller contract deployed at: %s, transaction hash: %s\n", precompileCallerAddr.Hex(), tx.Hash().Hex())
+	bind.WaitDeployed(ctx, client, tx)
+
+	return precompileCallerAddr
+}
+
+func SendCallPrecompileTx(t *testing.T, ctx context.Context, client *rtclient.RealtimeClient, privateKey *ecdsa.PrivateKey, precompileCallerAddr common.Address) types.Transaction {
+	data, err := precompileCallerABI.Pack("callPrecompile2")
+	require.NoError(t, err)
+
+	nonce, err := client.RealtimeGetTransactionCount(common.HexToAddress(DefaultL2AdminAddress))
+	require.NoError(t, err)
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
+
+	callPrecompileTx := &types.LegacyTx{
+		CommonTx: types.CommonTx{
+			Nonce: nonce,
+			To:    &precompileCallerAddr,
+			Gas:   3000000,
+			Value: uint256.NewInt(0),
+			Data:  data,
+		},
+		GasPrice: uint256.NewInt(uint64(gasPrice.Uint64())),
+	}
+
+	signer := types.MakeSigner(operations.GetTestChainConfig(DefaultL2ChainID), 1, 0)
+	signedTx, err := types.SignTx(callPrecompileTx, *signer, privateKey)
+	require.NoError(t, err)
+
+	err = client.SendTransaction(ctx, signedTx)
+	require.NoError(t, err)
+	log.Info(fmt.Sprintf("signedTx: %s", signedTx.Hash().String()))
+
+	return signedTx
 }
 
 // RevertReasonRealtime returns the revert reason for a tx that has a receipt with failed status

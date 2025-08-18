@@ -31,17 +31,11 @@ func (sdb *IntraBlockState) GenerateChangesetSinceSnapshotAndSendTxInfo(revid in
 		snapshot: snapshot,
 	}
 
-	// changeset := zktypes.NewChangeset()
-	// for _, entry := range (*entries)[snapshot:] {
-	// 	entry.collectChangeset(changeset)
-	// }
-
 	txInfoChan <- TxInfo{
 		BlockNumber: receipt.BlockNumber.Uint64(),
 		Tx:          tx,
 		Receipt:     receipt,
 		InnerTxs:    innerTxs,
-		// Changeset:   changeset,
-		Entries: entries,
+		Entries:     entries,
 	}
 }
