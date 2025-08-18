@@ -442,6 +442,11 @@ var (
 		Usage: "whitelist addresses that only allow to pass",
 		Value: "",
 	}
+	DynamicBlockGasLimit = cli.Uint64Flag{
+		Name:  "zkevm.dynamic-block-gas-limit",
+		Usage: "Dynamic block gas limit",
+		Value: 30_000_000,
+	}
 	EnableLatestDataStreamBlockNumberGlobalVariableForRpc = cli.BoolFlag{
 		Name:  "zkevm.enable-latest-data-stream-block-number-global-variable-for-rpc",
 		Usage: "Enable latest data stream block number global variable for RPC",

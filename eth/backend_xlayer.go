@@ -53,6 +53,18 @@ func (s *Ethereum) listenApollo(ctx context.Context, cfg *ethconfig.Config) {
 				cfg.Zk.XLayer.GetLogsRetries = ethCfg.XLayer.GetLogsRetries
 				l1SyncerConfigChanged = true
 			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.DynamicBlockGasLimit.Name) {
+				cfg.Zk.XLayer.DynamicBlockGasLimit = ethCfg.XLayer.DynamicBlockGasLimit
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BridgeInterceptWhitelistEnabled.Name) {
+				cfg.Zk.XLayer.BridgeIntercept.WhitelistEnabled = ethCfg.XLayer.BridgeIntercept.WhitelistEnabled
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BridgeInterceptMaxBridgeAmount.Name) {
+				cfg.Zk.XLayer.BridgeIntercept.MaxBridgeAmount = ethCfg.XLayer.BridgeIntercept.MaxBridgeAmount
+			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.BridgeInterceptWhitelistAddresses.Name) {
+				cfg.Zk.XLayer.BridgeIntercept.WhitelistAddresses = ethCfg.XLayer.BridgeIntercept.WhitelistAddresses
+			}
 			if l1SyncerConfigChanged {
 				s.updateAllL1Syncer(cfg.Zk.XLayer.GetLogsTimeout, cfg.Zk.XLayer.GetLogsRetries)
 			}

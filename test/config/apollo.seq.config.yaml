@@ -10,13 +10,13 @@ zkevm.l1-rpc-url: http://xlayer-mock-l1-network:8545
 zkevm.l1-highest-block-type: latest
 
 zkevm.address-sequencer: "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
-zkevm.address-zkevm: "0xeb173087729c88a47568AF87b17C653039377BA6"
+zkevm.address-zkevm: "0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd"
 zkevm.address-admin: "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"
-zkevm.address-rollup: "0x2d42E2899662EFf08b13eeb65b154b904C7a1c8a"
+zkevm.address-rollup: "0xE96dBF374555C6993618906629988d39184716B3"
 zkevm.address-ger-manager: "0xB8cedD4B9eF683f0887C44a6E4312dC7A6e2fcdB"
 
 zkevm.l1-rollup-id: 1
-zkevm.l1-first-block: 353
+zkevm.l1-first-block: 156
 zkevm.l1-block-range: 10
 zkevm.l1-query-delay: 6000
 zkevm.rpc-ratelimit: 0
@@ -24,9 +24,9 @@ zkevm.datastream-version: 2
 
 log.console.verbosity: info
 
-zkevm.sequencer-block-seal-time: "1s"
-zkevm.sequencer-max-block-seal-time: "3s"
-zkevm.sequencer-batch-seal-time: "10s"
+zkevm.sequencer-block-seal-time: "400ms"
+zkevm.sequencer-max-block-seal-time: "400ms"
+zkevm.sequencer-batch-seal-time: "60s"
 zkevm.sequencer-batch-sleep-duration: "0s"
 
 zkevm.data-stream-host: "localhost"
@@ -48,6 +48,8 @@ http.timeouts.idle: "10s"
 rpc.batch.concurrency: 2
 rpc.batch.limit: 20
 ws: true
+ws.addr: 0.0.0.0
+ws.port: 8546
 
 zkevm.apollo-enabled: true
 zkevm.apollo-ip-addr: "http://apollo-configservice:8085"
@@ -67,7 +69,8 @@ db.read.concurrency: 20000
 txpool.globalslots: 1000000
 txpool.globalbasefeeslots: 1000000
 txpool.globalqueue: 1000000
-txpool.packbatchspeciallist : ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"]
+txpool.packbatchspeciallist : ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534", "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"]
+
 txpool.gaspricemultiple : 2
 txpool.blockedlist: ["0xdD2FD4581271e230360230F9337D5c0430Bf44C0"]
 txpool.enablefreegasbynonce : true
@@ -99,13 +102,15 @@ zkevm.seal-batch-immediately-on-overflow: true
 zkevm.sequencer-timeout-on-empty-tx-pool: 5ms
 zkevm.pre-run-address-list: [""]
 zkevm.block-info-concurrent: true
-zkevm.standalone-smt-db: true  # true: enable split smt db, false: not split
-zkevm.enable-async-commit: true
+# zkevm.standalone-smt-db: true  # true: enable split smt db, false: not split
+# zkevm.enable-async-commit: true
 
 # to reduce lock race in stress test
 txpool.enabletimsort: true
 zkevm.bulk-add-txs: true
 zkevm.enable-add-tx-notify: true
+zkevm.initial-batch.config: /usr/src/app/first-batch-config.json
+
 
 zkevm.verification-batch-delay: 2
 zkevm.skip-analysis-group-api: true
@@ -113,3 +118,15 @@ zkevm.skip-analysis-group-api: true
 # zkevm.analysis-group-nacos-namespace: "ns-global"
 # zkevm.analysis-group-service-name: "analysis-group"
 # zkevm.analysis-group-api-path: "api/v1/196/validHeight"
+
+# realtime.enable-flag: true
+# realtime.enable-subscribe-flag: false
+realtime.cache-height-threshold: 10
+realtime.kafka-sync-bootstrap-servers: "xlayer-kafka:9092"
+realtime.kafka-sync-tx-topic: xlayer-tx
+realtime.kafka-sync-block-topic: xlayer-header
+realtime.kafka-sync-error-topic: xlayer-error
+realtime.kafka-sync-client-id: "xlayer-producer"
+bridgeIntercept.max-bridge-amount: "1000000000000000000000"
+bridgeIntercept.whitelist-enabled: true
+bridgeIntercept.whitelist-addresses: "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534,0xDE282DC882bbB5100b8A24E30D38a2D5B3080c15"

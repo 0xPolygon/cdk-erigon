@@ -2,6 +2,7 @@ package apollo
 
 import (
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/apolloconfig/agollo/v4/storage"
@@ -116,6 +117,24 @@ func loadEthSequencerConfig(ctx *cli.Context, ethCfg *ethconfig.Config) {
 	}
 	if ctx.IsSet(utils.GetLogsRetries.Name) {
 		ethCfg.Zk.XLayer.GetLogsRetries = ctx.Int(utils.GetLogsRetries.Name)
+	}
+	if ctx.IsSet(utils.DynamicBlockGasLimit.Name) {
+		ethCfg.Zk.XLayer.DynamicBlockGasLimit = ctx.Uint64(utils.DynamicBlockGasLimit.Name)
+	}
+	if ctx.IsSet(utils.BridgeInterceptWhitelistEnabled.Name) {
+		ethCfg.Zk.XLayer.BridgeIntercept.WhitelistEnabled = ctx.Bool(utils.BridgeInterceptWhitelistEnabled.Name)
+	}
+	if ctx.IsSet(utils.BridgeInterceptMaxBridgeAmount.Name) {
+		amount, _ := new(big.Int).SetString(ctx.String(utils.BridgeInterceptMaxBridgeAmount.Name), 10)
+		ethCfg.Zk.XLayer.BridgeIntercept.MaxBridgeAmount = amount
+	}
+	if ctx.IsSet(utils.BridgeInterceptWhitelistAddresses.Name) {
+		addrHexes := libcommon.CliString2Array(ctx.String(utils.BridgeInterceptWhitelistAddresses.Name))
+
+		ethCfg.Zk.XLayer.BridgeIntercept.WhitelistAddresses = make([]libcommon.Address, len(addrHexes))
+		for i, addr := range addrHexes {
+			ethCfg.Zk.XLayer.BridgeIntercept.WhitelistAddresses[i] = libcommon.HexToAddress(addr)
+		}
 	}
 
 	// For OkPay

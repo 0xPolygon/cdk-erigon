@@ -4,28 +4,28 @@ http: true
 private.api.addr: localhost:9091
 zkevm.l2-chain-id: 195
 zkevm.l2-sequencer-rpc-url: http://xlayer-seq:8545
-zkevm.l2-datastreamer-url: xlayer-ds:7900
+zkevm.l2-datastreamer-url: xlayer-seq:6900
 zkevm.l1-chain-id: 1337
 zkevm.l1-rpc-url: http://xlayer-mock-l1-network:8545
+zkevm.l1-highest-block-type: latest
 
 zkevm.address-sequencer: "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
-zkevm.address-zkevm: "0xeb173087729c88a47568AF87b17C653039377BA6"
+zkevm.address-zkevm: "0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd"
 zkevm.address-admin: "0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534"
-zkevm.address-rollup: "0x2d42E2899662EFf08b13eeb65b154b904C7a1c8a"
+zkevm.address-rollup: "0xE96dBF374555C6993618906629988d39184716B3"
 zkevm.address-ger-manager: "0xB8cedD4B9eF683f0887C44a6E4312dC7A6e2fcdB"
 
 zkevm.l1-rollup-id: 1
-zkevm.l1-first-block: 353
+zkevm.l1-first-block: 156
 zkevm.l1-block-range: 10
 zkevm.l1-query-delay: 6000
-zkevm.l1-highest-block-type: latest
 zkevm.rpc-ratelimit: 300
 zkevm.datastream-version: 2
 
 log.console.verbosity: info
 
-zkevm.sequencer-block-seal-time: "6s"
-zkevm.sequencer-batch-seal-time: "12s"
+zkevm.sequencer-block-seal-time: "400ms"
+zkevm.sequencer-batch-seal-time: "60s"
 zkevm.sequencer-batch-sleep-duration: "0s"
 
 zkevm.data-stream-host: "localhost"
@@ -49,6 +49,8 @@ http.methodratelimit: "{\"methods\":[\"eth_syncing\"],\"count\":10,\"bucket\":1}
 #   {"project":"Biconomy","key":"45543e0adc5dd3e316044909d32501a5","timeout":"2030-12-31","methods":["eth_syncing"],"count":10000,"bucket":1}
 
 ws: true
+ws.addr: 0.0.0.0
+ws.port: 8546
 
 zkevm.apollo-enabled: true
 zkevm.apollo-ip-addr: "http://apollo-configservice:8085"
@@ -70,7 +72,7 @@ networkid: 195
 
 zkevm.pool-manager-url: http://xlayer-pool-manager:8545
 
-http.methodratelimit: "{\"methods\":[\"eth_syncing\"],\"count\":10,\"bucket\":1}"
+# http.methodratelimit: "{\"methods\":[\"eth_syncing\"],\"count\":10,\"bucket\":1}"
 #http.apikeys: |
 #  {"project":"project1","key":"944cd2a6939eb23053289d9b91d6c498","timeout":"2033-12-12","methods":["eth_syncing"],"count":5,"bucket":1}
 
@@ -79,3 +81,18 @@ pprof.port: 6060
 pprof.addr: 0.0.0.0
 
 zkevm.standalone-smt-db: true  # true: enalbe split smt db, false: not split
+
+zkevm.enable-trace-log: true
+zkevm.trace-log-path: /home/erigon/data/logs/trace.log
+
+# Disable RT for default RPC node
+realtime.enable-flag: false
+realtime.enable-subscribe-flag: false
+realtime.cache-height-threshold: 10
+realtime.kafka-sync-bootstrap-servers: "xlayer-kafka:9092"
+realtime.kafka-sync-tx-topic: xlayer-tx
+realtime.kafka-sync-block-topic: xlayer-header
+realtime.kafka-sync-error-topic: xlayer-error
+realtime.kafka-sync-client-id: "xlayer-consumer"
+realtime.kafka-sync-group-id: "xlayer-consumer-1"
+realtime.cache-dump-path: /home/erigon/data/cache
