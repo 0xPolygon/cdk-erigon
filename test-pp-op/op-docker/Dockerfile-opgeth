@@ -4,5 +4,5 @@ COPY . .
 
 RUN make all
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 COPY --from=builder /app/build/bin/geth /usr/local/bin/
