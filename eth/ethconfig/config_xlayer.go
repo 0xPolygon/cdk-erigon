@@ -68,6 +68,8 @@ type XLayerConfig struct {
 
 	// Bridge Transaction Interception
 	BridgeIntercept BridgeInterceptConfig
+
+	EnableLatestDataStreamBlockNumberGlobalVariableForRpc bool
 }
 
 var DefaultXLayerConfig = XLayerConfig{}

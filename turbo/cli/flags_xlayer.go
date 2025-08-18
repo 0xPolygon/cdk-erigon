@@ -101,6 +101,7 @@ func ApplyFlagsForEthXLayerConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 			WhitelistEnabled:   ctx.Bool(utils.BridgeInterceptWhitelistEnabled.Name),
 			WhitelistAddresses: []libcommon.Address{},
 		},
+		EnableLatestDataStreamBlockNumberGlobalVariableForRpc: ctx.Bool(utils.EnableLatestDataStreamBlockNumberGlobalVariableForRpc.Name),
 	}
 	if cfg.XLayer.BlockInfoConcurrent {
 		blockinfo.SetUseBlockInfoTree(true)

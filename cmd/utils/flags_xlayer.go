@@ -442,6 +442,11 @@ var (
 		Usage: "whitelist addresses that only allow to pass",
 		Value: "",
 	}
+	EnableLatestDataStreamBlockNumberGlobalVariableForRpc = cli.BoolFlag{
+		Name:  "zkevm.enable-latest-data-stream-block-number-global-variable-for-rpc",
+		Usage: "Enable latest data stream block number global variable for RPC",
+		Value: false,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {

@@ -3,6 +3,7 @@ package stages
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -135,5 +136,19 @@ func CatchupDatastream(ctx context.Context, logPrefix string, tx kv.RwTx, srv se
 		return 0, err
 	}
 
+	SetLatestDataStreamBlockNumber(finalBlockNumber)
+
 	return finalBlockNumber, nil
+}
+
+var (
+	latestDataStreamBlockNumber atomic.Uint64
+)
+
+func GetLatestDataStreamBlockNumber() uint64 {
+	return latestDataStreamBlockNumber.Load()
+}
+
+func SetLatestDataStreamBlockNumber(blockNumber uint64) {
+	latestDataStreamBlockNumber.Store(blockNumber)
 }

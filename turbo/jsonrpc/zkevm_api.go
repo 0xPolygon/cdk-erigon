@@ -1530,6 +1530,12 @@ func (api *ZkEvmAPIImpl) getInjectedBatchAccInputHashFromSequencer(rpcUrl string
 }
 
 func (api *ZkEvmAPIImpl) GetLatestDataStreamBlock(ctx context.Context) (hexutil.Uint64, error) {
+	if api.config.Zk.XLayer.EnableLatestDataStreamBlockNumberGlobalVariableForRpc {
+		if latestBlock := zkStages.GetLatestDataStreamBlockNumber(); latestBlock > 0 {
+			return hexutil.Uint64(latestBlock), nil
+		}
+	}
+
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
 		return 0, err
@@ -1540,6 +1546,8 @@ func (api *ZkEvmAPIImpl) GetLatestDataStreamBlock(ctx context.Context) (hexutil.
 	if err != nil {
 		return 0, err
 	}
+
+	zkStages.SetLatestDataStreamBlockNumber(latestBlock)
 
 	return hexutil.Uint64(latestBlock), nil
 }
