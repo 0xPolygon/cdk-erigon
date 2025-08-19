@@ -72,6 +72,7 @@ if [ ! -d "optimism" ]; then
     ln -s optimism/op-geth ./
     cd optimism
     git apply ../../patch/optimism-0001-support-regenesis-op-geth-prestate.patch
+    git apply ../../patch/optimism-0001-decompress-genesis.patch
     cd -
 
     cd optimism
@@ -380,10 +381,15 @@ echo "finished init op-geth-seq and op-geth-rpc"
 EXPORT_DIR="$PWD_DIR/data/cannon-data"
 mkdir -p $EXPORT_DIR
 
+
+md5sum config-op/genesis.json
+# genesis.json is too large to embed in go, so we compress it now and decompress it in go code
+gzip -c config-op/genesis.json > config-op/genesis.gz.json
+
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/195-rollup.json" \
-    -v "$(pwd)/config-op/genesis.json:/app/op-program/chainconfig/configs/195-genesis-l2.json" \
+    -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/195-genesis-l2.json" \
     -v "$EXPORT_DIR:/app/op-program/bin" \
     -w /app \
     --network "${DOCKER_NETWORK}" \
