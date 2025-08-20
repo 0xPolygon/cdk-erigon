@@ -157,6 +157,7 @@ docker run \
       --upgrade-controller $ADMIN_OWNER_ADDRESS \
       --challenge-period-seconds $CHALLENGE_PERIOD_SECONDS \
       --withdrawal-delay-seconds $WITHDRAWAL_DELAY_SECONDS \
+      --proof-maturity-delay-seconds $WITHDRAWAL_DELAY_SECONDS \
       --dispute-game-finality-delay-seconds $DISPUTE_GAME_FINALITY_DELAY_SECONDS
   "
 
