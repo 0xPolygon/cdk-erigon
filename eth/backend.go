@@ -1554,6 +1554,55 @@ func (s *Ethereum) PreStart() error {
 			return err
 		}
 	}
+	// For X Layer, unwind data stream to block number if needed
+	if s.config.Zk.XLayer.DataStreamUnwindToBlock > 0 {
+		log.Info("Unwinding data stream to block number", "blockNumber", s.config.Zk.XLayer.DataStreamUnwindToBlock)
+		tx, err := s.chainDB.BeginRw(context.Background())
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		reader := hermez_db.NewHermezDbReader(tx)
+
+		dataStreamServer := dataStreamServerFactory.CreateDataStreamServer(s.streamServer, s.chainConfig.ChainID.Uint64())
+
+		from := s.config.Zk.XLayer.DataStreamUnwindToBlock
+		latestbatchNum, err := reader.GetBatchNoByL2Block(from - 1)
+		if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
+			return err
+		}
+
+		batchNum, err := reader.GetBatchNoByL2Block(from)
+		if err != nil && !errors.Is(err, hermez_db.ErrorNotStored) {
+			return err
+		}
+
+		if err = dataStreamServer.UnwindIfNecessary("DataStreamUnwindToBlock", reader, from, latestbatchNum, batchNum); err != nil {
+			return err
+		}
+
+		attempts := 0
+		for {
+			_, err = zkStages.CatchupDatastream(s.sentryCtx, "stream-catchup", tx, dataStreamServer)
+			if err != nil {
+				if errors.Is(err, datastreamer.ErrAtomicOpNotAllowed) {
+					attempts++
+					if attempts == 10 {
+						return err
+					}
+					time.Sleep(500 * time.Millisecond)
+					continue
+				}
+				return err
+			} else {
+				break
+			}
+		}
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

@@ -299,6 +299,21 @@ apollo:  build-docker
 	chmod -R 777 data 
 	$(DOCKER_COMPOSE) up -d xlayer-aggkit
 
+.PHONY: test-data-stream-unwind
+test-data-stream-unwind:
+	make stop
+	make run
+	sleep 30
+	$(STOP_DOCKER_SEQ)
+	echo "test-data-stream-unwind-step-1"
+	go test -count=1 -failfast -race -v -p 1 -timeout 10s -run TestAddFlag ./e2e/data_stream_unwind_test.go
+	$(RUN_DOCKER_SEQ)
+	sleep 10
+	echo "test-data-stream-unwind-step-2"
+	docker logs xlayer-seq 2>&1 | grep -q "Unwinding data stream to block number.*blockNumber=5" && echo "✔ Found unwind message for block 5" || echo "✘ Missing unwind message for block 5"
+	docker logs xlayer-seq 2>&1 | grep -q "\[stream-catchup\] Getting progress.*previousProgress=4" && echo "✔ Found stream-catchup progress message" || echo "✘ Missing stream-catchup progress message"
+	
+
 # Target to add data loss testing logic
 .PHONY: test-data-loss
 test-data-loss: data-loss-1 data-loss-2 data-loss-3 data-loss-4 data-loss-5 data-loss-6 data-loss-7 data-loss-8

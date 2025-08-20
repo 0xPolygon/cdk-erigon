@@ -72,6 +72,8 @@ type XLayerConfig struct {
 	DynamicBlockGasLimit uint64
 
 	EnableLatestDataStreamBlockNumberGlobalVariableForRpc bool
+
+	DataStreamUnwindToBlock uint64
 }
 
 var DefaultXLayerConfig = XLayerConfig{}

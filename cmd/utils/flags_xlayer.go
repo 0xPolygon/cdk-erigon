@@ -452,6 +452,11 @@ var (
 		Usage: "Enable latest data stream block number global variable for RPC",
 		Value: false,
 	}
+	DataStreamUnwindToBlock = cli.Uint64Flag{
+		Name:  "zkevm.data-stream-unwind-to-block",
+		Usage: "Unwind data stream to block number (this block will be truncated, and 0 means no unwind)",
+		Value: 0,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {
