@@ -690,7 +690,7 @@ func (p *TxPool) IdHashKnown(tx kv.Tx, hash []byte) (bool, error) {
 	// For X Layer, optimize tx pool
 	p.lock.RLock()
 	defer p.lock.RUnlock()
-	if _, ok := p.discardReasonsLRU.Get(string(hash)); ok {
+	if p.discardReasonsLRU.Contains(string(hash)) {
 		return true, nil
 	}
 	if _, ok := p.unprocessedRemoteByHash[string(hash)]; ok {
@@ -1336,8 +1336,8 @@ func (p *TxPool) discardLocked(mt *metaTx, reason DiscardReason) {
 
 func (p *TxPool) NonceFromAddress(addr [20]byte) (nonce uint64, inPool bool) {
 	// For X Layer, optimize tx pool
-	p.lock.RLock()
-	defer p.lock.RUnlock()
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	senderID, found := p.senders.getID(addr)
 	if !found {
 		return 0, false
