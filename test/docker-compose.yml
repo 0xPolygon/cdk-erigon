@@ -63,7 +63,7 @@ services:
 
   xlayer-bridge-service:
     container_name: xlayer-bridge-service
-    image: zjg555543/xlayer-bridge-service:v0.3.1_17ef00f
+    image: nivensie/xlayer-bridge-service:v0.6.1-no-cache
     ports:
       - 8080:8080
       - 9090:9090
@@ -80,7 +80,7 @@ services:
     command:
       - "/bin/sh"
       - "-c"
-      - "/app/xlayer-bridge run --cfg /app/config.toml"
+      - "/app/zkevm-bridge run --cfg /app/config.toml"
 
   prometheus:
     image: prom/prometheus:v2.51.2

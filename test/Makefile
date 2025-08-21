@@ -181,6 +181,7 @@ test:
 		run_test kurtosis-cdk; \
 		run_test resequence-default; \
 		run_test resequence-ac-split; \
+		run_test test-realtime-e2e; \
 		echo "\n========== Tests completed at $$(date) =========="; \
 		if [ $$ERROR_COUNT -gt 0 ]; then \
 			echo "❌ $$ERROR_COUNT tests failed:"; \
@@ -242,7 +243,10 @@ test-e2e: stop all ## Runs group xlayer feature e2e tests checking race conditio
 test-realtime-e2e: stop realtime-run
 	sleep 3
 	docker ps -a
+	# Run default
 	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../ci/e2e-1/...
+	# Run realtime e2e tests
+	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 600s ../zk/realtime/test/...
 	echo "E2E tests passed"
 
 .PHONY: min-apollo

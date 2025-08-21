@@ -48,9 +48,11 @@ func TestLegacyTx(t *testing.T) {
 	emptyTx.SetSender(testFromAddr)
 
 	emptyTxReceipt := types1.NewReceipt(false, 1000)
+	emptyTxInnerTxs := []*zktypes.InnerTx{}
+	emptyChangeset := &realtimeTypes.Changeset{}
 
 	blockNumber := uint64(100)
-	emptyMsg, err := kafkaTypes.ToKafkaTransactionMessage(emptyTx, emptyTxReceipt, nil, nil, blockNumber)
+	emptyMsg, err := kafkaTypes.ToKafkaTransactionMessage(emptyTx, emptyTxReceipt, emptyTxInnerTxs, emptyChangeset, blockNumber)
 	assert.NilError(t, err)
 	AssertCommonTx(t, emptyMsg, emptyTx, blockNumber, types1.LegacyTxType)
 	assert.Equal(t, emptyMsg.GasPrice, emptyTx.GetPrice().String())

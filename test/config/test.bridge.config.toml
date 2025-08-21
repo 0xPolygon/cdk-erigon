@@ -13,6 +13,7 @@ IsBackupConfig = true
 
 [SyncDB]
 Database = "postgres"
+[SyncDB.PgStorage]
 User = "test_user"
 Password = "test_password"
 Name = "test_db"
@@ -53,6 +54,7 @@ BridgeVersion = "v1"
 SentinelConfigFilePath = "/app/sentinel_config.json"
 [BridgeServer.DB]
 Database = "postgres"
+[BridgeServer.DB.PgStorage]
 User = "test_user"
 Password = "test_password"
 Name = "test_db"
@@ -87,6 +89,8 @@ PolygonZkEVMGlobalExitRootAddress = "0xB8cedD4B9eF683f0887C44a6E4312dC7A6e2fcdB"
 PolygonRollupManagerAddress = "0xE96dBF374555C6993618906629988d39184716B3"
 PolygonZkEvmAddress = "0xE45CCD0757670580a4a3600DE5cef1e45F0Ec2bd"
 L2PolygonBridgeAddresses = ["0x4B24266C13AFEf2bb60e2C69A4C08A482d81e3CA"]
+RequireSovereignChainSmcs = [false]
+L2PolygonZkEVMGlobalExitRootAddresses = ["0xB8cedD4B9eF683f0887C44a6E4312dC7A6e2fcdB"]
 
 [NacosConfig]
 NacosUrls = ""
