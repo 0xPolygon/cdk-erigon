@@ -1789,12 +1789,14 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 			panic(fmt.Sprintf("acc decoding error for acct: %s, err: %v", address, err))
 		}
 		acc.Balance = *balance
-		nonce, err := hexutil.DecodeUint64(value.Nonce)
-		if err != nil {
-			fmt.Println("nonce:", value.Nonce)
-			panic("nonce decoding error")
+		if value.Nonce != "" {
+			nonce, err := hexutil.DecodeUint64(value.Nonce)
+			if err != nil {
+				panic("nonce decoding error")
+			}
+			acc.Nonce = nonce
 		}
-		acc.Nonce = nonce
+
 		accChanges[address] = &acc
 
 		if value.Code != "0x" {
