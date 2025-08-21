@@ -350,6 +350,15 @@ fi
 
 echo "🎉 OP Stack deployment preparation completed!"
 
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    sed -i '' 's/"parentHash": "0x[0-9a-fA-F]\{64\}"/"parentHash": "'$PARENT_HASH'"/' config-op/genesis.json
+else
+    # Linux
+    sed -i 's/"parentHash": "0x[0-9a-fA-F]\{64\}"/"parentHash": "'$PARENT_HASH'"/' config-op/genesis.json
+fi
+
 # init op-geth-seq and op-geth-rpc
 OP_GETH_DATADIR="$(pwd)/data/op-geth-seq"
 rm -rf "$OP_GETH_DATADIR"
@@ -359,9 +368,15 @@ docker compose run --no-deps \
   op-geth-seq \
   --datadir "/datadir" \
   --gcmode=archive \
+  --db.engine=$DB_ENGINE \
+  --log.format json \
   init \
   --state.scheme=hash \
-  /genesis.json
+  /genesis.json 2>&1 | tee init.log
+
+NEW_BLOCK_HASH=$(grep "Successfully wrote genesis state" init.log | jq -r .hash)
+ROLLUP_CONTENT=$(jq ".genesis.l2.hash = \"$NEW_BLOCK_HASH\"" config-op/rollup.json)
+echo $ROLLUP_CONTENT | jq > config-op/rollup.json
 
 OP_GETH_DATADIR="$(pwd)/data/op-geth-rpc"
 rm -rf "$OP_GETH_DATADIR"
@@ -371,6 +386,7 @@ docker compose run --no-deps \
   op-geth-rpc \
   --datadir "/datadir" \
   --gcmode=archive \
+  --db.engine=$DB_ENGINE \
   init \
   --state.scheme=hash \
   /genesis.json
