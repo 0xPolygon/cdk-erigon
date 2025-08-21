@@ -1741,7 +1741,8 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		return fmt.Errorf("you cannot use --delete-scalable=true and --ignore-scalable=true flags together")
 	}
 
-	var jsonData map[string]map[string]accInfo
+	var jsonData map[string]interface{}
+	var allocData map[string]accInfo
 	if input == "" {
 		input = "genesis.json"
 	}
@@ -1750,13 +1751,23 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 	if err != nil {
 		if !os.IsNotExist(err) {
 			fmt.Println("Error reading file:", err)
-			return err
 		}
-	} else {
-		if err := json.Unmarshal(fileData, &jsonData); err != nil {
-			fmt.Println("Error decoding JSON:", err)
-			return err
-		}
+		return err
+	}
+	if err := json.Unmarshal(fileData, &jsonData); err != nil {
+		fmt.Println("Error decoding JSON:", err)
+		return err
+	}
+
+	allocBytes, err := json.Marshal(jsonData["alloc"])
+	if err != nil {
+		fmt.Println("Error encoding alloc JSON:", err)
+		return err
+	}
+
+	if err := json.Unmarshal(allocBytes, &allocData); err != nil {
+		fmt.Println("Error decoding alloc JSON:", err)
+		return err
 	}
 
 	accChanges := make(map[libcommon.Address]*accounts.Account)
@@ -1764,7 +1775,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 	storageChanges := make(map[libcommon.Address]map[string]string)
 
 	fmt.Println("Begin json decode")
-	for acc, value := range jsonData["alloc"] {
+	for acc, value := range allocData {
 		accBytes := common.FromHex(acc)
 		if err != nil {
 			panic("acc decoding error")
