@@ -132,7 +132,7 @@ func handleInjectedBatch(
 		return nil, nil, nil, 0, errors.New("expected 1 transaction in the injected batch")
 	}
 
-	ethBlockGasPool := new(core.GasPool).AddGas(transactionGasLimit) // used only in normalcy mode in stage sequencer to create a pool at block level
+	ethBlockGasPool := new(core.GasPool).AddGas(batchContext.cfg.zk.XLayer.DynamicBlockGasLimit) // used only in normalcy mode in stage sequencer to create a pool at block level
 
 	// process the tx and we can ignore the counters as an overflow at this stage means no network anyway
 	effectiveGas := DeriveEffectiveGasPrice(*batchContext.cfg, decodedBlocks[0].Transactions[0])

@@ -221,7 +221,7 @@ func attemptAddTransaction(
 	// if not normalcy we want to create a gas pool per transaction (zkevm block gas limit is infinite), if normalcy create a pool per block.
 	var gasPool *core.GasPool
 	if !cfg.chainConfig.IsNormalcy(blockContext.BlockNumber) {
-		gasPool = new(core.GasPool).AddGas(transactionGasLimit)
+		gasPool = new(core.GasPool).AddGas(cfg.zk.XLayer.DynamicBlockGasLimit)
 	} else {
 		gasPool = ethBlockGasPool
 	}

@@ -801,9 +801,9 @@ func (p *TxPool) validateTx(txn *types.TxSlot, isLocal bool, stateCache kvcache.
 		return IntrinsicGas
 	}
 	// For X Layer, check if gas limit is higher than the dynamic block gas limit
-	if txn.Gas > p.ethCfg.Zk.XLayer.DynamicBlockGasLimit {
+	if txn.Gas > p.GetDynamicBlockGasLimit() {
 		if txn.Traced {
-			log.Info(fmt.Sprintf("TX TRACING: validateTx gas limit too high idHash=%x gas=%d, limit=%d", txn.IDHash, txn.Gas, transactionGasLimit))
+			log.Info(fmt.Sprintf("TX TRACING: validateTx gas limit too high idHash=%x gas=%d, limit=%d", txn.IDHash, txn.Gas, p.GetDynamicBlockGasLimit()))
 		}
 		return GasLimitTooHigh
 	}
@@ -1990,6 +1990,10 @@ func (p *TxPool) purge() {
 			"hash", hex.EncodeToString(mt.Tx.IDHash[:]),
 			"ts", mt.created)
 	}
+}
+
+func (p *TxPool) GetDynamicBlockGasLimit() uint64 {
+	return p.ethCfg.Zk.XLayer.DynamicBlockGasLimit
 }
 
 // CalcIntrinsicGas computes the 'intrinsic gas' for a message with the given data.

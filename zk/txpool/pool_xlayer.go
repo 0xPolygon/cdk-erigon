@@ -187,7 +187,7 @@ func (p *TxPool) bestRead(n uint16, tx kv.Tx, onTopOf uint64, readContext *ReadC
 			continue
 		}
 
-		if mt.Tx.Gas > transactionGasLimit {
+		if mt.Tx.Gas > p.GetDynamicBlockGasLimit() {
 			// Skip transactions with very large gas limit, these shouldn't enter the pool at all
 			//log.Debug("found a transaction in the pending pool with too high gas for tx - clear the tx pool")
 			//log.Trace("Skipping transaction with too high gas", "txID", mt.Tx.IDHash, "gas", mt.Tx.Gas)

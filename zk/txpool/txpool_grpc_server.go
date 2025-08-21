@@ -58,6 +58,7 @@ type txPool interface {
 	CountContent() (int, int, int)
 	IdHashKnown(tx kv.Tx, hash []byte) (bool, error)
 	NonceFromAddress(addr [20]byte) (nonce uint64, inPool bool)
+	GetDynamicBlockGasLimit() uint64
 }
 
 var _ txpool_proto.TxpoolServer = (*GrpcServer)(nil)   // compile-time interface check
@@ -240,6 +241,9 @@ func (s *GrpcServer) Add(ctx context.Context, in *txpool_proto.AddRequest) (*txp
 
 		reply.Imported[i] = mapDiscardReasonToProto(discardReasons[j])
 		reply.Errors[i] = discardReasons[j].String()
+		if discardReasons[j] == GasLimitTooHigh {
+			reply.Errors[i] = fmt.Sprintf("gas limit too high. Max: %d", s.txPool.GetDynamicBlockGasLimit())
+		}
 		j++
 	}
 	return reply, nil
