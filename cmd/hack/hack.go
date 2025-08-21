@@ -1736,6 +1736,8 @@ func createSMTTables(db kv.RwDB, tx kv.RwTx) error {
 	return nil
 }
 
+var scalableAddr = libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+
 func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) error {
 	if *deleteScalable && *ignoreScalable {
 		return fmt.Errorf("you cannot use --delete-scalable=true and --ignore-scalable=true flags together")
@@ -1797,13 +1799,13 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		if value.Code != "0x" {
 			codeChanges[address] = value.Code
 		}
-		if *ignoreScalable && address == libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e") {
+		if *ignoreScalable && address == scalableAddr {
 			fmt.Printf("Ignoring scalable address: %s\n", address.String())
 			continue
 		}
 		if value.Storage != nil {
 			storageChanges[address] = make(map[string]string)
-			if *deleteScalable && address == libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e") {
+			if *deleteScalable && address == scalableAddr {
 				for k := range value.Storage {
 					storageChanges[address][k] = "0"
 				}
@@ -1860,7 +1862,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		fmt.Println("Deleting scalable address storage ...")
 		smtBatchRootHashOrigin, _ := smtBatch.Db.GetLastRoot()
 		fmt.Printf("*** (before delete) smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
-		ethAddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+		ethAddr := scalableAddr
 		ethAddrBigInt := utils.ConvertHexToBigInt(ethAddr.String())
 		ethAddrBigIngArray := utils.ScalarToArrayBig(ethAddrBigInt)
 		for k := range storageChanges[ethAddr] {
