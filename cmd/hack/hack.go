@@ -1791,6 +1791,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		acc.Balance = *balance
 		nonce, err := hexutil.DecodeUint64(value.Nonce)
 		if err != nil {
+			fmt.Println("nonce:", value.Nonce)
 			panic("nonce decoding error")
 		}
 		acc.Nonce = nonce
