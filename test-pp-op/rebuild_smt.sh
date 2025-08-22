@@ -1,6 +1,7 @@
 set -e
 set -x
 
+source .env
 ./scripts/prepare-check-regenesis.sh $CHECK_TYPE
 
 export chaindata_dir=$(pwd)/data_state2/seq/chaindata
