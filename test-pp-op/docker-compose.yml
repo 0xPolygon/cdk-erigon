@@ -109,7 +109,7 @@ services:
       test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8545"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
 
   l1-beacon-chain:
     image: "gcr.io/prysmaticlabs/prysm/beacon-chain:v4.1.1"
