@@ -90,6 +90,8 @@ var (
 	ignoreScalable  = flag.Bool("ignore-scalable", false, "ignore scalable account")
 	deleteScalable  = flag.Bool("delete-scalable", false, "delete scalable account")
 	debugPrint      = flag.Bool("debugPrint", false, "print debug info")
+
+	chaindataRebuild = flag.String("chaindata-rebuild", "./chaindata_rebuild", "path to rebuild chaindata")
 )
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
@@ -1875,10 +1877,12 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 				panic("DeleteKeySource: " + err.Error())
 			}
 		}
-		_, _, err := smtBatch.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
-		if err != nil {
-			panic("SetStorage: " + err.Error())
-		}
+		//smtBatchRootHashDeleted, _ := smtBatch.Db.GetLastRoot()
+		//fmt.Printf("*** (after delete) smtBatchRootHashDeleted: %x\n", smtBatchRootHashDeleted)
+		//_, _, err := smtBatch.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
+		//if err != nil {
+		//	panic("SetStorage: " + err.Error())
+		//}
 		fmt.Println("Done deleting scalable address.")
 	}
 	smtBatchRootHashOrigin, _ := smtBatch.Db.GetLastRoot()
@@ -1951,7 +1955,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		fmt.Println("Done incremental SMT buidling.")
 	} else {
 		start := time.Now() // record start time
-		dbRebuild := mdbx.MustOpen("./chaindata_rebuild")
+		dbRebuild := mdbx.MustOpen(*chaindataRebuild)
 		defer dbRebuild.Close()
 		txRebuild, err := dbRebuild.BeginRw(ctx)
 		if err != nil {
