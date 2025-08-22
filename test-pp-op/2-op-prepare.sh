@@ -15,12 +15,8 @@ ROOT_DIR=$(git rev-parse --show-toplevel)
 TEST_DIR="$ROOT_DIR/test-pp-op"
 
 cd $TEST_DIR
-if [ $CHECK_REGENESIS = "true" ]; then
-  ./scripts/prepare-check-regenesis.sh $CHECK_TYPE
-else
-  docker compose stop xlayer-seq
-fi
 
+docker compose stop xlayer-seq
 docker-compose stop xlayer-rpc
 
 docker-compose stop xlayer-bridge-service
