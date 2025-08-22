@@ -13,7 +13,7 @@ hack -action migrateGenesis -chaindata ./data_state0/seq/chaindata/ -input ./con
 cp ./config-op/genesis.json ./config-op/state0.json
 
 # 2. Generate state1.json
-hack -action migrateGenesis -chaindata ./data_state1/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/state1.json
+#hack -action migrateGenesis -chaindata ./data_state1/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/state1.json
 
 # 3. Generate state2.json
 hack -action migrateGenesis -chaindata ./data_state2/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/state2.json

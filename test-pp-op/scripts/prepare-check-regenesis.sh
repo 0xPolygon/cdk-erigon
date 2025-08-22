@@ -61,17 +61,17 @@ docker compose stop $SEQ_NAME --timeout 600
 cp -a -P $DATA_DIR data_state0
 
 # 2. Send one tx and save state1.json
-cd $TEST_DIR
-docker compose start $SEQ_NAME
-sleep $SLEEP_TIME
-cast send 0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E --value $TX_VALUE \
---private-key $PRIVATE_KEY \
---legacy --gas-price $GAS_PRICE \
---rpc-url http://localhost:8123
-sleep 3
-cd $TEST_DIR
-docker compose stop $SEQ_NAME --timeout 600
-cp -a -P $DATA_DIR data_state1
+#cd $TEST_DIR
+#docker compose start $SEQ_NAME
+#sleep $SLEEP_TIME
+#cast send 0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E --value $TX_VALUE \
+#--private-key $PRIVATE_KEY \
+#--legacy --gas-price $GAS_PRICE \
+#--rpc-url http://localhost:8123
+#sleep 3
+#cd $TEST_DIR
+#docker compose stop $SEQ_NAME --timeout 600
+#cp -a -P $DATA_DIR data_state1
 
 # 3. Send deterministic tx and save state2.json
 cd $TEST_DIR

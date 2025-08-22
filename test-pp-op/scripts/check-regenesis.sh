@@ -23,7 +23,7 @@ fi
 # Load nvm
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-nvm install v22
+#nvm install v22
 nvm use v22
 npm install -g yarn
 
@@ -35,17 +35,17 @@ echo "*** State 0 ***" > $RESULT_FILE
 state-check -dump-state-file config-op/state0.json -rpc-url $RPC_URL --progress-bar=false | tee $RESULT_FILE
 
 # 8. Run state-check state1
-cd $SA_BENCH_DIR
-PRIVATE_KEY=$(cat .env | grep "PRIVATE_KEY" | cut -d '=' -f 2)
-#GAS_PRICE=$(cat .env | grep "GAS_PRICE" | cut -d '=' -f 2)
-cast send 0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E --value $TX_VALUE \
---private-key 0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2 \
---legacy --gas-price $GAS_PRICE \
---rpc-url $RPC_URL
-sleep 5
-cd $TEST_DIR
-echo -e "\n\n*** State 1 ***" >> $RESULT_FILE
-state-check -dump-state-file config-op/state1.json -rpc-url $RPC_URL --progress-bar=false | tee -a $RESULT_FILE
+#cd $SA_BENCH_DIR
+#PRIVATE_KEY=$(cat .env | grep "PRIVATE_KEY" | cut -d '=' -f 2)
+##GAS_PRICE=$(cat .env | grep "GAS_PRICE" | cut -d '=' -f 2)
+#cast send 0xa03666Fb51Aa9aD2DE70e0434072A007b3C91A9E --value $TX_VALUE \
+#--private-key 0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2 \
+#--legacy --gas-price $GAS_PRICE \
+#--rpc-url $RPC_URL
+#sleep 5
+#cd $TEST_DIR
+#echo -e "\n\n*** State 1 ***" >> $RESULT_FILE
+#state-check -dump-state-file config-op/state1.json -rpc-url $RPC_URL --progress-bar=false | tee -a $RESULT_FILE
 
 # 9. Run state-check state2
 cd $SA_BENCH_DIR
