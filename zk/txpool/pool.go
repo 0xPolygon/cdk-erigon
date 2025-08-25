@@ -1993,6 +1993,9 @@ func (p *TxPool) purge() {
 }
 
 func (p *TxPool) GetDynamicBlockGasLimit() uint64 {
+	if p.ethCfg.Zk.XLayer.DynamicBlockGasLimit == 0 {
+		return transactionGasLimit
+	}
 	return p.ethCfg.Zk.XLayer.DynamicBlockGasLimit
 }
 
