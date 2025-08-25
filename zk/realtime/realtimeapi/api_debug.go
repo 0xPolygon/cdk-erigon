@@ -6,7 +6,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/turbo/jsonrpc"
 	realtimeCache "github.com/ledgerwatch/erigon/zk/realtime/cache"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type RealtimeDebugApiImpl struct {

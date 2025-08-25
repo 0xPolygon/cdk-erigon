@@ -21,8 +21,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/realtime/rtclient"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zkevm/encoding"
-	"github.com/ledgerwatch/erigon/zkevm/log"
-	log3 "github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/log/v3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +40,7 @@ func TestRealtimeComparison(t *testing.T) {
 	client := rtclient.NewRealtimeClient(ec, DefaultL2NetworkRealtimeURL)
 
 	// Create shared RPC client for direct JSON RPC calls to non-realtime node
-	nonRealtimeRPCClient, err := rpc.Dial(DefaultL2NetworkNoRealtimeURL, log3.Root())
+	nonRealtimeRPCClient, err := rpc.Dial(DefaultL2NetworkNoRealtimeURL, log.Root())
 	require.NoError(t, err)
 	defer nonRealtimeRPCClient.Close()
 

@@ -17,7 +17,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/adapter/ethapi"
 	ethapi2 "github.com/ledgerwatch/erigon/turbo/adapter/ethapi"
 	"github.com/ledgerwatch/erigon/turbo/transactions"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/log/v3"
 )
 
 // Call implements the realtime eth_call.

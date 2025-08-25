@@ -7,7 +7,7 @@ import (
 
 	"github.com/IBM/sarama"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type KafkaConsumer struct {

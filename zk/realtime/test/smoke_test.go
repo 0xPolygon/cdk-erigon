@@ -32,8 +32,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/realtime/rtclient"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zkevm/encoding"
-	"github.com/ledgerwatch/erigon/zkevm/log"
-	logger "github.com/ledgerwatch/log/v3"
+	"github.com/ledgerwatch/log/v3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -440,7 +439,7 @@ func compareCacheWithSequenceDB(t *testing.T, dbDir, cacheDir string) {
 	copiedDbDir := filepath.Join(tempDbDir, filepath.Base(dbDir))
 
 	ctx := context.Background()
-	db, err := mdbx.NewMDBX(logger.New()).Path(copiedDbDir).Open(ctx)
+	db, err := mdbx.NewMDBX(log.New()).Path(copiedDbDir).Open(ctx)
 	require.NoError(t, err)
 	defer db.Close()
 
