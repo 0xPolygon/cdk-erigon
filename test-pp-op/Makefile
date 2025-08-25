@@ -31,6 +31,7 @@ INIT_POLYGON_ZKEVM_BRIDGE_ACCOUNT := cast send -f 0x8943545177806ed17b9f23f0a21e
 
 .PHONY: run
 run: stop build-docker
+	./setup_images.sh
 	@echo "🚀 Starting L1 PoS environment automatic dependency management..."
 	$(DOCKER_COMPOSE) up -d l1-validator
 	@echo "🎉 L1 PoS environment started!"

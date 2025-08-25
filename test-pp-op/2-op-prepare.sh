@@ -41,44 +41,6 @@ PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$PWD_DIR")"
 TMP_DIR="$PWD_DIR/tmp"
 
-cd $TMP_DIR
-
-if [ ! -d "op-geth" ]; then
-    echo "Cloning op-geth repository..."
-    git clone https://github.com/ethereum-optimism/op-geth.git
-    cp $PWD_DIR/op-docker/Dockerfile-opgeth op-geth/Dockerfile
-    cd op-geth
-
-    # patch op-geth
-    git checkout 6005dd53e1b50fe5a3f59764e3e2056a639eff2f # optimism v1.13.4 relies on this commit
-    git apply ../../patch/op-geth-0001-support-load-genesis-at-a-given-number.patch
-
-    docker build -t $OP_GETH_IMAGE_TAG .
-    #docker build .
-    cd ..
-fi
-
-if [ ! -d "optimism" ]; then
-    echo "Cloning Optimism repository..."
-    git clone -b v1.13.4 https://github.com/ethereum-optimism/optimism.git
-    cp $PWD_DIR/op-docker/Dockerfile-contracts optimism/Dockerfile-contracts
-    cp $PWD_DIR/op-docker/Dockerfile-opstack optimism/Dockerfile-opstack
-
-    # cp Transactor.sol to optimism, which is used for addGameType
-    cp $PWD_DIR/contracts/Transactor.sol optimism/packages/contracts-bedrock/src/periphery/Transactor.sol
-
-    # To support making prestate for our custom op-geth
-    mv op-geth optimism/op-geth
-    ln -s optimism/op-geth ./
-    cd optimism
-    git apply ../../patch/optimism-0001-support-regenesis-op-geth-prestate.patch
-    cd -
-
-    cd optimism
-    docker build -t op-contracts:v1.13.4 -f Dockerfile-contracts .
-    docker build -t op-stack:v1.13.4 -f Dockerfile-opstack .
-    cd ..
-fi
 
 cd $PWD_DIR
 
