@@ -21,6 +21,7 @@ const (
 	ProcessingInvalidTxCounter    LogTag = "ProcessingInvalidTxCounter"
 	FinalizeBatchNumber           LogTag = "FinalizeBatchNumber"
 	BatchCommitDBTiming           LogTag = "BatchCommitDBTiming"
+	SmtBatchCommitDBTiming        LogTag = "SmtBatchCommitDBTiming"
 	PbStateTiming                 LogTag = "PbStateTiming"
 	ZkIncIntermediateHashesTiming LogTag = "ZkIncIntermediateHashesTiming"
 	FinaliseBlockWriteTiming      LogTag = "FinaliseBlockWriteTiming"

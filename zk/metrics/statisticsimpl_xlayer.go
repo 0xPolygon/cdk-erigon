@@ -97,6 +97,7 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 	blockPbStateTiming := l.statistics[PbStateTiming] - l.statisticsOld[PbStateTiming]
 	blockZkIncIntermediateHashesTiming := l.statistics[ZkIncIntermediateHashesTiming] - l.statisticsOld[ZkIncIntermediateHashesTiming]
 	blockFinaliseBlockWriteTiming := l.statistics[FinaliseBlockWriteTiming] - l.statisticsOld[FinaliseBlockWriteTiming]
+	blockSmtBatchCommitDBTiming := l.statistics[SmtBatchCommitDBTiming] - l.statisticsOld[SmtBatchCommitDBTiming]
 
 	blockZKHashAccountCount := l.statistics[ZKHashAccountCount] - l.statisticsOld[ZKHashAccountCount]
 	blockZKHashStoreCount := l.statistics[ZKHashStoreCount] - l.statisticsOld[ZKHashStoreCount]
@@ -152,7 +153,8 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 		"PbStateTiming<%dms>, "+
 		"ZkIncIntermediateHashesTiming<%dms> %s, "+
 		"FinaliseBlockWriteTiming<%dms>, "+
-		"BatchCommitDBTiming<%dms> "+
+		"SmtBatchCommitDBTiming<%dms>, "+
+		"BatchCommitDBTiming<%dms>, "+
 		"}, "+
 		"GasUsed<%d>, GetTxPause<%d>, "+
 		"GasOverTx<%d>, ZKOverflowBlock<%t>, InvalidTx<%d>, "+
@@ -163,6 +165,7 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 		blockPbStateTiming,
 		blockZkIncIntermediateHashesTiming, zkHashingDetails,
 		blockFinaliseBlockWriteTiming,
+		blockSmtBatchCommitDBTiming,
 		blockBatchCommitDBTiming,
 		blockGasUsed, blockGetTxPause,
 		blockGasOverTx, blockZkOverflowBlock, blockInvalidTx,
@@ -198,6 +201,7 @@ func (l *statisticsInstance) Summary() string {
 	pbStateTiming := l.statistics[PbStateTiming]
 	zkIncIntermediateHashesTiming := l.statistics[ZkIncIntermediateHashesTiming]
 	finaliseBlockWriteTiming := l.statistics[FinaliseBlockWriteTiming]
+	smtBatchCommitDBTiming := l.statistics[SmtBatchCommitDBTiming]
 
 	zkHashAccountCount := l.statistics[ZKHashAccountCount]
 	zkHashStoreCount := l.statistics[ZKHashStoreCount]
@@ -246,7 +250,7 @@ func (l *statisticsInstance) Summary() string {
 
 	zkHashingDetails := fmt.Sprintf("{ zkHashSMT %s, hermezSMT %s }", zkHashSMTTimings, hermezTimings)
 
-	result := fmt.Sprintf("Batch<%s>, Blocks<%d>, Txs<%d>, TotalDuration-batch<%dms> { SequencingBatchTiming<%dms> { ProcessTxTiming<%dms> %s, PbStateTiming<%dms>, ZkIncIntermediateHashesTiming<%dms> %s, FinaliseBlockWriteTiming<%dms>, BatchCommitDBTiming<%dms> } }"+
+	result := fmt.Sprintf("Batch<%s>, Blocks<%d>, Txs<%d>, TotalDuration-batch<%dms> { SequencingBatchTiming<%dms> { ProcessTxTiming<%dms> %s, PbStateTiming<%dms>, ZkIncIntermediateHashesTiming<%dms> %s, FinaliseBlockWriteTiming<%dms>, SmtBatchCommitDBTiming<%dms>, BatchCommitDBTiming<%dms> } }"+
 		", GasUsed<%d>, GetTxPause<%d>, "+
 		"GasOverTx<%d>, ZKOverflowBlock<%d>, InvalidTx<%d>, "+
 		"zkHashAccCount<account:%d, storage:%d, code:%d>, "+
@@ -257,6 +261,7 @@ func (l *statisticsInstance) Summary() string {
 		pbStateTiming,
 		zkIncIntermediateHashesTiming, zkHashingDetails,
 		finaliseBlockWriteTiming,
+		smtBatchCommitDBTiming,
 		batchCommitDBTiming,
 		gasUsed, getTxPause,
 		gasOverTx, zkOverflowBlock, invalidTx,
@@ -278,6 +283,7 @@ func (l *statisticsInstance) Summary() string {
 	SeqPbStateTiming.Set(float64(pbStateTiming))
 	SeqZkIncIntermediateHashesTiming.Set(float64(zkIncIntermediateHashesTiming))
 	SeqFinaliseBlockWriteTiming.Set(float64(finaliseBlockWriteTiming))
+	SeqSmtBatchCommitDBTiming.Set(float64(smtBatchCommitDBTiming))
 	SeqBatchCommitDBTiming.Set(float64(batchCommitDBTiming))
 
 	l.resetStatistics()

@@ -17,24 +17,25 @@ const (
 )
 
 var (
-	SeqPrefix            = "sequencer_"
-	BatchExecuteTimeName = SeqPrefix + "batch_execute_time"
-	PoolTxCountName      = SeqPrefix + "pool_tx_count"
-	SeqTxDurationName    = SeqPrefix + "tx_duration"
-	SeqTxCountName       = SeqPrefix + "tx_count"
-	SeqZKOverflowBlockCounterName   = SeqPrefix + "zk_overflow_block_count"
-	SeqBlockGasUsedName  = SeqPrefix + "block_gas_used"
-	
+	SeqPrefix                     = "sequencer_"
+	BatchExecuteTimeName          = SeqPrefix + "batch_execute_time"
+	PoolTxCountName               = SeqPrefix + "pool_tx_count"
+	SeqTxDurationName             = SeqPrefix + "tx_duration"
+	SeqTxCountName                = SeqPrefix + "tx_count"
+	SeqZKOverflowBlockCounterName = SeqPrefix + "zk_overflow_block_count"
+	SeqBlockGasUsedName           = SeqPrefix + "block_gas_used"
+
 	// Batch timing metrics
-	SeqBatchDurationName = SeqPrefix + "batch_duration"
-	SeqSequencingBatchTimingName = SeqPrefix + "sequencing_batch_timing"
-	SeqProcessTxTimingName = SeqPrefix + "process_tx_timing"
-	SeqGetTxTimingName = SeqPrefix + "get_tx_timing"
-	SeqGetTxPauseTimingName = SeqPrefix + "get_tx_pause_timing"
-	SeqPbStateTimingName = SeqPrefix + "pb_state_timing"
+	SeqBatchDurationName                 = SeqPrefix + "batch_duration"
+	SeqSequencingBatchTimingName         = SeqPrefix + "sequencing_batch_timing"
+	SeqProcessTxTimingName               = SeqPrefix + "process_tx_timing"
+	SeqGetTxTimingName                   = SeqPrefix + "get_tx_timing"
+	SeqGetTxPauseTimingName              = SeqPrefix + "get_tx_pause_timing"
+	SeqPbStateTimingName                 = SeqPrefix + "pb_state_timing"
 	SeqZkIncIntermediateHashesTimingName = SeqPrefix + "zk_inc_intermediate_hashes_timing"
-	SeqFinaliseBlockWriteTimingName = SeqPrefix + "finalise_block_write_timing"
-	SeqBatchCommitDBTimingName = SeqPrefix + "batch_commit_db_timing"
+	SeqFinaliseBlockWriteTimingName      = SeqPrefix + "finalise_block_write_timing"
+	SeqSmtBatchCommitDBTimingName        = SeqPrefix + "smt_batch_commit_db_timing"
+	SeqBatchCommitDBTimingName           = SeqPrefix + "batch_commit_db_timing"
 
 	RpcPrefix              = "rpc_"
 	RpcDynamicGasPriceName = RpcPrefix + "dynamic_gas_price"
@@ -50,7 +51,7 @@ func Init() {
 	prometheus.MustRegister(SeqBlockGasUsed)
 	prometheus.MustRegister(RpcDynamicGasPrice)
 	prometheus.MustRegister(RpcInnerTxExecuted)
-	
+
 	// Register new batch timing metrics
 	prometheus.MustRegister(SeqBatchDuration)
 	prometheus.MustRegister(SeqSequencingBatchTiming)
@@ -60,6 +61,7 @@ func Init() {
 	prometheus.MustRegister(SeqPbStateTiming)
 	prometheus.MustRegister(SeqZkIncIntermediateHashesTiming)
 	prometheus.MustRegister(SeqFinaliseBlockWriteTiming)
+	prometheus.MustRegister(SeqSmtBatchCommitDBTiming)
 	prometheus.MustRegister(SeqBatchCommitDBTiming)
 }
 
@@ -193,6 +195,13 @@ var SeqFinaliseBlockWriteTiming = prometheus.NewGauge(
 	prometheus.GaugeOpts{
 		Name: SeqFinaliseBlockWriteTimingName,
 		Help: "[SEQUENCER] finalise block write timing in milliseconds",
+	},
+)
+
+var SeqSmtBatchCommitDBTiming = prometheus.NewGauge(
+	prometheus.GaugeOpts{
+		Name: SeqSmtBatchCommitDBTimingName,
+		Help: "[SEQUENCER] smt batch commit DB timing in milliseconds",
 	},
 )
 
