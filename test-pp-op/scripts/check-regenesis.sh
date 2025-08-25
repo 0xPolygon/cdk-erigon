@@ -7,6 +7,7 @@ ROOT_DIR=$(git rev-parse --show-toplevel)
 TEST_DIR="$ROOT_DIR/test-pp-op"
 TMP_DIR="$TEST_DIR/tmp"
 SA_BENCH_DIR="$TMP_DIR/SA-Benchmark"
+SCRIPTS_DIR="$TEST_DIR/scripts"
 
 RPC_URL="http://localhost:8123"
 
@@ -27,12 +28,15 @@ export NVM_DIR="$HOME/.nvm"
 nvm use v22
 npm install -g yarn
 
+pip install web3 aiohttp tqdm
+
 # 1. Run state-check state0
-cd $ROOT_DIR
-go install ./cmd/state-check/
-cd $TEST_DIR
-echo "*** State 0 ***" > $RESULT_FILE
-state-check -dump-state-file config-op/state0.json -rpc-url $RPC_URL --progress-bar=false | tee $RESULT_FILE
+#cd $ROOT_DIR
+#go install ./cmd/state-check/
+#cd $TEST_DIR
+#echo "*** State 0 ***" > $RESULT_FILE
+#state-check -dump-state-file config-op/state0.json -rpc-url $RPC_URL --progress-bar=false | tee $RESULT_FILE
+python3 ${SCRIPTS_DIR}/check_genesis.py --genesis ./config-op/state0.json --rpc http://localhost:8123 --batch-size 50
 
 # 8. Run state-check state1
 #cd $SA_BENCH_DIR
@@ -56,5 +60,6 @@ yarn run senduop:deterministicop > $TX_RESULT_FILE
 sleep 5
 cd $TEST_DIR
 scripts/calc-total-fee-and-value.sh $TX_RESULT_FILE > $FEE_FILE
-echo -e "\n\n*** State 2 ***" >> $RESULT_FILE
-state-check -dump-state-file config-op/state2.json -rpc-url $RPC_URL --progress-bar=false | tee -a $RESULT_FILE
+#echo -e "\n\n*** State 2 ***" >> $RESULT_FILE
+#state-check -dump-state-file config-op/state2.json -rpc-url $RPC_URL --progress-bar=false | tee -a $RESULT_FILE
+python3 ${SCRIPTS_DIR}check_genesis.py --genesis ./config-op/state2.json --rpc http://localhost:8123 --batch-size 50
