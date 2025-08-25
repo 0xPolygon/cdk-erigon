@@ -167,6 +167,7 @@ func checkState(dumpStateFile, rpcURL, ignoreListFile string) error {
 	if *progressBar {
 		bar = progressbar.NewOptions(len(stateDump), progressbar.OptionSetPredictTime(true))
 	}
+	var index int
 	for address, accountData := range stateDump {
 		if slices.Contains(ignoreList, address) {
 			fmt.Printf("\nIgnoring address: %s\n", address)
@@ -177,6 +178,8 @@ func checkState(dumpStateFile, rpcURL, ignoreListFile string) error {
 			ok = false
 		}
 		if *progressBar {
+			index++
+			fmt.Printf("index: %d,, total: %d\n", index, len(stateDump))
 			bar.Add(1)
 		}
 	}
