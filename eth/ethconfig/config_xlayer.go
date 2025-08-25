@@ -74,6 +74,8 @@ type XLayerConfig struct {
 	EnableLatestDataStreamBlockNumberGlobalVariableForRpc bool
 
 	DataStreamUnwindToBlock uint64
+
+	SyncSeqLogs bool
 }
 
 var DefaultXLayerConfig = XLayerConfig{}

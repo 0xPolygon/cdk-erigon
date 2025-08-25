@@ -39,6 +39,8 @@ func NewDefaultZkStages(ctx context.Context,
 	forkValidator *engine_helpers.ForkValidator,
 	engine consensus.Engine,
 	l1Syncer *syncer.L1Syncer,
+	l1BlockSyncer *syncer.L1Syncer, // Added: Support for Sequencer L1 block sync
+	sequencerL1Syncer *syncer.L1Syncer, // Added: Support for Sequencer L1 syncer
 	datastreamClient zkStages.DatastreamClient,
 	dataStreamServer server.DataStreamServer,
 	infoTreeUpdater *l1infotree.Updater,
@@ -57,9 +59,20 @@ func NewDefaultZkStages(ctx context.Context,
 	// Hence we run it in the test mode.
 	runInTestMode := cfg.ImportMode
 
+	var l1SequencerSyncCfg zkStages.L1SequencerSyncCfg
+	var sequencerL1BlockSyncCfg zkStages.SequencerL1BlockSyncCfg
+
+	// If nill, will skip the stage
+	if sequencerL1Syncer != nil {
+		l1SequencerSyncCfg = zkStages.StageL1SequencerSyncCfg(db, cfg.Zk, sequencerL1Syncer)
+		sequencerL1BlockSyncCfg = zkStages.StageSequencerL1BlockSyncCfg(db, cfg.Zk, l1BlockSyncer)
+	}
+
 	return zkStages.DefaultZkStages(ctx,
 		zkStages.StageL1SyncerCfg(db, l1Syncer, cfg.Zk),
+		l1SequencerSyncCfg, // Added: Support for Sequencer L1 syncer
 		zkStages.StageL1InfoTreeCfg(db, cfg.Zk, infoTreeUpdater),
+		sequencerL1BlockSyncCfg, // Added: Support for Sequencer L1 syncer
 		zkStages.StageBatchesCfg(db, datastreamClient, cfg.Zk, controlServer.ChainConfig, &cfg.Miner),
 		zkStages.StageDataStreamCatchupCfg(dataStreamServer, db, cfg.Genesis.Config.ChainID.Uint64(), cfg.DatastreamVersion),
 		stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig, blockWriter),

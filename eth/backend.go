@@ -1325,6 +1325,43 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 					}
 				}
 			}
+			var l1BlockSyncer *syncer.L1Syncer
+			var sequencerL1Syncer *syncer.L1Syncer
+			if cfg.Zk.XLayer.SyncSeqLogs {
+				l1BlockSyncer = syncer.NewL1Syncer(
+					ctx,
+					ethermanClients,
+					[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup},
+					[][]libcommon.Hash{{
+						contracts.SequenceBatchesTopic,
+					}},
+					cfg.L1BlockRange,
+					cfg.L1QueryDelay,
+					cfg.L1HighestBlockType,
+					cfg.Zk.XLayer.GetLogsTimeout,
+					cfg.Zk.XLayer.GetLogsRetries,
+				)
+
+				sequencerL1Syncer = syncer.NewL1Syncer(
+					ctx,
+					ethermanClients,
+					[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup},
+					[][]libcommon.Hash{{
+						contracts.InitialSequenceBatchesTopic,
+						contracts.AddNewRollupTypeTopic,
+						contracts.AddNewRollupTypeTopicBanana,
+						contracts.CreateNewRollupTopic,
+						contracts.UpdateRollupTopic,
+					}},
+					cfg.L1BlockRange,
+					cfg.L1QueryDelay,
+					cfg.L1HighestBlockType,
+					cfg.Zk.XLayer.GetLogsTimeout,
+					cfg.Zk.XLayer.GetLogsRetries,
+				)
+
+				log.Info("RPC node: Created dedicated Sequencer L1 syncer for event pre-synchronization")
+			}
 
 			backend.syncStages = stages2.NewDefaultZkStages(
 				backend.sentryCtx,
@@ -1339,6 +1376,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.forkValidator,
 				backend.engine,
 				backend.l1Syncer,
+				l1BlockSyncer,     // Added: RPC node specific Sequencer L1 syncer
+				sequencerL1Syncer, // Added: RPC node specific Sequencer L1 syncer
 				streamClient,
 				dataStreamServer,
 				l1InfoTreeUpdater,

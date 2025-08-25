@@ -457,6 +457,11 @@ var (
 		Usage: "Unwind data stream to block number (this block will be truncated, and 0 means no unwind)",
 		Value: 0,
 	}
+	SyncSeqLogs = cli.BoolFlag{
+		Name:  "zkevm.sync-seq-logs",
+		Usage: "sync sequencer logs",
+		Value: false,
+	}
 )
 
 func setGPOXLayer(ctx *cli.Context, cfg *gaspricecfg.Config) {
