@@ -21,15 +21,15 @@ sed_inplace() {
 }
 
 ADDR="a03666fb51aa9ad2de70e0434072a007b3c91a9e"
-CURRENT_BALANCE=$(jq -r ".alloc[\"$ADDR\"].balance" ./config-op/genesis.json)
+CURRENT_BALANCE=$(jq -r ".alloc[\"$ADDR\"].balance" ./config-op/state0.json)
 echo "Current balance: $CURRENT_BALANCE"
 
 # NEW_BALANCE=$CURRENT_BALANCE + 10^24
-NEW_BALANCE=$(printf "0x%x" $((0x${CURRENT_BALANCE#0x} + 1000000000000000000000000)))
+NEW_BALANCE=$(python3 -c "print(hex($CURRENT_BALANCE + 1000000000000000000000000))")
 echo "Adding: 10^24"
 echo "New balance will be: $NEW_BALANCE"
 
-# 更新为新的余额
+# update balance to genesis file
 sed_inplace '/'"$ADDR"'/,/balance/s/"balance": "0x[^"]*"/"balance": "'$NEW_BALANCE'"/' ./config-op/genesis.json
 
 # 2. Generate state1.json
