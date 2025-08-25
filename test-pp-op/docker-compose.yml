@@ -598,6 +598,7 @@ services:
       - --l1-eth-rpc=${L1_RPC_URL_IN_DOCKER}
       - --game-type=${GAME_TYPE}
       - --allow-non-finalized
+      - --genesis-height=${FORK_BLOCK}
     depends_on:
       - op-batcher
 

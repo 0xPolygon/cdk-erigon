@@ -60,7 +60,7 @@ fi
 
 if [ ! -d "optimism" ]; then
     echo "Cloning Optimism repository..."
-    git clone -b v1.13.4 https://github.com/ethereum-optimism/optimism.git
+    git clone -b yxq/regenesis-op-mainnet https://github.com/okx/optimism.git
     cp $PWD_DIR/op-docker/Dockerfile-contracts optimism/Dockerfile-contracts
     cp $PWD_DIR/op-docker/Dockerfile-opstack optimism/Dockerfile-opstack
 
@@ -70,10 +70,10 @@ if [ ! -d "optimism" ]; then
     # To support making prestate for our custom op-geth
     mv op-geth optimism/op-geth
     ln -s optimism/op-geth ./
-    cd optimism
-    git apply ../../patch/optimism-0001-support-regenesis-op-geth-prestate.patch
-    git apply ../../patch/optimism-0001-decompress-genesis.patch
-    cd -
+#    cd optimism
+#    git apply ../../patch/optimism-0001-support-regenesis-op-geth-prestate.patch
+#    git apply ../../patch/optimism-0001-decompress-genesis.patch
+#    cd -
 
     cd optimism
     docker build -t op-contracts:v1.13.4 -f Dockerfile-contracts .
