@@ -182,7 +182,7 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 		// Check if realtime cache is ready
 		if !realtimeCache.ReadyFlag.Load() {
 			if ok := tryInitRealtimeCache(realtimeCache); !ok {
-				time.Sleep(1 * time.Second)
+				time.Sleep(10 * time.Second)
 			}
 			continue
 		}
