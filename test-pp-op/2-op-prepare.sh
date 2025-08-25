@@ -30,7 +30,7 @@ docker-compose stop xlayer-agg-sender
 docker-compose stop xlayer-agglayer
 docker-compose stop xlayer-agglayer-prover
 
-LOG_OUTPUT=$(docker compose logs xlayer-seq 2>&1 | tail -100)
+LOG_OUTPUT=$(docker compose logs --since=0 --tail=all xlayer-seq 2>&1)
 echo "LOG_OUTPUT: $LOG_OUTPUT"
 
 FORK_BLOCK=$(echo "$LOG_OUTPUT" | grep "Finish block" | tail -1 | sed -n 's/.*Finish block \([0-9]*\) with.*/\1/p')
@@ -157,6 +157,7 @@ docker run \
       --upgrade-controller $ADMIN_OWNER_ADDRESS \
       --challenge-period-seconds $CHALLENGE_PERIOD_SECONDS \
       --withdrawal-delay-seconds $WITHDRAWAL_DELAY_SECONDS \
+      --proof-maturity-delay-seconds $WITHDRAWAL_DELAY_SECONDS \
       --dispute-game-finality-delay-seconds $DISPUTE_GAME_FINALITY_DELAY_SECONDS
   "
 
