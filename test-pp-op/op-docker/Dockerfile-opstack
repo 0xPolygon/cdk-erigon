@@ -1,5 +1,5 @@
 # Single stage build with Go
-FROM golang:1.24
+FROM golang:1.24.4
 WORKDIR /app
 
 # Install all dependencies

@@ -53,7 +53,12 @@ if ! [ -s "$NVM_DIR/nvm.sh" ]; then
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 fi
 . "$NVM_DIR/nvm.sh"
-nvm use v22
+# Try to use the required version, install if not available
+if ! nvm use v22 2>/dev/null; then
+    echo "Node.js v22 not found, installing..."
+    nvm install 22
+    nvm use v22
+fi
 ./1-setup.sh
 sleep 5
 cd $TEST_DIR
