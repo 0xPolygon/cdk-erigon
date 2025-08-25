@@ -929,6 +929,11 @@ var (
 		Usage: "Sets a cap on gas that can be used in eth_call/estimateGas",
 		Value: 50000000,
 	}
+	BatchMethodForbiddenList = cli.StringFlag{
+		Name:  "rpc.batch-method-forbidden",
+		Usage: "Specify granular (method-by-method) API forbidden list for batch requests as CSV, these requests won't be allowed in a batch request as they can lead to OOM",
+		Value: "eth_getLogs,debug_traceTransaction,trace_transaction",
+	}
 	RpcTraceCompatFlag = cli.BoolFlag{
 		Name:  "trace.compat",
 		Usage: "Bug for bug compatibility with OE for trace_ routines",

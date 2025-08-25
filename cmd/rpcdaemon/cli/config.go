@@ -582,6 +582,8 @@ func startRegularRpcServer(ctx context.Context, cfg *httpcfg.HttpCfg, rpcAPI []r
 
 	srv.SetBatchLimit(cfg.BatchLimit)
 
+	srv.SetBatchMethodForbiddenList(cfg.BatchMethodForbiddenList)
+
 	defer srv.Stop()
 
 	var defaultAPIList []rpc.API
