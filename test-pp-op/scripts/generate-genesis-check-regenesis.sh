@@ -9,7 +9,7 @@ cd $ROOT_DIR
 go install ./cmd/hack/
 cd $TEST_DIR
 cp ./config-op/genesis.json ./config-op/genesis-op-raw.json
-hack -action migrateGenesis -chaindata ./data_state0/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/genesis.json
+hack -action migrateGenesis -chaindata ./data_state0/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/genesis.json -ignore-scalable
 cp ./config-op/genesis.json ./config-op/state0.json
 
 sed_inplace() {
@@ -36,4 +36,4 @@ sed_inplace '/'"$ADDR"'/,/balance/s/"balance": "0x[^"]*"/"balance": "'$NEW_BALAN
 #hack -action migrateGenesis -chaindata ./data_state1/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/state1.json
 
 # 3. Generate state2.json
-hack -action migrateGenesis -chaindata ./data_state2/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/state2.json
+hack -action migrateGenesis -chaindata ./data_state2/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/state2.json -ignore-scalable
