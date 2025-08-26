@@ -100,4 +100,5 @@ type HttpCfg struct {
 	DataStreamInactivityTimeout       time.Duration
 	DataStreamInactivityCheckInterval time.Duration
 	L2RpcUrl                          string
+	BatchMethodForbiddenList          map[string]struct{}
 }

@@ -51,13 +51,14 @@ type Server struct {
 	run             int32
 	codecs          mapset.Set // mapset.Set[ServerCodec] requires go 1.21
 
-	batchConcurrency    uint
-	disableStreaming    bool
-	traceRequests       bool // Whether to print requests at INFO level
-	debugSingleRequest  bool // Whether to print requests at INFO level
-	batchLimit          int  // Maximum number of requests in a batch
-	logger              log.Logger
-	rpcSlowLogThreshold time.Duration
+	batchConcurrency         uint
+	disableStreaming         bool
+	traceRequests            bool // Whether to print requests at INFO level
+	debugSingleRequest       bool // Whether to print requests at INFO level
+	batchLimit               int  // Maximum number of requests in a batch
+	logger                   log.Logger
+	rpcSlowLogThreshold      time.Duration
+	batchMethodForbiddenList ForbiddenList
 }
 
 // NewServer creates a new server instance with no registered handlers.
@@ -79,6 +80,10 @@ func (s *Server) SetAllowList(allowList AllowList) {
 // SetBatchLimit sets limit of number of requests in a batch
 func (s *Server) SetBatchLimit(limit int) {
 	s.batchLimit = limit
+}
+
+func (s *Server) SetBatchMethodForbiddenList(forbiddenList ForbiddenList) {
+	s.batchMethodForbiddenList = forbiddenList
 }
 
 // RegisterName creates a service for the given receiver type under the given name. When no
@@ -132,6 +137,15 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec, stre
 		return
 	}
 	if batch {
+		// check if any of the requests in the batch are not allowed.  We make this restriction because some requests like eth_getLogs can have really large return sizes and because we're in a batch we
+		// cannot use streaming for these so end up with huge allocations leading to OOM.
+		for _, req := range reqs {
+			if _, ok := s.batchMethodForbiddenList[req.Method]; ok {
+				codec.WriteJSON(ctx, errorMessage(fmt.Errorf("method %s not allowed in a batch request", req.Method)))
+				return
+			}
+		}
+
 		if s.batchLimit > 0 && len(reqs) > s.batchLimit {
 			codec.WriteJSON(ctx, errorMessage(fmt.Errorf("batch limit %d exceeded (can increase by --rpc.batch.limit). Requested batch of size: %d", s.batchLimit, len(reqs))))
 		} else {
