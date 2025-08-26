@@ -90,6 +90,14 @@ var (
 	ignoreScalable  = flag.Bool("ignore-scalable", false, "ignore scalable account")
 	deleteScalable  = flag.Bool("delete-scalable", false, "delete scalable account")
 	debugPrint      = flag.Bool("debugPrint", false, "print debug info")
+
+	// For differential smt verification
+	preSmtData                = flag.String("pre-smt-data", "", "path to pre smt data")
+	preChainData              = flag.String("pre-chain-data", "", "path to pre chain data")
+	postSmtData               = flag.String("post-smt-data", "", "path to post smt data")
+	preStateSnapshotFilePath  = flag.String("pre-state-snapshot", "", "path to pre-state snapshot file")
+	postStateSnapshotFilePath = flag.String("post-state", "", "path to post-state file")
+	outputStateDiffFilePath   = flag.String("state-diff-output", "", "path to output state diff file")
 )
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
@@ -1630,63 +1638,12 @@ func dumpState(chaindata string) error {
 	return nil
 }
 
-type accInfo struct {
+type AccInfo struct {
 	Balance string            `json:"balance"`
 	Nonce   string            `json:"nonce"`
 	Code    string            `json:"code"`
 	Storage map[string]string `json:"storage"`
 }
-
-/*
-func decodeAccInfo(accoutStr string, value accInfo, accChanges map[libcommon.Address]*accounts.Account,
-	codeChanges map[libcommon.Address]string, storageChanges map[libcommon.Address]map[string]string) {
-	acc_bytes, err := hexutil.Decode(accoutStr)
-	if err != nil {
-		panic("acc decoding error")
-	}
-	address := libcommon.BytesToAddress(acc_bytes)
-	acc := accounts.NewAccount()
-	balance, err := uint256.FromHex(value.Balance)
-	if err != nil {
-		panic("balance decoding error")
-	}
-	acc.Balance = *balance
-	nonce, err := hexutil.DecodeUint64(value.Nonce)
-	if err != nil {
-		panic("nonce decoding error")
-	}
-	acc.Nonce = nonce
-	accChanges[address] = &acc
-
-	if value.Code != "0x" {
-		codeChanges[address] = value.Code
-		if value.Storage != nil {
-			storageChanges[address] = make(map[string]string)
-			for k, v := range value.Storage {
-				storageChanges[address][k] = v
-			}
-		}
-	}
-}
-
-func newMDBX(dbdir string, ctx context.Context) (kv.RwDB, error) {
-	label := kv.SmtDB
-	name := kv.SmtDB.String()
-	dbPath := filepath.Join(dbdir, name)
-
-	hackLogger.Info("Opening Database", "label", name, "path", dbPath)
-
-	roTxLimit := int64(32)
-	roTxsLimiter := semaphore.NewWeighted(roTxLimit) // 1 less than max to allow unlocking to happen
-	opts := mdbx.NewMDBX(hackLogger).
-		Path(dbPath).Label(label).
-		GrowthStep(16 * datasize.MB).
-		SyncPeriod(30 * time.Second).
-		RoTxsLimiter(roTxsLimiter)
-	opts = opts.DirtySpace(uint64(512 * datasize.MB))
-	return opts.Open(ctx)
-}
-*/
 
 // const TableSmt = "HermezSmt"
 // const TableStats = "HermezSmtStats"
@@ -1725,7 +1682,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		return fmt.Errorf("you cannot use --delete-scalable=true and --ignore-scalable=true flags together")
 	}
 
-	var jsonData map[string]map[string]accInfo
+	var jsonData map[string]map[string]AccInfo
 	if input == "" {
 		input = "genesis.json"
 	}
@@ -2147,6 +2104,10 @@ func main() {
 		err = dumpAll(*chaindata, *output)
 	case "migrateGenesis":
 		err = migrateGenesis(*chaindata, *input, *output)
+	case "verifySmtWithStateDiff":
+		err = VerifySmtWithStateDiff(
+			*preSmtData, *preChainData,
+			*preStateSnapshotFilePath, *postSmtData, *postStateSnapshotFilePath, *outputStateDiffFilePath)
 	case "checkStateRoot":
 		if *standaloneSmtDb {
 			err = checkStateRoot(*chaindata, *pathSmtDb, *input, *incremental, *debugPrint)
