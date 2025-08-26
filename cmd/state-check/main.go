@@ -137,24 +137,28 @@ func verifyAccountState(address string, accountData AccountState, client *ethcli
 		if codeHex != accountData.Code {
 			return fmt.Errorf("address: %s code does not match", address)
 		}
+	}
 
-		// 4. Verify storage slots
+	// 4. Verify storage slots
+	// record current time
+	now := time.Now()
 
-		// record current time
-		now := time.Now()
-
-		// Split storage verification into chunks of 100,000 and use errgroup
-		if len(accountData.Storage) > 0 {
-			err := verifyStorageInChunks(ctx, addr, address, accountData.Storage, client)
-			if err != nil {
-				return err
-			}
+	// Split storage verification into chunks of 100,000 and use errgroup
+	if len(accountData.Storage) > 0 {
+		err := verifyStorageInChunks(ctx, addr, address, accountData.Storage, client)
+		if err != nil {
+			return err
 		}
+	}
 
-		if len(accountData.Storage) > 10000 {
-			// log time cost
-			fmt.Printf("address: %s has %d storage slots, cost: %s\n", address, len(accountData.Storage), time.Since(now))
-		}
+	// if code is empty but has storage, return error
+	if (accountData.Code == "" || accountData.Code == "0x") && len(accountData.Storage) > 0 {
+		fmt.Printf("address: %s code is empty but has storage slots: %d\n", address, len(accountData.Storage))
+	}
+
+	if len(accountData.Storage) > 10000 {
+		// log time cost
+		fmt.Printf("address: %s has %d storage slots, cost: %s\n", address, len(accountData.Storage), time.Since(now))
 	}
 	return nil
 }
