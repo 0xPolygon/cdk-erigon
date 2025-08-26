@@ -26,6 +26,7 @@ import (
 	types2 "github.com/ledgerwatch/erigon-lib/types"
 
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
+	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	cmath "github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/common/u256"
 	"github.com/ledgerwatch/erigon/consensus/misc"
@@ -464,6 +465,12 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*Executi
 		// For X Layer
 		innerTx.To = vm.AccountRef(*msg.To()).Address().String()
 	}
+	innerTx.Output = hexutility.Encode(ret[:])
+	if vmerr != nil {
+		innerTx.Error = vmerr.Error()
+		innerTx.IsError = true
+	}
+
 	if refunds {
 		if rules.IsLondon {
 			// After EIP-3529: refunds are capped to gasUsed / 5
