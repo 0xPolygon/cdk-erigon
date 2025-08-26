@@ -90,8 +90,6 @@ var (
 	ignoreScalable  = flag.Bool("ignore-scalable", false, "ignore scalable account")
 	deleteScalable  = flag.Bool("delete-scalable", false, "delete scalable account")
 	debugPrint      = flag.Bool("debugPrint", false, "print debug info")
-
-	chaindataRebuild = flag.String("chaindata-rebuild", "./chaindata_rebuild", "path to rebuild chaindata")
 )
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
@@ -499,34 +497,18 @@ func migrateGenesis(chaindata, input, output string) error {
 		}
 		acc_addr := libcommon.HexToAddress(acc_hex)
 		log.Debug("acc_addr: %s\n", acc_hex)
-		if v, exists := allocData[acc_hex]; exists {
+		if _, exists := allocData[acc_hex]; exists {
 			// Fixme: if xlayer account conflict with target node(such as op-geth), use which as new regenesis account?
 			a, err := plainStateReader.ReadAccountData(acc_addr)
 			if err != nil {
 				return err
 			}
-			account := v.(map[string]interface{})
+
 			if hex.EncodeToString(a.CodeHash.Bytes()) != "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" {
 				fmt.Println("Adding existing contract: ", acc_hex)
-				codeHash := libcommon.BigToHash(utils.HashContractBytecodeBigInt(hex.EncodeToString(hexutility.FromHex(account["code"].(string)))))
-				isCodeEqual := codeHash == a.CodeHash
-				isBalanceEqual := account["balance"].(string) == a.Balance.Hex()
-				isNonceEqual := account["nonce"].(string) == "0x"+strconv.FormatUint(a.Nonce, 16)
-				if !isBalanceEqual {
-					fmt.Printf("	  balance: %s ==> %s\n", account["balance"].(string), a.Balance.Hex())
-				}
-				if !isNonceEqual {
-					fmt.Printf("	  nonce: %s ==> %s\n", account["nonce"].(string), "0x"+strconv.FormatUint(a.Nonce, 16))
-				}
-				if !isCodeEqual {
-					fmt.Println("	 code not equal")
-				}
 			} else {
 				fmt.Println("Adding existing account:", acc_hex)
 			}
-			// use nonce and balance from xlayer, but use code and storage from op stack
-			account["nonce"] = "0x" + strconv.FormatUint(a.Nonce, 16)
-			account["balance"] = a.Balance.Hex()
 			continue
 		}
 		allocData[acc_hex] = make(map[string]interface{})
@@ -1738,15 +1720,12 @@ func createSMTTables(db kv.RwDB, tx kv.RwTx) error {
 	return nil
 }
 
-var scalableAddr = libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
-
 func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) error {
 	if *deleteScalable && *ignoreScalable {
 		return fmt.Errorf("you cannot use --delete-scalable=true and --ignore-scalable=true flags together")
 	}
 
-	var jsonData map[string]interface{}
-	var allocData map[string]accInfo
+	var jsonData map[string]map[string]accInfo
 	if input == "" {
 		input = "genesis.json"
 	}
@@ -1755,23 +1734,13 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 	if err != nil {
 		if !os.IsNotExist(err) {
 			fmt.Println("Error reading file:", err)
+			return err
 		}
-		return err
-	}
-	if err := json.Unmarshal(fileData, &jsonData); err != nil {
-		fmt.Println("Error decoding JSON:", err)
-		return err
-	}
-
-	allocBytes, err := json.Marshal(jsonData["alloc"])
-	if err != nil {
-		fmt.Println("Error encoding alloc JSON:", err)
-		return err
-	}
-
-	if err := json.Unmarshal(allocBytes, &allocData); err != nil {
-		fmt.Println("Error decoding alloc JSON:", err)
-		return err
+	} else {
+		if err := json.Unmarshal(fileData, &jsonData); err != nil {
+			fmt.Println("Error decoding JSON:", err)
+			return err
+		}
 	}
 
 	ctx := context.Background()
@@ -1798,7 +1767,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 	codeChanges := make(map[libcommon.Address]string)
 	storageChanges := make(map[libcommon.Address]map[string]string)
 	fmt.Println("Begin json decode")
-	for acc, value := range allocData {
+	for acc, value := range jsonData["alloc"] {
 		accBytes := common.FromHex(acc)
 		if err != nil {
 			panic("acc decoding error")
@@ -1810,20 +1779,16 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 			panic(fmt.Sprintf("acc decoding error for acct: %s, err: %v", address, err))
 		}
 		acc.Balance = *balance
-		if value.Nonce != "" {
-			nonce, err := hexutil.DecodeUint64(value.Nonce)
-			if err != nil {
-				panic("nonce decoding error")
-			}
-			acc.Nonce = nonce
+		nonce, err := hexutil.DecodeUint64(value.Nonce)
+		if err != nil {
+			panic("nonce decoding error")
 		}
-
+		acc.Nonce = nonce
 		accChanges[address] = &acc
 
 		if value.Code != "0x" {
 			codeChanges[address] = value.Code
 		}
-
 		if *ignoreScalable && address == state.ADDRESS_SCALABLE_L2 {
 			fmt.Printf("Ignoring scalable address: %s\n", address.String())
 
@@ -1847,14 +1812,9 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		}
 		if value.Storage != nil {
 			storageChanges[address] = make(map[string]string)
-			if *deleteScalable && address == scalableAddr {
-				for k := range value.Storage {
-					storageChanges[address][k] = "0"
-				}
-			} else { /// Fixme: use maps.Clone, which is more efficient
-				for k, v := range value.Storage {
-					storageChanges[address][k] = v
-				}
+			/// Fixme: use maps.Clone, which is more efficient
+			for k, v := range value.Storage {
+				storageChanges[address][k] = v
 			}
 		}
 	}
@@ -1885,7 +1845,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		fmt.Println("Deleting scalable address storage ...")
 		smtBatchRootHashOrigin, _ := smtOrigin.Db.GetLastRoot()
 		fmt.Printf("*** (before delete) smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
-		ethAddr := scalableAddr
+		ethAddr := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
 		ethAddrBigInt := utils.ConvertHexToBigInt(ethAddr.String())
 		ethAddrBigIngArray := utils.ScalarToArrayBig(ethAddrBigInt)
 		for k := range storageChanges[ethAddr] {
@@ -1971,7 +1931,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		fmt.Println("Done incremental SMT buidling.")
 	} else {
 		start := time.Now() // record start time
-		dbRebuild := mdbx.MustOpen(*chaindataRebuild)
+		dbRebuild := mdbx.MustOpen("./chaindata_rebuild")
 		defer dbRebuild.Close()
 		txRebuild, err := dbRebuild.BeginRw(ctx)
 		if err != nil {
