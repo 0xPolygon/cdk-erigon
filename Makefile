@@ -4,6 +4,10 @@ GOBIN = $(CURDIR)/$(GOBINREL)
 UNAME = $(shell uname) # Supported: Darwin, Linux
 DOCKER := $(shell command -v docker 2> /dev/null)
 
+# Docker image configuration
+DOCKER_IMAGE_NAME ?= xlayer-erigon
+DOCKER_HUB_USERNAME ?= xlayerdev
+
 GIT_COMMIT ?= $(shell git rev-list -1 HEAD)
 GIT_BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD)
 GIT_TAG    ?= $(shell git describe --all)
@@ -406,3 +410,53 @@ help	:	Makefile
 
 build-docker: ## X Layer Builds a docker image with the binary
 	docker build -t cdk-erigon -f ./Dockerfile.local .
+
+## build-xlayer-docker:                X Layer Builds a docker image with custom name and version
+build-xlayer-docker: ## X Layer Builds a docker image named xlayer-erigon with version
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make build-xlayer-docker VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "Building $(DOCKER_IMAGE_NAME):$(VERSION)..."
+	docker build -t $(DOCKER_IMAGE_NAME):$(VERSION) -f ./Dockerfile.local .
+	docker tag $(DOCKER_IMAGE_NAME):$(VERSION) $(DOCKER_IMAGE_NAME):latest
+	@echo "✓ Built $(DOCKER_IMAGE_NAME):$(VERSION) and $(DOCKER_IMAGE_NAME):latest"
+	@echo "Next: make tag-xlayer-docker VERSION=$(VERSION)"
+
+## tag-xlayer-docker:                  Tag xlayer-erigon image for Docker Hub
+tag-xlayer-docker: ## Tag xlayer-erigon image for Docker Hub (xlayerdev/xlayer-erigon)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make tag-xlayer-docker VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "Tagging for Docker Hub..."
+	docker tag $(DOCKER_IMAGE_NAME):$(VERSION) $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):$(VERSION)
+	docker tag $(DOCKER_IMAGE_NAME):latest $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):latest
+	@echo "✓ Tagged $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):$(VERSION)"
+	@echo "Next: make push-xlayer-docker VERSION=$(VERSION)"
+
+## push-xlayer-docker:                  Push xlayer-erigon image to Docker Hub
+push-xlayer-docker: ## Push xlayer-erigon image to Docker Hub (xlayerdev/xlayer-erigon)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make push-xlayer-docker VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "Pushing to Docker Hub..."
+	@echo "Ensure you're logged in: docker login"
+	docker push $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):$(VERSION)
+	docker push $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):latest
+	@echo "✓ Pushed to Docker Hub"
+	@echo "View: https://hub.docker.com/r/$(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME)"
+	@echo "Pull: docker pull $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):$(VERSION)"
+
+## release-xlayer-docker:               Build, tag and push xlayer-erigon to Docker Hub
+release-xlayer-docker: ## Complete workflow: build, tag and push to Docker Hub
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make release-xlayer-docker VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "🚀 Release $(VERSION) workflow starting..."
+	make build-xlayer-docker VERSION=$(VERSION)
+	make tag-xlayer-docker VERSION=$(VERSION)
+	make push-xlayer-docker VERSION=$(VERSION)
+	@echo "🎉 Release $(VERSION) completed!"
