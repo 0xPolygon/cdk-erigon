@@ -10,12 +10,36 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	db2 "github.com/ledgerwatch/erigon/smt/pkg/db"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"maps"
 	"os"
 )
+
+func GetStorageDiff(preStorage map[string]string, postStorage map[string]string) map[string]string {
+	storageDiff := make(map[string]string)
+	for key, postValue := range postStorage {
+		preValue, ok := preStorage[key]
+		if ok {
+			if postValue != preValue {
+				storageDiff[key] = postValue
+			}
+		} else {
+			storageDiff[key] = postValue
+		}
+
+	}
+
+	for key, _ := range preStorage {
+		_, ok := postStorage[key]
+		if !ok {
+			storageDiff[key] = "0x"
+		}
+	}
+	return storageDiff
+}
 
 // VerifySmtWithStateDiff given two genesis files, generate a state diff file
 //
@@ -96,8 +120,14 @@ func VerifySmtWithStateDiff(
 	defer dbPostSmt.Close()
 	txPostSmt, err := dbPostSmt.BeginRw(ctx)
 	if err != nil {
+		fmt.Println("Failed to open post smt data", err)
 		panic(err)
 	}
+
+	preEriDb := db2.NewEriDb(txPreSmt, txPreChain)
+	smtPre := smt.NewSMT(preEriDb, false)
+	postEriDb := db2.NewEriDb(txPostSmt, nil)
+	smtPost := smt.NewSMT(postEriDb, false)
 
 	// Initialize change maps similar to checkStateRoot
 	accChanges := make(map[libcommon.Address]*accounts.Account)
@@ -105,12 +135,24 @@ func VerifySmtWithStateDiff(
 	storageChanges := make(map[libcommon.Address]map[string]string)
 
 	// Process all accounts in post-state (insertions and modifications)
+	fmt.Printf("Start process post state checking for insertion and modifications, total acct len: %d\n", len(postAlloc))
 	for addr, postAccValue := range postAlloc {
 		accBytes := common.FromHex(addr)
 		if err != nil {
 			panic(fmt.Sprintf("preAlloc failed with addr: %s", addr))
 		}
 		address := libcommon.BytesToAddress(accBytes)
+
+		// FIXME: this is a hack, need investigate
+		if address == state.ADDRESS_SCALABLE_L2 {
+			//if postAccValue.Storage != nil {
+
+			fmt.Printf("number of Storage items for post scalable contract %s: %d\n", address.Hex(), len(postAccValue.Storage))
+			fmt.Printf("number of Storage items for pre scalable contract %s: %d\n", address.Hex(), len(preAlloc[addr].Storage))
+
+			//continue
+		}
+
 		acc := accounts.NewAccount()
 		preAccValue, exists := preAlloc[addr]
 		if !exists || postAccValue.Balance != preAccValue.Balance || postAccValue.Nonce != preAccValue.Nonce {
@@ -129,22 +171,25 @@ func VerifySmtWithStateDiff(
 		}
 
 		if !exists || postAccValue.Code != postAccValue.Code {
-			codeChanges[address] = postAccValue.Code
+			if postAccValue.Code != "0x" {
+				codeChanges[address] = postAccValue.Code
+			}
 		}
 
 		if postAccValue.Storage != nil {
 			if !exists || preAccValue.Storage == nil { // use new to override
 				storageChanges[address] = maps.Clone(postAccValue.Storage)
 			} else { // only apply diff
-				for k, v := range postAccValue.Storage {
-					if preAccValue.Storage[k] != v {
-						storageChanges[address][k] = v
-					}
-				}
-
+				//for k, v := range postAccValue.Storage {
+				//	if preAccValue.Storage[k] != v {
+				//		storageChanges[address][k] = v
+				//	}
+				//}
+				storageChanges[address] = GetStorageDiff(preAlloc[addr].Storage, postAccValue.Storage)
 			}
 		}
 	}
+	fmt.Printf("Start process pre state checking for deletion, total acct len: %d\n", len(preAlloc))
 
 	// Check for deletions (accounts that exist in pre-state but not in post-state)
 	for addr, preAccValue := range preAlloc {
@@ -192,16 +237,14 @@ func VerifySmtWithStateDiff(
 	fmt.Printf("State diff generated successfully. Output written to: %s\n", outputStateDiffFilePath)
 
 	fmt.Println("Start apply changes to pre smt DB")
-	preEriDb := db2.NewEriDb(txPreSmt, txPreChain)
-	smtPre := smt.NewSMT(preEriDb, false)
+
 	_, _, err = smtPre.SetStorage(ctx, "", accChanges, codeChanges, storageChanges)
 	if err != nil {
 		fmt.Println("SetStorage error ", err)
 		panic("SetStorage: " + err.Error())
 	}
-	postEriDb := db2.NewEriDb(txPostSmt, nil)
-	smtPost := smt.NewSMT(postEriDb, false)
-	if smtPost.LastRoot() == smtPre.LastRoot() {
+
+	if smtPost.LastRoot().Text(16) == smtPre.LastRoot().Text(16) {
 		fmt.Println("Verify success")
 	} else {
 		fmt.Printf("Verify fail, pre smt after apply change root is: %v, post smt root is: %v \n", smtPre.LastRoot(), smtPost.LastRoot())

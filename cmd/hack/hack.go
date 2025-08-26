@@ -96,9 +96,11 @@ var (
 	preChainData              = flag.String("pre-chain-data", "", "path to pre chain data")
 	postSmtData               = flag.String("post-smt-data", "", "path to post smt data")
 	preStateSnapshotFilePath  = flag.String("pre-state-snapshot", "", "path to pre-state snapshot file")
-	postStateSnapshotFilePath = flag.String("post-state", "", "path to post-state file")
+	postStateSnapshotFilePath = flag.String("post-state-snapshot", "", "path to post-state file")
 	outputStateDiffFilePath   = flag.String("state-diff-output", "", "path to output state diff file")
 )
+
+const ZERO_CODE_HASH = "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
 	db := mdbx.MustOpen(chaindata)
@@ -512,7 +514,7 @@ func migrateGenesis(chaindata, input, output string) error {
 				return err
 			}
 
-			if hex.EncodeToString(a.CodeHash.Bytes()) != "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" {
+			if hex.EncodeToString(a.CodeHash.Bytes()) != "" {
 				fmt.Println("Adding existing contract: ", acc_hex)
 			} else {
 				fmt.Println("Adding existing account:", acc_hex)
@@ -2123,5 +2125,7 @@ func main() {
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
+	} else {
+		os.Exit(0)
 	}
 }
