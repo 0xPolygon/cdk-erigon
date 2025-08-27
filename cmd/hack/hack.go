@@ -502,10 +502,11 @@ func migrateGenesis(chaindata, input, output string) error {
 	}
 	defer cc.Close()
 	for _, acc_hex := range keys {
-		if *ignoreScalable && strings.ToLower(acc_hex) == "000000000000000000000000000000005ca1ab1e" {
+		acc_addr := libcommon.HexToAddress(acc_hex)
+
+		if *ignoreScalable && acc_addr == state.ADDRESS_SCALABLE_L2 {
 			continue
 		}
-		acc_addr := libcommon.HexToAddress(acc_hex)
 		log.Debug("acc_addr: %s\n", acc_hex)
 		if _, exists := allocData[acc_hex]; exists {
 			// Fixme: if xlayer account conflict with target node(such as op-geth), use which as new regenesis account?
@@ -539,7 +540,7 @@ func migrateGenesis(chaindata, input, output string) error {
 		current["balance"] = a.Balance.Hex()
 
 		log.Debug("CodeHash:%x\nIncarnation:%d\nNonce:%d\nblance:%s\n", a.CodeHash, a.Incarnation, a.Nonce, a.Balance.String())
-		if strings.ToLower(acc_hex) == "000000000000000000000000000000005ca1ab1e" {
+		if acc_addr == state.ADDRESS_SCALABLE_L2 {
 			fmt.Printf("SCALABEL incarnation: %v\n", a.Incarnation)
 		}
 
@@ -552,7 +553,7 @@ func migrateGenesis(chaindata, input, output string) error {
 		log.Debug("acc: %s => %s\n", acc_addr, hexutil.Encode(code))
 		acc_bytes := common.FromHex(acc_hex)
 		first_storage := false
-		var last_incarnation uint64 = 100000
+		var last_incarnation uint64 = 1<<64 - 1
 		for k, v, e := c.Seek(acc_bytes); k != nil; k, v, e = c.Next() {
 			if e != nil {
 				return e
@@ -562,8 +563,7 @@ func migrateGenesis(chaindata, input, output string) error {
 			}
 			// todo: make sure if exist same address have diff Incarnation? seem no
 			if len(k) > 28 {
-				if strings.ToLower(acc_hex) == "000000000000000000000000000000005ca1ab1e" {
-
+				if acc_addr == state.ADDRESS_SCALABLE_L2 {
 					incar := binary.BigEndian.Uint64(k[20:28])
 					if incar != last_incarnation {
 						fmt.Printf("KEY: %v, slice: %v, fetched: %v\n", k, k[20:28], incar)

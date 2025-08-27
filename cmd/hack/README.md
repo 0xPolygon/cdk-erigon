@@ -27,6 +27,7 @@ hack -action checkStateRoot -chaindata ${chaindata_dir} -smt-db-path ${smtdata_d
 ```
 
 ## run differential smt verify
+
 ```
 export pre_chaindata_dir=$(pwd)/data_state0/seq/chaindata
 export pre_smtdata_dir=$(pwd)/data_state0/seq/smt
@@ -35,6 +36,15 @@ export post_smtdata_dir=$(pwd)/data_state2/seq/smt
 
 hack -action migrateGenesis -chaindata ${pre_chaindata_dir} -input empty.json -output pre_xlayer_dump_file.json
 hack -action migrateGenesis -chaindata ${post_chaindata_dir} -input empty.json -output post_xlayer_dump_file.json
+
+
+## verifySmtWithStateDiff parameters
+# - `preSmtData` is the previous smt data path
+# - `preChainData` is the previous chain data path
+# - `preStateSnapshotFilePath` is the path to the pre-state snapshot file.
+# - `postSmtData` is the post smt data path
+# - `postStateSnapshotFilePath` is the path to the post-state snapshot file.
+# - `outputStateDiffFilePath` is the path to the output state diff file.
 hack -action verifySmtWithStateDiff -pre-chain-data ${pre_chaindata_dir} -pre-smt-data ${pre_smtdata_dir} -pre-state-snapshot pre_xlayer_dump_file.json \
  -post-state-snapshot post_xlayer_dump_file.json -post-smt-data ${post_smtdata_dir} -state-diff-output state_diff.json
 ```
