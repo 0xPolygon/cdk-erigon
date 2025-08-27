@@ -58,7 +58,7 @@ PRIVATE_KEY="0x815405dddb0e2a99b12af775fd2929e526704e1d1aea6a0b4e74dc33e2f7fcd2"
 # RPC Endpoint Configuration
 # =============================================================================
 L1RPC=http://127.0.0.1:8545
-L2RPC=http://127.0.0.1:8124
+L2RPC=http://127.0.0.1:8123
 
 # =============================================================================
 # Finalize Withdrawal on L1
@@ -70,6 +70,7 @@ source .env
 
 # Check current L1 balance
 L1_BALANCE_BEFORE=$(cast balance "$ACCOUNT" --rpc-url "$L1RPC")
+echo "L1_BALANCE_BEFORE: $L1_BALANCE_BEFORE"
 
 # Finalize the withdrawal
 FINALIZE_OUTPUT=$(docker run --rm \

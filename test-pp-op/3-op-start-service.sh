@@ -201,6 +201,7 @@ L2_CHAIN_ID=$(cast call --rpc-url $RPC_URL $PERMISSIONED_GAME "l2ChainId()")
 add_game_type_via_transactor 1 true $TEMP_CLOCK_EXTENSION $TEMP_MAX_CLOCK_DURATION $ABSOLUTE_PRESTATE
 
 export GAME_TYPE=1
+export FORK_BLOCK=0
 docker compose up -d op-proposer
 
 echo "Waiting for op-proposer to create a game..."
@@ -322,6 +323,7 @@ docker run --rm \
   "
 
 export GAME_TYPE=0
+source .env # source .env to update `FORK_BLOCK`
 
 sleep $TEMP_GAME_WINDOW
 docker compose up -d op-proposer op-challenger op-dispute-mon

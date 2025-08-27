@@ -1,6 +1,6 @@
 configType = "standard-overrides"
 l1ChainID = 1337
-fundDevAccounts = true
+fundDevAccounts = false
 opcmAddress = "0x0000000000000000000000000000000000000000"
 l1ContractsLocator = "file:///app/packages/contracts-bedrock/forge-artifacts"
 l2ContractsLocator = "file:///app/packages/contracts-bedrock/forge-artifacts"

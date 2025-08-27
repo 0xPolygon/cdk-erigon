@@ -70,7 +70,11 @@ run: stop build-docker
 mainnet: build-docker
 	@echo "🚀 Starting XLayer Fake Mainnet ..."
 	$(DOCKER_COMPOSE) up -d l1-validator
-	sleep 5
+	sleep 20
+	$(INIT_ACCOUNT_1)
+	$(INIT_ACCOUNT_2)
+	$(INIT_ACCOUNT_3)
+	$(INIT_ACCOUNT_4)
 	$(DOCKER_COMPOSE) up -d xlayer-mainnet-seq
 
 .PHONY: stop
