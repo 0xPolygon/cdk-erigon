@@ -514,7 +514,7 @@ func migrateGenesis(chaindata, input, output string) error {
 				return err
 			}
 
-			if hex.EncodeToString(a.CodeHash.Bytes()) != "" {
+			if hex.EncodeToString(a.CodeHash.Bytes()) != ZERO_CODE_HASH {
 				fmt.Println("Adding existing contract: ", acc_hex)
 			} else {
 				fmt.Println("Adding existing account:", acc_hex)
