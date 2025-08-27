@@ -554,6 +554,7 @@ func migrateGenesis(chaindata, input, output string) error {
 		acc_bytes := common.FromHex(acc_hex)
 		first_storage := false
 		var last_incarnation uint64 = 1<<64 - 1
+		numIncarnations := 0
 		for k, v, e := c.Seek(acc_bytes); k != nil; k, v, e = c.Next() {
 			if e != nil {
 				return e
@@ -563,15 +564,15 @@ func migrateGenesis(chaindata, input, output string) error {
 			}
 			// todo: make sure if exist same address have diff Incarnation? seem no
 			if len(k) > 28 {
-				if acc_addr == state.ADDRESS_SCALABLE_L2 {
-					incar := binary.BigEndian.Uint64(k[20:28])
-					if incar != last_incarnation {
-						fmt.Printf("KEY: %v, slice: %v, fetched: %v\n", k, k[20:28], incar)
-						fmt.Printf("scalabel incarnation: %d\n", incar)
-						last_incarnation = incar
+				incarnation := binary.BigEndian.Uint64(k[20:28])
+				if incarnation != last_incarnation {
+					last_incarnation = incarnation
+					numIncarnations += 1
+					if numIncarnations > 1 {
+						panic(fmt.Sprintf("acct with multiple incarnations: %s, num of incarnations: %d", acc_hex, numIncarnations))
 					}
-
 				}
+
 				if !first_storage {
 					if _, exists := current["storage"]; !exists {
 						current["storage"] = make(map[string]interface{})
