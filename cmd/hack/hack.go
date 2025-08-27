@@ -564,7 +564,7 @@ func migrateGenesis(chaindata, input, output string) error {
 			if len(k) > 28 {
 				if strings.ToLower(acc_hex) == "000000000000000000000000000000005ca1ab1e" {
 
-					incar := binary.LittleEndian.Uint64(k[20:28])
+					incar := binary.BigEndian.Uint64(k[20:28])
 					if incar != last_incarnation {
 						fmt.Printf("KEY: %v, slice: %v, fetched: %v\n", k, k[20:28], incar)
 						fmt.Printf("scalabel incarnation: %d\n", incar)
