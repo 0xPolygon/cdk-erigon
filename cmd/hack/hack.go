@@ -558,6 +558,9 @@ func migrateGenesis(chaindata, input, output string) error {
 			}
 			// todo: make sure if exist same address have diff Incarnation? seem no
 			if len(k) > 28 {
+				if strings.ToLower(acc_hex) == "000000000000000000000000000000005ca1ab1e" {
+					fmt.Printf("scalabel key: %v\n", k)
+				}
 				if !first_storage {
 					if _, exists := current["storage"]; !exists {
 						current["storage"] = make(map[string]interface{})
