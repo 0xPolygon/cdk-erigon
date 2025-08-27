@@ -16,6 +16,7 @@ import (
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
 	"maps"
 	"os"
+	"time"
 )
 
 func GetStorageDiff(preStorage map[string]string, postStorage map[string]string) map[string]string {
@@ -58,6 +59,7 @@ func VerifySmtWithStateDiff(
 	postSmtData,
 	postStateSnapshotFilePath,
 	outputStateDiffFilePath string) error {
+	start := time.Now()
 
 	if preSmtData == "" || preChainData == "" || preStateSnapshotFilePath == "" {
 		panic("pre data is empty")
@@ -250,5 +252,7 @@ func VerifySmtWithStateDiff(
 		fmt.Printf("Verify fail, pre smt after apply change root is: %v, post smt root is: %v \n", smtPre.LastRoot(), smtPost.LastRoot())
 	}
 
+	elapsed := time.Since(start).Seconds()
+	fmt.Printf("Elapsed time: %.3f seconds \n", elapsed)
 	return nil
 }
