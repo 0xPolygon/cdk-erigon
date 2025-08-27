@@ -10,6 +10,7 @@ sed_inplace() {
 }
 
 source .env
+source ./tools.sh
 
 ROOT_DIR=$(git rev-parse --show-toplevel)
 TEST_DIR="$ROOT_DIR/test-pp-op"
@@ -360,7 +361,7 @@ EXPORT_DIR="$PWD_DIR/data/cannon-data"
 mkdir -p $EXPORT_DIR
 
 
-md5sum config-op/genesis.json
+$MD5SUM_CMD config-op/genesis.json
 # genesis.json is too large to embed in go, so we compress it now and decompress it in go code
 gzip -c config-op/genesis.json > config-op/genesis.gz.json
 

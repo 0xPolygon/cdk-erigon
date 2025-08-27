@@ -66,7 +66,7 @@ build_op_stack_image() {
   rm -rf $PWD_DIR/tmp/optimism
   cd $PWD_DIR/tmp/
   echo "Cloning Optimism repository..."
-  git clone -b v1.13.4 https://github.com/ethereum-optimism/optimism.git
+  git clone -b yxq/regenesis-op-mainnet https://github.com/okx/optimism.git
   cp $PWD_DIR/op-docker/Dockerfile-contracts optimism/Dockerfile-contracts
   cp $PWD_DIR/op-docker/Dockerfile-opstack optimism/Dockerfile-opstack
 
@@ -76,9 +76,9 @@ build_op_stack_image() {
   # To support making prestate for our custom op-geth
   mv op-geth optimism/op-geth
   ln -s optimism/op-geth ./
-  cd optimism
-  git apply $PWD_DIR/patch/optimism-0001-support-regenesis-op-geth-prestate.patch
-  cd -
+#  cd optimism
+#  git apply $PWD_DIR/patch/optimism-0001-support-regenesis-op-geth-prestate.patch
+#  cd -
 
   cd optimism
   docker build -t $OP_CONTRACTS_IMAGE_TAG -f Dockerfile-contracts .

@@ -28,6 +28,14 @@ export NVM_DIR="$HOME/.nvm"
 nvm use v22
 npm install -g yarn
 
+if [ -d venv ]; then
+    echo "env already created"
+else
+    echo "creating python env"
+    python3 -m venv venv
+fi
+
+source venv/bin/activate
 pip install web3 aiohttp tqdm
 
 # 1. Run state-check state0
@@ -36,7 +44,7 @@ pip install web3 aiohttp tqdm
 #cd $TEST_DIR
 #echo "*** State 0 ***" > $RESULT_FILE
 #state-check -dump-state-file config-op/state0.json -rpc-url $RPC_URL --progress-bar=false | tee $RESULT_FILE
-python3 ${SCRIPTS_DIR}/check_genesis.py --genesis ./config-op/state0.json --rpc http://localhost:8123 --batch-size 50
+python ${SCRIPTS_DIR}/check_genesis.py --genesis ./config-op/state0.json --rpc http://localhost:8123 --batch-size 50
 
 # 8. Run state-check state1
 #cd $SA_BENCH_DIR
@@ -62,4 +70,5 @@ cd $TEST_DIR
 scripts/calc-total-fee-and-value.sh $TX_RESULT_FILE > $FEE_FILE
 #echo -e "\n\n*** State 2 ***" >> $RESULT_FILE
 #state-check -dump-state-file config-op/state2.json -rpc-url $RPC_URL --progress-bar=false | tee -a $RESULT_FILE
-python3 ${SCRIPTS_DIR}/check_genesis.py --genesis ./config-op/state2.json --rpc http://localhost:8123 --batch-size 50
+python ${SCRIPTS_DIR}/check_genesis.py --genesis ./config-op/state2.json --rpc http://localhost:8123 --batch-size 50
+deactivate
