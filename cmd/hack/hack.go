@@ -539,6 +539,9 @@ func migrateGenesis(chaindata, input, output string) error {
 		current["balance"] = a.Balance.Hex()
 
 		log.Debug("CodeHash:%x\nIncarnation:%d\nNonce:%d\nblance:%s\n", a.CodeHash, a.Incarnation, a.Nonce, a.Balance.String())
+		if strings.ToLower(acc_hex) == "000000000000000000000000000000005ca1ab1e" {
+			fmt.Printf("SCALABEL incarnation: %v\n", a.Incarnation)
+		}
 
 		// otherwise, get code and storage
 		code, err := tx.GetOne(kv.Code, a.CodeHash[:])
@@ -563,7 +566,9 @@ func migrateGenesis(chaindata, input, output string) error {
 
 					incar := binary.LittleEndian.Uint32(k[20:28])
 					if incar != last_incarnation {
+						fmt.Printf("KEY: %v\n", k)
 						fmt.Printf("scalabel incarnation: %d\n", incar)
+						last_incarnation = incar
 					}
 
 				}
