@@ -549,6 +549,7 @@ func migrateGenesis(chaindata, input, output string) error {
 		log.Debug("acc: %s => %s\n", acc_addr, hexutil.Encode(code))
 		acc_bytes := common.FromHex(acc_hex)
 		first_storage := false
+		var last_incarnation uint32 = 100000
 		for k, v, e := c.Seek(acc_bytes); k != nil; k, v, e = c.Next() {
 			if e != nil {
 				return e
@@ -559,7 +560,12 @@ func migrateGenesis(chaindata, input, output string) error {
 			// todo: make sure if exist same address have diff Incarnation? seem no
 			if len(k) > 28 {
 				if strings.ToLower(acc_hex) == "000000000000000000000000000000005ca1ab1e" {
-					fmt.Printf("scalabel key: %v\n", k)
+
+					incar := binary.LittleEndian.Uint32(k[20:28])
+					if incar != last_incarnation {
+						fmt.Printf("scalabel incarnation: %d\n", incar)
+					}
+
 				}
 				if !first_storage {
 					if _, exists := current["storage"]; !exists {
