@@ -185,7 +185,7 @@ type storageItem struct {
 
 // verifyStorageInChunks verifies storage slots in chunks of 10,000 using errgroup
 func verifyStorageInChunks(ctx context.Context, addr common.Address, address string, storage map[string]string, clientPool *ClientPool, bar *progressbar.ProgressBar, mu *sync.Mutex) error {
-	const chunkSize = 10000
+	const chunkSize = 3000
 
 	// If storage is small enough, process directly without converting to slice
 	if len(storage) <= chunkSize {
