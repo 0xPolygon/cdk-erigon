@@ -566,7 +566,7 @@ func migrateGenesis(chaindata, input, output string) error {
 
 					incar := binary.LittleEndian.Uint32(k[20:28])
 					if incar != last_incarnation {
-						fmt.Printf("KEY: %v\n", k)
+						fmt.Printf("KEY: %v, slice: %v, fetched: %v\n", k, k[20:28], incar)
 						fmt.Printf("scalabel incarnation: %d\n", incar)
 						last_incarnation = incar
 					}
