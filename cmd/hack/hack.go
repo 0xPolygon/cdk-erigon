@@ -552,7 +552,7 @@ func migrateGenesis(chaindata, input, output string) error {
 		log.Debug("acc: %s => %s\n", acc_addr, hexutil.Encode(code))
 		acc_bytes := common.FromHex(acc_hex)
 		first_storage := false
-		var last_incarnation uint32 = 100000
+		var last_incarnation uint64 = 100000
 		for k, v, e := c.Seek(acc_bytes); k != nil; k, v, e = c.Next() {
 			if e != nil {
 				return e
@@ -564,7 +564,7 @@ func migrateGenesis(chaindata, input, output string) error {
 			if len(k) > 28 {
 				if strings.ToLower(acc_hex) == "000000000000000000000000000000005ca1ab1e" {
 
-					incar := binary.LittleEndian.Uint32(k[20:28])
+					incar := binary.LittleEndian.Uint64(k[20:28])
 					if incar != last_incarnation {
 						fmt.Printf("KEY: %v, slice: %v, fetched: %v\n", k, k[20:28], incar)
 						fmt.Printf("scalabel incarnation: %d\n", incar)
