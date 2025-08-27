@@ -4,6 +4,12 @@ GOBIN = $(CURDIR)/$(GOBINREL)
 UNAME = $(shell uname) # Supported: Darwin, Linux
 DOCKER := $(shell command -v docker 2> /dev/null)
 
+# Docker image configuration
+DOCKER_IMAGE_NAME ?= xlayer-erigon
+DOCKER_HUB_USERNAME ?= xlayerdev
+# Target platform for Docker builds (default: linux/amd64 for cloud servers)
+DOCKER_TARGET_PLATFORM ?= linux/amd64
+
 GIT_COMMIT ?= $(shell git rev-list -1 HEAD)
 GIT_BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD)
 GIT_TAG    ?= $(shell git describe --all)
@@ -404,5 +410,158 @@ protobuf:
 help	:	Makefile
 	@sed -n 's/^##//p' $<
 
+## docker-help:                        print docker build commands help
+docker-help: ## Show available docker build commands
+	@echo "🐳 Available Docker Commands:"
+	@echo ""
+	@echo "Manual Build Commands:"
+	@echo "  make build-xlayer-docker VERSION=v1.0.0                    # Build for current platform"
+	@echo "  make build-xlayer-docker VERSION=v1.0.0 DOCKER_TARGET_PLATFORM=linux/amd64  # Build for specific platform"
+	@echo "  make build-xlayer-docker-macos VERSION=v1.0.0              # Build macOS compatible image"
+	@echo "  make build-xlayer-docker-linux VERSION=v1.0.0              # Build Linux server image (AMD64)"
+	@echo ""
+	@echo "Manual Workflow Commands:"
+	@echo "  make tag-xlayer-docker VERSION=v1.0.0                      # Tag for Docker Hub"
+	@echo "  make push-xlayer-docker VERSION=v1.0.0                     # Push to Docker Hub"
+	@echo ""
+	@echo "One-Command Releases:"
+	@echo "  make release-xlayer-docker-macos VERSION=v1.0.0            # macOS compatible workflow"
+	@echo "  make release-xlayer-docker-linux VERSION=v1.0.0            # Linux server workflow"
+	@echo "  make release-xlayer-docker-multi VERSION=v1.0.0             # Both platforms workflow"
+	@echo ""
+	@echo "Platform Options:"
+	@echo "  DOCKER_TARGET_PLATFORM=linux/amd64     # Linux x86_64 (cloud servers)"
+	@echo "  DOCKER_TARGET_PLATFORM=linux/arm64     # Linux ARM64 (Apple Silicon, ARM servers)"
+	@echo ""
+	@echo "Use Cases:"
+	@echo "  # For macOS development (one command)"
+	@echo "  make release-xlayer-docker-macos VERSION=v1.0.0"
+	@echo ""
+	@echo "  # For Linux server deployment (one command)"
+	@echo "  make release-xlayer-docker-linux VERSION=v1.0.0"
+	@echo ""
+	@echo "  # For both platforms (one command)"
+	@echo "  make release-xlayer-docker-multi VERSION=v1.0.0"
+	@echo "    → Creates multi-architecture image with automatic platform selection"
+	@echo ""
+	@echo "  # Manual workflow example:"
+	@echo "  make build-xlayer-docker-linux VERSION=v1.0.0"
+	@echo "  make tag-xlayer-docker VERSION=v1.0.0"
+	@echo "  make push-xlayer-docker VERSION=v1.0.0"
+
 build-docker: ## X Layer Builds a docker image with the binary
 	docker build -t cdk-erigon -f ./Dockerfile.local .
+
+## build-xlayer-docker:                X Layer Builds a docker image with custom name and version
+build-xlayer-docker: ## X Layer Builds a docker image named xlayer-erigon with version
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make build-xlayer-docker VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "Building $(DOCKER_IMAGE_NAME):$(VERSION) for $(DOCKER_TARGET_PLATFORM)..."
+	docker build --platform $(DOCKER_TARGET_PLATFORM) -t $(DOCKER_IMAGE_NAME):$(VERSION) -f ./Dockerfile.local .
+	docker tag $(DOCKER_IMAGE_NAME):$(VERSION) $(DOCKER_IMAGE_NAME):latest
+	@echo "✓ Built $(DOCKER_IMAGE_NAME):$(VERSION) and $(DOCKER_IMAGE_NAME):latest for $(DOCKER_TARGET_PLATFORM)"
+	@echo "Next: make tag-xlayer-docker VERSION=$(VERSION)"
+
+## tag-xlayer-docker:                  Tag xlayer-erigon image for Docker Hub
+tag-xlayer-docker: ## Tag xlayer-erigon image for Docker Hub
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make tag-xlayer-docker VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "Tagging for Docker Hub..."
+	docker tag $(DOCKER_IMAGE_NAME):$(VERSION) $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):$(VERSION)
+	docker tag $(DOCKER_IMAGE_NAME):latest $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):latest
+	@echo "✓ Tagged $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):$(VERSION)"
+	@echo "Next: make push-xlayer-docker VERSION=$(VERSION)"
+
+## push-xlayer-docker:                  Push xlayer-erigon image to Docker Hub
+push-xlayer-docker: ## Push xlayer-erigon image to Docker Hub
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make push-xlayer-docker VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "Pushing to Docker Hub..."
+	docker push $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):$(VERSION)
+	docker push $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):latest
+	@echo "✓ Pushed to Docker Hub"
+	@echo "View: https://hub.docker.com/r/$(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME)"
+
+## release-xlayer-docker-macos:          Build, tag and push macOS compatible image
+release-xlayer-docker-macos: ## Complete workflow for macOS compatible image
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make release-xlayer-docker-macos VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "🚀 macOS Release $(VERSION) workflow starting..."
+	make build-xlayer-docker-macos VERSION=$(VERSION)
+	make tag-xlayer-docker VERSION=$(VERSION)
+	make push-xlayer-docker VERSION=$(VERSION)
+	@echo "🎉 macOS Release $(VERSION) completed!"
+
+## release-xlayer-docker-linux:          Build, tag and push Linux server image
+release-xlayer-docker-linux: ## Complete workflow for Linux server image
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make release-xlayer-docker-linux VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "🚀 Linux Server Release $(VERSION) workflow starting..."
+	make build-xlayer-docker-linux VERSION=$(VERSION)
+	make tag-xlayer-docker VERSION=$(VERSION)
+	make push-xlayer-docker VERSION=$(VERSION)
+	@echo "🎉 Linux Server Release $(VERSION) completed!"
+
+## release-xlayer-docker-multi:           Build, tag and push both macOS and Linux images
+release-xlayer-docker-multi: ## Complete workflow for both platforms
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make release-xlayer-docker-multi VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "🚀 Both Platforms Release $(VERSION) workflow starting..."
+	@echo "This will create a multi-architecture image that automatically selects the right platform"
+	@echo ""
+	@echo "Creating multi-platform builder..."
+	docker buildx create --use --name multi-platform-builder || true
+	@echo ""
+	@echo "Building and pushing multi-architecture image..."
+	@echo "Platforms: linux/amd64 (Linux servers), linux/arm64 (macOS, ARM servers)"
+	@echo "Tags: $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):$(VERSION), $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):latest"
+	@echo ""
+	docker buildx build --platform linux/amd64,linux/arm64 \
+		-t $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):$(VERSION) \
+		-t $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):latest \
+		--push \
+		-f ./Dockerfile.local .
+	@echo ""
+	@echo "🎉 Multi-Platform Release $(VERSION) completed!"
+	@echo "Your multi-architecture image is now available on Docker Hub!"
+	@echo ""
+	@echo "Users can now run: docker pull $(DOCKER_HUB_USERNAME)/$(DOCKER_IMAGE_NAME):$(VERSION)"
+	@echo "Docker will automatically select the appropriate architecture for their platform:"
+	@echo "  - x86_64 servers → linux/amd64 image"
+	@echo "  - ARM servers/Apple Silicon → linux/arm64 image"
+
+## build-xlayer-docker-macos:           Build macOS compatible image (ARM64 for Apple Silicon, AMD64 for Intel)
+build-xlayer-docker-macos: ## Build macOS compatible image
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make build-xlayer-docker-macos VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "Building macOS compatible image for $(VERSION)..."
+	@if [ "$(shell uname -m)" = "arm64" ]; then \
+		echo "Detected Apple Silicon Mac - building ARM64 image"; \
+		make build-xlayer-docker VERSION=$(VERSION) DOCKER_TARGET_PLATFORM=linux/arm64; \
+	else \
+		echo "Detected Intel Mac - building AMD64 image"; \
+		make build-xlayer-docker VERSION=$(VERSION) DOCKER_TARGET_PLATFORM=linux/amd64; \
+	fi
+
+## build-xlayer-docker-linux:           Build Linux server image (AMD64 for cloud servers)
+build-xlayer-docker-linux: ## Build Linux server image for cloud deployment
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required. Usage: make build-xlayer-docker-linux VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	@echo "Target: linux/amd64 (compatible with most cloud servers)"
+	make build-xlayer-docker VERSION=$(VERSION) DOCKER_TARGET_PLATFORM=linux/amd64
