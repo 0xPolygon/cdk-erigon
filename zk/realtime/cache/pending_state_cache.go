@@ -70,7 +70,7 @@ func (cache *PendingStateCache) ApplyChangeset(changeset *realtimeTypes.Changese
 	for address, account := range addressChanges {
 		delete(cache.cache.accountCache, address)
 		cache.cache.accountCache[address] = account
-		log.Debug("[Realtime] ApplyChangeset: ", address)
+		log.Debug(fmt.Sprintf("[Realtime] ApplyChangeset: %s", address))
 	}
 
 	log.Debug(fmt.Sprintf("[Realtime] Apply changeset from tx with height: %d, txIndex: %d\n", blockNumber, txIndex))

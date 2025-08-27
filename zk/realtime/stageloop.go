@@ -19,7 +19,7 @@ import (
 
 var (
 	MaxKafkaChanSize        = 10_000
-	MaxKafkaCacheSize       = 1_000
+	MaxKafkaCacheSize       = 10_000
 	MinRealtimeLoopWaitTime = 10 * time.Millisecond
 
 	errorFlag  = atomic.Bool{}
@@ -188,7 +188,7 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 		}
 
 		// Check for corrupted cache
-		pendingHeight := realtimeCache.GetHighestPendingHeight()
+		pendingHeight := realtimeCache.GetCurrentPendingHeight()
 		lastExecutionHeight := realtimeCache.GetExecutionHeight()
 		if pendingHeight != 0 && pendingHeight < lastExecutionHeight {
 			// Execution is ahead of pending cache. This should not happen

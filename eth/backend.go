@@ -1236,7 +1236,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			// For X Layer, realtime
 			if cfg.Zk.XLayer.Realtime.Enable {
-				kafkaProducer, err := realtimeKafka.NewKafkaProducer(cfg.Zk.XLayer.Realtime.Kafka, backend.sentryCtx, backend.chainDB)
+				kafkaProducer, err := realtimeKafka.NewKafkaProducer(cfg.Zk.XLayer.Realtime.Kafka, backend.sentryCtx, backend.chainDB, nil)
 				if err != nil {
 					backend.kafkaEnabled = false
 					log.Warn("[Realtime] Failed to initialize kafka producer", "error", err)

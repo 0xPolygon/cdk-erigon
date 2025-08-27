@@ -17,10 +17,12 @@
 package state
 
 import (
+	"fmt"
+
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/log/v3"
 )
 
 // journalEntry is a modification entry in the state change journal that can be
@@ -207,7 +209,7 @@ func (ch createObjectChange) collectChangeset(cs *realtimeTypes.Changeset) {
 	cs.NonceChanges[*ch.account] = 0
 	cs.CodeHashChanges[*ch.account] = emptyCodeHashH
 	cs.StorageChanges[*ch.account] = make(map[libcommon.Hash]*uint256.Int)
-	log.Debugf("[Realtime] createObjectChange: %v", *ch.account)
+	log.Debug(fmt.Sprintf("[Realtime] createObjectChange: %v", *ch.account))
 }
 
 func (ch resetObjectChange) revert(s *IntraBlockState) {
@@ -247,7 +249,7 @@ func (ch selfdestructChange) collectChangeset(cs *realtimeTypes.Changeset) {
 	delete(cs.IncarnationChanges, *ch.account)
 	delete(cs.IncarnationMapChanges, *ch.account)
 	delete(cs.StorageChanges, *ch.account)
-	log.Debugf("[Realtime] selfdestructChange: %v", *ch.account)
+	log.Debug(fmt.Sprintf("[Realtime] selfdestructChange: %v", *ch.account))
 }
 
 var ripemd = libcommon.HexToAddress("0000000000000000000000000000000000000003")
@@ -271,7 +273,7 @@ func (ch balanceChange) dirtied() *libcommon.Address {
 
 func (ch balanceChange) collectChangeset(cs *realtimeTypes.Changeset) {
 	cs.BalanceChanges[*ch.account] = &ch.post
-	log.Debugf("[Realtime] balanceChange: %v -> %v", ch.account, *cs.BalanceChanges[*ch.account])
+	log.Debug(fmt.Sprintf("[Realtime] balanceChange: %v -> %v", ch.account, *cs.BalanceChanges[*ch.account]))
 }
 
 func (ch balanceIncrease) revert(s *IntraBlockState) {
@@ -304,7 +306,7 @@ func (ch balanceIncreaseTransfer) collectChangeset(cs *realtimeTypes.Changeset) 
 	}
 	cs.BalanceChanges[*ch.account] = uint256.NewInt(0)
 	cs.BalanceChanges[*ch.account].Add(&ch.prev, &ch.bi.increase)
-	log.Debugf("[Realtime] balanceIncreaseTransfer: %v + %v -> %v", ch.account, ch.bi.increase, *cs.BalanceChanges[*ch.account])
+	log.Debug(fmt.Sprintf("[Realtime] balanceIncreaseTransfer: %v + %v -> %v", ch.account, ch.bi.increase, *cs.BalanceChanges[*ch.account]))
 }
 
 func (ch nonceChange) revert(s *IntraBlockState) {
@@ -317,7 +319,7 @@ func (ch nonceChange) dirtied() *libcommon.Address {
 
 func (ch nonceChange) collectChangeset(cs *realtimeTypes.Changeset) {
 	cs.NonceChanges[*ch.account] = ch.post
-	log.Debugf("[Realtime] nonceChange: %v -> %v", ch.account, ch.post)
+	log.Debug(fmt.Sprintf("[Realtime] nonceChange: %v -> %v", ch.account, ch.post))
 }
 
 func (ch codeChange) revert(s *IntraBlockState) {
@@ -333,7 +335,7 @@ func (ch codeChange) collectChangeset(cs *realtimeTypes.Changeset) {
 	if ch.posthash != emptyCodeHashH {
 		cs.CodeChanges[ch.posthash] = ch.postcode
 	}
-	log.Debugf("[Realtime] codeChange: %v -> %v", ch.account, ch.posthash)
+	log.Debug(fmt.Sprintf("[Realtime] codeChange: %v -> %v", ch.account, ch.posthash))
 }
 
 func (ch storageChange) revert(s *IntraBlockState) {
@@ -349,7 +351,7 @@ func (ch storageChange) collectChangeset(cs *realtimeTypes.Changeset) {
 		cs.StorageChanges[*ch.account] = make(map[libcommon.Hash]*uint256.Int)
 	}
 	cs.StorageChanges[*ch.account][ch.key] = &ch.postvalue
-	log.Debugf("[Realtime] storageChange: %v -> %v -> %v", ch.account, ch.key, *cs.StorageChanges[*ch.account][ch.key])
+	log.Debug(fmt.Sprintf("[Realtime] storageChange: %v -> %v -> %v", ch.account, ch.key, *cs.StorageChanges[*ch.account][ch.key]))
 }
 
 func (ch fakeStorageChange) revert(s *IntraBlockState) {

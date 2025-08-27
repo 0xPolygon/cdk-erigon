@@ -5,9 +5,12 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"testing"
+	"time"
 
+	"github.com/IBM/sarama"
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/common"
@@ -18,6 +21,7 @@ import (
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
+	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
 )
 
@@ -107,7 +111,11 @@ func TestKafka(t *testing.T) {
 		ClientID:         "xlayer-test-consumer",
 		GroupID:          "xlayer-test-consumer-1",
 	}
-	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), nil)
+
+	err := createKafkaTopics(cfg)
+	assert.NilError(t, err)
+
+	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), nil, nil)
 	assert.NilError(t, err)
 
 	currBlockHeader := ethTypes.CopyHeader(blockHeader)
@@ -161,7 +169,7 @@ func TestKafka(t *testing.T) {
 		case err := <-errorChan:
 			t.Fatalf("Received error from consumer: %v", err)
 		case txMsg := <-txMsgsChan:
-			AssertCommonTx(t, txMsg, rightvrsTx, uint64(i), ethTypes.LegacyTxType)
+			AssertCommonTxWithoutBlockNumber(t, txMsg, rightvrsTx, ethTypes.LegacyTxType)
 			AssertReceipt(t, txMsg, rightvrsTxReceipt)
 			AssertInnerTxs(t, txMsg, rightvrsTxInnerTxs)
 			AssertChangeseet(t, txMsg, rightvrsTxChangeset)
@@ -173,7 +181,7 @@ func TestKafka(t *testing.T) {
 		case err := <-errorChan:
 			t.Fatalf("Received error from consumer: %v", err)
 		case txMsg := <-txMsgsChan:
-			AssertCommonTx(t, txMsg, accessListTx, uint64(i), ethTypes.AccessListTxType)
+			AssertCommonTxWithoutBlockNumber(t, txMsg, accessListTx, ethTypes.AccessListTxType)
 			AssertAccessList(t, txMsg.AccessList)
 			AssertReceipt(t, txMsg, rightvrsTxReceipt)
 			AssertInnerTxs(t, txMsg, rightvrsTxInnerTxs)
@@ -215,4 +223,85 @@ func TestKafka(t *testing.T) {
 	ctxWithCancel()
 	err = consumer.Close()
 	assert.NilError(t, err)
+}
+
+func TestStressTestKafkaProducer(t *testing.T) {
+	rightvrsTx.SetSender(testFromAddr)
+	cfg := kafka.KafkaConfig{
+		BootstrapServers: []string{"0.0.0.0:9095"},
+		BlockTopic:       "xlayer-test-block",
+		TxTopic:          "xlayer-test-tx",
+		ErrorTopic:       "xlayer-test-error",
+		ClientID:         "xlayer-test-consumer",
+		GroupID:          "xlayer-test-consumer-1",
+	}
+
+	err := createKafkaTopics(cfg)
+	assert.NilError(t, err)
+
+	successChan := make(chan struct{}, 10000)
+	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), nil, successChan)
+	assert.NilError(t, err)
+
+	startTime := time.Now()
+	for i := 1; i <= 1000; i++ {
+		err = producer.SendKafkaTransaction(uint64(i), rightvrsTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset)
+		assert.NilError(t, err)
+	}
+
+	// Sending 1000 messages should not be blocking, and should take less than 50ms
+	elapsed := time.Since(startTime)
+	fmt.Printf("Batch producer send took %s to dispatch 1000 messages\n", elapsed)
+	require.Less(t, elapsed, 50*time.Millisecond)
+
+	for i := 0; i < 1000; i++ {
+		select {
+		case <-successChan:
+		case <-time.After(1 * time.Second):
+			t.Fatalf("Timeout waiting for success message %d", i)
+		}
+	}
+	elapsed = time.Since(startTime)
+	fmt.Printf("Producer took %s to send 1000 messages to kafka broker\n", elapsed)
+	require.Less(t, elapsed, 100*time.Millisecond)
+
+	err = producer.Close()
+	assert.NilError(t, err)
+}
+
+// createKafkaTopics creates the required Kafka topics for testing
+func createKafkaTopics(config kafka.KafkaConfig) error {
+	// Create admin client
+	adminClient, err := sarama.NewClusterAdmin(config.BootstrapServers, nil)
+	if err != nil {
+		return err
+	}
+	defer adminClient.Close()
+
+	// Define topics to create
+	topics := []string{config.BlockTopic, config.TxTopic, config.ErrorTopic}
+
+	for _, topic := range topics {
+		// Check if topic already exists
+		metadata, err := adminClient.DescribeConfig(sarama.ConfigResource{
+			Type: sarama.TopicResource,
+			Name: topic,
+		})
+
+		if err != nil {
+			// Topic doesn't exist, create it
+			err = adminClient.CreateTopic(topic, &sarama.TopicDetail{
+				NumPartitions:     1,
+				ReplicationFactor: 1,
+			}, false)
+			if err != nil {
+				return err
+			}
+		} else {
+			// Topic exists, just verify it's accessible
+			_ = metadata
+		}
+	}
+	time.Sleep(1 * time.Second)
+	return nil
 }

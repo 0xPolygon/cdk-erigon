@@ -17,7 +17,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
-	"github.com/ledgerwatch/log/v3"
 )
 
 var (
@@ -311,7 +310,6 @@ func (cache *GlobalStateCache) DebugCompare(reader state.StateReader) []string {
 
 	mismatches := []string{}
 	for addr, accCache := range cache.cache.accountCache {
-		log.Info(fmt.Sprintf("[Realtime] Comparing account address: %s", addr.String()))
 		accDb, err := reader.ReadAccountData(addr)
 		if err != nil {
 			mismatch := fmt.Sprintf("chain-state db reader error, failed to read account. address: %s, error: %v", addr.String(), err)
