@@ -88,7 +88,7 @@ func (api *RealtimeAPIImpl) getBlockNumber(blockNr rpc.BlockNumber) (uint64, boo
 }
 
 func (api *RealtimeAPIImpl) getPendingHeightFromCache() (uint64, error) {
-	pendingHeight := api.cacheDB.GetCurrentPendingHeight()
+	pendingHeight := api.cacheDB.GetPendingHeight()
 	if pendingHeight == 0 {
 		return 0, fmt.Errorf("no pending block number found in realtime cache")
 	}
@@ -123,11 +123,12 @@ func (api *RealtimeAPIImpl) createStateReader(blockNrOrHash *rpc.BlockNumberOrHa
 		pendingReader := api.cacheDB.GetPendingStateCache(pendingHeight)
 		if pendingReader != nil {
 			reader = pendingReader
+			blockNumber = pendingHeight
 		} else {
-			// Pending block was closed, we use the latest confirmed global state
+			// Next pending block not open yet, we use the latest confirmed global state
 			reader = api.cacheDB.State
+			blockNumber = confirmHeight
 		}
-		blockNumber = pendingHeight
 	} else if *blockNrOrHash.BlockNumber == rpc.LatestBlockNumber || *blockNrOrHash.BlockNumber == rpc.BlockNumber(confirmHeight) {
 		reader = api.cacheDB.State
 		blockNumber = confirmHeight

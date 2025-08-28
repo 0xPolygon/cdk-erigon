@@ -134,7 +134,7 @@ func (cache *RealtimeCache) UpdateExecution(finishEntry realtimeTypes.FinishedEn
 	}
 }
 
-func (cache *RealtimeCache) GetCurrentPendingHeight() uint64 {
+func (cache *RealtimeCache) GetPendingHeight() uint64 {
 	if cache.GetHighestPendingHeight() == 0 {
 		return 0
 	}
@@ -174,38 +174,38 @@ func (cache *RealtimeCache) TryInitStateCache(executionHeight uint64) error {
 	return nil
 }
 
-func (cache *RealtimeCache) TryApplyBlockMsg(blockNum uint64, blockMsg *kafkaTypes.BlockMessage) error {
+func (cache *RealtimeCache) TryApplyNewBlockMsg(blockNum uint64, blockMsg *realtimeTypes.BlockInfo) error {
+	cache.Stateless.PutNewHeader(blockNum, blockMsg)
 	if err := cache.tryCreateNewPendingBlockContext(blockNum); err != nil {
 		return err
 	}
-
-	cache.Stateless.PutHeader(blockNum, blockMsg.Header, blockMsg.PrevBlockInfo)
 	return nil
 }
 
-func (cache *RealtimeCache) TryCloseBlockFromBlockMsg(prevblockNum uint64, blockMsg *kafkaTypes.BlockMessage) error {
-	if prevblockNum == 0 {
-		// Cache init
-		return nil
-	}
-
-	var prevContext *PendingBlockContext
+func (cache *RealtimeCache) TryCloseBlockFromConfirmedBlockMsg(blockNum uint64, blockMsg *realtimeTypes.BlockInfo) (bool, error) {
+	var pendingContext *PendingBlockContext
 	for _, context := range cache.pendingBlocks.Items() {
-		if context.blockNum == prevblockNum {
-			prevContext = context
+		if context.blockNum == blockNum {
+			pendingContext = context
 			break
 		}
-		if context.blockNum > prevblockNum {
+		if context.blockNum > blockNum {
 			// Next block header must be received first before previous block can be closed
-			return fmt.Errorf("prev block %d is not in pending blocks", prevblockNum)
+			return false, fmt.Errorf("prev block %d is not in pending blocks", blockNum)
 		}
 	}
-	prevContext.txCount = blockMsg.PrevBlockInfo.TxCount
+	if pendingContext == nil {
+		return false, nil
+	}
 
-	// Try close pending block
-	cache.tryCloseBlock(prevContext)
+	// Update stateless cache
+	cache.Stateless.PutConfirmedHeader(blockNum, blockMsg)
 
-	return nil
+	// Update pending block context
+	pendingContext.txCount = blockMsg.TxCount
+	cache.tryCloseBlock(pendingContext)
+
+	return true, nil
 }
 
 func (cache *RealtimeCache) HandlePendingBlocks(kafkaCache *KafkaCache) error {
@@ -308,6 +308,10 @@ func (cache *RealtimeCache) tryCreateNewPendingBlockContext(blockNum uint64) err
 }
 
 func (cache *RealtimeCache) tryCloseBlock(pendingBlockContext *PendingBlockContext) {
+	if pendingBlockContext == nil {
+		return
+	}
+
 	if pendingBlockContext.txCount < 0 {
 		// Header not received yet. Skip close
 		return

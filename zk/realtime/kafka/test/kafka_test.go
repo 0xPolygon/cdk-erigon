@@ -115,29 +115,18 @@ func TestKafka(t *testing.T) {
 	err := createKafkaTopics(cfg)
 	assert.NilError(t, err)
 
-	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), nil, nil)
+	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), nil)
 	assert.NilError(t, err)
 
-	currBlockHeader := ethTypes.CopyHeader(blockHeader)
 	for i := 1; i <= 10; i++ {
 		err = producer.SendKafkaTransaction(uint64(i), rightvrsTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset)
 		assert.NilError(t, err)
 
-		var prevBlockHeader *ethTypes.Header
-		if i != 1 {
-			prevBlockHeader = ethTypes.CopyHeader(currBlockHeader)
-		}
-		currBlockHeader.Number = big.NewInt(int64(i))
-		blockMsg := kafkaTypes.BlockMessage{
-			Header: currBlockHeader,
-			PrevBlockInfo: &realtimeTypes.BlockInfo{
-				Header:  prevBlockHeader,
-				TxCount: int64(i),
-				Hash:    testHash,
-			},
-		}
-		assert.NilError(t, err)
-		err = producer.SendKafkaBlockMessage(blockMsg)
+		err = producer.SendKafkaBlockMessage(&realtimeTypes.BlockInfo{
+			Header:  blockHeader,
+			TxCount: int64(i),
+			Hash:    testHash,
+		})
 		assert.NilError(t, err)
 
 		err = producer.SendKafkaErrorTrigger(uint64(i))
@@ -157,7 +146,7 @@ func TestKafka(t *testing.T) {
 	consumer, err := kafka.NewKafkaConsumer(cfg, false)
 	assert.NilError(t, err)
 	ctx, ctxWithCancel := context.WithCancel(context.Background())
-	headersChan := make(chan kafkaTypes.BlockMessage, 20)
+	headersChan := make(chan realtimeTypes.BlockInfo, 20)
 	txMsgsChan := make(chan kafkaTypes.TransactionMessage, 20)
 	errorMsgsChan := make(chan kafkaTypes.ErrorTriggerMessage, 20)
 	errorChan := make(chan error, 10)
@@ -190,23 +179,14 @@ func TestKafka(t *testing.T) {
 	}
 
 	// Verify header messages
-	currBlockHeader = ethTypes.CopyHeader(blockHeader)
 	for i := 1; i <= 10; i++ {
 		select {
 		case err := <-errorChan:
 			t.Fatalf("Received error from consumer: %v", err)
 		case rcvHeader := <-headersChan:
-			var prevBlockHeader *ethTypes.Header
-			if i != 1 {
-				prevBlockHeader = ethTypes.CopyHeader(currBlockHeader)
-			}
-			currBlockHeader.Number = big.NewInt(int64(i))
-			header, prevBlockInfo, err := rcvHeader.GetBlockInfo()
-			assert.NilError(t, err)
-			AssertHeader(t, currBlockHeader, header)
-			AssertHeader(t, prevBlockHeader, prevBlockInfo.Header)
-			assert.Equal(t, prevBlockInfo.TxCount, int64(i))
-			assert.Equal(t, prevBlockInfo.Hash, testHash)
+			AssertHeader(t, blockHeader, rcvHeader.Header)
+			assert.Equal(t, rcvHeader.TxCount, int64(i))
+			assert.Equal(t, rcvHeader.Hash, testHash)
 		}
 	}
 
@@ -240,7 +220,7 @@ func TestStressTestKafkaProducer(t *testing.T) {
 	assert.NilError(t, err)
 
 	successChan := make(chan struct{}, 10000)
-	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), nil, successChan)
+	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), successChan)
 	assert.NilError(t, err)
 
 	startTime := time.Now()

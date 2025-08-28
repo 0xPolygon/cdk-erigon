@@ -30,7 +30,8 @@ var (
 func ListenKafkaProducer(
 	ctx context.Context,
 	kafkaProducer *kafka.KafkaProducer,
-	blockInfoChan chan *types.Header,
+	newBlockInfoChan chan *types.Header,
+	confirmedBlockInfoChan chan *types.Block,
 	txInfoChan chan state.TxInfo) {
 	if !sequencer.IsSequencer() {
 		log.Info("[Realtime] KafkaProducer is disabled on non-sequencer, skipping")
@@ -43,17 +44,29 @@ func ListenKafkaProducer(
 		select {
 		case <-ctx.Done():
 			return
-		case header := <-blockInfoChan:
+		case header := <-newBlockInfoChan:
 			currHeight = header.Number.Uint64()
-			err := kafkaProducer.SendKafkaBlockInfo(header)
+			err := kafkaProducer.SendKafkaNewBlockInfo(header)
 			if err != nil {
-				log.Error(fmt.Sprintf("[Realtime] Failed to send kafka block info message. error: %v, currHeight: %d", err, currHeight))
+				log.Error(fmt.Sprintf("[Realtime] Failed to send kafka new block info message. error: %v, currHeight: %d", err, currHeight))
 				err = kafkaProducer.SendKafkaErrorTrigger(currHeight)
 				if err != nil {
 					log.Error(fmt.Sprintf("[Realtime] Failed to send error trigger message. error: %v, currHeight: %d", err, currHeight))
 				}
 			} else {
-				log.Debug(fmt.Sprintf("[Realtime] Sent kafka block info message for block number %d", header.Number))
+				log.Debug(fmt.Sprintf("[Realtime] Sent kafka new block info message for block number %d", currHeight))
+			}
+		case block := <-confirmedBlockInfoChan:
+			currHeight = block.NumberU64()
+			err := kafkaProducer.SendKafkaConfirmedBlockInfo(block)
+			if err != nil {
+				log.Error(fmt.Sprintf("[Realtime] Failed to send kafka confirmed block info message. error: %v, currHeight: %d", err, currHeight))
+				err = kafkaProducer.SendKafkaErrorTrigger(currHeight)
+				if err != nil {
+					log.Error(fmt.Sprintf("[Realtime] Failed to send error trigger message. error: %v, currHeight: %d", err, currHeight))
+				}
+			} else {
+				log.Debug(fmt.Sprintf("[Realtime] Sent kafka confirmed block info message for block number %d", currHeight))
 			}
 		case txInfo := <-txInfoChan:
 			currHeight = txInfo.BlockNumber
@@ -92,7 +105,7 @@ func ListenKafkaConsumer(
 	}
 
 	errorFlag.Store(false)
-	blockMsgsChan := make(chan kafkaTypes.BlockMessage, MaxKafkaChanSize)
+	blockMsgsChan := make(chan realtimeTypes.BlockInfo, MaxKafkaChanSize)
 	txMsgsChan := make(chan kafkaTypes.TransactionMessage, MaxKafkaChanSize)
 	errorMsgsChan := make(chan kafkaTypes.ErrorTriggerMessage, MaxKafkaChanSize)
 	errorChan := make(chan error, 1)
@@ -120,12 +133,19 @@ func ListenKafkaConsumer(
 				log.Error(fmt.Sprintf("[Realtime] Failed to consume block message from kafka. error: %v", err))
 				continue
 			}
-			kafkaCache.BlockMsgCache.Add(&blockMsg)
-			if subService != nil {
-				// Publish block to subscriptions
-				subService.BroadcastNewMsg(&blockMsg, nil)
+			if blockMsg.IsConfirmedBlock() {
+				// Confirmed block msg
+				kafkaCache.ConfirmedBlockMsgCache.Add(&blockMsg)
+				if subService != nil {
+					// Publish block to subscriptions
+					subService.BroadcastNewMsg(&blockMsg, nil)
+				}
+				log.Debug(fmt.Sprintf("[Realtime] Received confirmed block message. blockNum: %d", blockMsg.Header.Number))
+			} else {
+				// New pending block msg
+				kafkaCache.NewBlockMsgCache.Add(&blockMsg)
+				log.Debug(fmt.Sprintf("[Realtime] Received new block message. blockNum: %d", blockMsg.Header.Number))
 			}
-			log.Debug(fmt.Sprintf("[Realtime] Received block message. blockNum: %d", blockMsg.Header.Number))
 		case txMsg := <-txMsgsChan:
 			if err := txMsg.Validate(); err != nil {
 				log.Error(fmt.Sprintf("[Realtime] Failed to consume transaction message from kafka. error: %v", err))
@@ -141,7 +161,7 @@ func ListenKafkaConsumer(
 				// Publish tx to subscriptions
 				subService.BroadcastNewMsg(nil, &txMsg)
 			}
-			log.Debug(fmt.Sprintf("[Realtime] Received transaction message. blockNum: %d", txMsg.BlockNumber))
+			log.Debug(fmt.Sprintf("[Realtime] Received transaction message. blockNum: %d, txHash: %x", txMsg.BlockNumber, txMsg.Hash))
 		case errorTriggerMsg := <-errorMsgsChan:
 			resetFlag.Store(true)
 			triggerHeight := errorTriggerMsg.BlockNumber
@@ -188,7 +208,7 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 		}
 
 		// Check for corrupted cache
-		pendingHeight := realtimeCache.GetCurrentPendingHeight()
+		pendingHeight := realtimeCache.GetPendingHeight()
 		lastExecutionHeight := realtimeCache.GetExecutionHeight()
 		if pendingHeight != 0 && pendingHeight < lastExecutionHeight {
 			// Execution is ahead of pending cache. This should not happen
@@ -197,32 +217,32 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 			continue
 		}
 
-		// Sync state cache with kafka data
-		lowestKafkaHeight := kafkaCache.GetLowestBlockHeight()
-		if lowestKafkaHeight != 0 {
-			// New block msg to process. Enforce that header msgs are processed in order
-			nextHeight := pendingHeight + 1
-			if pendingHeight == 0 {
-				// First block msg after cache init
-				nextHeight = realtimeCache.State.GetInitHeight() + 1
-			}
-
-			// Get next block msg and tx msgs
-			blockMsg, ok := kafkaCache.BlockMsgCache.Pop(nextHeight)
+		// Handle confirmed block msgs
+		if pendingHeight != 0 {
+			confirmBlockMsg, ok := kafkaCache.ConfirmedBlockMsgCache.Get(pendingHeight)
 			if ok {
-				// Try close the previous block
-				realtimeCache.TryCloseBlockFromBlockMsg(pendingHeight, blockMsg)
-
-				// Process block msg
-				err := realtimeCache.TryApplyBlockMsg(nextHeight, blockMsg)
+				applied, err := realtimeCache.TryCloseBlockFromConfirmedBlockMsg(pendingHeight, confirmBlockMsg)
 				if err != nil {
 					// Apply state error. Reset cache
 					resetFlag.Store(true)
-					log.Error(fmt.Sprintf("[Realtime] Failed to apply block msg and tx msgs. error: %v, nextHeight: %d", err, nextHeight))
+					log.Error(fmt.Sprintf("[Realtime] Failed to apply block msg and tx msgs. error: %v, pendingHeight: %d", err, pendingHeight))
 				}
+				if applied {
+					kafkaCache.ConfirmedBlockMsgCache.Flush(pendingHeight)
+				}
+			}
+		}
 
-				// Flush block msg cache
-				kafkaCache.BlockMsgCache.Flush(nextHeight)
+		// Handle new block msgs
+		confirmHeight := realtimeCache.GetHighestConfirmHeight()
+		nextHeight := confirmHeight + 1
+		newBlockMsgs := kafkaCache.NewBlockMsgCache.GetBlockMsgsFromHeight(nextHeight)
+		for _, newBlockMsg := range newBlockMsgs {
+			err := realtimeCache.TryApplyNewBlockMsg(newBlockMsg.Header.Number.Uint64(), newBlockMsg)
+			if err != nil {
+				// Apply state error. Reset cache
+				resetFlag.Store(true)
+				log.Error(fmt.Sprintf("[Realtime] Failed to apply block msg and tx msgs. error: %v, nextHeight: %d", err, newBlockMsg.Header.Number.Uint64()))
 			}
 		}
 
@@ -246,7 +266,7 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 func tryInitRealtimeCache(realtimeCache *cache.RealtimeCache) bool {
 	log.Debug("[Realtime] Trying to initialize realtime cache")
 	executionHeight := realtimeCache.GetExecutionHeight()
-	lowestKafkaHeight := kafkaCache.GetLowestBlockHeight()
+	lowestKafkaHeight := kafkaCache.GetLowestNewBlockHeight()
 	if executionHeight == 0 || lowestKafkaHeight == 0 {
 		// No kafka message or rpc execution. Skip init
 		log.Debug(fmt.Sprintf("[Realtime] Init realtime cache failed, no kafka message or rpc execution. lowestKafkaHeight: %d, executionHeight: %d", lowestKafkaHeight, executionHeight))

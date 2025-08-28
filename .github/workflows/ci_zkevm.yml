@@ -267,6 +267,30 @@ jobs:
         run: sudo -E make data-loss-${{ matrix.case }}
         working-directory: test
 
+  test-realtime-e2e:
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Make Foundry available to sudo
+        run: |
+          FOUNDRY_DIR=$(dirname $(which cast))
+          sudo ln -sf "$FOUNDRY_DIR/cast" /usr/local/bin/cast
+          sudo ln -sf "$FOUNDRY_DIR/forge" /usr/local/bin/forge
+          sudo ln -sf "$FOUNDRY_DIR/anvil" /usr/local/bin/anvil
+          sudo cast --version
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build Docker
+        run: make build-docker
+
+      - name: Test
+        run: sudo -E make test-realtime-e2e
+        working-directory: test
+
   # For X Layer
   check-chinese-chars:
     name: Check Chinese Characters

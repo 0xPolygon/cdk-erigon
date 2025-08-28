@@ -96,8 +96,9 @@ type SequenceBlockCfg struct {
 	doneHook       DoneHook
 
 	// For X Layer, realtime
-	kafkaBlockInfoChan chan *types.Header
-	kafkaTxInfoChan    chan state.TxInfo
+	kafkaNewBlockInfoChan       chan *types.Header
+	kafkaConfirmedBlockInfoChan chan *types.Block
+	kafkaTxInfoChan             chan state.TxInfo
 }
 
 func StageSequenceBlocksCfg(
@@ -130,7 +131,8 @@ func StageSequenceBlocksCfg(
 	doneHook DoneHook,
 
 	// For X Layer, realtime
-	kafkaBlockInfoChan chan *types.Header,
+	kafkaNewBlockInfoChan chan *types.Header,
+	kafkaConfirmedBlockInfoChan chan *types.Block,
 	kafkaTxInfoChan chan state.TxInfo,
 ) SequenceBlockCfg {
 
@@ -164,8 +166,9 @@ func StageSequenceBlocksCfg(
 		dbsmt: dbsmt,
 
 		// For X Layer, realtime
-		kafkaBlockInfoChan: kafkaBlockInfoChan,
-		kafkaTxInfoChan:    kafkaTxInfoChan,
+		kafkaNewBlockInfoChan:       kafkaNewBlockInfoChan,
+		kafkaConfirmedBlockInfoChan: kafkaConfirmedBlockInfoChan,
+		kafkaTxInfoChan:             kafkaTxInfoChan,
 	}
 }
 

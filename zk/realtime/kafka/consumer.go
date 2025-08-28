@@ -7,6 +7,7 @@ import (
 
 	"github.com/IBM/sarama"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
+	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -40,7 +41,7 @@ func NewKafkaConsumer(config KafkaConfig, latestFlag bool) (*KafkaConsumer, erro
 
 type consumerGroupHandler struct {
 	ctx           context.Context
-	blockMsgsChan chan kafkaTypes.BlockMessage
+	blockMsgsChan chan realtimeTypes.BlockInfo
 	txMsgsChan    chan kafkaTypes.TransactionMessage
 	errorMsgsChan chan kafkaTypes.ErrorTriggerMessage
 	errorChan     chan error
@@ -72,7 +73,7 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 			}
 			switch msg.Topic {
 			case h.blockTopic:
-				var blockMsg kafkaTypes.BlockMessage
+				var blockMsg realtimeTypes.BlockInfo
 				if err := json.Unmarshal(msg.Value, &blockMsg); err != nil {
 					log.Warn(fmt.Sprintf("[Realtime] consume claim error, unmarshaling block message. error: %v", err))
 					continue
@@ -128,7 +129,7 @@ func (h *consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 }
 
 // ConsumeKafka starts consuming kafka messages from the specified topics
-func (client *KafkaConsumer) ConsumeKafka(ctx context.Context, blockMsgsChan chan kafkaTypes.BlockMessage, txMsgsChan chan kafkaTypes.TransactionMessage, errorMsgsChan chan kafkaTypes.ErrorTriggerMessage, errorChan chan error) {
+func (client *KafkaConsumer) ConsumeKafka(ctx context.Context, blockMsgsChan chan realtimeTypes.BlockInfo, txMsgsChan chan kafkaTypes.TransactionMessage, errorMsgsChan chan kafkaTypes.ErrorTriggerMessage, errorChan chan error) {
 	handler := &consumerGroupHandler{
 		ctx:           ctx,
 		blockMsgsChan: blockMsgsChan,

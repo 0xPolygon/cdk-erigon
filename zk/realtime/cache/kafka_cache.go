@@ -1,23 +1,26 @@
 package cache
 
 import (
-	"fmt"
 	"sync"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
-	"github.com/ledgerwatch/log/v3"
 )
 
 // -------------- Kafka Cache --------------
 type KafkaCache struct {
-	BlockMsgCache *BlockMessageCache
-	TxMsgCache    *TransactionMessageCache
+	NewBlockMsgCache       *BlockMessageCache
+	ConfirmedBlockMsgCache *BlockMessageCache
+	TxMsgCache             *TransactionMessageCache
 }
 
 func NewKafkaCache(maxCacheSize int) (*KafkaCache, error) {
-	blockCache, err := NewBlockMessageCache(maxCacheSize)
+	newBlockCache, err := NewBlockMessageCache(maxCacheSize)
+	if err != nil {
+		return nil, err
+	}
+	confirmedBlockCache, err := NewBlockMessageCache(maxCacheSize)
 	if err != nil {
 		return nil, err
 	}
@@ -26,37 +29,40 @@ func NewKafkaCache(maxCacheSize int) (*KafkaCache, error) {
 		return nil, err
 	}
 	return &KafkaCache{
-		BlockMsgCache: blockCache,
-		TxMsgCache:    txCache,
+		NewBlockMsgCache:       newBlockCache,
+		ConfirmedBlockMsgCache: confirmedBlockCache,
+		TxMsgCache:             txCache,
 	}, nil
 }
 
 func (cache *KafkaCache) Clear() {
-	cache.BlockMsgCache.Clear()
+	cache.NewBlockMsgCache.Clear()
+	cache.ConfirmedBlockMsgCache.Clear()
 	cache.TxMsgCache.Clear()
 }
 
-func (cache *KafkaCache) Flush(blockNumber uint64) {
-	if blockNumber == 0 {
+func (cache *KafkaCache) Flush(executionHeight uint64) {
+	if executionHeight == 0 {
 		return
 	}
 
-	cache.BlockMsgCache.Flush(blockNumber)
-	cache.TxMsgCache.Flush(blockNumber)
+	cache.NewBlockMsgCache.Flush(executionHeight)
+	cache.ConfirmedBlockMsgCache.Flush(executionHeight - 1)
+	cache.TxMsgCache.Flush(executionHeight)
 }
 
-func (cache *KafkaCache) GetLowestBlockHeight() uint64 {
-	return cache.BlockMsgCache.GetLowestBlockHeight()
+func (cache *KafkaCache) GetLowestNewBlockHeight() uint64 {
+	return cache.NewBlockMsgCache.GetLowestBlockHeight()
 }
 
 // -------------- Block Message Cache --------------
 type BlockMessageCache struct {
 	mu    sync.RWMutex
-	cache *lru.Cache[uint64, *kafkaTypes.BlockMessage]
+	cache *lru.Cache[uint64, *realtimeTypes.BlockInfo]
 }
 
 func NewBlockMessageCache(maxCacheSize int) (*BlockMessageCache, error) {
-	cache, err := lru.New[uint64, *kafkaTypes.BlockMessage](maxCacheSize)
+	cache, err := lru.New[uint64, *realtimeTypes.BlockInfo](maxCacheSize)
 	if err != nil {
 		return nil, err
 	}
@@ -66,12 +72,11 @@ func NewBlockMessageCache(maxCacheSize int) (*BlockMessageCache, error) {
 	}, nil
 }
 
-func (cache *BlockMessageCache) Add(blockMsg *kafkaTypes.BlockMessage) {
+func (cache *BlockMessageCache) Add(blockMsg *realtimeTypes.BlockInfo) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
 	cache.cache.Add(blockMsg.Header.Number.Uint64(), blockMsg)
-	log.Debug(fmt.Sprintf("[Realtime] Added block message to kafka cache for block number %d", blockMsg.Header.Number.Uint64()))
 }
 
 func (cache *BlockMessageCache) Clear() {
@@ -88,16 +93,11 @@ func (cache *BlockMessageCache) Size() int {
 	return cache.cache.Len()
 }
 
-// GetAndFlush pops the block message for the given block number
-func (cache *BlockMessageCache) Pop(blockNumber uint64) (*kafkaTypes.BlockMessage, bool) {
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
+func (cache *BlockMessageCache) Get(blockNumber uint64) (*realtimeTypes.BlockInfo, bool) {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
 
-	blockMsg, ok := cache.cache.Get(blockNumber)
-	if ok {
-		cache.cache.Remove(blockNumber)
-	}
-	return blockMsg, ok
+	return cache.cache.Get(blockNumber)
 }
 
 func (cache *BlockMessageCache) Flush(blockNumber uint64) {
@@ -123,6 +123,23 @@ func (cache *BlockMessageCache) GetLowestBlockHeight() uint64 {
 		}
 	}
 	return lowestBlockHeight
+}
+
+func (cache *BlockMessageCache) GetBlockMsgsFromHeight(height uint64) []*realtimeTypes.BlockInfo {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+
+	blockMsgs := make([]*realtimeTypes.BlockInfo, 0)
+	for _, k := range cache.cache.Keys() {
+		if k >= height {
+			blockMsg, ok := cache.cache.Get(k)
+			if ok {
+				cache.cache.Remove(k)
+				blockMsgs = append(blockMsgs, blockMsg)
+			}
+		}
+	}
+	return blockMsgs
 }
 
 // -------------- Tx Message Cache --------------
@@ -152,7 +169,6 @@ func (cache *TransactionMessageCache) Add(txMsg *kafkaTypes.TransactionMessage) 
 	}
 	txMsgsList.Add(txMsg)
 	txMsgsList.Sort()
-	log.Debug(fmt.Sprintf("[Realtime] Added tx message to kafka cache for block number %d with txhash: %x", txMsg.BlockNumber, txMsg.Hash))
 }
 
 func (cache *TransactionMessageCache) Clear() {

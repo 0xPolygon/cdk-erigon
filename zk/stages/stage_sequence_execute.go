@@ -459,8 +459,8 @@ BatchLoop:
 		processingTxTime := time.Now()
 
 		// For X Layer, realtime. Send kafka block header
-		if cfg.zk.XLayer.Realtime.Enable && cfg.kafkaBlockInfoChan != nil {
-			cfg.kafkaBlockInfoChan <- header
+		if cfg.zk.XLayer.Realtime.Enable && cfg.kafkaNewBlockInfoChan != nil {
+			cfg.kafkaNewBlockInfoChan <- header
 		}
 
 	OuterLoopTransactions:
@@ -880,6 +880,10 @@ BatchLoop:
 
 		if err := streamWriter.WriteBlockDetailsToDatastream(batchState.forkId, batchState.batchNumber, batchState.builtBlocks); err != nil {
 			return err
+		}
+		// For X Layer, realtime
+		if cfg.zk.XLayer.Realtime.Enable && cfg.kafkaConfirmedBlockInfoChan != nil {
+			cfg.kafkaConfirmedBlockInfoChan <- block
 		}
 
 		// lets commit everything after updateStreamAndCheckRollback no matter of its result unless

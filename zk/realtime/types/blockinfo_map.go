@@ -8,12 +8,6 @@ import (
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
 )
 
-type BlockInfo struct {
-	Header  *ethTypes.Header `json:"header"`
-	TxCount int64            `json:"txCount"`
-	Hash    libcommon.Hash   `json:"hash"`
-}
-
 type BlockInfoMap struct {
 	blockInfos        map[uint64]*BlockInfo
 	blockHashToHeight map[libcommon.Hash]uint64
@@ -45,21 +39,17 @@ func (bm *BlockInfoMap) GetBlockNumberByHash(blockHash libcommon.Hash) (uint64, 
 	return blockNum, exists
 }
 
-func (bm *BlockInfoMap) PutHeader(blockNum uint64, header *ethTypes.Header, prevBlockInfo *BlockInfo) {
+func (bm *BlockInfoMap) PutNewHeader(blockNum uint64, blockInfo *BlockInfo) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
-	bm.blockInfos[blockNum] = &BlockInfo{
-		Header:  header,
-		TxCount: -1,
-		Hash:    libcommon.Hash{},
-	}
+	bm.blockInfos[blockNum] = blockInfo
+}
 
-	// Update previous block info
-	prevBlockNum := blockNum - 1
-	if prevBlockInfo != nil {
-		bm.blockInfos[prevBlockNum] = prevBlockInfo
-		bm.blockHashToHeight[prevBlockInfo.Hash] = prevBlockNum
-	}
+func (bm *BlockInfoMap) PutConfirmedHeader(blockNum uint64, blockInfo *BlockInfo) {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	bm.blockInfos[blockNum] = blockInfo
+	bm.blockHashToHeight[blockInfo.Hash] = blockNum
 }
 
 func (bm *BlockInfoMap) Delete(blockNum uint64) {

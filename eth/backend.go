@@ -256,14 +256,15 @@ type Ethereum struct {
 	l1BlockSyncer    *syncer.L1Syncer
 
 	// For X Layer, realtime
-	kafkaEnabled  bool
-	kafkaProducer *realtimeKafka.KafkaProducer
-	kafkaConsumer *realtimeKafka.KafkaConsumer
-	realtimeCache *realtimeCache.RealtimeCache
-	blockInfoChan chan *types.Header
-	txInfoChan    chan state.TxInfo
-	finishChan    chan realtimeTypes.FinishedEntry
-	realtimeSub   *realtimeSub.RealtimeSubscription
+	kafkaEnabled           bool
+	kafkaProducer          *realtimeKafka.KafkaProducer
+	kafkaConsumer          *realtimeKafka.KafkaConsumer
+	realtimeCache          *realtimeCache.RealtimeCache
+	newBlockInfoChan       chan *types.Header
+	confirmedBlockInfoChan chan *types.Block
+	txInfoChan             chan state.TxInfo
+	finishChan             chan realtimeTypes.FinishedEntry
+	realtimeSub            *realtimeSub.RealtimeSubscription
 }
 
 func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {
@@ -1236,14 +1237,15 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			// For X Layer, realtime
 			if cfg.Zk.XLayer.Realtime.Enable {
-				kafkaProducer, err := realtimeKafka.NewKafkaProducer(cfg.Zk.XLayer.Realtime.Kafka, backend.sentryCtx, backend.chainDB, nil)
+				kafkaProducer, err := realtimeKafka.NewKafkaProducer(cfg.Zk.XLayer.Realtime.Kafka, backend.sentryCtx, nil)
 				if err != nil {
 					backend.kafkaEnabled = false
 					log.Warn("[Realtime] Failed to initialize kafka producer", "error", err)
 				} else {
 					backend.kafkaEnabled = true
 					backend.kafkaProducer = kafkaProducer
-					backend.blockInfoChan = make(chan *types.Header, realtimeKafka.DefaultKafkaBufferSize)
+					backend.newBlockInfoChan = make(chan *types.Header, realtimeKafka.DefaultKafkaBufferSize)
+					backend.confirmedBlockInfoChan = make(chan *types.Block, realtimeKafka.DefaultKafkaBufferSize)
 					backend.txInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
 
 					// Send error trigger message on sequencer restart
@@ -1273,7 +1275,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.txPool2DB,
 				l1InfoTreeUpdater,
 				hook,
-				backend.blockInfoChan,
+				backend.newBlockInfoChan,
+				backend.confirmedBlockInfoChan,
 				backend.txInfoChan,
 			)
 
@@ -2124,7 +2127,7 @@ func (s *Ethereum) Start() error {
 		// For X Layer, realtime
 		if s.config.Zk.XLayer.Realtime.Enable && s.kafkaEnabled {
 			go realtime.ListenKafkaConsumer(s.sentryCtx, s.kafkaConsumer, s.realtimeCache, s.finishChan, s.realtimeSub)
-			go realtime.ListenKafkaProducer(s.sentryCtx, s.kafkaProducer, s.blockInfoChan, s.txInfoChan)
+			go realtime.ListenKafkaProducer(s.sentryCtx, s.kafkaProducer, s.newBlockInfoChan, s.confirmedBlockInfoChan, s.txInfoChan)
 		}
 	}
 

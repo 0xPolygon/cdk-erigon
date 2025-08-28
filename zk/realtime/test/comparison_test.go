@@ -302,6 +302,8 @@ func TestRealtimeComparison(t *testing.T) {
 	})
 
 	// TestStateAPIs - Balances, Code, Storage, and Contract Calls
+	// Sleep to let non-RT RPC catch up
+	time.Sleep(1 * time.Second)
 	t.Run("TestStateAPIs", func(t *testing.T) {
 		log.Info("Running state comparison tests")
 
