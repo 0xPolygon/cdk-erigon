@@ -214,10 +214,10 @@ func (api *APIImpl) GetBlockGasLimit(ctx context.Context) (*hexutil.Big, error) 
 	}
 	defer client.Close()
 
-	price, err := client.BlockGasLimit(ctx)
+	gasLimit, err := client.BlockGasLimit(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return (*hexutil.Big)(price), nil
+	return (*hexutil.Big)(gasLimit), nil
 }
