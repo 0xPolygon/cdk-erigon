@@ -435,6 +435,7 @@ func BytesToPaddedHex(data []byte, length int) string {
 }
 
 func migrateGenesis(chaindata, input, output string) error {
+	start := time.Now()
 	db := mdbx.MustOpen(chaindata)
 	defer db.Close()
 
@@ -612,6 +613,8 @@ func migrateGenesis(chaindata, input, output string) error {
 		fmt.Println("Error writing to file:", err)
 		return err
 	}
+	elapsed := time.Since(start).Seconds()
+	fmt.Printf("elapsed: %.3f seconds\n", elapsed)
 	return nil
 }
 
