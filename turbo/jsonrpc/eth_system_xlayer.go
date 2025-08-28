@@ -191,7 +191,7 @@ func (api *APIImpl) MinGasPrice(ctx context.Context) (*hexutil.Big, error) {
 	return (*hexutil.Big)(minGP), nil
 }
 
-func (api *APIImpl) getBlockGasLimit(ctx context.Context) (*hexutil.Big, error) {
+func (api *APIImpl) GetBlockGasLimit(ctx context.Context) (*hexutil.Big, error) {
 
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {

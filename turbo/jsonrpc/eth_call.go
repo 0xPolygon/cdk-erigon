@@ -180,7 +180,7 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 		//hi = h.GasLimit
 
 		// Retrieve from rpc
-		gaslimit, err := api.getBlockGasLimit(ctx)
+		gaslimit, err := api.GetBlockGasLimit(ctx)
 		if err != nil {
 			return 0, err
 		}

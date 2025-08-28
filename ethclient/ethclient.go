@@ -747,7 +747,7 @@ func (ec *Client) SendTransaction(ctx context.Context, tx types.Transaction) err
 
 func (ec *Client) BlockGasLimit(ctx context.Context) (*big.Int, error) {
 	var hex hexutil.Big
-	if err := ec.c.CallContext(ctx, &hex, "eth_blockGasLimit"); err != nil {
+	if err := ec.c.CallContext(ctx, &hex, "eth_getBlockGasLimit"); err != nil {
 		return nil, err
 	}
 	return (*big.Int)(&hex), nil
