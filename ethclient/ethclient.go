@@ -745,6 +745,14 @@ func (ec *Client) SendTransaction(ctx context.Context, tx types.Transaction) err
 	return ec.c.CallContext(ctx, nil, "eth_sendRawTransaction", hexutil.Encode(data.Bytes()))
 }
 
+func (ec *Client) BlockGasLimit(ctx context.Context) (*big.Int, error) {
+	var hex hexutil.Big
+	if err := ec.c.CallContext(ctx, &hex, "eth_blockGasLimit"); err != nil {
+		return nil, err
+	}
+	return (*big.Int)(&hex), nil
+}
+
 func toBlockNumArg(number *big.Int) string {
 	if number == nil {
 		return "latest"

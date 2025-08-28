@@ -13,6 +13,7 @@ import (
 	proto_txpool "github.com/ledgerwatch/erigon-lib/gointerfaces/txpool"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/eth/gasprice"
+	"github.com/ledgerwatch/erigon/ethclient"
 	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/zk/apollo"
 	"github.com/ledgerwatch/erigon/zk/metrics"
@@ -188,4 +189,35 @@ func (api *APIImpl) MinGasPrice(ctx context.Context) (*hexutil.Big, error) {
 	}
 
 	return (*hexutil.Big)(minGP), nil
+}
+
+func (api *APIImpl) getBlockGasLimit(ctx context.Context) (*hexutil.Big, error) {
+
+	tx, err := api.db.BeginRo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	cc, err := api.chainConfig(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	chainId := cc.ChainID
+	if !api.isZkNonSequencer(chainId) {
+		gasLimit := big.NewInt(int64(api.BlockGasLimit))
+		return (*hexutil.Big)(gasLimit), nil
+	}
+
+	client, err := ethclient.DialContext(ctx, api.l2RpcUrl)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	price, err := client.BlockGasLimit(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return (*hexutil.Big)(price), nil
 }

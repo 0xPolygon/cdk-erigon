@@ -396,6 +396,7 @@ type APIImpl struct {
 	BulkAddTxsWaitTime time.Duration
 	txChan             chan txRequest
 	EnableNotify       bool
+	BlockGasLimit      uint64
 }
 
 // For X Layer, split db and ac
@@ -446,6 +447,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, dbsmt kv.RoDB, eth rpchelper.ApiBacken
 		EnableNotify:       ethCfg.XLayer.EnableAddTxNotify,
 		txChan:             make(chan txRequest, 1000),
 		dbsmt:              dbsmt,
+		BlockGasLimit:      ethCfg.XLayer.DynamicBlockGasLimit,
 	}
 
 	// For X Layer

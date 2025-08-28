@@ -157,27 +157,34 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	if args.Gas != nil && uint64(*args.Gas) >= params.TxGas {
 		hi = uint64(*args.Gas)
 	} else {
-		// Retrieve the block to act as the gas ceiling
-		h, err := headerByNumberOrHash(ctx, dbtx, bNrOrHash, api)
+		//// Retrieve the block to act as the gas ceiling
+		//h, err := headerByNumberOrHash(ctx, dbtx, bNrOrHash, api)
+		//if err != nil {
+		//	return 0, err
+		//}
+		//if h == nil {
+		//	// if a block number was supplied and there is no header return 0
+		//	if blockNrOrHash != nil {
+		//		return 0, nil
+		//	}
+		//
+		//	// block number not supplied, so we haven't found a pending block, read the latest block instead
+		//	h, err = headerByNumberOrHash(ctx, dbtx, latestNumOrHash, api)
+		//	if err != nil {
+		//		return 0, err
+		//	}
+		//	if h == nil {
+		//		return 0, nil
+		//	}
+		//}
+		//hi = h.GasLimit
+
+		// Retrieve from rpc
+		gaslimit, err := api.getBlockGasLimit(ctx)
 		if err != nil {
 			return 0, err
 		}
-		if h == nil {
-			// if a block number was supplied and there is no header return 0
-			if blockNrOrHash != nil {
-				return 0, nil
-			}
-
-			// block number not supplied, so we haven't found a pending block, read the latest block instead
-			h, err = headerByNumberOrHash(ctx, dbtx, latestNumOrHash, api)
-			if err != nil {
-				return 0, err
-			}
-			if h == nil {
-				return 0, nil
-			}
-		}
-		hi = h.GasLimit
+		hi = gaslimit.Uint64()
 	}
 
 	var feeCap *big.Int
