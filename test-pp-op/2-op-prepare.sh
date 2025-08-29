@@ -10,6 +10,7 @@ sed_inplace() {
 }
 
 source .env
+source ./tools.sh
 
 ROOT_DIR=$(git rev-parse --show-toplevel)
 TEST_DIR="$ROOT_DIR/test-pp-op"
@@ -30,7 +31,7 @@ docker-compose stop xlayer-agg-sender
 docker-compose stop xlayer-agglayer
 docker-compose stop xlayer-agglayer-prover
 
-LOG_OUTPUT=$(docker logs xlayer-seq 2>&1)
+LOG_OUTPUT=$(docker compose logs --since=0 --tail=all xlayer-seq 2>&1)
 echo "LOG_OUTPUT: $LOG_OUTPUT"
 
 FORK_BLOCK=$(echo "$LOG_OUTPUT" | grep "Finish block" | tail -1 | sed -n 's/.*Finish block \([0-9]*\) with.*/\1/p')
@@ -41,45 +42,6 @@ PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$PWD_DIR")"
 TMP_DIR="$PWD_DIR/tmp"
 
-cd $TMP_DIR
-
-if [ ! -d "op-geth" ]; then
-    echo "Cloning op-geth repository..."
-    git clone https://github.com/ethereum-optimism/op-geth.git
-    cp $PWD_DIR/op-docker/Dockerfile-opgeth op-geth/Dockerfile
-    cd op-geth
-
-    # patch op-geth
-    git checkout 6005dd53e1b50fe5a3f59764e3e2056a639eff2f # optimism v1.13.4 relies on this commit
-    git apply ../../patch/op-geth-0001-support-load-genesis-at-a-given-number.patch
-
-    docker build -t $OP_GETH_IMAGE_TAG .
-    #docker build .
-    cd ..
-fi
-
-if [ ! -d "optimism" ]; then
-    echo "Cloning Optimism repository..."
-    git clone -b yxq/regenesis-op-mainnet https://github.com/okx/optimism.git
-    cp $PWD_DIR/op-docker/Dockerfile-contracts optimism/Dockerfile-contracts
-    cp $PWD_DIR/op-docker/Dockerfile-opstack optimism/Dockerfile-opstack
-
-    # cp Transactor.sol to optimism, which is used for addGameType
-    cp $PWD_DIR/contracts/Transactor.sol optimism/packages/contracts-bedrock/src/periphery/Transactor.sol
-
-    # To support making prestate for our custom op-geth
-    mv op-geth optimism/op-geth
-    ln -s optimism/op-geth ./
-#    cd optimism
-#    git apply ../../patch/optimism-0001-support-regenesis-op-geth-prestate.patch
-#    git apply ../../patch/optimism-0001-decompress-genesis.patch
-#    cd -
-
-    cd optimism
-    docker build -t op-contracts:v1.13.4 -f Dockerfile-contracts .
-    docker build -t op-stack:v1.13.4 -f Dockerfile-opstack .
-    cd ..
-fi
 
 cd $PWD_DIR
 
@@ -399,7 +361,7 @@ EXPORT_DIR="$PWD_DIR/data/cannon-data"
 mkdir -p $EXPORT_DIR
 
 
-md5sum config-op/genesis.json
+$MD5SUM_CMD config-op/genesis.json
 # genesis.json is too large to embed in go, so we compress it now and decompress it in go code
 gzip -c config-op/genesis.json > config-op/genesis.gz.json
 

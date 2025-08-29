@@ -3,6 +3,7 @@ set -e
 set -x
 
 source .env
+source ./utils.sh
 
 PWD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$PWD_DIR")"
@@ -39,35 +40,10 @@ git checkout config/first-batch-config.json
 echo "Sending funds to deployer..."
 cast send -f $RICH_ADDRESS --private-key $RICH_PRIVATE_KEY --value 3ether --legacy $DEPLOYER_ADDRESS
 
-mkdir -p $TMP_DIR
-cd $TMP_DIR
-if [ ! -d "./aggkit" ]; then
-  echo "Cloning contract repository..."
-  git clone -b feature/0.1.0 https://github.com/okx/aggkit.git
-  cd ./aggkit
-  echo "Cleaning and resting contract repository..."
-  git reset --hard; git checkout feature/0.1.0;git pull
-  make build-docker
-fi
-
 cd $TMP_DIR
 if [ ! -d "./xlayer-contracts" ]; then
   echo "Cloning contract repository..."
   git clone -b zjg/v11.0.0-rc.0-op-v1 https://github.com/okx/xlayer-contracts.git
-fi
-
-cd $TMP_DIR
-
-if [ ! -d "zkevm-bridge-service" ]; then
-    echo "Cloning zkevm-bridge-service repository..."
-    git clone -b v0.6.0-RC16 https://github.com/0xPolygon/zkevm-bridge-service.git
-    # it has docker file
-    cd zkevm-bridge-service
-
-    # patch zkevm-bridge-service
-    git apply ../../patch/xlayer-bridge-service-0001-support-sync-L2-block-at-given-number.patch
-
-    docker build -t $XLAYER_BRIDGE_SERVICE_IMAGE_TAG .
 fi
 
 cd $TMP_DIR/xlayer-contracts

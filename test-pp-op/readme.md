@@ -22,3 +22,30 @@ L2 WETH Token: 0xd80e5a44dc9628fae9b432eac67873238504ea29
 L2 admin: 0x8f8E2d6cF621f30e9a11309D6A56A876281Fd534
 
 ```
+
+# check with RPC
+```
+cd xlayer-erigon/test-pp-op
+# for testnet: add the following line to .env
+CHECK_REGENESIS="true"
+# for mainnet: add the following 2 lines to .env
+CHECK_REGENESIS="true"
+CHECK_TYPE="mainnet"
+# ---
+./1-pp-setup.sh 
+./2-op-prepare.sh 
+./3-op-start-service.sh
+```
+
+# check with differential smt rebuilt
+```
+export pre_chaindata_dir=$(pwd)/data_state0/seq/chaindata
+export pre_smtdata_dir=$(pwd)/data_state0/seq/smt
+export post_chaindata_dir=$(pwd)/data_state2/seq/chaindata
+export post_smtdata_dir=$(pwd)/data_state2/seq/smt
+
+hack -action migrateGenesis -chaindata ${pre_chaindata_dir} -input empty.json -output pre_xlayer_dump_file.json
+hack -action migrateGenesis -chaindata ${post_chaindata_dir} -input empty.json -output post_xlayer_dump_file.json
+hack -action verifySmtWithStateDiff -pre-chain-data ${pre_chaindata_dir} -pre-smt-data ${pre_smtdata_dir} -pre-state-snapshot pre_xlayer_dump_file.json \
+ -post-state-snapshot post_xlayer_dump_file.json -post-smt-data ${post_smtdata_dir} -state-diff-output state_diff.json
+```

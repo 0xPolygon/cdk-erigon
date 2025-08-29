@@ -90,7 +90,17 @@ var (
 	ignoreScalable  = flag.Bool("ignore-scalable", false, "ignore scalable account")
 	deleteScalable  = flag.Bool("delete-scalable", false, "delete scalable account")
 	debugPrint      = flag.Bool("debugPrint", false, "print debug info")
+
+	// For differential smt verification
+	preSmtData                = flag.String("pre-smt-data", "", "path to pre smt data")
+	preChainData              = flag.String("pre-chain-data", "", "path to pre chain data")
+	postSmtData               = flag.String("post-smt-data", "", "path to post smt data")
+	preStateSnapshotFilePath  = flag.String("pre-state-snapshot", "", "path to pre-state snapshot file")
+	postStateSnapshotFilePath = flag.String("post-state-snapshot", "", "path to post-state file")
+	outputStateDiffFilePath   = flag.String("state-diff-output", "", "path to output state diff file")
 )
+
+const ZERO_CODE_HASH = "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
 	db := mdbx.MustOpen(chaindata)
@@ -492,10 +502,11 @@ func migrateGenesis(chaindata, input, output string) error {
 	}
 	defer cc.Close()
 	for _, acc_hex := range keys {
-		if *ignoreScalable && strings.ToLower(acc_hex) == "000000000000000000000000000000005ca1ab1e" {
+		acc_addr := libcommon.HexToAddress(acc_hex)
+
+		if *ignoreScalable && acc_addr == state.ADDRESS_SCALABLE_L2 {
 			continue
 		}
-		acc_addr := libcommon.HexToAddress(acc_hex)
 		log.Debug("acc_addr: %s\n", acc_hex)
 		if _, exists := allocData[acc_hex]; exists {
 			// Fixme: if xlayer account conflict with target node(such as op-geth), use which as new regenesis account?
@@ -504,7 +515,7 @@ func migrateGenesis(chaindata, input, output string) error {
 				return err
 			}
 
-			if hex.EncodeToString(a.CodeHash.Bytes()) != "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" {
+			if hex.EncodeToString(a.CodeHash.Bytes()) != ZERO_CODE_HASH {
 				fmt.Println("Adding existing contract: ", acc_hex)
 			} else {
 				fmt.Println("Adding existing account:", acc_hex)
@@ -529,6 +540,9 @@ func migrateGenesis(chaindata, input, output string) error {
 		current["balance"] = a.Balance.Hex()
 
 		log.Debug("CodeHash:%x\nIncarnation:%d\nNonce:%d\nblance:%s\n", a.CodeHash, a.Incarnation, a.Nonce, a.Balance.String())
+		if acc_addr == state.ADDRESS_SCALABLE_L2 {
+			fmt.Printf("SCALABEL incarnation: %v\n", a.Incarnation)
+		}
 
 		// otherwise, get code and storage
 		code, err := tx.GetOne(kv.Code, a.CodeHash[:])
@@ -539,6 +553,8 @@ func migrateGenesis(chaindata, input, output string) error {
 		log.Debug("acc: %s => %s\n", acc_addr, hexutil.Encode(code))
 		acc_bytes := common.FromHex(acc_hex)
 		first_storage := false
+		var last_incarnation uint64 = 1<<64 - 1
+		numIncarnations := 0
 		for k, v, e := c.Seek(acc_bytes); k != nil; k, v, e = c.Next() {
 			if e != nil {
 				return e
@@ -548,6 +564,15 @@ func migrateGenesis(chaindata, input, output string) error {
 			}
 			// todo: make sure if exist same address have diff Incarnation? seem no
 			if len(k) > 28 {
+				incarnation := binary.BigEndian.Uint64(k[20:28])
+				if incarnation != last_incarnation {
+					last_incarnation = incarnation
+					numIncarnations += 1
+					if numIncarnations > 1 {
+						panic(fmt.Sprintf("acct with multiple incarnations: %s, num of incarnations: %d", acc_hex, numIncarnations))
+					}
+				}
+
 				if !first_storage {
 					if _, exists := current["storage"]; !exists {
 						current["storage"] = make(map[string]interface{})
@@ -1630,63 +1655,12 @@ func dumpState(chaindata string) error {
 	return nil
 }
 
-type accInfo struct {
+type AccInfo struct {
 	Balance string            `json:"balance"`
 	Nonce   string            `json:"nonce"`
 	Code    string            `json:"code"`
 	Storage map[string]string `json:"storage"`
 }
-
-/*
-func decodeAccInfo(accoutStr string, value accInfo, accChanges map[libcommon.Address]*accounts.Account,
-	codeChanges map[libcommon.Address]string, storageChanges map[libcommon.Address]map[string]string) {
-	acc_bytes, err := hexutil.Decode(accoutStr)
-	if err != nil {
-		panic("acc decoding error")
-	}
-	address := libcommon.BytesToAddress(acc_bytes)
-	acc := accounts.NewAccount()
-	balance, err := uint256.FromHex(value.Balance)
-	if err != nil {
-		panic("balance decoding error")
-	}
-	acc.Balance = *balance
-	nonce, err := hexutil.DecodeUint64(value.Nonce)
-	if err != nil {
-		panic("nonce decoding error")
-	}
-	acc.Nonce = nonce
-	accChanges[address] = &acc
-
-	if value.Code != "0x" {
-		codeChanges[address] = value.Code
-		if value.Storage != nil {
-			storageChanges[address] = make(map[string]string)
-			for k, v := range value.Storage {
-				storageChanges[address][k] = v
-			}
-		}
-	}
-}
-
-func newMDBX(dbdir string, ctx context.Context) (kv.RwDB, error) {
-	label := kv.SmtDB
-	name := kv.SmtDB.String()
-	dbPath := filepath.Join(dbdir, name)
-
-	hackLogger.Info("Opening Database", "label", name, "path", dbPath)
-
-	roTxLimit := int64(32)
-	roTxsLimiter := semaphore.NewWeighted(roTxLimit) // 1 less than max to allow unlocking to happen
-	opts := mdbx.NewMDBX(hackLogger).
-		Path(dbPath).Label(label).
-		GrowthStep(16 * datasize.MB).
-		SyncPeriod(30 * time.Second).
-		RoTxsLimiter(roTxsLimiter)
-	opts = opts.DirtySpace(uint64(512 * datasize.MB))
-	return opts.Open(ctx)
-}
-*/
 
 // const TableSmt = "HermezSmt"
 // const TableStats = "HermezSmtStats"
@@ -1725,7 +1699,7 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 		return fmt.Errorf("you cannot use --delete-scalable=true and --ignore-scalable=true flags together")
 	}
 
-	var jsonData map[string]map[string]accInfo
+	var jsonData map[string]map[string]AccInfo
 	if input == "" {
 		input = "genesis.json"
 	}
@@ -2147,6 +2121,10 @@ func main() {
 		err = dumpAll(*chaindata, *output)
 	case "migrateGenesis":
 		err = migrateGenesis(*chaindata, *input, *output)
+	case "verifySmtWithStateDiff":
+		err = VerifySmtWithStateDiff(
+			*preSmtData, *preChainData,
+			*preStateSnapshotFilePath, *postSmtData, *postStateSnapshotFilePath, *outputStateDiffFilePath)
 	case "checkStateRoot":
 		if *standaloneSmtDb {
 			err = checkStateRoot(*chaindata, *pathSmtDb, *input, *incremental, *debugPrint)
@@ -2162,5 +2140,7 @@ func main() {
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
+	} else {
+		os.Exit(0)
 	}
 }
