@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/turbo/jsonrpc"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 )
@@ -57,4 +58,53 @@ func (api *RealtimeAPIImpl) GetInternalTransactions(ctx context.Context, hash co
 	}
 
 	return innerTxs, nil
+}
+
+func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.BlockNumberOrHash) ([]map[string]interface{}, error) {
+	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
+		return api.APIImpl.GetBlockReceipts(ctx, number)
+	}
+
+	blockNum, err := api.getBlockNumberOrHash(number)
+	if err != nil {
+		return api.APIImpl.GetBlockReceipts(ctx, number)
+	}
+
+	header, _, blockhash, ok := api.cacheDB.Stateless.GetHeader(blockNum)
+	if !ok {
+		return api.APIImpl.GetBlockReceipts(ctx, number)
+	}
+
+	txHashes, ok := api.cacheDB.Stateless.GetBlockTxs(blockNum)
+	if !ok {
+		return api.APIImpl.GetBlockReceipts(ctx, number)
+	}
+
+	tx, err := api.APIImpl.GetDB().BeginRo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	cc, err := api.APIImpl.GetChainConfig(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]map[string]interface{}, 0, len(txHashes))
+	for _, txHash := range txHashes {
+		txn, receipt, _, _, exists := api.cacheDB.Stateless.GetTxInfo(txHash)
+		if !exists {
+			return api.APIImpl.GetBlockReceipts(ctx, number)
+		}
+		if blockhash != EmptyBlockHash {
+			receipt.BlockHash = blockhash
+			for _, log := range receipt.Logs {
+				log.BlockHash = blockhash
+			}
+		}
+		result = append(result, jsonrpc.MarshalReceipt(receipt, txn, cc, header, txn.Hash(), true))
+	}
+
+	return result, nil
 }

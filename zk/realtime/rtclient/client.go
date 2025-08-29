@@ -516,6 +516,42 @@ func (rc *RealtimeClient) RealtimeGetBlockInternalTransactions(blockNumber uint6
 	return result, nil
 }
 
+func (rc *RealtimeClient) RealtimeGetBlockReceiptsByNumber(blockNumber uint64) ([]*types.Receipt, error) {
+	response, err := client.JSONRPCCall(rc.url, "eth_getBlockReceipts", blockNumber)
+	if err != nil {
+		return nil, err
+	}
+	if response.Error != nil {
+		return nil, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
+	}
+
+	var result []*types.Receipt
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (rc *RealtimeClient) RealtimeGetBlockReceiptsByHash(blockHash common.Hash) ([]*types.Receipt, error) {
+	response, err := client.JSONRPCCall(rc.url, "eth_getBlockReceipts", blockHash)
+	if err != nil {
+		return nil, err
+	}
+	if response.Error != nil {
+		return nil, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
+	}
+
+	var result []*types.Receipt
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 func (rc *RealtimeClient) RealtimeEnabled() (bool, error) {
 	response, err := client.JSONRPCCall(rc.url, "eth_realtimeEnabled")
 	if err != nil {

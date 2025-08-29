@@ -1,11 +1,13 @@
 package types
 
 import (
+	"fmt"
 	"path/filepath"
 	"sync"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 )
 
 type BlockInfoMap struct {
@@ -50,6 +52,7 @@ func (bm *BlockInfoMap) PutConfirmedHeader(blockNum uint64, blockInfo *BlockInfo
 	defer bm.mu.Unlock()
 	bm.blockInfos[blockNum] = blockInfo
 	bm.blockHashToHeight[blockInfo.Hash] = blockNum
+	log.Debug(fmt.Sprintf("PutConfirmedHeader: blockNum: %d, blockHash: %+v", blockNum, blockInfo.Hash))
 }
 
 func (bm *BlockInfoMap) Delete(blockNum uint64) {

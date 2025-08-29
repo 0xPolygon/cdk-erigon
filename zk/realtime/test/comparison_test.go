@@ -299,6 +299,31 @@ func TestRealtimeComparison(t *testing.T) {
 
 			require.Equal(t, realtimeInternalTxs, nonRealtimeInternalTxs, fmt.Sprintf("Internal transactions should be identical for hash %s", txHash))
 		})
+
+		t.Run("getBlockReceipts", func(t *testing.T) {
+			txHash := transToken(t, context.Background(), client, uint256.NewInt(encoding.Gwei), testAddress.String())
+
+			receipt, err := client.RealtimeGetTransactionReceipt(common.HexToHash(txHash))
+			require.NoError(t, err)
+			require.NotNil(t, receipt, "Transaction receipt should not be nil")
+
+			receiptsByNumber, err := client.RealtimeGetBlockReceiptsByNumber(receipt.BlockNumber.Uint64())
+			require.NoError(t, err)
+			require.NotNil(t, receiptsByNumber, "Transaction receipts by number should not be nil")
+
+			receiptsByHash, err := client.RealtimeGetBlockReceiptsByHash(receipt.BlockHash)
+			require.NoError(t, err)
+			require.NotNil(t, receiptsByHash, "Transaction receipts by hash should not be nil")
+
+			time.Sleep(1 * time.Second)
+			var nonRealtimeReceipts []*types.Receipt
+			err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeReceipts, "eth_getBlockReceipts", receipt.BlockHash)
+			require.NoError(t, err)
+			require.NotNil(t, nonRealtimeReceipts, "Transaction receipts by hash should not be nil")
+
+			require.Equal(t, receiptsByNumber, nonRealtimeReceipts, fmt.Sprintf("Transaction receipts by number should be identical for block %d", receipt.BlockNumber.Uint64()))
+			require.Equal(t, receiptsByHash, nonRealtimeReceipts, fmt.Sprintf("Transaction receipts by hash should be identical for block %d", receipt.BlockHash))
+		})
 	})
 
 	// TestStateAPIs - Balances, Code, Storage, and Contract Calls

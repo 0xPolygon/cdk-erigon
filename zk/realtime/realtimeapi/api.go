@@ -50,6 +50,23 @@ func NewRealtimeAPI(
 	return NewRealtimeAPIImpl(base, cacheDB, subService)
 }
 
+func (api *RealtimeAPIImpl) getBlockNumberOrHash(blockNrOrHash rpc.BlockNumberOrHash) (uint64, error) {
+	hash, ok := blockNrOrHash.Hash()
+	if !ok {
+		blockNum, _, err := api.getBlockNumber(*blockNrOrHash.BlockNumber)
+		if err != nil {
+			return 0, err
+		}
+		return blockNum, nil
+	} else {
+		blockNum, found := api.cacheDB.Stateless.GetBlockNumberByHash(hash)
+		if !found {
+			return 0, fmt.Errorf("block %x not found", hash)
+		}
+		return blockNum, nil
+	}
+}
+
 func (api *RealtimeAPIImpl) getBlockNumber(blockNr rpc.BlockNumber) (uint64, bool, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
 		return 0, false, ErrRealtimeNotEnabled

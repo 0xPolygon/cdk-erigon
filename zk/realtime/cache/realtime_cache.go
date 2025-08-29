@@ -20,7 +20,7 @@ const (
 
 	// Stateless cache sizes
 	DefaultStatelessBlockCacheSize = 100
-	DefaultStatelessTxCacheSize    = 1000
+	DefaultStatelessTxCacheSize    = 1_000 * DefaultStatelessBlockCacheSize
 
 	// State cache size
 	DefaultGlobalStateCacheSize  = 1_000_000
