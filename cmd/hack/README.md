@@ -11,8 +11,17 @@ Hack is a set of developer focussed tools for dealing with the node and it's dat
 
 ## build
 ```
+go install ./cmd/hack 
+
+# alteratively
 make hack
-sudo DIST=/usr/local/bin make install # optional on mac
+sudo DIST=/usr/local/bin make install 
+```
+
+## run dump genesis
+```
+export chaindata_dir=/data1/chaindata
+hack -action migrateGenesis -chaindata ${chaindata_dir} -input empty.json -output pre_xlayer_dump_file.json -log-level info
 ```
 
 ## re-genesis state check
