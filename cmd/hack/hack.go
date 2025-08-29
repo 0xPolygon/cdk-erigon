@@ -471,9 +471,7 @@ func migrateGenesis(chaindata, input, output string) error {
 	var currentAcct map[string]interface{}
 	var currentStorage map[string]interface{}
 	var acctCount uint64
-	//var keys []string
 
-	//lastIncarnation := 1<< 64 -1
 	startScanKeys := time.Now()
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
 		plainStateReader := state.NewPlainStateReader(tx)
@@ -561,78 +559,10 @@ func migrateGenesis(chaindata, input, output string) error {
 	}
 	elapsedScanKeys := time.Since(startScanKeys).Seconds()
 	logger.Info("complete scan keys", "total acct count: ", acctCount, "elapsed in seconds: ", elapsedScanKeys)
-	//sort.Strings(keys)
-	//tx, txErr := db.BeginRo(context.Background())
-	//if txErr != nil {
-	//	return txErr
-	//}
-	//defer tx.Rollback()
-	//
-	//c, err := tx.Cursor(kv.PlainState)
-	//if err != nil {
-	//	return err
-	//}
-	//defer c.Close()
-	//
-	//contractCodeCursor, err := tx.Cursor(kv.PlainContractCode)
-	//if err != nil {
-	//	return err
-	//}
-	//defer contractCodeCursor.Close()
 
-	//totolTimeDumpStorage := 0.0
-	//for _, acc_hex := range keys {
-	//
-	//	acc_bytes := common.FromHex(acc_hex)
-	//	first_storage := false
-	//	var last_incarnation uint64 = 1<<64 - 1
-	//	numIncarnations := 0
-
-	//startDumpStorage := time.Now()
-	//for k, v, e := c.Seek(acc_bytes); k != nil; k, v, e = c.Next() {
-	//	if e != nil {
-	//		return e
-	//	}
-	//	if !bytes.HasPrefix(k, acc_bytes) {
-	//		break
-	//	}
-	//	// todo: make sure if exist same address have diff Incarnation? seem no
-	//	if len(k) > 28 {
-	//		incarnation := binary.BigEndian.Uint64(k[20:28])
-	//		if incarnation != last_incarnation {
-	//			last_incarnation = incarnation
-	//			numIncarnations += 1
-	//			if numIncarnations > 1 {
-	//				panic(fmt.Sprintf("acct with multiple incarnations: %s, num of incarnations: %d", acc_hex, numIncarnations))
-	//			}
-	//		}
-	//
-	//		if !first_storage {
-	//			if _, exists := current["storage"]; !exists {
-	//				current["storage"] = make(map[string]interface{})
-	//			}
-	//
-	//			switch node := current["storage"].(type) {
-	//			case map[string]interface{}:
-	//				current = node
-	//			default:
-	//				panic("unhandled json type")
-	//			}
-	//			first_storage = true
-	//		}
-	//		current[hexutil.Encode(k[28:])] = BytesToPaddedHex(v, 64)
-	//		log.Debug("%x slot => %x\n", k[28:], v)
-	//	}
-	//}
-	//if !first_storage {
-	//	current["storage"] = make(map[string]interface{})
-	//}
-	//elapsedDumpStorage := time.Since(startDumpStorage).Seconds()
-	//totolTimeDumpStorage += elapsedDumpStorage
-	//}
-	//logger.Info("complete dump", "totolTimeDumpStorage in seconds", totolTimeDumpStorage)
 	genesisData["alloc"] = allocData
 
+	startJsonWrite := time.Now()
 	updatedData, err := json.MarshalIndent(genesisData, "", "  ")
 	if err != nil {
 		fmt.Println("Error encoding JSON:", err)
@@ -648,6 +578,9 @@ func migrateGenesis(chaindata, input, output string) error {
 		fmt.Println("Error writing to file:", err)
 		return err
 	}
+	elapsedJsonWrite := time.Since(startJsonWrite).Seconds()
+	logger.Info("complete json write", "elapsed in seconds: ", elapsedJsonWrite)
+
 	elapsed := time.Since(start).Seconds()
 	logger.Info("completed", "total time elapsed", elapsed)
 	return nil
