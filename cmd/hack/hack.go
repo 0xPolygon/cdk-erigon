@@ -71,6 +71,8 @@ import (
 )
 
 var (
+	logLevel = flag.String("log-level", "info", "log level (debug, info, warn, error)")
+
 	action     = flag.String("action", "", "action to execute")
 	cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
 	block      = flag.Int("block", 1, "specifies a block number for operation")
@@ -445,7 +447,7 @@ func migrateGenesis(chaindata, input, output string) error {
 	if input == "" {
 		input = "genesis.json"
 	}
-	fmt.Printf("input: %s\n", input)
+	logger.Info("input", "filename: ", input)
 	fileData, err := os.ReadFile(input)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -460,7 +462,7 @@ func migrateGenesis(chaindata, input, output string) error {
 	}
 
 	if _, ok := genesisData["alloc"]; !ok {
-		fmt.Println("No alloc field found in genesis stub.")
+		logger.Warn("No alloc field found in genesis stub.")
 		allocData = make(map[string]interface{})
 	} else {
 		allocData = genesisData["alloc"].(map[string]interface{})
@@ -470,7 +472,7 @@ func migrateGenesis(chaindata, input, output string) error {
 
 	var count uint64
 	var keys []string
-
+	startScanKeys := time.Now()
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
 		return tx.ForEach(kv.PlainState, nil, func(k, v []byte) error {
 			if len(k) == 20 {
@@ -482,8 +484,8 @@ func migrateGenesis(chaindata, input, output string) error {
 	}); err != nil {
 		return err
 	}
-
-	fmt.Printf("Keys count: %d\n", count)
+	elapsedScanKeys := time.Since(startScanKeys).Seconds()
+	logger.Info("complete scan keys", "Keys count: ", count, "elapsed in seconds: ", elapsedScanKeys)
 	sort.Strings(keys)
 	tx, txErr := db.BeginRo(context.Background())
 	if txErr != nil {
@@ -502,14 +504,16 @@ func migrateGenesis(chaindata, input, output string) error {
 		return err
 	}
 	defer cc.Close()
+
+	totolTimeDumpStorage := 0.0
 	for _, acc_hex := range keys {
 		acc_addr := libcommon.HexToAddress(acc_hex)
 
-		if *ignoreScalable && acc_addr == state.ADDRESS_SCALABLE_L2 {
-			continue
-		}
-		log.Debug("acc_addr: %s\n", acc_hex)
+		//if *ignoreScalable && acc_addr == state.ADDRESS_SCALABLE_L2 {
+		//	continue
+		//}
 		if _, exists := allocData[acc_hex]; exists {
+			logger.Warn("state conflict found", "acc_addr: ", acc_hex)
 			// Fixme: if xlayer account conflict with target node(such as op-geth), use which as new regenesis account?
 			a, err := plainStateReader.ReadAccountData(acc_addr)
 			if err != nil {
@@ -517,9 +521,9 @@ func migrateGenesis(chaindata, input, output string) error {
 			}
 
 			if hex.EncodeToString(a.CodeHash.Bytes()) != ZERO_CODE_HASH {
-				fmt.Println("Adding existing contract: ", acc_hex)
+				logger.Debug("Adding existing contract: ", acc_hex)
 			} else {
-				fmt.Println("Adding existing account:", acc_hex)
+				logger.Debug("Adding existing account:", acc_hex)
 			}
 			continue
 		}
@@ -540,9 +544,8 @@ func migrateGenesis(chaindata, input, output string) error {
 		current["nonce"] = "0x" + strconv.FormatUint(a.Nonce, 16)
 		current["balance"] = a.Balance.Hex()
 
-		log.Debug("CodeHash:%x\nIncarnation:%d\nNonce:%d\nblance:%s\n", a.CodeHash, a.Incarnation, a.Nonce, a.Balance.String())
 		if acc_addr == state.ADDRESS_SCALABLE_L2 {
-			fmt.Printf("SCALABEL incarnation: %v\n", a.Incarnation)
+			logger.Debug("SCALABLE contract", "incarnation:", a.Incarnation)
 		}
 
 		// otherwise, get code and storage
@@ -551,11 +554,13 @@ func migrateGenesis(chaindata, input, output string) error {
 			return err
 		}
 		current["code"] = hexutil.Encode(code)
-		log.Debug("acc: %s => %s\n", acc_addr, hexutil.Encode(code))
+		logger.Debug("acc: %s => %s\n", acc_addr, hexutil.Encode(code))
 		acc_bytes := common.FromHex(acc_hex)
 		first_storage := false
 		var last_incarnation uint64 = 1<<64 - 1
 		numIncarnations := 0
+
+		startDumpStorage := time.Now()
 		for k, v, e := c.Seek(acc_bytes); k != nil; k, v, e = c.Next() {
 			if e != nil {
 				return e
@@ -594,8 +599,10 @@ func migrateGenesis(chaindata, input, output string) error {
 		if !first_storage {
 			current["storage"] = make(map[string]interface{})
 		}
+		elapsedDumpStorage := time.Since(startDumpStorage).Seconds()
+		totolTimeDumpStorage += elapsedDumpStorage
 	}
-
+	logger.Info("complete dump", "totolTimeDumpStorage in seconds", totolTimeDumpStorage)
 	genesisData["alloc"] = allocData
 
 	updatedData, err := json.MarshalIndent(genesisData, "", "  ")
@@ -607,14 +614,14 @@ func migrateGenesis(chaindata, input, output string) error {
 	if output == "" {
 		output = "state_dump.json"
 	}
-	fmt.Printf("output: %s\n", output)
+	logger.Info("output", "written to", output)
 
 	if err := os.WriteFile(output, updatedData, 0644); err != nil {
 		fmt.Println("Error writing to file:", err)
 		return err
 	}
 	elapsed := time.Since(start).Seconds()
-	fmt.Printf("elapsed: %.3f seconds\n", elapsed)
+	logger.Info("completed", "total time elapsed", elapsed)
 	return nil
 }
 
@@ -1978,14 +1985,45 @@ func getSmtroot(chaindata string) error {
 	return nil
 }
 
+var logger log.Logger
+
+func init() {
+	logger = log.New()
+	consoleHandler := log.StreamHandler(os.Stdout, log.TerminalFormat())
+	logger.SetHandler(log.LvlFilterHandler(log.LvlInfo, consoleHandler))
+	logger.Debug("start hack")
+}
+
 func main() {
+
 	debug.RaiseFdLimit()
 	flag.Parse()
+
+	// Configure log level based on flag
+	var level log.Lvl
+	switch strings.ToLower(*logLevel) {
+	case "debug":
+		level = log.LvlDebug
+	case "info":
+		level = log.LvlInfo
+	case "warn", "warning":
+		level = log.LvlWarn
+	case "error":
+		level = log.LvlError
+	default:
+		fmt.Printf("Invalid log level: %s, using 'info'\n", *logLevel)
+		level = log.LvlInfo
+	}
+
+	// Update logger with new level
+	consoleHandler := log.StreamHandler(os.Stdout, log.TerminalFormat())
+	logger.SetHandler(log.LvlFilterHandler(level, consoleHandler))
 
 	// For X Layer, split db
 	kv.InitStandaloneSMT(*standaloneSmtDb)
 
 	if *cpuprofile != "" {
+		logger.Info("starting cpu profile")
 		f, err := os.Create(*cpuprofile)
 		if err != nil {
 			log.Error("could not create CPU profile", "err", err)
