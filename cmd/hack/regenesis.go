@@ -172,10 +172,10 @@ func VerifySmtWithStateDiff(
 			accChanges[address] = &acc
 		}
 
-		if !exists || postAccValue.Code != postAccValue.Code {
-			if postAccValue.Code != "0x" {
-				codeChanges[address] = postAccValue.Code
-			}
+		if !exists || postAccValue.Code != preAccValue.Code {
+			//if postAccValue.Code != "0x" {
+			codeChanges[address] = postAccValue.Code
+			//}
 		}
 
 		if postAccValue.Storage != nil {
