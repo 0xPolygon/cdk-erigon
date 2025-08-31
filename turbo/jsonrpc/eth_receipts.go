@@ -92,7 +92,15 @@ func (api *BaseAPI) getReceipts(ctx context.Context, tx kv.Tx, block *types.Bloc
 }
 
 // GetLogs implements eth_getLogs. Returns an array of logs matching a given filter object.
-func (api *APIImpl) GetLogs(ctx context.Context, crit filters.FilterCriteria) (types.Logs, error) {
+func (api *APIImpl) GetLogs(ctx context.Context, crit filters.FilterCriteria) (types.Logs, err error) {
+	// Add panic recovery to prevent crashes
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("GetLogs panic recovered", "error", r)
+			err = fmt.Errorf("GetLogs panic recovered: %v", r)
+		}
+	}()
+
 	var begin, end uint64
 	logs := types.Logs{}
 
@@ -107,6 +115,13 @@ func (api *APIImpl) GetLogs(ctx context.Context, crit filters.FilterCriteria) (t
 		if err != nil {
 			return nil, err
 		}
+		if block != nil && block.HeaderNoCopy() == nil {
+			return nil, fmt.Errorf("block header is nil")
+		}
+		if block.HeaderNoCopy().Number == nil{
+			return nil, fmt.Errorf("block header number is nil")
+		}
+		
 		header, err := api._blockReader.HeaderByNumber(ctx, tx, block.NumberU64())
 		if err != nil {
 			return nil, err
