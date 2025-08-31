@@ -116,10 +116,12 @@ func (api *APIImpl) GetLogs(ctx context.Context, crit filters.FilterCriteria) (t
 			return nil, err
 		}
 		if block != nil && block.HeaderNoCopy() == nil {
-			return nil, fmt.Errorf("block header is nil")
+			log.Errorf("block header is nil, block hash: %x", *crit.BlockHash)
+			return nil, fmt.Errorf("block header is nil, block hash: %x", *crit.BlockHash)
 		}
 		if block.HeaderNoCopy().Number == nil{
-			return nil, fmt.Errorf("block header number is nil")
+			log.Errorf("block header number is nil, block hash: %x", *crit.BlockHash)
+			return nil, fmt.Errorf("block header number is nil, block hash: %x", *crit.BlockHash)
 		}
 		
 		header, err := api._blockReader.HeaderByNumber(ctx, tx, block.NumberU64())
