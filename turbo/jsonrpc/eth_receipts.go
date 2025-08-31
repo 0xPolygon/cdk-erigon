@@ -92,11 +92,12 @@ func (api *BaseAPI) getReceipts(ctx context.Context, tx kv.Tx, block *types.Bloc
 }
 
 // GetLogs implements eth_getLogs. Returns an array of logs matching a given filter object.
-func (api *APIImpl) GetLogs(ctx context.Context, crit filters.FilterCriteria) (types.Logs, err error) {
+func (api *APIImpl) GetLogs(ctx context.Context, crit filters.FilterCriteria) (retlog types.Logs, err error) {
 	// Add panic recovery to prevent crashes
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("GetLogs panic recovered", "error", r)
+			retlog = nil
 			err = fmt.Errorf("GetLogs panic recovered: %v", r)
 		}
 	}()
@@ -116,14 +117,14 @@ func (api *APIImpl) GetLogs(ctx context.Context, crit filters.FilterCriteria) (t
 			return nil, err
 		}
 		if block != nil && block.HeaderNoCopy() == nil {
-			log.Errorf("block header is nil, block hash: %x", *crit.BlockHash)
+			log.Error("block header is nil", "block hash", *crit.BlockHash)
 			return nil, fmt.Errorf("block header is nil, block hash: %x", *crit.BlockHash)
 		}
-		if block.HeaderNoCopy().Number == nil{
-			log.Errorf("block header number is nil, block hash: %x", *crit.BlockHash)
+		if block.HeaderNoCopy().Number == nil {
+			log.Error("block header number is nil", "block hash", *crit.BlockHash)
 			return nil, fmt.Errorf("block header number is nil, block hash: %x", *crit.BlockHash)
 		}
-		
+
 		header, err := api._blockReader.HeaderByNumber(ctx, tx, block.NumberU64())
 		if err != nil {
 			return nil, err
