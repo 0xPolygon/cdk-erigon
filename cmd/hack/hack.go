@@ -2417,6 +2417,8 @@ func main() {
 		}
 	}()
 
+	start := time.Now()
+
 	var err error
 	switch *action {
 	case "cfg":
@@ -2560,6 +2562,8 @@ func main() {
 		fmt.Printf("Unknown action: %s\n", *action)
 		return
 	}
+
+	fmt.Println("total time elapsed:", time.Since(start))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
