@@ -40,6 +40,13 @@ RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
     make db-tools
 
+# Install dlv (Delve debugger)
+RUN --mount=type=cache,target=/root/.cache \
+    --mount=type=cache,target=/tmp/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go install github.com/go-delve/delve/cmd/dlv@latest && \
+    cp /go/bin/dlv /app/build/bin/dlv
+
 FROM docker.io/library/alpine:3.17
 
 # install required runtime libs, along with some helpers for debugging
@@ -57,6 +64,7 @@ WORKDIR /home/erigon
 
 ## then give each binary its own layer
 COPY --from=tools-builder /app/build/bin/mdbx_copy /usr/local/bin/mdbx_copy
+COPY --from=tools-builder /app/build/bin/dlv /usr/local/bin/dlv
 COPY --from=builder /app/build/bin/cdk-erigon /usr/local/bin/cdk-erigon
 COPY --from=builder /app/build/bin/smt-db-split /usr/local/bin/smt-db-split
 COPY --from=builder /app/cmd/smt-db-split/prepare-db-split.sh /usr/local/bin/prepare-db-split.sh
@@ -70,7 +78,8 @@ EXPOSE 8545 \
        42069/udp \
        8080 \
        9090 \
-       6060
+       6060 \
+       40000
 
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md
 ARG BUILD_DATE

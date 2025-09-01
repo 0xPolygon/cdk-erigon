@@ -14,6 +14,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/eth/gasprice"
 	"github.com/ledgerwatch/erigon/rpc"
+	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/zk/apollo"
 	"github.com/ledgerwatch/erigon/zk/metrics"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
@@ -188,4 +189,18 @@ func (api *APIImpl) MinGasPrice(ctx context.Context) (*hexutil.Big, error) {
 	}
 
 	return (*hexutil.Big)(minGP), nil
+}
+
+func (api *APIImpl) GetBlockGasLimit(ctx context.Context) (*hexutil.Big, error) {
+	if sequencer.IsSequencer() {
+		gasLimit := big.NewInt(int64(api.BlockGasLimit))
+		return (*hexutil.Big)(gasLimit), nil
+	}
+
+	gasLimit, err := rpchelper.GetCachedBlockGasLimit()
+	if err != nil {
+		return nil, err
+	}
+
+	return (*hexutil.Big)(big.NewInt(int64(gasLimit))), nil
 }

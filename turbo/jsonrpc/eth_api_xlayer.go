@@ -59,6 +59,9 @@ func (apii *APIImpl) listenApollo(ctx context.Context) {
 			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.PreRunAddressList.Name) {
 				apii.PreRunList = ethCfg.XLayer.PreRunList
 			}
+			if slices.Contains(ethCfg.XLayer.ApolloChanged, utils.DynamicBlockGasLimit.Name) {
+				apii.BlockGasLimit = ethCfg.XLayer.DynamicBlockGasLimit
+			}
 		case <-ctx.Done():
 			return
 		}

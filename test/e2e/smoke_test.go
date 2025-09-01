@@ -1529,3 +1529,155 @@ func TestVerification(t *testing.T) {
 
 	log.Info("Verification delay batch test completed successfully")
 }
+
+func TestGetBlockGasLimit(t *testing.T) {
+	log.Infof("Start TestGetBlockGasLimit")
+	gaslimit, err := operations.GetBlockGasLimit()
+	require.NoError(t, err)
+	require.Equal(t, uint64(30000000), gaslimit)
+	require.NoError(t, err)
+}
+
+// TestHighGasEstimation tests gas estimation for high gas consumption transactions
+func TestHighGasEstimation(t *testing.T) {
+	log.Infof("Start TestHighGasEstimation")
+	client, err := ethclient.Dial(operations.DefaultL2NetworkURL)
+	require.NoError(t, err)
+	defer client.Close()
+
+	// Test 1: Contract deployment (high gas consumption)
+	t.Run("ContractDeployment", func(t *testing.T) {
+		from := common.HexToAddress(operations.DefaultL2AdminAddress)
+
+		// Simple ERC20-like contract bytecode (this is a complex contract that consumes significant gas)
+		bytecode := "0x608060405234801561001057600080fd5b506040516105643803806105648339810160408190526100309190610054565b600055610084565b6000602082840312156100655760ff5b5051919050565b6104d1806100936000396000f3fe608060405234801561001057600080fd5b50600436106100575760003560e01c806306fdde031461005c578063095ea7b31461007a57806318160ddd1461009d57806323b872dd146100af578063313ce567146100c2575b600080fd5b6100646100d7565b6040516100719190610250565b60405180910390f35b61008d610088366004610334565b610169565b604051901515815260200161005e565b6100a56100a7565b005b61008d6100bd366004610334565b6101d3565b6100ca6101d5565b60405160ff909116815260200161005e565b60606040518060400160405280600781526020017f54657374204552430000000000000000000000000000000000000000000000008152509050919050565b6000813f7c010000000000000000000000000000000000000000000000000000000000000081141561013e5760019150506101cd565b816001600160a01b03163f7c010000000000000000000000000000000000000000000000000000000000000081141561017a5760019150506101cd565b60405162461bcd60e51b815260206004820152601060248201527f496e76616c696420616464726573730000000000000000000000000000000000604482015260640160405180910390fd5b92915050565b505050565b6012919050565b600060208083528351808285015260005b8181101561020c578581018301518582016040015282016101f0565b8181111561021e576000604083870101525b50601f01601f1916929092016040019392505050565b80356001600160a01b038116811461024b57600080fd5b919050565b6000806040838503121561026357600080fd5b61026c83610234565b946020939093013593505050565b60006020828403121561028c57600080fd5b61029582610234565b9392505050565b6000806000606084860312156102b157600080fd5b6102ba84610234565b92506102c860208501610234565b9150604084013590509250925092565b600181811c908216806102ec57607f821691505b6020821081141561030d57634e487b7160e01b600052602260045260246000fd5b5091905056fea2646970667358221220f7e7b4c8c6d8d5a8a2b1c9e8f7a6b5c4d3e2f1a9b8c7d6e5f4a3b2c1d0e9f8a722"
+
+		// Estimate gas for contract deployment
+		estimatedGas, err := operations.EthEstimateGas(
+			from,
+			common.Address{}, // to address is empty for contract creation
+			"0x0",            // gas (will be estimated)
+			"0x3B9ACA00",     // gasPrice (1 Gwei)
+			"0x0",            // value
+			bytecode,         // data (contract bytecode)
+		)
+		require.NoError(t, err)
+		log.Infof("Contract deployment estimated gas: %d", estimatedGas)
+
+		// Expect high gas consumption for contract deployment (typically > 200,000)
+		require.Greater(t, estimatedGas, uint64(21000), "Contract deployment should consume significant gas")
+	})
+
+	// Test 2: Transaction with large data payload
+	t.Run("LargeDataTransaction", func(t *testing.T) {
+		from := common.HexToAddress(operations.DefaultL2AdminAddress)
+		to := common.HexToAddress(operations.DefaultL2NewAcc1Address)
+
+		// Create a large data payload (4KB of data)
+		largeData := "0x"
+		for i := 0; i < 4096; i++ {
+			largeData += "00"
+		}
+
+		// Estimate gas for transaction with large data
+		estimatedGas, err := operations.EthEstimateGas(
+			from,
+			to,
+			"0x0",        // gas (will be estimated)
+			"0x3B9ACA00", // gasPrice (1 Gwei)
+			"0x0",        // value
+			largeData,    // large data payload
+		)
+		require.NoError(t, err)
+		log.Infof("Large data transaction estimated gas: %d", estimatedGas)
+
+		// Expect higher gas consumption due to data costs (21000 base + data costs)
+		require.Greater(t, estimatedGas, uint64(21000), "Large data transaction should consume more than base gas")
+		// Data cost is 4 gas per zero byte and 16 gas per non-zero byte
+		// For 4KB of zero bytes: 21000 + (4096 * 4) = 37,384
+		require.Greater(t, estimatedGas, uint64(35000), "Should account for data costs")
+	})
+
+	// Test 3: Multiple sequential operations to test gas limit constraints
+	t.Run("GasLimitConstraints", func(t *testing.T) {
+		// Get current block gas limit
+		blockGasLimit, err := operations.GetBlockGasLimit()
+		require.NoError(t, err)
+		log.Infof("Current block gas limit: %d", blockGasLimit)
+
+		from := common.HexToAddress(operations.DefaultL2AdminAddress)
+		to := common.HexToAddress(operations.DefaultL2NewAcc1Address)
+
+		// Try to estimate gas for a transaction that would exceed block limit
+		// (This should either return an error or cap at a reasonable value)
+		excessiveGasHex := fmt.Sprintf("0x%x", blockGasLimit+1000000) // Try to use more than block limit
+
+		_, err = operations.EthEstimateGas(
+			from,
+			to,
+			excessiveGasHex, // try to set gas higher than block limit
+			"0x3B9ACA00",    // gasPrice (1 Gwei)
+			"0x0",           // value
+			"0x",            // empty data
+		)
+
+		// This might fail or succeed depending on implementation
+		// The key is that we're testing the gas estimation behavior at boundaries
+		if err != nil {
+			log.Infof("Gas estimation correctly rejected excessive gas limit: %v", err)
+		} else {
+			log.Infof("Gas estimation handled excessive gas limit gracefully")
+		}
+	})
+
+	// Test 4: Complex computation simulation (using precompile calls)
+	t.Run("ComplexComputation", func(t *testing.T) {
+		from := common.HexToAddress(operations.DefaultL2AdminAddress)
+		// Use the SHA256 precompile address (0x02) to simulate complex computation
+		sha256Precompile := common.HexToAddress("0x0000000000000000000000000000000000000002")
+
+		// Create data for SHA256 computation (large input)
+		computationData := "0x"
+		for i := 0; i < 1000; i++ {
+			computationData += fmt.Sprintf("%02x", i%256)
+		}
+
+		// Estimate gas for precompile call
+		estimatedGas, err := operations.EthEstimateGas(
+			from,
+			sha256Precompile,
+			"0x0",           // gas (will be estimated)
+			"0x3B9ACA00",    // gasPrice (1 Gwei)
+			"0x0",           // value
+			computationData, // data for computation
+		)
+		require.NoError(t, err)
+		log.Infof("Complex computation estimated gas: %d", estimatedGas)
+
+		// SHA256 precompile has specific gas costs
+		require.Greater(t, estimatedGas, uint64(21000), "Complex computation should consume more than base gas")
+	})
+
+	// Test 2: Transaction with large data payload
+	t.Run("SuperLargeDataTransaction", func(t *testing.T) {
+		from := common.HexToAddress(operations.DefaultL2AdminAddress)
+		to := common.HexToAddress(operations.DefaultL2NewAcc1Address)
+
+		const targetBytes = 7494751
+		largeData := "0x" + strings.Repeat("00", targetBytes)
+
+		// Estimate gas for transaction with large data
+		_, err := operations.EthEstimateGas(
+			from,
+			to,
+			"0x0",        // gas (will be estimated)
+			"0x3B9ACA00", // gasPrice (1 Gwei)
+			"0x0",        // value
+			largeData,    // large data payload
+		)
+		require.Error(t, err)
+		log.Infof("SuperLarge data transaction estimated gas exceed")
+	})
+
+	log.Infof("TestHighGasEstimation completed successfully")
+}

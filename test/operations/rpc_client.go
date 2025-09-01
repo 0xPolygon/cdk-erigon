@@ -302,3 +302,15 @@ func GetMetrics() (string, error) {
 	}
 	return string(body), nil
 }
+
+func GetBlockGasLimit() (uint64, error) {
+	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "eth_getBlockGasLimit")
+	if err != nil {
+		return 0, err
+	}
+	if response.Error != nil {
+		return 0, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
+	}
+
+	return transHexToUint64(response.Result)
+}
