@@ -2368,20 +2368,13 @@ func getSmtroot(chaindata string) error {
 
 var logger log.Logger
 
-func init() {
-	logger = log.New()
-	consoleHandler := log.StreamHandler(os.Stdout, log.TerminalFormat())
-	logger.SetHandler(log.LvlFilterHandler(log.LvlInfo, consoleHandler))
-	logger.Debug("start hack")
-}
-
 func main() {
 
 	debug.RaiseFdLimit()
 	flag.Parse()
 
 	// Configure log level based on flag
-	var level log.Lvl
+	var level = log.LvlInfo
 	switch strings.ToLower(*logLevel) {
 	case "debug":
 		level = log.LvlDebug
@@ -2396,7 +2389,7 @@ func main() {
 		level = log.LvlInfo
 	}
 
-	// Update logger with new level
+	logger = log.New()
 	consoleHandler := log.StreamHandler(os.Stdout, log.TerminalFormat())
 	logger.SetHandler(log.LvlFilterHandler(level, consoleHandler))
 
