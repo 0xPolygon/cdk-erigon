@@ -2084,6 +2084,8 @@ func calcSmtRoot(input string) (*big.Int, error) {
 		input = "genesis.json"
 	}
 	fmt.Printf("input: %s\n", input)
+
+	start0 := time.Now()
 	fileData, err := os.ReadFile(input)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -2096,6 +2098,7 @@ func calcSmtRoot(input string) (*big.Int, error) {
 			return nil, err
 		}
 	}
+	fmt.Println("read json elapsed:", time.Since(start0))
 
 	alloc := jsonData["alloc"]
 
