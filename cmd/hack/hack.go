@@ -14,10 +14,12 @@ import (
 	_ "net/http/pprof" //nolint:gosec
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
@@ -1928,6 +1930,424 @@ func checkStateRoot(chaindata, smtdata, input string, incremental, debug bool) e
 	return nil
 }
 
+func checkStateRootFast(chaindata, smtdata, input string) error {
+
+	var smtBatchRootHashOrigin *big.Int
+	if chaindata != "" {
+		ctx := context.Background()
+		db := mdbx.MustOpen(chaindata)
+		defer db.Close()
+		tx, err := db.BeginRw(ctx)
+		if err != nil {
+			panic(err)
+		}
+		defer tx.Rollback()
+		var txsmt kv.RwTx = nil
+		if smtdata != "" {
+			fmt.Printf("Using split DB: %s\n", smtdata)
+			dbsmt := mdbx.MustOpen(*pathSmtDb)
+			defer dbsmt.Close()
+			txsmt, err = dbsmt.BeginRw(ctx)
+			if err != nil {
+				panic(err)
+			}
+			defer txsmt.Rollback()
+		}
+		eridb := db2.NewEriDb(txsmt, tx)
+		smtOrigin := smt.NewSMT(eridb, false)
+		smtBatchRootHashOrigin = smtOrigin.LastRoot()
+		fmt.Printf("*** smtBatchRootHashOrigin: %x\n", smtBatchRootHashOrigin)
+	}
+
+	smtBatchRootHashRebuild, err := calcSmtRoot(input)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("*** smtBatchRootHashRebuild: %x\n", smtBatchRootHashRebuild)
+
+	if smtBatchRootHashOrigin != nil {
+		if smtBatchRootHashOrigin.Text(16) == smtBatchRootHashRebuild.Text(16) {
+			fmt.Println("Batch check: Pass")
+		} else {
+			fmt.Println("Batch check: Failed")
+		}
+	}
+	return nil
+}
+
+func TinyScalarToArrayUint64(scalar uint64) [8]uint64 {
+	var result [8]uint64
+
+	result[0] = scalar & 0xFFFFFFFF
+	result[1] = (scalar >> 32) & 0xFFFFFFFF
+
+	return result
+}
+
+type NodeKV struct {
+	Key       utils.NodeKey
+	Value     [8]uint64
+	leafHash  [4]uint64
+	level     int // [0, 255]
+	path      []int
+	shortPath [4]uint64 // Store 256 bits using 4 uint64s
+}
+
+func calculateLevels(nodeKvs []*NodeKV, startLevel int) {
+	if len(nodeKvs) <= 1 || startLevel > 255 {
+		return
+	}
+
+	// Find the position that split the tree into two subtrees.
+	splitIndex := sort.Search(len(nodeKvs), func(i int) bool {
+		return nodeKvs[i].Key.GetPath()[startLevel] == 1
+	})
+
+	if splitIndex == 0 {
+		// All nodes belong to the right subtree
+		calculateLevels(nodeKvs, startLevel+1)
+	} else if splitIndex == len(nodeKvs) {
+		// All nodes belong to the left subtree
+		calculateLevels(nodeKvs, startLevel+1)
+	} else {
+		// Both left subtree and right subtree have node(s)
+		for i := range nodeKvs {
+			nodeKvs[i].level = startLevel + 1
+		}
+
+		// Enable concurrent processing only when data size is large enough
+		if len(nodeKvs) > 10000 {
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			// Process left subtree concurrently
+			go func() {
+				defer wg.Done()
+				calculateLevels(nodeKvs[:splitIndex], startLevel+1)
+			}()
+
+			// Process right subtree concurrently
+			go func() {
+				defer wg.Done()
+				calculateLevels(nodeKvs[splitIndex:], startLevel+1)
+			}()
+
+			wg.Wait()
+		} else {
+			// Process sequentially when data size is small
+			calculateLevels(nodeKvs[:splitIndex], startLevel+1)
+			calculateLevels(nodeKvs[splitIndex:], startLevel+1)
+		}
+	}
+}
+
+func KeyContractStorageHack(ethaddr [8]uint64, storageKey string) utils.NodeKey {
+	storageKeyBig := utils.ConvertHexToBigInt(storageKey)
+	storageKeyArr := utils.ScalarToArrayUint64(storageKeyBig)
+	hk0 := utils.HashByPointers(&storageKeyArr, &utils.BranchCapacity)
+	var key1 = [8]uint64{ethaddr[0], ethaddr[1], ethaddr[2], ethaddr[3], ethaddr[4], ethaddr[5], uint64(utils.SC_STORAGE), uint64(0)}
+	return *utils.HashByPointers(&key1, hk0)
+}
+
+func calcSmtRoot(input string) (*big.Int, error) {
+	var jsonData map[string]map[string]AccInfo
+	if input == "" {
+		input = "genesis.json"
+	}
+	fmt.Printf("input: %s\n", input)
+
+	start0 := time.Now()
+	fileData, err := os.ReadFile(input)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Println("Error reading file:", err)
+			return nil, err
+		}
+	} else {
+		if err := json.Unmarshal(fileData, &jsonData); err != nil {
+			fmt.Println("Error decoding JSON:", err)
+			return nil, err
+		}
+	}
+	fmt.Println("read json elapsed:", time.Since(start0))
+
+	alloc := jsonData["alloc"]
+
+	nodeKvs := make([]*NodeKV, 0)
+	start1 := time.Now()
+
+	// Get all addresses and process them in chunks
+	addrs := make([]string, 0, len(alloc))
+	for addr := range alloc {
+		addrs = append(addrs, addr)
+	}
+
+	numWorkers := runtime.NumCPU()
+	fmt.Println("numWorkers:", numWorkers)
+	chunkSize := (len(addrs) + numWorkers - 1) / numWorkers
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for i := 0; i < len(addrs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(addrs) {
+			end = len(addrs)
+		}
+
+		wg.Add(1)
+		go func(addrSlice []string) {
+			defer wg.Done()
+			localKvs := make([]*NodeKV, 0, len(addrSlice)*2+2)
+
+			for _, addrStr := range addrSlice {
+				addr := libcommon.HexToAddress(addrStr).String()
+				acc := alloc[addrStr]
+
+				if !isEmpty(acc.Balance) {
+					balanceKey := utils.KeyEthAddrBalance(addr)
+					balanceBig := utils.ConvertHexToBigInt(acc.Balance)
+					balanceValue := utils.ScalarToArrayUint64(balanceBig)
+					localKvs = append(localKvs, &NodeKV{
+						Key:   balanceKey,
+						Value: balanceValue,
+					})
+				}
+
+				if !isEmpty(acc.Nonce) {
+					nonceKey := utils.KeyEthAddrNonce(addr)
+					nonceBig := utils.ConvertHexToBigInt(acc.Nonce)
+					nonceValue := utils.ScalarToArrayUint64(nonceBig)
+					localKvs = append(localKvs, &NodeKV{
+						Key:   nonceKey,
+						Value: nonceValue,
+					})
+				}
+
+				if !isEmptyCode(acc.Code) {
+					keyContractCode := utils.KeyContractCode(addr)
+					keyContractLength := utils.KeyContractLength(addr)
+					bi, bytecodeLength, _ := smt.HackWrapConvertBytecodeToBigInt(acc.Code)
+					localKvs = append(localKvs, &NodeKV{
+						Key:   keyContractCode,
+						Value: utils.ScalarToArrayUint64(bi),
+					})
+					localKvs = append(localKvs, &NodeKV{
+						Key:   keyContractLength,
+						Value: TinyScalarToArrayUint64(uint64(bytecodeLength)),
+					})
+				}
+
+				if len(acc.Storage) > 50000 {
+					// Convert storage to slice for parallel processing
+					storageKeys := make([]string, 0, len(acc.Storage))
+					for k := range acc.Storage {
+						storageKeys = append(storageKeys, k)
+					}
+
+					// Calculate chunk size for each worker
+					numStorageWorkers := runtime.NumCPU()
+					storageChunkSize := (len(storageKeys) + numStorageWorkers - 1) / numStorageWorkers
+
+					var storageWg sync.WaitGroup
+					var storageMu sync.Mutex
+					addrBig := utils.ConvertHexToBigInt(addr)
+					addrArr := utils.ScalarToArrayUint64(addrBig)
+
+					// Process storage concurrently
+					for i := 0; i < len(storageKeys); i += storageChunkSize {
+						end := i + storageChunkSize
+						if end > len(storageKeys) {
+							end = len(storageKeys)
+						}
+
+						storageWg.Add(1)
+						go func(keys []string) {
+							defer storageWg.Done()
+							localStorageKvs := make([]*NodeKV, 0, len(keys))
+
+							for _, k := range keys {
+								v := acc.Storage[k]
+								storageBig := utils.ConvertHexToBigInt(v)
+								storageValue := utils.ScalarToArrayUint64(storageBig)
+								storageKey := KeyContractStorageHack(addrArr, k)
+								localStorageKvs = append(localStorageKvs, &NodeKV{
+									Key:   storageKey,
+									Value: storageValue,
+								})
+							}
+
+							storageMu.Lock()
+							localKvs = append(localKvs, localStorageKvs...)
+							storageMu.Unlock()
+						}(storageKeys[i:end])
+					}
+
+					storageWg.Wait()
+				} else {
+					// Process storage sequentially when size is small
+					addrBig := utils.ConvertHexToBigInt(addr)
+					addrArr := utils.ScalarToArrayUint64(addrBig)
+					for k, v := range acc.Storage {
+						storageBig := utils.ConvertHexToBigInt(v)
+						storageValue := utils.ScalarToArrayUint64(storageBig)
+						storageKey := KeyContractStorageHack(addrArr, k)
+						localKvs = append(localKvs, &NodeKV{
+							Key:   storageKey,
+							Value: storageValue,
+						})
+					}
+				}
+			}
+
+			// Calculate path and shortPath
+			for i := range localKvs {
+				localKvs[i].path = localKvs[i].Key.GetPath()
+				// Convert path to shortPath
+				for j := 0; j < 256; j++ {
+					if localKvs[i].path[j] == 1 {
+						// Set corresponding bit to 1
+						// j=0 should map to highest bit, so use 63-(j%64)
+						blockIdx := j / 64      // Determine which uint64
+						bitPos := 63 - (j % 64) // Position in this uint64, starting from highest bit
+						localKvs[i].shortPath[blockIdx] |= uint64(1) << uint64(bitPos)
+					}
+				}
+			}
+
+			// Merge results
+			mu.Lock()
+			nodeKvs = append(nodeKvs, localKvs...)
+			mu.Unlock()
+		}(addrs[i:end])
+	}
+
+	wg.Wait()
+	fmt.Println("prepare elapsed:", time.Since(start1))
+
+	start11 := time.Now()
+	slices.SortFunc(nodeKvs, func(a, b *NodeKV) int {
+		// Directly compare uint64 arrays
+		for i := 0; i < 4; i++ {
+			if a.shortPath[i] < b.shortPath[i] {
+				return -1
+			}
+			if a.shortPath[i] > b.shortPath[i] {
+				return 1
+			}
+		}
+		return 0
+	})
+	fmt.Println("sorting nodes elapsed:", time.Since(start11))
+
+	start2 := time.Now()
+	calculateLevels(nodeKvs, 0)
+	fmt.Println("calculate level elapsed:", time.Since(start2))
+
+	start3 := time.Now()
+	// 2. Calculate leaf node hashes concurrently
+	chunkSize = (len(nodeKvs) + numWorkers - 1) / numWorkers
+
+	for i := 0; i < len(nodeKvs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(nodeKvs) {
+			end = len(nodeKvs)
+		}
+
+		wg.Add(1)
+		go func(start, end int) {
+			defer wg.Done()
+			for i := start; i < end; i++ {
+				// value hash
+				valueHash := utils.HashByPointers(
+					&nodeKvs[i].Value,
+					&utils.BranchCapacity,
+				)
+
+				// leaf hash
+				remainingKey := utils.RemoveKeyBits(nodeKvs[i].Key, nodeKvs[i].level)
+				nodeKvs[i].leafHash = *utils.HashByPointers(
+					&[8]uint64{
+						remainingKey[0], remainingKey[1], remainingKey[2], remainingKey[3],
+						valueHash[0], valueHash[1], valueHash[2], valueHash[3],
+					},
+					&utils.LeafCapacity,
+				)
+			}
+		}(i, end)
+	}
+	wg.Wait()
+	fmt.Println("calculate leaf hash elapsed:", time.Since(start3))
+
+	start4 := time.Now()
+	root := utils.NodeKey(calculateRoot(nodeKvs, 0, len(nodeKvs), 0))
+	fmt.Println("calculate root hash elapsed:", time.Since(start4))
+
+	return root.ToBigInt(), nil
+}
+
+func calculateRoot(nodeKVs []*NodeKV, start, end, level int) [4]uint64 {
+	if start >= end {
+		return [4]uint64{0, 0, 0, 0} // Return zero hash for empty node
+	}
+
+	if start+1 == end {
+		return nodeKVs[start].leafHash // Return leaf hash for single node
+	}
+
+	// Find the split point
+	splitIndex := sort.Search(end-start, func(i int) bool {
+		return nodeKVs[start+i].path[level] == 1
+	}) + start
+
+	// Calculate hashes for left and right subtrees
+	var leftHash, rightHash [4]uint64
+	if end-start > 10000 {
+		var wg sync.WaitGroup
+
+		if splitIndex > start {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				leftHash = calculateRoot(nodeKVs, start, splitIndex, level+1)
+			}()
+		}
+
+		if splitIndex < end {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				rightHash = calculateRoot(nodeKVs, splitIndex, end, level+1)
+			}()
+		}
+
+		wg.Wait()
+	} else {
+		if splitIndex > start {
+			leftHash = calculateRoot(nodeKVs, start, splitIndex, level+1)
+		}
+		if splitIndex < end {
+			rightHash = calculateRoot(nodeKVs, splitIndex, end, level+1)
+		}
+	}
+
+	// Calculate hash for current node
+	return *utils.HashByPointers(
+		&[8]uint64{
+			leftHash[0], leftHash[1], leftHash[2], leftHash[3],
+			rightHash[0], rightHash[1], rightHash[2], rightHash[3],
+		},
+		&utils.BranchCapacity,
+	)
+}
+
+func isEmpty(s string) bool {
+	return s == "" || s == "0x0"
+}
+
+func isEmptyCode(s string) bool {
+	return s == "" || s == "0x"
+}
+
 func getSmtroot(chaindata string) error {
 	db := mdbx.MustOpen(chaindata)
 	defer db.Close()
@@ -2001,6 +2421,8 @@ func main() {
 			log.Error("Failure in running pprof server", "err", err)
 		}
 	}()
+
+	start := time.Now()
 
 	var err error
 	switch *action {
@@ -2133,12 +2555,20 @@ func main() {
 		} else {
 			err = checkStateRoot(*chaindata, "", *input, *incremental, *debugPrint)
 		}
+	case "checkStateRootFast":
+		if *standaloneSmtDb {
+			err = checkStateRootFast(*chaindata, *pathSmtDb, *input)
+		} else {
+			err = checkStateRootFast(*chaindata, "", *input)
+		}
 	case "getSmtroot":
 		err = getSmtroot(*chaindata)
 	default:
 		fmt.Printf("Unknown action: %s\n", *action)
 		return
 	}
+
+	fmt.Println("total time elapsed:", time.Since(start))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)

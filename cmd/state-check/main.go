@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -79,7 +80,7 @@ func (p *ClientPool) Close() {
 }
 
 // verifyAccountState verifies a single account's state against the Ethereum node
-func verifyAccountState(address string, accountData AccountState, client *ethclient.Client) error {
+func verifyAccountState(address string, accountData AccountState, clientPool *ClientPool, bar *progressbar.ProgressBar, mu *sync.Mutex) error {
 	// Create context with no timeout
 	ctx := context.Background()
 
@@ -87,7 +88,9 @@ func verifyAccountState(address string, accountData AccountState, client *ethcli
 	addr := common.HexToAddress(address)
 
 	// 1. Verify balance
+	client := clientPool.GetClient()
 	balanceRPC, err := client.BalanceAt(ctx, addr, nil)
+	clientPool.ReturnClient(client)
 	if err != nil {
 		return fmt.Errorf("address: %s balance is invalid: %v", address, err)
 	}
@@ -109,7 +112,9 @@ func verifyAccountState(address string, accountData AccountState, client *ethcli
 	}
 
 	// 2. Verify nonce
+	client = clientPool.GetClient()
 	nonceRPC, err := client.NonceAt(ctx, addr, nil)
+	clientPool.ReturnClient(client)
 	if err != nil {
 		return fmt.Errorf("address: %s nonce is invalid: %v", address, err)
 	}
@@ -128,7 +133,9 @@ func verifyAccountState(address string, accountData AccountState, client *ethcli
 
 	// 3. Verify code (if not empty)
 	if accountData.Code != "" && accountData.Code != "0x" {
+		client = clientPool.GetClient()
 		code, err := client.CodeAt(ctx, addr, nil)
+		clientPool.ReturnClient(client)
 		if err != nil {
 			return fmt.Errorf("address: %s code is invalid: %v", address, err)
 		}
@@ -137,24 +144,35 @@ func verifyAccountState(address string, accountData AccountState, client *ethcli
 		if codeHex != accountData.Code {
 			return fmt.Errorf("address: %s code does not match", address)
 		}
+	}
 
-		// 4. Verify storage slots
+	// 4. Verify storage slots
+	// record current time
+	now := time.Now()
 
-		// record current time
-		now := time.Now()
-
-		// Split storage verification into chunks of 100,000 and use errgroup
-		if len(accountData.Storage) > 0 {
-			err := verifyStorageInChunks(ctx, addr, address, accountData.Storage, client)
-			if err != nil {
-				return err
-			}
+	// Split storage verification into chunks of 100,000 and use errgroup
+	if len(accountData.Storage) > 0 {
+		err := verifyStorageInChunks(ctx, addr, address, accountData.Storage, clientPool, bar, mu)
+		if err != nil {
+			return err
 		}
+	}
 
-		if len(accountData.Storage) > 10000 {
-			// log time cost
-			fmt.Printf("address: %s has %d storage slots, cost: %s\n", address, len(accountData.Storage), time.Since(now))
-		}
+	// if code is empty but has storage, return error
+	//if (accountData.Code == "" || accountData.Code == "0x") && len(accountData.Storage) > 0 {
+	//	fmt.Printf("address: %s code is empty but has storage slots: %d\n", address, len(accountData.Storage))
+	//}
+
+	if len(accountData.Storage) > 10000 {
+		// log time cost
+		fmt.Printf("address: %s has %d storage slots, cost: %s\n", address, len(accountData.Storage), time.Since(now))
+	}
+
+	// Update progress for account completion
+	if bar != nil {
+		mu.Lock()
+		bar.Add(1)
+		mu.Unlock()
 	}
 	return nil
 }
@@ -166,12 +184,12 @@ type storageItem struct {
 }
 
 // verifyStorageInChunks verifies storage slots in chunks of 10,000 using errgroup
-func verifyStorageInChunks(ctx context.Context, addr common.Address, address string, storage map[string]string, client *ethclient.Client) error {
-	const chunkSize = 100000
+func verifyStorageInChunks(ctx context.Context, addr common.Address, address string, storage map[string]string, clientPool *ClientPool, bar *progressbar.ProgressBar, mu *sync.Mutex) error {
+	const chunkSize = 3000
 
 	// If storage is small enough, process directly without converting to slice
 	if len(storage) <= chunkSize {
-		return verifyStorageMap(ctx, addr, address, storage, client)
+		return verifyStorageMap(ctx, addr, address, storage, clientPool, bar, mu)
 	}
 
 	// Convert storage map to slice for chunking
@@ -192,7 +210,7 @@ func verifyStorageInChunks(ctx context.Context, addr common.Address, address str
 		// Use slice directly without creating new array
 		chunk := storageItems[i:end]
 		g.Go(func() error {
-			return verifyStorageChunk(ctx, addr, address, chunk, client)
+			return verifyStorageChunk(ctx, addr, address, chunk, clientPool, bar, mu)
 		})
 	}
 
@@ -200,12 +218,14 @@ func verifyStorageInChunks(ctx context.Context, addr common.Address, address str
 }
 
 // verifyStorageSlot verifies a single storage slot
-func verifyStorageSlot(ctx context.Context, addr common.Address, address, storageKey, valueDump string, client *ethclient.Client) error {
+func verifyStorageSlot(ctx context.Context, addr common.Address, address, storageKey, valueDump string, clientPool *ClientPool) error {
 	// Parse storage key
 	key := common.HexToHash(storageKey)
 
 	// Get storage value
+	client := clientPool.GetClient()
 	storageValue, err := client.StorageAt(ctx, addr, key, nil)
+	clientPool.ReturnClient(client)
 	if err != nil {
 		return fmt.Errorf("address: %s storage is invalid for key %s: %v", address, storageKey, err)
 	}
@@ -220,22 +240,58 @@ func verifyStorageSlot(ctx context.Context, addr common.Address, address, storag
 }
 
 // verifyStorageMap verifies storage slots directly from map
-func verifyStorageMap(ctx context.Context, addr common.Address, address string, storage map[string]string, client *ethclient.Client) error {
+func verifyStorageMap(ctx context.Context, addr common.Address, address string, storage map[string]string, clientPool *ClientPool, bar *progressbar.ProgressBar, mu *sync.Mutex) error {
+	count := 0
 	for storageKey, valueDump := range storage {
-		if err := verifyStorageSlot(ctx, addr, address, storageKey, valueDump, client); err != nil {
+		if err := verifyStorageSlot(ctx, addr, address, storageKey, valueDump, clientPool); err != nil {
 			return err
 		}
+		count++
+		// Update progress for each storage slot
+		if bar != nil {
+			if count%50 == 0 {
+				mu.Lock()
+				bar.Add(count)
+				mu.Unlock()
+				count = 0
+			}
+		}
+	}
+
+	if bar != nil {
+		mu.Lock()
+		bar.Add(count)
+		mu.Unlock()
+		count = 0
 	}
 
 	return nil
 }
 
 // verifyStorageChunk verifies a chunk of storage slots
-func verifyStorageChunk(ctx context.Context, addr common.Address, address string, storageItems []storageItem, client *ethclient.Client) error {
+func verifyStorageChunk(ctx context.Context, addr common.Address, address string, storageItems []storageItem, clientPool *ClientPool, bar *progressbar.ProgressBar, mu *sync.Mutex) error {
+	count := 0
 	for _, item := range storageItems {
-		if err := verifyStorageSlot(ctx, addr, address, item.key, item.value, client); err != nil {
+		if err := verifyStorageSlot(ctx, addr, address, item.key, item.value, clientPool); err != nil {
 			return err
 		}
+		count++
+		// Update progress for each storage slot
+		if bar != nil {
+			if count%50 == 0 {
+				mu.Lock()
+				bar.Add(count)
+				mu.Unlock()
+				count = 0
+			}
+		}
+	}
+
+	if bar != nil {
+		mu.Lock()
+		bar.Add(count)
+		mu.Unlock()
+		count = 0
 	}
 
 	return nil
@@ -278,9 +334,24 @@ func checkState(dumpStateFile, rpcURL, ignoreListFile string) error {
 
 	fmt.Println("Finish loading state dump file.")
 
+	// Calculate total progress units: accounts + storage slots
+	totalProgressUnits := len(stateDump)
+	totalStorageSlots := 0
+	for address, accountData := range stateDump {
+		if slices.Contains(ignoreList, address) {
+			continue
+		}
+		totalStorageSlots += len(accountData.Storage)
+		totalProgressUnits += len(accountData.Storage)
+	}
+
+	totalAccounts := len(stateDump)
+	fmt.Printf("Total accounts to verify: %d\n", totalAccounts)
+	fmt.Printf("Total storage slots to verify: %d\n", totalStorageSlots)
+
 	// Log CPU information
-	// cpus := runtime.NumCPU()
-	// fmt.Printf("CPUs available: %d\n", cpus)
+	cpus := runtime.NumCPU()
+	fmt.Printf("CPUs available: %d\n", cpus)
 
 	// Create client pool
 	clientPool, err := NewClientPool(rpcURL, *connectionCount)
@@ -293,7 +364,11 @@ func checkState(dumpStateFile, rpcURL, ignoreListFile string) error {
 	ok := true
 	var bar *progressbar.ProgressBar
 	if *progressBar {
-		bar = progressbar.NewOptions(len(stateDump), progressbar.OptionSetPredictTime(true))
+		bar = progressbar.NewOptions(totalProgressUnits,
+			progressbar.OptionSetPredictTime(true),
+			progressbar.OptionShowCount(),
+			progressbar.OptionSetDescription("Verifying state"),
+		)
 	}
 
 	// Split: Launch goroutines for each account using errgroup
@@ -308,24 +383,14 @@ func checkState(dumpStateFile, rpcURL, ignoreListFile string) error {
 
 		addr, data := address, accountData // Capture loop variables
 		g.Go(func() error {
-			// Get client from pool (blocks if none available)
-			client := clientPool.GetClient()
-			defer clientPool.ReturnClient(client)
-
 			// Verify account state
-			err := verifyAccountState(addr, data, client)
+			err := verifyAccountState(addr, data, clientPool, bar, &mu)
 
 			// Print error directly and update status
 			if err != nil {
 				mu.Lock()
 				fmt.Printf("\nverification failed: %v\n", err)
 				ok = false
-				mu.Unlock()
-			}
-
-			if *progressBar {
-				mu.Lock()
-				bar.Add(1)
 				mu.Unlock()
 			}
 
