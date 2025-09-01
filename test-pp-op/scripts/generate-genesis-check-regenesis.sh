@@ -30,7 +30,7 @@ echo "Adding: 10^24"
 echo "New balance will be: $NEW_BALANCE"
 
 # update balance to genesis file
-sed_inplace '/'"$ADDR"'/,/balance/s/"balance": "0x[^"]*"/"balance": "'$NEW_BALANCE'"/' ./config-op/genesis.json
+sed_inplace '/"'"$ADDR"'"/{n;s/"balance": "0x[^"]*"/"balance": "'$NEW_BALANCE'"/}' ./config-op/genesis.json
 
 # 2. Generate state1.json
 #hack -action migrateGenesis -chaindata ./data_state1/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/state1.json
