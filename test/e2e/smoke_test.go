@@ -466,7 +466,7 @@ func TestGasPrice(t *testing.T) {
 func TestMetrics(t *testing.T) {
 	result, err := operations.GetMetricsPrometheus()
 	require.NoError(t, err)
-	require.Equal(t, strings.Contains(result, "sequencer_batch_execute_time"), true)
+	require.Equal(t, strings.Contains(result, "xlayer_operation_timing_seconds"), true)
 	//require.Equal(t, strings.Contains(result, "sequencer_pool_tx_count"), true)
 
 	// TODO: enable this test after metrics are enabled

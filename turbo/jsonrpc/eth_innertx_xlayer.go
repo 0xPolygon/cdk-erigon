@@ -109,7 +109,7 @@ func (api *APIImpl) GetBlockInternalTransactions(ctx context.Context, number rpc
 	} else if len(blockInnerTxs) > len(block.Transactions()) {
 		log.Warn(fmt.Sprintf("block inner tx count %d is greater than block tx count %d", len(blockInnerTxs), len(block.Transactions())))
 	}
-	metrics.RpcInnerTxExecuted.Add(float64(len(blockInnerTxs)))
+	metrics.IncRpcInnerTxExecuted(float64(len(blockInnerTxs)))
 
 	res := make(map[libcommon.Hash][]*zktypes.InnerTx)
 	for index, innerTxs := range blockInnerTxs[:len(block.Transactions())] {

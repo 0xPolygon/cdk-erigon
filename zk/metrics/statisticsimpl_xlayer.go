@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -172,6 +173,20 @@ func (l *statisticsInstance) SummaryCheckpoint() string {
 		blockZKHashAccountCount, blockZKHashStoreCount, blockZKHashCodeCount, setSmtCacheTiming)
 
 	log.Info(result)
+	// Report metrics to Prometheus
+	// Block level metrics
+	if blockNumber, err := strconv.ParseFloat(block, 64); err == nil {
+		SetBlockNumber(blockNumber)
+	}
+	RecordBlockExecuteTimingMs(blockDuration)
+	RecordBlockProcessTxTimingMs(blockProcessTxTiming)
+	RecordBlockGetTxTimingMs(blockGetTxTiming)
+	RecordBlockGetTxPauseTimingMs(blockGetTxPauseTiming)
+	IncBlockTxCount(float64(blockTx))
+	IncBlockInvalidTxCount(float64(blockInvalidTx))
+	SeqBlockGasUsed.Set(float64(blockGasUsed))
+	RecordBlockSetSmtCacheTimingMs(setSmtCacheTiming)
+
 	l.mu.Lock()
 	for k, v := range l.statistics {
 		l.statisticsOld[k] = v
@@ -271,20 +286,27 @@ func (l *statisticsInstance) Summary() string {
 
 	// Report metrics to Prometheus
 	// Batch level metrics
-	SeqBatchDuration.Set(float64(batchDuration))
-	SeqSequencingBatchTiming.Set(float64(sequencingBatchTiming))
-
+	if batchNumber, err := strconv.ParseFloat(batch, 64); err == nil {
+		SetBatchNumber(batchNumber)
+	}
+	RecordBatchExecuteTimingMs(batchDuration)
+	RecordBatchSequencingTimingMs(sequencingBatchTiming)
 	// Process transaction metrics
-	SeqProcessTxTiming.Set(float64(processTxTiming))
-	SeqGetTxTiming.Set(float64(getTxTiming))
-	SeqGetTxPauseTiming.Set(float64(getTxPauseTiming))
+	RecordBatchProcessTxTimingMs(processTxTiming)
+	RecordBatchGetTxTimingMs(getTxTiming)
+	RecordBatchGetTxPauseTimingMs(getTxPauseTiming)
+
+	// Tx count metrics
+	IncBatchTxCount(float64(tx))
+	IncBatchInvalidTxCount(float64(invalidTx))
 
 	// State and finalization metrics
-	SeqPbStateTiming.Set(float64(pbStateTiming))
-	SeqZkIncIntermediateHashesTiming.Set(float64(zkIncIntermediateHashesTiming))
-	SeqFinaliseBlockWriteTiming.Set(float64(finaliseBlockWriteTiming))
-	SeqSmtBatchCommitDBTiming.Set(float64(smtBatchCommitDBTiming))
-	SeqBatchCommitDBTiming.Set(float64(batchCommitDBTiming))
+	RecordBatchPbStateTimingMs(pbStateTiming)
+	RecordBatchZkIncIntermediateHashesTimingMs(zkIncIntermediateHashesTiming)
+	RecordBatchFinaliseBlockWriteTimingMs(finaliseBlockWriteTiming)
+	RecordBatchCommitDBTimingMs(batchCommitDBTiming)
+	RecordBatchSmtCommitDBTimingMs(smtBatchCommitDBTiming)
+	RecordBatchSetSmtCacheTimingMs(setSmtCacheTiming)
 
 	l.resetStatistics()
 	return result

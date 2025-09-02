@@ -360,7 +360,6 @@ func sequencingBatchStep(
 
 	// For X Layer
 	var batchCloseReason metrics.BatchFinalizeType
-	batchStart := time.Now()
 	cfg.yieldSize = apollo.GetYieldSize(cfg.yieldSize)
 
 	// once the batch ticker has ticked we need a signal to close the batch after the next block is done
@@ -743,7 +742,6 @@ BatchLoop:
 
 		// For X Layer
 		metrics.GetLogStatistics().CumulativeTiming(metrics.ProcessingTxTiming, time.Since(processingTxTime))
-		metrics.SeqTxDuration.Observe(float64(time.Since(processingTxTime).Milliseconds()))
 
 		// we do not want to commit this block if it has no transactions and we detected an overflow - essentially the batch is too
 		// full to get any more transactions in it and we don't want to commit an empty block
@@ -800,7 +798,6 @@ BatchLoop:
 		// For X Layer
 		metrics.GetLogStatistics().CumulativeCounting(metrics.BlockCounter)
 		// Count successful transactions
-		metrics.SeqTxCount.Add(float64(len(batchState.blockState.builtBlockElements.transactions)))
 		metrics.GetLogStatistics().CumulativeValue(metrics.TxCounter, int64(len(batchState.blockState.builtBlockElements.transactions)))
 
 		// add a check to the verifier and also check for responses
@@ -845,7 +842,6 @@ BatchLoop:
 		if elapsedSeconds != 0 {
 			gasPerSecond = float64(block.GasUsed()) / elapsedSeconds
 		}
-		metrics.SeqBlockGasUsed.Set(float64(block.GasUsed()))
 
 		if gasPerSecond != 0 {
 			log.Info(fmt.Sprintf("[%s] Finish block %d with %d transactions... (%d gas/s)", logPrefix, blockNumber, len(batchState.blockState.builtBlockElements.transactions), int(gasPerSecond)), "info-tree-index", infoTreeIndexProgress, "taken", time.Since(startTime))
@@ -937,9 +933,6 @@ BatchLoop:
 	// For X Layer, split db and ac
 	err = sdb.Commit(s, blockNumber, false)
 	metrics.GetLogStatistics().CumulativeTiming(metrics.BatchCommitDBTiming, time.Since(startCommitTime))
-
-	batchTime := time.Since(batchStart)
-	metrics.BatchExecuteTime(string(batchCloseReason), batchTime)
 
 	return err
 }
