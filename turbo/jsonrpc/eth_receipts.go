@@ -107,12 +107,12 @@ func (api *APIImpl) GetLogs(ctx context.Context, crit filters.FilterCriteria) (t
 		if err != nil {
 			return nil, err
 		}
+		if block == nil {
+			return nil, fmt.Errorf("block not found: %x", *crit.BlockHash)
+		}
 		header, err := api._blockReader.HeaderByNumber(ctx, tx, block.NumberU64())
 		if err != nil {
 			return nil, err
-		}
-		if block == nil {
-			return nil, fmt.Errorf("block not found: %x", *crit.BlockHash)
 		}
 		begin = header.Number.Uint64()
 		end = header.Number.Uint64()
