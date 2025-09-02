@@ -48,7 +48,7 @@ build_op_geth_image() {
   rm -rf $PWD_DIR/tmp/op-geth
   cd $PWD_DIR/tmp/
   echo "Cloning op-geth repository..."
-  git clone -b https://github.com/okx/op-geth.git
+  git clone -b dev-op https://github.com/okx/op-geth.git
   cp $PWD_DIR/op-docker/Dockerfile-opgeth op-geth/Dockerfile
   cd op-geth
 
