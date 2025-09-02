@@ -19,7 +19,7 @@ cd $TEST_DIR
 if [ $CHECK_REGENESIS = "true" ]; then
   ./scripts/prepare-check-regenesis.sh $CHECK_TYPE
 else
-  docker compose stop xlayer-seq
+  docker stop xlayer-seq
 fi
 
 docker-compose stop xlayer-rpc
@@ -31,7 +31,7 @@ docker-compose stop xlayer-agg-sender
 docker-compose stop xlayer-agglayer
 docker-compose stop xlayer-agglayer-prover
 
-LOG_OUTPUT=$(docker compose logs --since=0 --tail=all xlayer-seq 2>&1)
+LOG_OUTPUT=$(docker logs xlayer-seq 2>&1)
 echo "LOG_OUTPUT: $LOG_OUTPUT"
 
 FORK_BLOCK=$(echo "$LOG_OUTPUT" | grep "Finish block" | tail -1 | sed -n 's/.*Finish block \([0-9]*\) with.*/\1/p')
@@ -175,6 +175,11 @@ docker run \
 
 echo "genesis.json and rollup.json are generated in deployments folder"
 
+DATA_DIR="data"
+if [ $CHECK_TYPE = "mainnet" ]; then
+  DATA_DIR="mainnet"
+fi
+
 if [ $CHECK_REGENESIS = "true" ]; then
   ./scripts/generate-genesis-check-regenesis.sh
 else
@@ -188,7 +193,7 @@ else
   if go install ./cmd/hack/ 2>/dev/null; then
       echo "✅ hack tool built successfully"
       cd $PWD_DIR
-      hack -action migrateGenesis -chaindata ./data/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/genesis.json
+      hack -action migrateGenesis -chaindata ./${DATA_DIR}/seq/chaindata/ -input ./config-op/genesis-op-raw.json -output ./config-op/genesis.json
   else
       echo "❌ Local build failed, using Docker fallback..."
       cd $PWD_DIR
@@ -213,7 +218,7 @@ EOF
       # Run hack tool in Docker
       cd $PWD_DIR
       docker run --rm \
-          -v "$(pwd)/data/seq/chaindata:/chaindata:rw" \
+          -v "$(pwd)/${DATA_DIR}/seq/chaindata:/chaindata:rw" \
           -v "$(pwd)/config-op:/config:rw" \
           hack-tool:latest \
           ./hack -action migrateGenesis \
