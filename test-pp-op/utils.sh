@@ -48,13 +48,9 @@ build_op_geth_image() {
   rm -rf $PWD_DIR/tmp/op-geth
   cd $PWD_DIR/tmp/
   echo "Cloning op-geth repository..."
-  git clone -b dev-op https://github.com/okx/op-geth.git 
+  git clone -b dev-op https://github.com/okx/op-geth.git
   cp $PWD_DIR/op-docker/Dockerfile-opgeth op-geth/Dockerfile
   cd op-geth
-
-  # patch op-geth
-  # git checkout 6005dd53e1b50fe5a3f59764e3e2056a639eff2f # optimism v1.13.4 relies on this commit
-  # git apply $PWD_DIR/patch/op-geth-0001-support-load-genesis-at-a-given-number.patch
 
   docker build -t $OP_GETH_IMAGE_TAG .
   cd $PWD_DIR
