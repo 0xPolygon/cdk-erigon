@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/ethclient"
@@ -148,7 +147,7 @@ func verifyAccountState(address string, accountData AccountState, clientPool *Cl
 
 	// 4. Verify storage slots
 	// record current time
-	now := time.Now()
+	//now := time.Now()
 
 	// Split storage verification into chunks of 100,000 and use errgroup
 	if len(accountData.Storage) > 0 {
@@ -163,10 +162,10 @@ func verifyAccountState(address string, accountData AccountState, clientPool *Cl
 	//	fmt.Printf("address: %s code is empty but has storage slots: %d\n", address, len(accountData.Storage))
 	//}
 
-	if len(accountData.Storage) > 10000 {
-		// log time cost
-		fmt.Printf("address: %s has %d storage slots, cost: %s\n", address, len(accountData.Storage), time.Since(now))
-	}
+	// if len(accountData.Storage) > 10000 {
+	// log time cost
+	//fmt.Printf("address: %s has %d storage slots, cost: %s\n", address, len(accountData.Storage), time.Since(now))
+	//}
 
 	// Update progress for account completion
 	if bar != nil {
