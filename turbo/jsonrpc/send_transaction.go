@@ -12,6 +12,7 @@ import (
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/hexutility"
 	txPoolProto "github.com/erigontech/erigon-lib/gointerfaces/txpool"
+	"github.com/erigontech/erigon-lib/kv"
 
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/params"
@@ -56,7 +57,7 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 		return common.Hash{}, err
 	}
 
-	header, err := api.blockByNumber(ctx, rpc.BlockNumber(latestBlockNumber), tx)
+	header, err := api.loadSendTransactionBlock(ctx, tx, latestBlockNumber)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -135,6 +136,40 @@ func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility
 // SendTransaction implements eth_sendTransaction. Creates new message call transaction or a contract creation if the data field contains code.
 func (api *APIImpl) SendTransaction(_ context.Context, txObject interface{}) (common.Hash, error) {
 	return common.Hash{0}, fmt.Errorf(NotImplemented, "eth_sendTransaction")
+}
+
+func (api *APIImpl) loadSendTransactionBlock(ctx context.Context, tx kv.Tx, blockNumber uint64) (*types.Block, error) {
+	// First check with read lock
+	api.sendTransactionBlockCacheLock.RLock()
+	if api.sendTransactionBlockCache == nil {
+		api.sendTransactionBlockCacheLock.RUnlock()
+		// must have been some error during initialisation - so just load the block as normal
+		return api.blockByNumber(ctx, rpc.BlockNumber(blockNumber), tx)
+	}
+
+	if block, ok := api.sendTransactionBlockCache.Get(blockNumber); ok {
+		api.sendTransactionBlockCacheLock.RUnlock()
+		return block, nil
+	}
+	api.sendTransactionBlockCacheLock.RUnlock()
+
+	// Cache miss - acquire write lock and double-check
+	api.sendTransactionBlockCacheLock.Lock()
+	defer api.sendTransactionBlockCacheLock.Unlock()
+
+	// Double-check: another thread might have loaded it while we were waiting for the write lock
+	if block, ok := api.sendTransactionBlockCache.Get(blockNumber); ok {
+		return block, nil
+	}
+
+	block, err := api.blockByNumber(ctx, rpc.BlockNumber(blockNumber), tx)
+	if err != nil {
+		return nil, err
+	}
+
+	api.sendTransactionBlockCache.Add(blockNumber, block)
+
+	return block, nil
 }
 
 // checkTxFee is an internal function used to check whether the fee of
