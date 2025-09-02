@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -22,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
@@ -105,6 +105,8 @@ var (
 )
 
 const ZERO_CODE_HASH = "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+
+var EMPTY_CODE_HASH = libcommon.HexToHash(ZERO_CODE_HASH)
 
 func dbSlice(chaindata string, bucket string, prefix []byte) {
 	db := mdbx.MustOpen(chaindata)
@@ -424,18 +426,57 @@ func dumpAll(chaindata, output string) error {
 	return db.View(context.Background(), fdumper)
 }
 
-func BytesToPaddedHex(data []byte, length int) string {
-	hexStr := hex.EncodeToString(data)
+var hexChar = []byte("0123456789abcdef")
 
-	currentLen := len(hexStr)
-	zeroCount := length - currentLen
-	zeros := ""
+func BytesToPaddedHex(data []byte, length int) string {
+	result := make([]byte, length+2) // +2 for "0x" prefix
+
+	result[0] = '0'
+	result[1] = 'x'
+
+	hexLen := len(data) * 2
+	zeroCount := length - hexLen
 	if zeroCount > 0 {
-		zeros = fmt.Sprintf("0x%0*s", zeroCount, "")
-	} else {
-		zeros = "0x"
+		for i := 2; i < zeroCount+2; i++ {
+			result[i] = '0'
+		}
 	}
-	return zeros + hexStr
+
+	j := zeroCount + 2
+	for _, b := range data {
+		result[j] = hexChar[b>>4]
+		result[j+1] = hexChar[b&0x0f]
+		j += 2
+	}
+
+	return string(result)
+}
+
+type GenesisData struct {
+	Config     *chain.Config      `json:"config"`
+	Nonce      uint64             `json:"nonce"`
+	Timestamp  uint64             `json:"timestamp"`
+	ExtraData  []byte             `json:"extraData"`
+	GasLimit   uint64             `json:"gasLimit"`
+	Difficulty *big.Int           `json:"difficulty"`
+	Mixhash    libcommon.Hash     `json:"mixHash"`
+	Coinbase   libcommon.Address  `json:"coinbase"`
+	Alloc      map[string]AccInfo `json:"alloc"`
+
+	AuRaStep uint64 `json:"auRaStep"`
+	AuRaSeal []byte `json:"auRaSeal"`
+
+	// These fields are used for consensus tests. Please don't use them
+	// in actual genesis blocks.
+	Number     uint64         `json:"number"`
+	GasUsed    uint64         `json:"gasUsed"`
+	ParentHash libcommon.Hash `json:"parentHash"`
+
+	// Header fields added in London and later hard forks
+	BaseFee               *big.Int        `json:"baseFeePerGas"`         // EIP-1559
+	BlobGasUsed           *uint64         `json:"blobGasUsed"`           // EIP-4844
+	ExcessBlobGas         *uint64         `json:"excessBlobGas"`         // EIP-4844
+	ParentBeaconBlockRoot *libcommon.Hash `json:"parentBeaconBlockRoot"` // EIP-4788
 }
 
 func migrateGenesis(chaindata, input, output string) error {
@@ -443,8 +484,7 @@ func migrateGenesis(chaindata, input, output string) error {
 	db := mdbx.MustOpen(chaindata)
 	defer db.Close()
 
-	var genesisData map[string]interface{}
-	var allocData map[string]interface{}
+	var genesisData GenesisData
 
 	if input == "" {
 		input = "genesis.json"
@@ -463,27 +503,25 @@ func migrateGenesis(chaindata, input, output string) error {
 		}
 	}
 
-	if _, ok := genesisData["alloc"]; !ok {
+	if len(genesisData.Alloc) == 0 {
 		logger.Warn("No alloc field found in genesis stub.")
-		allocData = make(map[string]interface{})
-	} else {
-		allocData = genesisData["alloc"].(map[string]interface{})
+		genesisData.Alloc = make(map[string]AccInfo)
 	}
 
-	var currentAcct map[string]interface{}
-	var currentStorage map[string]interface{}
+	allocData := genesisData.Alloc
+
 	var acctCount uint64
+	var storageCount uint64
+	var total uint64
 
 	startScanKeys := time.Now()
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		plainStateReader := state.NewPlainStateReader(tx)
-
 		return tx.ForEach(kv.PlainState, nil, func(k, v []byte) error {
+			total++
 			// account
 			if len(k) == 20 {
 				acctCount++
 				acctHex := common.Bytes2Hex(k)
-				acctAddress := libcommon.HexToAddress(acctHex)
 
 				// Fixme: if xlayer account balance or nonce conflict with target node(such as op-geth), currently we use op-geth
 				if _, exists := allocData[acctHex]; exists {
@@ -491,68 +529,39 @@ func migrateGenesis(chaindata, input, output string) error {
 					return nil
 				}
 
-				if allocData[acctHex] == nil {
-					allocData[acctHex] = make(map[string]interface{})
-				}
-
-				switch node := allocData[acctHex].(type) {
-				case map[string]interface{}:
-					currentAcct = node
-				default:
-					panic("unhandled json type")
-				}
-				acctData, err := plainStateReader.ReadAccountData(acctAddress)
-				if err != nil {
-					return err
-				} else if acctData == nil {
-					return fmt.Errorf("acc not found")
-				}
-
-				currentAcct["nonce"] = "0x" + strconv.FormatUint(acctData.Nonce, 16)
-				currentAcct["balance"] = acctData.Balance.Hex()
-
-				//if acctAddress == state.ADDRESS_SCALABLE_L2 {
-				//	logger.Debug("SCALABLE contract", "incarnation:", acctData.Incarnation)
-				//}
-
-				code, err := tx.GetOne(kv.Code, acctData.CodeHash[:])
-				if err != nil {
+				var a accounts.Account
+				if err = a.DecodeForStorage(v); err != nil {
 					return err
 				}
-				currentAcct["code"] = hexutil.Encode(code)
+
+				var acc AccInfo
+
+				acc.Nonce = "0x" + strconv.FormatUint(a.Nonce, 16)
+				acc.Balance = a.Balance.Hex()
+
+				if a.CodeHash != EMPTY_CODE_HASH {
+					code, err := tx.GetOne(kv.Code, a.CodeHash[:])
+					if err != nil {
+						return err
+					}
+					acc.Code = hexutil.Encode(code)
+				}
+
+				allocData[acctHex] = acc
 			}
 
 			// storage
 			if len(k) > 28 {
-
+				storageCount++
 				acctBytes := k[:20]
 				acctHex := common.Bytes2Hex(acctBytes)
-				//acctAddress := libcommon.HexToAddress(acctHex)
-				if allocData[acctHex] == nil {
-					allocData[acctHex] = make(map[string]interface{})
+
+				acc := allocData[acctHex]
+				if acc.Storage == nil {
+					acc.Storage = make(map[string]string)
 				}
 
-				switch node := allocData[acctHex].(type) {
-				case map[string]interface{}:
-					currentAcct = node
-				default:
-					panic("unhandled json type")
-				}
-
-				if _, exists := currentAcct["storage"]; !exists {
-					currentAcct["storage"] = make(map[string]interface{})
-				}
-
-				//incarnation := binary.BigEndian.Uint64(k[20:28])
-
-				switch node := currentAcct["storage"].(type) {
-				case map[string]interface{}:
-					currentStorage = node
-				default:
-					panic("unhandled json type")
-				}
-
-				currentStorage[hexutil.Encode(k[28:])] = BytesToPaddedHex(v, 64)
+				acc.Storage[hexutil.Encode(k[28:])] = BytesToPaddedHex(v, 64)
 			}
 			return nil
 		})
@@ -560,9 +569,7 @@ func migrateGenesis(chaindata, input, output string) error {
 		return err
 	}
 	elapsedScanKeys := time.Since(startScanKeys).Seconds()
-	logger.Info("complete scan keys", "total acct count: ", acctCount, "elapsed in seconds: ", elapsedScanKeys)
-
-	genesisData["alloc"] = allocData
+	logger.Info("complete scan keys", "total acct count: ", acctCount, "storage count:", storageCount, "total:", total, "elapsed in seconds: ", elapsedScanKeys)
 
 	startJsonWrite := time.Now()
 	updatedData, err := json.MarshalIndent(genesisData, "", "  ")
