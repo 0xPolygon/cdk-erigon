@@ -454,28 +454,25 @@ func BytesToPaddedHex(data []byte, length int) string {
 
 type GenesisData struct {
 	Config     *chain.Config       `json:"config,omitempty"`
-	Nonce      uint64              `json:"nonce,omitempty"`
-	Timestamp  uint64              `json:"timestamp,omitempty"`
-	ExtraData  []byte              `json:"extraData,omitempty"`
-	GasLimit   uint64              `json:"gasLimit,omitempty"`
+	Nonce      string              `json:"nonce,omitempty"`
+	Timestamp  string              `json:"timestamp,omitempty"`
+	ExtraData  string              `json:"extraData,omitempty"`
+	GasLimit   string              `json:"gasLimit,omitempty"`
 	Difficulty string              `json:"difficulty,omitempty"`
 	Mixhash    string              `json:"mixHash,omitempty"`
 	Coinbase   string              `json:"coinbase,omitempty"`
 	Alloc      map[string]*AccInfo `json:"alloc,omitempty"`
 
-	AuRaStep uint64 `json:"auRaStep,omitempty"`
-	AuRaSeal []byte `json:"auRaSeal,omitempty"`
-
 	// These fields are used for consensus tests. Please don't use them
 	// in actual genesis blocks.
-	Number     uint64 `json:"number,omitempty"`
-	GasUsed    uint64 `json:"gasUsed,omitempty"`
+	Number     string `json:"number,omitempty"`
+	GasUsed    string `json:"gasUsed,omitempty"`
 	ParentHash string `json:"parentHash,omitempty"`
 
 	// Header fields added in London and later hard forks
 	BaseFee               string `json:"baseFeePerGas,omitempty"`         // EIP-1559
-	BlobGasUsed           uint64 `json:"blobGasUsed,omitempty"`           // EIP-4844
-	ExcessBlobGas         uint64 `json:"excessBlobGas,omitempty"`         // EIP-4844
+	BlobGasUsed           string `json:"blobGasUsed,omitempty"`           // EIP-4844
+	ExcessBlobGas         string `json:"excessBlobGas,omitempty"`         // EIP-4844
 	ParentBeaconBlockRoot string `json:"parentBeaconBlockRoot,omitempty"` // EIP-4788
 }
 
