@@ -453,15 +453,15 @@ func BytesToPaddedHex(data []byte, length int) string {
 }
 
 type GenesisData struct {
-	Config     *chain.Config      `json:"config,omitempty"`
-	Nonce      uint64             `json:"nonce,omitempty"`
-	Timestamp  uint64             `json:"timestamp,omitempty"`
-	ExtraData  []byte             `json:"extraData,omitempty"`
-	GasLimit   uint64             `json:"gasLimit,omitempty"`
-	Difficulty *big.Int           `json:"difficulty,omitempty"`
-	Mixhash    string             `json:"mixHash,omitempty"`
-	Coinbase   string             `json:"coinbase,omitempty"`
-	Alloc      map[string]AccInfo `json:"alloc,omitempty"`
+	Config     *chain.Config       `json:"config,omitempty"`
+	Nonce      uint64              `json:"nonce,omitempty"`
+	Timestamp  uint64              `json:"timestamp,omitempty"`
+	ExtraData  []byte              `json:"extraData,omitempty"`
+	GasLimit   uint64              `json:"gasLimit,omitempty"`
+	Difficulty *big.Int            `json:"difficulty,omitempty"`
+	Mixhash    string              `json:"mixHash,omitempty"`
+	Coinbase   string              `json:"coinbase,omitempty"`
+	Alloc      map[string]*AccInfo `json:"alloc,omitempty"`
 
 	AuRaStep uint64 `json:"auRaStep,omitempty"`
 	AuRaSeal []byte `json:"auRaSeal,omitempty"`
@@ -505,7 +505,7 @@ func migrateGenesis(chaindata, input, output string) error {
 
 	if len(genesisData.Alloc) == 0 {
 		logger.Warn("No alloc field found in genesis stub.")
-		genesisData.Alloc = make(map[string]AccInfo)
+		genesisData.Alloc = make(map[string]*AccInfo)
 	}
 
 	allocData := genesisData.Alloc
@@ -513,6 +513,7 @@ func migrateGenesis(chaindata, input, output string) error {
 	var acctCount uint64
 	var storageCount uint64
 	var total uint64
+	var a accounts.Account
 
 	startScanKeys := time.Now()
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
@@ -529,15 +530,18 @@ func migrateGenesis(chaindata, input, output string) error {
 					return nil
 				}
 
-				var a accounts.Account
 				if err = a.DecodeForStorage(v); err != nil {
 					return err
 				}
 
 				var acc AccInfo
+				if a.Nonce != 0 {
+					acc.Nonce = "0x" + strconv.FormatUint(a.Nonce, 16)
+				}
 
-				acc.Nonce = "0x" + strconv.FormatUint(a.Nonce, 16)
-				acc.Balance = a.Balance.Hex()
+				if !a.Balance.IsZero() {
+					acc.Balance = a.Balance.Hex()
+				}
 
 				if a.CodeHash != EMPTY_CODE_HASH {
 					code, err := tx.GetOne(kv.Code, a.CodeHash[:])
@@ -547,7 +551,7 @@ func migrateGenesis(chaindata, input, output string) error {
 					acc.Code = hexutil.Encode(code)
 				}
 
-				allocData[acctHex] = acc
+				allocData[acctHex] = &acc
 			}
 
 			// storage
@@ -556,7 +560,10 @@ func migrateGenesis(chaindata, input, output string) error {
 				acctBytes := k[:20]
 				acctHex := common.Bytes2Hex(acctBytes)
 
-				acc := allocData[acctHex]
+				acc, ok := allocData[acctHex]
+				if !ok {
+					logger.Error("account state not found", "account", acctHex)
+				}
 				if acc.Storage == nil {
 					acc.Storage = make(map[string]string)
 				}
