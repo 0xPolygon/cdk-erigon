@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
@@ -452,36 +451,13 @@ func BytesToPaddedHex(data []byte, length int) string {
 	return string(result)
 }
 
-type GenesisData struct {
-	Config     *chain.Config       `json:"config,omitempty"`
-	Nonce      string              `json:"nonce,omitempty"`
-	Timestamp  string              `json:"timestamp,omitempty"`
-	ExtraData  string              `json:"extraData,omitempty"`
-	GasLimit   string              `json:"gasLimit,omitempty"`
-	Difficulty string              `json:"difficulty,omitempty"`
-	Mixhash    string              `json:"mixHash,omitempty"`
-	Coinbase   string              `json:"coinbase,omitempty"`
-	Alloc      map[string]*AccInfo `json:"alloc,omitempty"`
-
-	// These fields are used for consensus tests. Please don't use them
-	// in actual genesis blocks.
-	Number     string `json:"number,omitempty"`
-	GasUsed    string `json:"gasUsed,omitempty"`
-	ParentHash string `json:"parentHash,omitempty"`
-
-	// Header fields added in London and later hard forks
-	BaseFee               string `json:"baseFeePerGas,omitempty"`         // EIP-1559
-	BlobGasUsed           string `json:"blobGasUsed,omitempty"`           // EIP-4844
-	ExcessBlobGas         string `json:"excessBlobGas,omitempty"`         // EIP-4844
-	ParentBeaconBlockRoot string `json:"parentBeaconBlockRoot,omitempty"` // EIP-4788
-}
-
 func migrateGenesis(chaindata, input, output string) error {
 	start := time.Now()
 	db := mdbx.MustOpen(chaindata)
 	defer db.Close()
 
-	var genesisData GenesisData
+	var genesisData map[string]interface{}
+	var allocData map[string]*AccInfo
 
 	if input == "" {
 		input = "genesis.json"
@@ -498,14 +474,21 @@ func migrateGenesis(chaindata, input, output string) error {
 			logger.Error("unmarshal json", "error", err)
 			return err
 		}
+		data, err := json.Marshal(genesisData["alloc"])
+		if err != nil {
+			logger.Error("marshal alloc", "error", err)
+			return err
+		}
+		if err := json.Unmarshal(data, &allocData); err != nil {
+			logger.Error("unmarshal alloc", "error", err)
+			return err
+		}
 	}
 
-	if len(genesisData.Alloc) == 0 {
+	if len(allocData) == 0 {
 		logger.Warn("No alloc field found in genesis stub.")
-		genesisData.Alloc = make(map[string]*AccInfo)
+		allocData = make(map[string]*AccInfo)
 	}
-
-	allocData := genesisData.Alloc
 
 	var acctCount uint64
 	var storageCount uint64
@@ -572,6 +555,8 @@ func migrateGenesis(chaindata, input, output string) error {
 		return err
 	}
 	logger.Info("complete scan keys", "total acct count", acctCount, "storage count", storageCount, "total", total, "elapsed", time.Since(startScanKeys))
+
+	genesisData["alloc"] = allocData
 
 	startJsonMarshal := time.Now()
 	updatedData, err := json.MarshalIndent(genesisData, "", "  ")
