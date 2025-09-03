@@ -536,9 +536,8 @@ func migrateGenesis(chaindata, input, output string) error {
 					acc.Nonce = "0x" + strconv.FormatUint(a.Nonce, 16)
 				}
 
-				if !a.Balance.IsZero() {
-					acc.Balance = a.Balance.Hex()
-				}
+				// balance is required even it is zero
+				acc.Balance = a.Balance.Hex()
 
 				if a.CodeHash != EMPTY_CODE_HASH {
 					code, err := tx.GetOne(kv.Code, a.CodeHash[:])
