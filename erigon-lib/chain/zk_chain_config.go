@@ -3,7 +3,6 @@ package chain
 import "github.com/ledgerwatch/erigon-lib/chain/networkname"
 
 var chainIds = []uint64{
-	195,    // xlayer-testnet
 	196,    // xlayer-mainet
 	1101,   // mainnet
 	2440,   // cardona internal
@@ -11,10 +10,10 @@ var chainIds = []uint64{
 	10010,  //etrog testnet
 	999999, // local devnet
 	123,    // estestnet
+	1952,   // xlayer-testnet
 }
 
 var chainIdToName = map[uint64]string{
-	195:    networkname.XLayerTestnetChainName,
 	196:    networkname.XLayerMainnetChainName,
 	1101:   networkname.HermezMainnetChainName,
 	2440:   networkname.HermezBaliChainName,
@@ -22,6 +21,7 @@ var chainIdToName = map[uint64]string{
 	10010:  networkname.HermezEtrogChainName,
 	999999: networkname.HermezLocalDevnetChainName,
 	123:    networkname.HermezESTestChainName,
+	1952:   networkname.XLayerTestnetChainName,
 }
 
 func IsZk(chainId uint64) bool {

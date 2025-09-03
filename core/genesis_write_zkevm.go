@@ -87,7 +87,7 @@ func HermezESTestGenesisBlock() *types.Genesis {
 func XLayerTestnetGenesisBlock() *types.Genesis {
 	return &types.Genesis{
 		Config:     params.XLayerTestnetChainConfig,
-		Timestamp:  1699369668,
+		Timestamp:  1749551688,
 		GasLimit:   0x0,
 		Difficulty: big.NewInt(0x0),
 		Alloc:      readPrealloc("allocs/xlayer-testnet.json"),

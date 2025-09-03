@@ -2,23 +2,41 @@ datadir: /data/erigon-data/xlayer-testnet
 chain: xlayer-testnet
 http: true
 private.api.addr: localhost:9091
-zkevm.l2-chain-id: 195
-zkevm.l2-sequencer-rpc-url: https://testrpc.xlayer.tech
-zkevm.l2-datastreamer-url: teststream.xlayer.tech:8800
+zkevm.l2-chain-id: 1952
+zkevm.l2-sequencer-rpc-url: https://testrpc.xlayer.tech/terigon
+zkevm.l2-datastreamer-url: teststream.xlayer.tech:8900
 zkevm.l1-chain-id: 11155111
-zkevm.l1-rpc-url: https://rpc.ankr.com/eth_sepolia/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+zkevm.l1-rpc-url: {your_eth_sepolia_l1_rpc}
 
-zkevm.address-sequencer: "0xD6DdA5AA7749142B7fDa3Fe4662C9f346101B8A6"
-zkevm.address-zkevm: "0x01469dACfDDA885D68Ff0f8628F2629c14F95a20"
-zkevm.address-rollup: "0x6662621411A8DACC3cA7049C8BddABaa9a999ce3"
-zkevm.address-ger-manager: "0x66E61bA00F58b857A9DD2C500F3aBc424A46BD20"
+log.console.verbosity: info
 
-zkevm.l1-rollup-id: 1
-zkevm.l1-first-block: 4648290
-zkevm.l1-block-range: 2000
-zkevm.l1-query-delay: 1000
+zkevm.address-sequencer: "0x98245d0adf4595c66f0a9db8e13c44cbff6be459"
+zkevm.address-zkevm: "0x7b1472be9a0115c3076b9f30e6bab91b13b3be6b"
+zkevm.address-admin: "0x00C832BFF84B2c6B1BFCa893cb0d56CcA2b2f65d"
+zkevm.address-rollup: "0x32d33d5137a7cffb54c5bf8371172bcec5f310ff"
+zkevm.address-ger-manager: "0xad1490c248c5d3cbae399fd529b79b42984277df"
+
+zkevm.l1-rollup-id: 39
+zkevm.l1-first-block: 5158574
+zkevm.l1-block-range: 1000
+zkevm.l1-query-delay: 2000
+zkevm.rpc-ratelimit: 250
 zkevm.datastream-version: 3
+zkevm.l2-short-circuit-to-verified-batch: false
+zkevm.allow-internal-transactions: true
 
-http.api: [eth, debug, net, trace, web3, erigon, zkevm]
+zkevm.increment-tree-always: true
+
+externalcl: true
+http.api: [eth, debug, net, trace, web3, erigon, zkevm, txpool]
 http.addr: 0.0.0.0
 http.port: 8545
+http.vhosts: "*"
+http.timeouts.read: "15m"
+http.timeouts.write: "15m"
+
+rpc.returndata.limit: 100000000
+
+metrics: false
+metrics.addr: "0.0.0.0"
+metrics.port: 7002

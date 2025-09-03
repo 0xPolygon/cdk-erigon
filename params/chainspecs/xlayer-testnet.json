@@ -1,6 +1,6 @@
 {
   "ChainName": "xlayer-testnet",
-  "chainId": 195,
+  "chainId": 1952,
   "consensus": "ethash",
   "homesteadBlock": 0,
   "daoForkBlock": 0,
