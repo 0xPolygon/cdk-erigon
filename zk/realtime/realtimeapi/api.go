@@ -23,7 +23,7 @@ var (
 
 // RealtimeAPIImpl is implementation of the RealtimeAPI interface
 type RealtimeAPIImpl struct {
-	jsonrpc.APIImpl
+	*jsonrpc.APIImpl
 	cacheDB    *realtimeCache.RealtimeCache
 	subService *subscription.RealtimeSubscription
 }
@@ -36,7 +36,7 @@ func NewRealtimeAPIImpl(
 ) *RealtimeAPIImpl {
 
 	return &RealtimeAPIImpl{
-		APIImpl:    *base,
+		APIImpl:    base,
 		cacheDB:    cacheDB,
 		subService: subService,
 	}

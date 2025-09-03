@@ -114,11 +114,20 @@ func (api *RealtimeAPIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi.C
 		return 0, fmt.Errorf("header not found for block number %d", blockNumber)
 	}
 
+	// Retrieve from rpc
+	gaslimit, err := api.GetBlockGasLimit(ctx)
+	if err != nil {
+		return 0, err
+	}
+
 	// Determine the highest gas limit can be used during the estimation.
 	if args.Gas != nil && uint64(*args.Gas) >= params.TxGas {
 		hi = uint64(*args.Gas)
+		if hi > gaslimit.Uint64() {
+			hi = gaslimit.Uint64()
+		}
 	} else {
-		hi = header.GasLimit
+		hi = gaslimit.Uint64()
 	}
 
 	var feeCap *big.Int

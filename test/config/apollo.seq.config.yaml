@@ -119,8 +119,8 @@ zkevm.skip-analysis-group-api: true
 # zkevm.analysis-group-service-name: "analysis-group"
 # zkevm.analysis-group-api-path: "api/v1/196/validHeight"
 
-# realtime.enable-flag: true
-# realtime.enable-subscribe-flag: false
+realtime.enable-flag: true
+realtime.enable-subscribe-flag: false
 realtime.cache-height-threshold: 10
 realtime.kafka-sync-bootstrap-servers: "xlayer-kafka:9092"
 realtime.kafka-sync-tx-topic: xlayer-tx
