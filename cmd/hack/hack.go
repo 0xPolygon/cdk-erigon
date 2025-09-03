@@ -453,30 +453,30 @@ func BytesToPaddedHex(data []byte, length int) string {
 }
 
 type GenesisData struct {
-	Config     *chain.Config      `json:"config"`
-	Nonce      uint64             `json:"nonce"`
-	Timestamp  uint64             `json:"timestamp"`
-	ExtraData  []byte             `json:"extraData"`
-	GasLimit   uint64             `json:"gasLimit"`
-	Difficulty *big.Int           `json:"difficulty"`
-	Mixhash    libcommon.Hash     `json:"mixHash"`
-	Coinbase   libcommon.Address  `json:"coinbase"`
-	Alloc      map[string]AccInfo `json:"alloc"`
+	Config     *chain.Config      `json:"config,omitempty"`
+	Nonce      uint64             `json:"nonce,omitempty"`
+	Timestamp  uint64             `json:"timestamp,omitempty"`
+	ExtraData  []byte             `json:"extraData,omitempty"`
+	GasLimit   uint64             `json:"gasLimit,omitempty"`
+	Difficulty *big.Int           `json:"difficulty,omitempty"`
+	Mixhash    string             `json:"mixHash,omitempty"`
+	Coinbase   string             `json:"coinbase,omitempty"`
+	Alloc      map[string]AccInfo `json:"alloc,omitempty"`
 
-	AuRaStep uint64 `json:"auRaStep"`
-	AuRaSeal []byte `json:"auRaSeal"`
+	AuRaStep uint64 `json:"auRaStep,omitempty"`
+	AuRaSeal []byte `json:"auRaSeal,omitempty"`
 
 	// These fields are used for consensus tests. Please don't use them
 	// in actual genesis blocks.
-	Number     uint64         `json:"number"`
-	GasUsed    uint64         `json:"gasUsed"`
-	ParentHash libcommon.Hash `json:"parentHash"`
+	Number     uint64 `json:"number,omitempty"`
+	GasUsed    uint64 `json:"gasUsed,omitempty"`
+	ParentHash string `json:"parentHash,omitempty"`
 
 	// Header fields added in London and later hard forks
-	BaseFee               *big.Int        `json:"baseFeePerGas"`         // EIP-1559
-	BlobGasUsed           *uint64         `json:"blobGasUsed"`           // EIP-4844
-	ExcessBlobGas         *uint64         `json:"excessBlobGas"`         // EIP-4844
-	ParentBeaconBlockRoot *libcommon.Hash `json:"parentBeaconBlockRoot"` // EIP-4788
+	BaseFee               *big.Int `json:"baseFeePerGas,omitempty"`         // EIP-1559
+	BlobGasUsed           uint64   `json:"blobGasUsed,omitempty"`           // EIP-4844
+	ExcessBlobGas         uint64   `json:"excessBlobGas,omitempty"`         // EIP-4844
+	ParentBeaconBlockRoot string   `json:"parentBeaconBlockRoot,omitempty"` // EIP-4788
 }
 
 func migrateGenesis(chaindata, input, output string) error {
@@ -489,16 +489,16 @@ func migrateGenesis(chaindata, input, output string) error {
 	if input == "" {
 		input = "genesis.json"
 	}
-	logger.Info("input", "filename: ", input)
+	logger.Info("input", "filename", input)
 	fileData, err := os.ReadFile(input)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			fmt.Println("Error reading file:", err)
+			logger.Error("read file", "error", err)
 			return err
 		}
 	} else {
 		if err := json.Unmarshal(fileData, &genesisData); err != nil {
-			fmt.Println("Error decoding JSON:", err)
+			logger.Error("unmarshal json", "error", err)
 			return err
 		}
 	}
@@ -525,7 +525,7 @@ func migrateGenesis(chaindata, input, output string) error {
 
 				// Fixme: if xlayer account balance or nonce conflict with target node(such as op-geth), currently we use op-geth
 				if _, exists := allocData[acctHex]; exists {
-					logger.Warn("account state conflict found", "account: ", acctHex)
+					logger.Warn("account state conflict found", "account", acctHex)
 					return nil
 				}
 
@@ -568,13 +568,12 @@ func migrateGenesis(chaindata, input, output string) error {
 	}); err != nil {
 		return err
 	}
-	elapsedScanKeys := time.Since(startScanKeys).Seconds()
-	logger.Info("complete scan keys", "total acct count: ", acctCount, "storage count:", storageCount, "total:", total, "elapsed in seconds: ", elapsedScanKeys)
+	logger.Info("complete scan keys", "total acct count", acctCount, "storage count", storageCount, "total", total, "elapsed", time.Since(startScanKeys))
 
 	startJsonWrite := time.Now()
 	updatedData, err := json.MarshalIndent(genesisData, "", "  ")
 	if err != nil {
-		fmt.Println("Error encoding JSON:", err)
+		logger.Error("encoding JSON", "error", err)
 		return err
 	}
 
@@ -584,13 +583,13 @@ func migrateGenesis(chaindata, input, output string) error {
 	logger.Info("output", "written to", output)
 
 	if err := os.WriteFile(output, updatedData, 0644); err != nil {
-		fmt.Println("Error writing to file:", err)
+		logger.Error("writing json file", "error", err)
 		return err
 	}
-	elapsedJsonWrite := time.Since(startJsonWrite).Seconds()
-	logger.Info("complete json write", "elapsed in seconds: ", elapsedJsonWrite)
+	elapsedJsonWrite := time.Since(startJsonWrite)
+	logger.Info("complete json write", "elapsed", elapsedJsonWrite)
 
-	elapsed := time.Since(start).Seconds()
+	elapsed := time.Since(start)
 	logger.Info("completed", "total time elapsed", elapsed)
 	return nil
 }
@@ -1636,10 +1635,10 @@ func dumpState(chaindata string) error {
 }
 
 type AccInfo struct {
-	Balance string            `json:"balance"`
-	Nonce   string            `json:"nonce"`
-	Code    string            `json:"code"`
-	Storage map[string]string `json:"storage"`
+	Balance string            `json:"balance,omitempty"`
+	Nonce   string            `json:"nonce,omitempty"`
+	Code    string            `json:"code,omitempty"`
+	Storage map[string]string `json:"storage,omitempty"`
 }
 
 // const TableSmt = "HermezSmt"
