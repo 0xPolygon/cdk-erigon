@@ -11,6 +11,7 @@ import (
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/holiman/uint256"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common"
@@ -386,8 +387,8 @@ type APIImpl struct {
 
 	// used to cache recent block headers so under load we don't waste CPU time loading the
 	// same block header repeatedly
-	sendTransactionBlockCache     *lru.Cache[uint64, *types.Block]
-	sendTransactionBlockCacheLock sync.RWMutex
+	sendTransactionBlockCache *lru.Cache[uint64, *types.Block]
+	sendTransactionBlockGroup *singleflight.Group
 }
 
 // NewEthAPI returns APIImpl instance
@@ -436,6 +437,7 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		DisableStateRootCheck:         disableStateRootCheck,
 		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
 		sendTransactionBlockCache:     sendTransactionBlockCache,
+		sendTransactionBlockGroup:     &singleflight.Group{},
 	}
 }
 

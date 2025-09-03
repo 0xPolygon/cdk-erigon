@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 
 	"github.com/erigontech/erigon/zk/hermez_db"
 
@@ -139,37 +140,39 @@ func (api *APIImpl) SendTransaction(_ context.Context, txObject interface{}) (co
 }
 
 func (api *APIImpl) loadSendTransactionBlock(ctx context.Context, tx kv.Tx, blockNumber uint64) (*types.Block, error) {
-	// First check with read lock
-	api.sendTransactionBlockCacheLock.RLock()
 	if api.sendTransactionBlockCache == nil {
-		api.sendTransactionBlockCacheLock.RUnlock()
 		// must have been some error during initialisation - so just load the block as normal
 		return api.blockByNumber(ctx, rpc.BlockNumber(blockNumber), tx)
 	}
 
-	if block, ok := api.sendTransactionBlockCache.Get(blockNumber); ok {
-		api.sendTransactionBlockCacheLock.RUnlock()
-		return block, nil
-	}
-	api.sendTransactionBlockCacheLock.RUnlock()
-
-	// Cache miss - acquire write lock and double-check
-	api.sendTransactionBlockCacheLock.Lock()
-	defer api.sendTransactionBlockCacheLock.Unlock()
-
-	// Double-check: another thread might have loaded it while we were waiting for the write lock
+	// Check cache first (fast path for cache hits)
 	if block, ok := api.sendTransactionBlockCache.Get(blockNumber); ok {
 		return block, nil
 	}
 
-	block, err := api.blockByNumber(ctx, rpc.BlockNumber(blockNumber), tx)
+	// Use singleflight to ensure only one goroutine loads each block number
+	key := strconv.FormatUint(blockNumber, 10)
+	result, err, _ := api.sendTransactionBlockGroup.Do(key, func() (interface{}, error) {
+		if block, ok := api.sendTransactionBlockCache.Get(blockNumber); ok {
+			return block, nil
+		}
+
+		// Load the block
+		block, err := api.blockByNumber(ctx, rpc.BlockNumber(blockNumber), tx)
+		if err != nil {
+			return nil, err
+		}
+
+		// Cache the result
+		api.sendTransactionBlockCache.Add(blockNumber, block)
+		return block, nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	api.sendTransactionBlockCache.Add(blockNumber, block)
-
-	return block, nil
+	return result.(*types.Block), nil
 }
 
 // checkTxFee is an internal function used to check whether the fee of
