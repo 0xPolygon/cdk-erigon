@@ -577,18 +577,20 @@ func migrateGenesis(chaindata, input, output string) error {
 	}
 	logger.Info("complete scan keys", "total acct count", acctCount, "storage count", storageCount, "total", total, "elapsed", time.Since(startScanKeys))
 
-	startJsonWrite := time.Now()
+	startJsonMarshal := time.Now()
 	updatedData, err := json.MarshalIndent(genesisData, "", "  ")
 	if err != nil {
 		logger.Error("encoding JSON", "error", err)
 		return err
 	}
+	logger.Info("json marshal", "elapsed", time.Since(startJsonMarshal))
 
 	if output == "" {
 		output = "state_dump.json"
 	}
 	logger.Info("output", "written to", output)
 
+	startJsonWrite := time.Now()
 	if err := os.WriteFile(output, updatedData, 0644); err != nil {
 		logger.Error("writing json file", "error", err)
 		return err
