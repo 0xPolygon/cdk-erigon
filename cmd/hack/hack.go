@@ -603,17 +603,6 @@ func migrateGenesis(chaindata, input, output string) error {
 	return nil
 }
 
-type storageKV struct {
-	key   []byte
-	value []byte
-}
-
-var manager sync.Map
-
-func processStorage(skv storageKV) {
-
-}
-
 func printBucket(chaindata, bucket string) {
 	db := mdbx.MustOpen(chaindata)
 	defer db.Close()
