@@ -248,8 +248,8 @@ func (rc *RealtimeClient) RealtimeGetCode(address common.Address) (string, error
 }
 
 // RealtimeGetStorageAt returns the value from a storage position at a given address in real-time
-func (rc *RealtimeClient) RealtimeGetStorageAt(address common.Address, position string) (string, error) {
-	response, err := client.JSONRPCCall(rc.url, "eth_getStorageAt", address, position, PendingTag)
+func (rc *RealtimeClient) RealtimeGetStorageAt(address common.Address, position string, tag string) (string, error) {
+	response, err := client.JSONRPCCall(rc.url, "eth_getStorageAt", address, position, tag)
 	if err != nil {
 		return "", err
 	}
@@ -420,6 +420,7 @@ func (rc *RealtimeClient) EthGetTokenBalance(
 	ctx context.Context,
 	addr common.Address,
 	erc20Addr common.Address,
+	height *big.Int,
 ) (*big.Int, error) {
 	// Pack the balanceOf function call
 	data, err := erc20ABI.Pack("balanceOf", addr)
@@ -431,7 +432,7 @@ func (rc *RealtimeClient) EthGetTokenBalance(
 	result, err := rc.CallContract(ctx, ethereum.CallMsg{
 		To:   &erc20Addr,
 		Data: data,
-	}, nil)
+	}, height)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call contract: %v", err)
 	}

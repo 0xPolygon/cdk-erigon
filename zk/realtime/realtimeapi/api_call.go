@@ -53,7 +53,7 @@ func (api *RealtimeAPIImpl) doRealtimeCall(ctx context.Context, args ethapi2.Cal
 		args.Gas = (*hexutil.Uint64)(&api.APIImpl.GasCap)
 	}
 
-	header, _, _, ok := api.cacheDB.Stateless.GetHeader(blockNumber)
+	header, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNumber)
 	if !ok {
 		return nil, fmt.Errorf("header not found for block number %d", blockNumber)
 	}
@@ -109,7 +109,7 @@ func (api *RealtimeAPIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi.C
 	if err != nil || stateReader == nil {
 		return api.APIImpl.EstimateGas(ctx, argsOrNil, blockNrOrHash)
 	}
-	header, _, _, ok := api.cacheDB.Stateless.GetHeader(blockNumber)
+	header, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNumber)
 	if !ok {
 		return 0, fmt.Errorf("header not found for block number %d", blockNumber)
 	}

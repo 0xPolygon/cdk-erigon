@@ -38,6 +38,11 @@ func (api *RealtimeAPIImpl) GetBlockTransactionCountByNumber(ctx context.Context
 		return api.APIImpl.GetBlockTransactionCountByNumber(ctx, blockNr)
 	}
 
+	_, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
+	if !ok {
+		return api.APIImpl.GetBlockTransactionCountByNumber(ctx, blockNr)
+	}
+
 	txs, ok := api.cacheDB.Stateless.GetBlockTxs(blockNum)
 	if !ok {
 		return api.APIImpl.GetBlockTransactionCountByNumber(ctx, blockNr)
@@ -133,7 +138,7 @@ func (api *RealtimeAPIImpl) GetBlockInternalTransactions(ctx context.Context, bl
 		return api.APIImpl.GetBlockInternalTransactions(ctx, blockNr)
 	}
 
-	_, _, _, ok := api.cacheDB.Stateless.GetHeader(blockNum)
+	_, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		return api.APIImpl.GetBlockInternalTransactions(ctx, blockNr)
 	}

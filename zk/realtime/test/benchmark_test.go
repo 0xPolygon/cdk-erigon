@@ -125,7 +125,7 @@ func TestRealtimeBenchmarkERC20Transfer(t *testing.T) {
 	// Benchmark erc20 transfer tx
 	var totalRealtimeBalanceDuration, totalEthBalanceDuration time.Duration
 	for i := 0; i < Iterations; i++ {
-		balance, err := client.EthGetTokenBalance(ctx, testAddress, erc20Address)
+		balance, err := client.EthGetTokenBalance(ctx, testAddress, erc20Address, nil)
 		require.NoError(t, err)
 		realtimeBalance, err := client.RealtimeGetTokenBalance(fromAddress, testAddress, erc20Address)
 		require.NoError(t, err)

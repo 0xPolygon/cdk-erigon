@@ -55,9 +55,14 @@ func (api *RealtimeDebugApiImpl) RealtimeCompareStateCache(ctx context.Context) 
 	}
 	defer tx.Rollback()
 
+	mismatches, err := api.cacheDB.State.DebugCompare(reader)
+	if err != nil {
+		return nil, fmt.Errorf("compareStateCache cannot compare state cache: %w", err)
+	}
+
 	return &RealtimeDebugResult{
 		ConfirmHeight:   api.cacheDB.GetHighestConfirmHeight(),
 		ExecutionHeight: api.cacheDB.GetExecutionHeight(),
-		Mismatches:      api.cacheDB.State.DebugCompare(reader),
+		Mismatches:      mismatches,
 	}, nil
 }

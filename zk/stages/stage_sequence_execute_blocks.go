@@ -16,6 +16,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/erigon_db"
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/metrics"
+	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/secp256k1"
 )
@@ -74,31 +75,31 @@ func doFinishBlockAndUpdateState(
 	l1BlockHash common.Hash,
 	l1TreeUpdateIndex uint64,
 	infoTreeIndexProgress uint64,
-) (*types.Block, error) {
+) (*types.Block, *realtimeTypes.Changeset, error) {
 	thisBlockNumber := header.Number.Uint64()
 
 	if batchContext.cfg.accumulator != nil {
 		batchContext.cfg.accumulator.StartChange(thisBlockNumber, header.Hash(), nil, false)
 	}
 
-	block, err := finaliseBlock(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress)
+	block, postExecuteChangeset, err := finaliseBlock(batchContext, ibs, header, parentBlock, batchState, ger, l1BlockHash, l1TreeUpdateIndex, infoTreeIndexProgress)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := updateSequencerProgress(batchContext.sdb.tx, thisBlockNumber, batchState.batchNumber, false); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if batchContext.cfg.accumulator != nil {
 		txs, err := rawdb.RawTransactionsRange(batchContext.sdb.tx, thisBlockNumber, thisBlockNumber)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		batchContext.cfg.accumulator.ChangeTransactions(txs)
 	}
 
-	return block, nil
+	return block, postExecuteChangeset, nil
 }
 
 func finaliseBlock(
@@ -111,13 +112,13 @@ func finaliseBlock(
 	l1BlockHash common.Hash,
 	l1TreeUpdateIndex uint64,
 	infoTreeIndexProgress uint64,
-) (*types.Block, error) {
+) (*types.Block, *realtimeTypes.Changeset, error) {
 	thisBlockNumber := newHeader.Number.Uint64()
 	if err := batchContext.sdb.hermezDb.WriteBlockL1InfoTreeIndex(thisBlockNumber, l1TreeUpdateIndex); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := batchContext.sdb.hermezDb.WriteBlockL1InfoTreeIndexProgress(thisBlockNumber, infoTreeIndexProgress); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	stateWriter := state.NewPlainStateWriter(batchContext.sdb.tx, batchContext.sdb.tx, newHeader.Number.Uint64()).SetAccumulator(batchContext.cfg.accumulator)
@@ -138,7 +139,7 @@ func finaliseBlock(
 			signer := types.MakeSigner(batchContext.cfg.chainConfig, newHeader.Number.Uint64(), newHeader.Time)
 			from, err = tx.Sender(*signer)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		localReceipt := core.CreateReceiptForBlockInfoTree(builtBlockElements.receipts[i], batchContext.cfg.chainConfig, newHeader.Number.Uint64(), builtBlockElements.executionResults[i])
@@ -153,8 +154,10 @@ func finaliseBlock(
 	// For X Layer
 	pbStateStart := time.Now()
 	if err := postBlockStateHandling(*batchContext.cfg, ibs, batchContext.sdb.hermezDb, newHeader, ger, l1BlockHash, parentBlock.Root(), txInfos); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	postExecuteChangeset := ibs.GenerateChangeset()
+
 	// For X Layer
 	metrics.GetLogStatistics().CumulativeTiming(metrics.PbStateTiming, time.Since(pbStateStart))
 
@@ -179,7 +182,7 @@ func finaliseBlock(
 		nil,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// For X Layer
@@ -187,7 +190,7 @@ func finaliseBlock(
 	// For X Layer, this is actually the interhashes stage
 	newRoot, err := zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// For X Layer
@@ -203,41 +206,41 @@ func finaliseBlock(
 
 	err = rawdb.WriteHeader_zkEvm(batchContext.sdb.tx, finalHeader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write header: %v", err)
+		return nil, nil, fmt.Errorf("failed to write header: %v", err)
 	}
 	if err := rawdb.WriteHeadHeaderHash(batchContext.sdb.tx, finalHeader.Hash()); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	err = rawdb.WriteCanonicalHash(batchContext.sdb.tx, finalHeader.Hash(), newNum.Uint64())
 	if err != nil {
-		return nil, fmt.Errorf("failed to write header: %v", err)
+		return nil, nil, fmt.Errorf("failed to write header: %v", err)
 	}
 
 	erigonDB := erigon_db.NewErigonDb(batchContext.sdb.tx)
 	err = erigonDB.WriteBody(newNum, finalHeader.Hash(), finalTransactions)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write body: %v", err)
+		return nil, nil, fmt.Errorf("failed to write body: %v", err)
 	}
 
 	// write the new block lookup entries
 	rawdb.WriteTxLookupEntries(batchContext.sdb.tx, finalBlock)
 
 	if err = rawdb.WriteReceipts(batchContext.sdb.tx, newNum.Uint64(), finalReceipts); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err = batchContext.sdb.hermezDb.WriteForkId(batchState.batchNumber, batchState.forkId); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// now process the senders to avoid a stage by itself
 	if err := addSenders(*batchContext.cfg, newNum, finalTransactions, batchContext.sdb.tx, finalHeader); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// now add in the zk batch to block references
 	if err := batchContext.sdb.hermezDb.WriteBlockBatch(newNum.Uint64(), batchState.batchNumber); err != nil {
-		return nil, fmt.Errorf("write block batch error: %v", err)
+		return nil, nil, fmt.Errorf("write block batch error: %v", err)
 	}
 
 	// For X Layer
@@ -253,13 +256,13 @@ func finaliseBlock(
 	}
 	to := newNum.Uint64() + 1
 	if err = stagedsync.PromoteHistory(batchContext.s.LogPrefix(), batchContext.sdb.tx, kv.AccountChangeSet, from, to, *batchContext.historyCfg, quitCh); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err = stagedsync.PromoteHistory(batchContext.s.LogPrefix(), batchContext.sdb.tx, kv.StorageChangeSet, from, to, *batchContext.historyCfg, quitCh); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return finalBlock, nil
+	return finalBlock, postExecuteChangeset, nil
 }
 
 func postBlockStateHandling(

@@ -256,15 +256,14 @@ type Ethereum struct {
 	l1BlockSyncer    *syncer.L1Syncer
 
 	// For X Layer, realtime
-	kafkaEnabled           bool
-	kafkaProducer          *realtimeKafka.KafkaProducer
-	kafkaConsumer          *realtimeKafka.KafkaConsumer
-	realtimeCache          *realtimeCache.RealtimeCache
-	newBlockInfoChan       chan *types.Header
-	confirmedBlockInfoChan chan *types.Block
-	txInfoChan             chan state.TxInfo
-	finishChan             chan realtimeTypes.FinishedEntry
-	realtimeSub            *realtimeSub.RealtimeSubscription
+	kafkaEnabled       bool
+	kafkaProducer      *realtimeKafka.KafkaProducer
+	kafkaConsumer      *realtimeKafka.KafkaConsumer
+	realtimeCache      *realtimeCache.RealtimeCache
+	kafkaBlockInfoChan chan *realtimeTypes.BlockInfo
+	kafkaTxInfoChan    chan state.TxInfo
+	finishChan         chan realtimeTypes.FinishedEntry
+	realtimeSub        *realtimeSub.RealtimeSubscription
 }
 
 func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {
@@ -1244,9 +1243,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				} else {
 					backend.kafkaEnabled = true
 					backend.kafkaProducer = kafkaProducer
-					backend.newBlockInfoChan = make(chan *types.Header, realtimeKafka.DefaultKafkaBufferSize)
-					backend.confirmedBlockInfoChan = make(chan *types.Block, realtimeKafka.DefaultKafkaBufferSize)
-					backend.txInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
+					backend.kafkaBlockInfoChan = make(chan *realtimeTypes.BlockInfo, realtimeKafka.DefaultKafkaBufferSize)
+					backend.kafkaTxInfoChan = make(chan state.TxInfo, realtimeKafka.DefaultKafkaBufferSize)
 
 					// Send error trigger message on sequencer restart
 					if err := backend.kafkaProducer.SendKafkaErrorTrigger(0); err != nil {
@@ -1275,9 +1273,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.txPool2DB,
 				l1InfoTreeUpdater,
 				hook,
-				backend.newBlockInfoChan,
-				backend.confirmedBlockInfoChan,
-				backend.txInfoChan,
+				backend.kafkaBlockInfoChan,
+				backend.kafkaTxInfoChan,
 			)
 
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
@@ -1313,15 +1310,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				} else {
 					backend.kafkaEnabled = true
 					backend.kafkaConsumer = kafkaConsumer
-
-					// Init realtime cache
-					backend.realtimeCache, err = realtimeCache.NewRealtimeCache(backend.sentryCtx, backend.chainDB, cfg.Zk.XLayer.Realtime.CacheDumpPath)
-					if err != nil {
-						return nil, err
-					}
-
+					backend.realtimeCache = realtimeCache.NewRealtimeCache(backend.sentryCtx, backend.chainDB, cfg.Zk.XLayer.Realtime.CacheDumpPath, cfg.Zk.XLayer.Realtime.CacheHeightThreshold)
 					backend.finishChan = make(chan realtimeTypes.FinishedEntry)
-
 					if cfg.Zk.XLayer.Realtime.EnableSubscribe {
 						backend.realtimeSub = realtimeSub.NewRealtimeSubscription()
 						backend.realtimeSub.Start(ctx)
@@ -2127,7 +2117,7 @@ func (s *Ethereum) Start() error {
 		// For X Layer, realtime
 		if s.config.Zk.XLayer.Realtime.Enable && s.kafkaEnabled {
 			go realtime.ListenKafkaConsumer(s.sentryCtx, s.kafkaConsumer, s.realtimeCache, s.finishChan, s.realtimeSub)
-			go realtime.ListenKafkaProducer(s.sentryCtx, s.kafkaProducer, s.newBlockInfoChan, s.confirmedBlockInfoChan, s.txInfoChan)
+			go realtime.ListenKafkaProducer(s.sentryCtx, s.kafkaProducer, s.kafkaBlockInfoChan, s.kafkaTxInfoChan)
 		}
 	}
 

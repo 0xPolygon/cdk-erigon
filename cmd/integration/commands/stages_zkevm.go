@@ -145,7 +145,6 @@ func newSyncZk(ctx context.Context, db, dbsmt kv.RwDB) (consensus.Engine, *vm.Co
 			nil,
 			nil,
 			nil,
-			nil,
 		)
 	} else {
 		stages = stages2.NewDefaultZkStages(

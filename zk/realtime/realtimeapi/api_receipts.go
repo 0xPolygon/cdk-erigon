@@ -20,7 +20,7 @@ func (api *RealtimeAPIImpl) GetTransactionReceipt(ctx context.Context, hash comm
 	if !ok {
 		return api.APIImpl.GetTransactionReceipt(ctx, hash)
 	}
-	header, _, blockhash, ok := api.cacheDB.Stateless.GetHeader(receipt.BlockNumber.Uint64())
+	header, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(receipt.BlockNumber.Uint64())
 	if !ok {
 		return api.APIImpl.GetTransactionReceipt(ctx, hash)
 	}
@@ -70,7 +70,7 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 		return api.APIImpl.GetBlockReceipts(ctx, number)
 	}
 
-	header, _, blockhash, ok := api.cacheDB.Stateless.GetHeader(blockNum)
+	header, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		return api.APIImpl.GetBlockReceipts(ctx, number)
 	}

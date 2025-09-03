@@ -1,272 +1,149 @@
 package cache
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 
-	"github.com/holiman/uint256"
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 	"github.com/ledgerwatch/erigon/core/state"
-	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 )
 
-var (
-	ErrNotReady   = fmt.Errorf("state cache not initialized")
-	emptyCodeHash = crypto.Keccak256(nil)
-)
+var emptyCodeHash = crypto.Keccak256(nil)
 
-type stateCache struct {
-	accountCache        map[libcommon.Address]*accounts.Account
-	storageCache        map[string]*uint256.Int
-	codeCache           map[libcommon.Hash][]byte
-	incarnationMapCache map[libcommon.Address]uint64
+// StateCache holds the realtime block state caches and the chainstate db from the default
+// execution logic. The highest block number in the block state cache holds the latest
+// confirmed realtime state.
+type StateCache struct {
+	ctx context.Context
+
+	cacheLock    sync.RWMutex
+	globalHeight uint64
+	globalCache  *GlobalStateCache
+	blocksCache  map[uint64]*BlockStateCache
 }
 
-func newStateCache(size int) *stateCache {
-	return &stateCache{
-		accountCache:        make(map[libcommon.Address]*accounts.Account, size),
-		storageCache:        make(map[string]*uint256.Int, size),
-		codeCache:           make(map[libcommon.Hash][]byte, size),
-		incarnationMapCache: make(map[libcommon.Address]uint64, size),
+func NewStateCache(ctx context.Context, db kv.RoDB, globalSize int, blocksCacheSize int) *StateCache {
+	return &StateCache{
+		ctx:          ctx,
+		globalHeight: 0,
+		globalCache:  NewGlobalStateCache(ctx, db, globalSize),
+		blocksCache:  make(map[uint64]*BlockStateCache, blocksCacheSize),
 	}
 }
 
-func (cache *stateCache) Clear() {
-	for k := range cache.accountCache {
-		delete(cache.accountCache, k)
-	}
-	for k := range cache.storageCache {
-		delete(cache.storageCache, k)
-	}
-	for k := range cache.codeCache {
-		delete(cache.codeCache, k)
-	}
-	for k := range cache.incarnationMapCache {
-		delete(cache.incarnationMapCache, k)
-	}
-}
-
-// GlobalStateCache implements the plain state reader with a changeset cache layer.
-// The global cache holds the latest chainstate - it holds the chainstate db,
-// with a changeset cache layer that stores in-memory the latest state changes.
-type GlobalStateCache struct {
-	ctx        context.Context
-	db         kv.RoDB
-	initHeight atomic.Uint64
-
-	cacheLock sync.RWMutex
-	cache     *stateCache
-}
-
-func NewGlobalStateCache(ctx context.Context, db kv.RoDB, size int) (*GlobalStateCache, error) {
-	return &GlobalStateCache{
-		ctx:        ctx,
-		db:         db,
-		initHeight: atomic.Uint64{},
-		cache:      newStateCache(size),
-	}, nil
-}
-
-func (cache *GlobalStateCache) TryInitCache(executionHeight uint64) error {
+func (cache *StateCache) TryInitCache(executionHeight uint64) error {
 	cache.cacheLock.Lock()
 	defer cache.cacheLock.Unlock()
 
-	if cache.initHeight.Load() != 0 {
+	if cache.globalHeight != 0 {
 		return fmt.Errorf("state cache already initialized")
 	}
-	cache.initHeight.Store(executionHeight)
+	cache.globalHeight = executionHeight
 
 	return nil
 }
 
-func (cache *GlobalStateCache) Clear() {
+func (cache *StateCache) Clear() {
 	cache.cacheLock.Lock()
 	defer cache.cacheLock.Unlock()
 
-	// Clear all caches
-	cache.cache.Clear()
-	cache.initHeight.Store(0)
+	// Clear block state caches
+	for blockNum, bc := range cache.blocksCache {
+		bc.Clear()
+		delete(cache.blocksCache, blockNum)
+	}
+
+	// Clear global state cache
+	cache.globalCache.Clear()
+	cache.globalHeight = 0
 }
 
-func (cache *GlobalStateCache) GetInitHeight() uint64 {
-	return cache.initHeight.Load()
-}
-
-// -------------- Cache operations --------------
-func (cache *GlobalStateCache) FlushState(stateCache *stateCache) error {
-	cache.cacheLock.Lock()
-	defer cache.cacheLock.Unlock()
-
-	// Apply account changes
-	for address, account := range stateCache.accountCache {
-		delete(cache.cache.accountCache, address)
-		cache.cache.accountCache[address] = account
-	}
-
-	// Apply code changes
-	for codeHash, code := range stateCache.codeCache {
-		delete(cache.cache.codeCache, codeHash)
-		cache.cache.codeCache[codeHash] = code
-	}
-
-	// Apply storage changes
-	for key, value := range stateCache.storageCache {
-		delete(cache.cache.storageCache, key)
-		cache.cache.storageCache[key] = value
-	}
-
-	// Apply incarnation map changes
-	for address, incarnation := range stateCache.incarnationMapCache {
-		delete(cache.cache.incarnationMapCache, address)
-		cache.cache.incarnationMapCache[address] = incarnation
-	}
-
-	return nil
-}
-
-// -------------- StateReader implementation --------------
-func (cache *GlobalStateCache) ReadAccountData(address libcommon.Address) (*accounts.Account, error) {
-	if cache.initHeight.Load() == 0 {
-		return nil, ErrNotReady
-	}
-
-	cache.cacheLock.RLock()
-	acc, ok := cache.cache.accountCache[address]
-	if ok {
-		accCopy := accounts.DeepCopyAccount(acc)
-		cache.cacheLock.RUnlock()
-		return accCopy, nil
-	}
-	cache.cacheLock.RUnlock()
-
-	// Cache miss, read from chainstate db
-	return cache.GetAccountFromChainDb(address)
-}
-
-func (cache *GlobalStateCache) ReadAccountStorage(address libcommon.Address, incarnation uint64, key *libcommon.Hash) ([]byte, error) {
-	if cache.initHeight.Load() == 0 {
-		return nil, ErrNotReady
-	}
-
-	compositeKey := dbutils.PlainGenerateCompositeStorageKey(address.Bytes(), incarnation, key.Bytes())
-
-	cache.cacheLock.RLock()
-	storage, ok := cache.cache.storageCache[string(compositeKey)]
-	if ok {
-		storageCopy := libcommon.Copy(storage.Bytes())
-		cache.cacheLock.RUnlock()
-		return storageCopy, nil
-	}
-	cache.cacheLock.RUnlock()
-
-	// Cache miss, read from chainstate db
-	return cache.GetAccountStorageFromChainDb(address, incarnation, key)
-}
-
-func (cache *GlobalStateCache) ReadAccountCode(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) ([]byte, error) {
-	if bytes.Equal(codeHash.Bytes(), emptyCodeHash) {
-		return nil, nil
-	}
-
-	if cache.initHeight.Load() == 0 {
-		return nil, ErrNotReady
-	}
-
-	cache.cacheLock.RLock()
-	code, ok := cache.cache.codeCache[codeHash]
-	if ok {
-		codeCopy := libcommon.Copy(code)
-		cache.cacheLock.RUnlock()
-		return codeCopy, nil
-	}
-	cache.cacheLock.RUnlock()
-
-	// Cache miss, read from chainstate db
-	return cache.GetAccountCodeFromChainDb(address, incarnation, codeHash)
-}
-
-func (cache *GlobalStateCache) ReadAccountCodeSize(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) (int, error) {
-	code, err := cache.ReadAccountCode(address, incarnation, codeHash)
-	return len(code), err
-}
-
-func (cache *GlobalStateCache) ReadAccountIncarnation(address libcommon.Address) (uint64, error) {
-	if cache.initHeight.Load() == 0 {
-		return 0, ErrNotReady
-	}
-
-	cache.cacheLock.RLock()
-	incarnation, ok := cache.cache.incarnationMapCache[address]
-	cache.cacheLock.RUnlock()
-	if ok {
-		return incarnation, nil
-	}
-
-	// Cache miss, read from chainstate db
-	return cache.GetAccountIncarnationFromChainDb(address)
-}
-
-// -------------- Chainstate db reader operations --------------
-func (cache *GlobalStateCache) GetAccountFromChainDb(address libcommon.Address) (*accounts.Account, error) {
-	tx, err := cache.db.BeginRo(cache.ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	reader := state.NewPlainStateReader(tx)
-	return reader.ReadAccountData(address)
-}
-
-func (cache *GlobalStateCache) GetAccountStorageFromChainDb(address libcommon.Address, incarnation uint64, key *libcommon.Hash) ([]byte, error) {
-	tx, err := cache.db.BeginRo(cache.ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	reader := state.NewPlainStateReader(tx)
-	return reader.ReadAccountStorage(address, incarnation, key)
-}
-
-func (cache *GlobalStateCache) GetAccountCodeFromChainDb(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) ([]byte, error) {
-	tx, err := cache.db.BeginRo(cache.ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	reader := state.NewPlainStateReader(tx)
-	return reader.ReadAccountCode(address, incarnation, codeHash)
-}
-
-func (cache *GlobalStateCache) GetAccountIncarnationFromChainDb(address libcommon.Address) (uint64, error) {
-	tx, err := cache.db.BeginRo(cache.ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	reader := state.NewPlainStateReader(tx)
-	return reader.ReadAccountIncarnation(address)
-}
-
-// -------------- Debug operations --------------
-func (cache *GlobalStateCache) DebugDumpToFile(cacheDumpPath string) error {
+func (cache *StateCache) GetStateReaderWithHeight(blockNum uint64) (state.StateReader, bool, error) {
 	cache.cacheLock.RLock()
 	defer cache.cacheLock.RUnlock()
 
+	if blockNum < cache.globalHeight {
+		return nil, false, fmt.Errorf("block number %d is less than global height %d", blockNum, cache.globalHeight)
+	} else if blockNum == cache.globalHeight {
+		return cache.globalCache, true, nil
+	} else {
+		bc, exists := cache.blocksCache[blockNum]
+		if !exists {
+			return nil, false, fmt.Errorf("block number %d is not in the blocks cache", blockNum)
+		}
+		return bc, false, nil
+	}
+}
+
+func (cache *StateCache) AddBlock(blockNum uint64, blockStateCache *BlockStateCache) error {
+	cache.cacheLock.Lock()
+	defer cache.cacheLock.Unlock()
+
+	_, exists := cache.blocksCache[blockNum]
+	if exists {
+		return fmt.Errorf("block %d already exists in the confirmed block state cache", blockNum)
+	}
+	cache.blocksCache[blockNum] = blockStateCache
+	return nil
+}
+
+func (cache *StateCache) FlushBlock(blockNum uint64) error {
+	cache.cacheLock.Lock()
+	defer cache.cacheLock.Unlock()
+
+	if cache.globalHeight == 0 {
+		return nil // Not initialized yet
+	}
+
+	if blockNum <= cache.globalHeight {
+		return nil
+	}
+
+	// Process all blocks from globalHeight+1 to blockNum
+	// This handles cases where blockNum might not be consecutive
+	for flushHeight := cache.globalHeight + 1; flushHeight <= blockNum; flushHeight++ {
+		bc, exists := cache.blocksCache[flushHeight]
+		if !exists {
+			return fmt.Errorf("failed to flush block %d, block state cache not found in state cache. global cache height: %d", flushHeight, cache.globalHeight)
+		}
+
+		// Verify the previous state reader is global for the first block in sequence
+		if !bc.isPrevGlobal.Load() {
+			return fmt.Errorf("failed to flush block %d, previous state reader is not global. global cache height: %d", flushHeight, cache.globalHeight)
+		}
+
+		// Flush global cache with this block's state
+		cache.globalCache.FlushState(bc.cache)
+		cache.globalHeight = flushHeight
+
+		// Update linked list - set the next block's previous reader to global cache
+		nbc := bc.nextBlockCache
+		if nbc != nil {
+			nbc.SetPrevStateReader(cache.globalCache, true)
+		}
+
+		// Remove from map and clear
+		delete(cache.blocksCache, flushHeight)
+		bc.Clear()
+	}
+
+	return nil
+}
+
+// -------------- Debug operations --------------
+func (cache *StateCache) DebugDumpToFile(cacheDumpPath string) error {
+	flatten, err := cache.flattenState()
+	if err != nil {
+		return err
+	}
+
 	accountData := make(map[string]string)
-	for addr, acc := range cache.cache.accountCache {
+	for addr, acc := range flatten.accountCache {
 		value := make([]byte, acc.EncodingLengthForStorage())
 		acc.EncodeForStorage(value)
 		accountData[hex.EncodeToString(addr[:])] = hex.EncodeToString(value)
@@ -276,7 +153,7 @@ func (cache *GlobalStateCache) DebugDumpToFile(cacheDumpPath string) error {
 	}
 
 	storageData := make(map[string]string)
-	for key, value := range cache.cache.storageCache {
+	for key, value := range flatten.storageCache {
 		storageData[hex.EncodeToString([]byte(key))] = hex.EncodeToString(value.Bytes())
 	}
 	if err := realtimeTypes.WriteToJSON(filepath.Join(cacheDumpPath, "storage_cache.json"), storageData); err != nil {
@@ -284,7 +161,7 @@ func (cache *GlobalStateCache) DebugDumpToFile(cacheDumpPath string) error {
 	}
 
 	codeData := make(map[string]string)
-	for hash, code := range cache.cache.codeCache {
+	for hash, code := range flatten.codeCache {
 		codeData[hex.EncodeToString(hash[:])] = hex.EncodeToString(code)
 	}
 	if err := realtimeTypes.WriteToJSON(filepath.Join(cacheDumpPath, "code_cache.json"), codeData); err != nil {
@@ -292,7 +169,7 @@ func (cache *GlobalStateCache) DebugDumpToFile(cacheDumpPath string) error {
 	}
 
 	incarnationData := make(map[string]uint64)
-	for addr, incarnation := range cache.cache.incarnationMapCache {
+	for addr, incarnation := range flatten.incarnationMapCache {
 		incarnationData[hex.EncodeToString(addr[:])] = incarnation
 	}
 	if err := realtimeTypes.WriteToJSON(filepath.Join(cacheDumpPath, "incarnation_cache.json"), incarnationData); err != nil {
@@ -304,12 +181,14 @@ func (cache *GlobalStateCache) DebugDumpToFile(cacheDumpPath string) error {
 
 // DebugCompare compares the state cache with the chain-state db, and returns the
 // list of account addresses that have differing states.
-func (cache *GlobalStateCache) DebugCompare(reader state.StateReader) []string {
-	cache.cacheLock.RLock()
-	defer cache.cacheLock.RUnlock()
+func (cache *StateCache) DebugCompare(reader state.StateReader) ([]string, error) {
+	flatten, err := cache.flattenState()
+	if err != nil {
+		return nil, err
+	}
 
 	mismatches := []string{}
-	for addr, accCache := range cache.cache.accountCache {
+	for addr, accCache := range flatten.accountCache {
 		accDb, err := reader.ReadAccountData(addr)
 		if err != nil {
 			mismatch := fmt.Sprintf("chain-state db reader error, failed to read account. address: %s, error: %v", addr.String(), err)
@@ -343,5 +222,25 @@ func (cache *GlobalStateCache) DebugCompare(reader state.StateReader) []string {
 		}
 	}
 
-	return mismatches
+	return mismatches, nil
+}
+
+func (cache *StateCache) flattenState() (*plainStateCache, error) {
+	cache.cacheLock.RLock()
+	defer cache.cacheLock.RUnlock()
+
+	flatten := newPlainStateCache(DefaultGlobalStateCacheSize)
+	flatten.Flatten(cache.globalCache.cache)
+
+	blockNum := cache.globalHeight + 1
+	for {
+		bc, exists := cache.blocksCache[blockNum]
+		if !exists {
+			break
+		}
+		flatten.Flatten(bc.cache)
+		blockNum++
+	}
+
+	return flatten, nil
 }

@@ -120,37 +120,38 @@ func (api *RealtimeAPIImpl) getConfirmHeightFromCache() (uint64, error) {
 	return confirmHeight, nil
 }
 
-func (api *RealtimeAPIImpl) createStateReader(blockNrOrHash *rpc.BlockNumberOrHash) (reader state.StateReader, blockNumber uint64, err error) {
+func (api *RealtimeAPIImpl) createStateReader(blockNrOrHash *rpc.BlockNumberOrHash) (state.StateReader, uint64, error) {
 	if blockNrOrHash.BlockNumber == nil {
-		// todo: add support for latest block hash
-		return nil, 0, fmt.Errorf("failed to create state reader: block number is nil")
-	}
-
-	confirmHeight, err := api.getConfirmHeightFromCache()
-	if err != nil {
-		return nil, 0, err
-	}
-	pendingHeight, err := api.getPendingHeightFromCache()
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// Realtime supports pending and latest tags only
-	if *blockNrOrHash.BlockNumber == rpc.PendingBlockNumber || *blockNrOrHash.BlockNumber == rpc.BlockNumber(pendingHeight) {
-		pendingReader := api.cacheDB.GetPendingStateCache(pendingHeight)
-		if pendingReader != nil {
-			reader = pendingReader
-			blockNumber = pendingHeight
-		} else {
-			// Next pending block not open yet, we use the latest confirmed global state
-			reader = api.cacheDB.State
-			blockNumber = confirmHeight
+		blockHeight, err := api.getBlockNumberOrHash(*blockNrOrHash)
+		if err != nil {
+			return nil, 0, err
 		}
-	} else if *blockNrOrHash.BlockNumber == rpc.LatestBlockNumber || *blockNrOrHash.BlockNumber == rpc.BlockNumber(confirmHeight) {
-		reader = api.cacheDB.State
-		blockNumber = confirmHeight
+		reader := api.cacheDB.GetStateReaderByHeight(blockHeight)
+		return reader, blockHeight, nil
 	}
-	return
+
+	pendingHeight := api.cacheDB.GetPendingHeight()
+	if *blockNrOrHash.BlockNumber == rpc.PendingBlockNumber || *blockNrOrHash.BlockNumber == rpc.BlockNumber(pendingHeight) {
+		pendingReader, err := api.cacheDB.GetPendingStateCache()
+		if pendingReader != nil && err == nil {
+			return pendingReader, pendingHeight, nil
+		}
+		// Case where no pending block is open yet, or pending block was confirmed. Use latest confirmed state reader
+		return api.cacheDB.GetLatestStateCache(), api.cacheDB.GetHighestConfirmHeight(), nil
+	}
+
+	if *blockNrOrHash.BlockNumber == rpc.LatestBlockNumber {
+		return api.cacheDB.GetLatestStateCache(), api.cacheDB.GetHighestConfirmHeight(), nil
+	}
+
+	// Retrieve by height
+	blockHeight, _, err := api.getBlockNumber(*blockNrOrHash.BlockNumber)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	reader := api.cacheDB.GetStateReaderByHeight(blockHeight)
+	return reader, blockHeight, nil
 }
 
 // newRPCTransaction_realtime returns a transaction that will serialize to the RPC
@@ -174,7 +175,7 @@ func (api *RealtimeAPIImpl) tryGetBlockResponseFromNumber(
 	blockNum uint64,
 	fullTx bool,
 ) (map[string]interface{}, error) {
-	header, _, _, ok := api.cacheDB.Stateless.GetHeader(blockNum)
+	header, _, _, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		return nil, fmt.Errorf("header not found for block %d", blockNum)
 	}

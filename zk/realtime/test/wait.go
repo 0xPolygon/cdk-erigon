@@ -107,7 +107,7 @@ func WaitTokenBalanceEth(ctx context.Context, client *rtclient.RealtimeClient, t
 			return fmt.Errorf("invalid contract address")
 		}
 
-		rpcBalance, err := client.EthGetTokenBalance(ctx, toAddress, erc20Address)
+		rpcBalance, err := client.EthGetTokenBalance(ctx, toAddress, erc20Address, nil)
 		if err != nil {
 			return err
 		}

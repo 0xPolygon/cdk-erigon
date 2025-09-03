@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/iden3/go-iden3-crypto/keccak256"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/ethclient"
@@ -54,12 +56,12 @@ func TestRealtimeComparison(t *testing.T) {
 		testBlocks = append(testBlocks, fmt.Sprintf("0x%x", latestBlockNumber-uint64(i)))
 	}
 
-	fromAddress := common.HexToAddress(DefaultL2AdminAddress)
+	fromAddress := libcommon.HexToAddress(DefaultL2AdminAddress)
 	log.Info(fmt.Sprintf("Sender: %s", fromAddress))
 
-	testAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	testAddress := libcommon.HexToAddress("0x1234567890123456789012345678901234567890")
 	txHash := transToken(t, context.Background(), client, uint256.NewInt(encoding.Gwei), testAddress.String())
-	txHashCommon := common.HexToHash(txHash)
+	txHashCommon := libcommon.HexToHash(txHash)
 	time.Sleep(1 * time.Second)
 
 	erc20Address := deployERC20Contract(t, ctx, privateKey, client)
@@ -157,6 +159,8 @@ func TestRealtimeComparison(t *testing.T) {
 				}
 			}
 
+			testBlocks = testBlocks[:len(testBlocks)-1]
+
 			require.True(t, allPassed, "getBlockByHash test failed - some scenarios did not pass")
 		})
 
@@ -166,7 +170,7 @@ func TestRealtimeComparison(t *testing.T) {
 			lastTxHash := txHashes[len(txHashes)-1]
 
 			// Get the block information from the last transaction's receipt
-			receipt, err := client.RealtimeGetTransactionReceipt(common.HexToHash(lastTxHash))
+			receipt, err := client.RealtimeGetTransactionReceipt(libcommon.HexToHash(lastTxHash))
 			require.NoError(t, err)
 			require.NotNil(t, receipt, "Transaction receipt should not be nil")
 
@@ -194,7 +198,7 @@ func TestRealtimeComparison(t *testing.T) {
 			txHashes := transTokenBatch(t, context.Background(), client, uint256.NewInt(encoding.Gwei), testAddress.String(), numberOfTransactions)
 			lastTxHash := txHashes[len(txHashes)-1]
 
-			receipt, err := client.RealtimeGetTransactionReceipt(common.HexToHash(lastTxHash))
+			receipt, err := client.RealtimeGetTransactionReceipt(libcommon.HexToHash(lastTxHash))
 			require.NoError(t, err)
 			require.NotNil(t, receipt, "Transaction receipt should not be nil")
 
@@ -227,7 +231,7 @@ func TestRealtimeComparison(t *testing.T) {
 		t.Run("getBlockInternalTransactions", func(t *testing.T) {
 			txHash := transToken(t, context.Background(), client, uint256.NewInt(encoding.Gwei), testAddress.String())
 
-			receipt, err := client.RealtimeGetTransactionReceipt(common.HexToHash(txHash))
+			receipt, err := client.RealtimeGetTransactionReceipt(libcommon.HexToHash(txHash))
 			require.NoError(t, err)
 			require.NotNil(t, receipt, "Transaction receipt should not be nil")
 
@@ -241,7 +245,7 @@ func TestRealtimeComparison(t *testing.T) {
 			time.Sleep(1 * time.Second)
 
 			blockNumberHex := fmt.Sprintf("0x%x", targetBlockNumber)
-			var nonRealtimeInternalTxs map[common.Hash][]*zktypes.InnerTx
+			var nonRealtimeInternalTxs map[libcommon.Hash][]*zktypes.InnerTx
 			err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeInternalTxs, "eth_getBlockInternalTransactions", blockNumberHex)
 			require.NoError(t, err)
 			require.NotNil(t, nonRealtimeInternalTxs, "Non-realtime internal transactions should not be nil")
@@ -251,12 +255,12 @@ func TestRealtimeComparison(t *testing.T) {
 
 		t.Run("getTransactionByHash", func(t *testing.T) {
 			txHashNew := transToken(t, context.Background(), client, uint256.NewInt(encoding.Gwei), testAddress.String())
-			realtimeTransaction, err := client.RealtimeGetTransactionByHash(common.HexToHash(txHashNew), nil)
+			realtimeTransaction, err := client.RealtimeGetTransactionByHash(libcommon.HexToHash(txHashNew), nil)
 			require.NoError(t, err)
 
 			// Make direct RPC call to non-realtime node to get JSON response
 			var nonRealtimeTransaction rtclient.RpcTransaction
-			err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTransaction, "eth_getTransactionByHash", common.HexToHash(txHashNew))
+			err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTransaction, "eth_getTransactionByHash", libcommon.HexToHash(txHashNew))
 			require.NoError(t, err)
 
 			require.Equal(t, realtimeTransaction, nonRealtimeTransaction, fmt.Sprintf("Transactions should be identical for hash %s", txHash))
@@ -303,7 +307,7 @@ func TestRealtimeComparison(t *testing.T) {
 		t.Run("getBlockReceipts", func(t *testing.T) {
 			txHash := transToken(t, context.Background(), client, uint256.NewInt(encoding.Gwei), testAddress.String())
 
-			receipt, err := client.RealtimeGetTransactionReceipt(common.HexToHash(txHash))
+			receipt, err := client.RealtimeGetTransactionReceipt(libcommon.HexToHash(txHash))
 			require.NoError(t, err)
 			require.NotNil(t, receipt, "Transaction receipt should not be nil")
 
@@ -328,7 +332,7 @@ func TestRealtimeComparison(t *testing.T) {
 
 	// TestStateAPIs - Balances, Code, Storage, and Contract Calls
 	// Sleep to let non-RT RPC catch up
-	time.Sleep(1 * time.Second)
+	time.Sleep(5 * time.Second)
 	t.Run("TestStateAPIs", func(t *testing.T) {
 		log.Info("Running state comparison tests")
 
@@ -398,7 +402,7 @@ func TestRealtimeComparison(t *testing.T) {
 		})
 
 		t.Run("getStorageAt", func(t *testing.T) {
-			realtimeStorage, err := client.RealtimeGetStorageAt(erc20Address, "0x2")
+			realtimeStorage, err := client.RealtimeGetStorageAt(erc20Address, "0x2", "pending")
 			require.NoError(t, err)
 
 			var nonRealtimeStorage string
@@ -406,6 +410,66 @@ func TestRealtimeComparison(t *testing.T) {
 			require.NoError(t, err)
 
 			require.Equal(t, realtimeStorage, nonRealtimeStorage, "Storages should match")
+		})
+
+		t.Run("getStorageAtScalable", func(t *testing.T) {
+			scalableAddress := libcommon.HexToAddress("0x000000000000000000000000000000005ca1ab1e")
+
+			// Test state storage set by Scalable contract in each block
+			for _, blockParam := range testBlocks {
+				// Test LAST_BLOCK_STORAGE_POS (0x0) - stores block number
+				realtimeBlockNumStorage, err := client.RealtimeGetStorageAt(scalableAddress, "0x0", blockParam)
+				require.NoError(t, err)
+
+				var nonRealtimeBlockNumStorage string
+				err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeBlockNumStorage, "eth_getStorageAt", scalableAddress, "0x0", blockParam)
+				require.NoError(t, err)
+
+				require.Equal(t, realtimeBlockNumStorage, nonRealtimeBlockNumStorage,
+					fmt.Sprintf("Block number storage should match for block %s", blockParam))
+
+				// Test TIMESTAMP_STORAGE_POS (0x2) - stores timestamp
+				realtimeTimestampStorage, err := client.RealtimeGetStorageAt(scalableAddress, "0x2", blockParam)
+				require.NoError(t, err)
+
+				var nonRealtimeTimestampStorage string
+				err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTimestampStorage, "eth_getStorageAt", scalableAddress, "0x2", blockParam)
+				require.NoError(t, err)
+
+				require.Equal(t, realtimeTimestampStorage, nonRealtimeTimestampStorage,
+					fmt.Sprintf("Timestamp storage should match for block %s", blockParam))
+
+				// Test BLOCK_INFO_ROOT_STORAGE_POS (0x3) - stores L1 info root
+				realtimeBlockInfoRootStorage, err := client.RealtimeGetStorageAt(scalableAddress, "0x3", blockParam)
+				require.NoError(t, err)
+
+				var nonRealtimeBlockInfoRootStorage string
+				err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeBlockInfoRootStorage, "eth_getStorageAt", scalableAddress, "0x3", blockParam)
+				require.NoError(t, err)
+
+				require.Equal(t, realtimeBlockInfoRootStorage, nonRealtimeBlockInfoRootStorage,
+					fmt.Sprintf("Block info root storage should match for block %s", blockParam))
+
+				// Test state root storage - storage key is calculated via keccak256(blockNum, STATE_ROOT_STORAGE_POS)
+				blockNumber, err := convertBlockParam(client, blockParam)
+				require.NoError(t, err)
+
+				d1 := common.LeftPadBytes(uint256.NewInt(blockNumber).Bytes(), 32)
+				d2 := common.LeftPadBytes(libcommon.HexToHash("0x1").Bytes(), 32)
+
+				mapKey := keccak256.Hash(d1, d2)
+				storageKey := fmt.Sprintf("0x%x", mapKey)
+
+				realtimeStateRootStorage, err := client.RealtimeGetStorageAt(scalableAddress, storageKey, blockParam)
+				require.NoError(t, err)
+
+				var nonRealtimeStateRootStorage string
+				err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeStateRootStorage, "eth_getStorageAt", scalableAddress, storageKey, blockParam)
+				require.NoError(t, err)
+
+				require.Equal(t, realtimeStateRootStorage, nonRealtimeStateRootStorage,
+					fmt.Sprintf("State root storage should match for block %s", blockParam))
+			}
 		})
 	})
 }

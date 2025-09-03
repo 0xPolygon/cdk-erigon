@@ -122,7 +122,7 @@ func TestKafka(t *testing.T) {
 		err = producer.SendKafkaTransaction(uint64(i), rightvrsTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset)
 		assert.NilError(t, err)
 
-		err = producer.SendKafkaBlockMessage(&realtimeTypes.BlockInfo{
+		err = producer.SendKafkaBlockInfo(&realtimeTypes.BlockInfo{
 			Header:  blockHeader,
 			TxCount: int64(i),
 			Hash:    testHash,

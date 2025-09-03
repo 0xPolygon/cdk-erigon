@@ -6,6 +6,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/core/types"
 	ethTypes "github.com/ledgerwatch/erigon/core/types"
+	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 )
 
@@ -38,4 +39,12 @@ func (sdb *IntraBlockState) GenerateChangesetSinceSnapshotAndSendTxInfo(revid in
 		InnerTxs:    innerTxs,
 		Entries:     entries,
 	}
+}
+
+func (sdb *IntraBlockState) GenerateChangeset() *realtimeTypes.Changeset {
+	entries := Entries{
+		entries:  &sdb.journal.entries,
+		snapshot: 0,
+	}
+	return CollectChangeset(entries)
 }

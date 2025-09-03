@@ -47,7 +47,7 @@ func (cache *KafkaCache) Flush(executionHeight uint64) {
 	}
 
 	cache.NewBlockMsgCache.Flush(executionHeight)
-	cache.ConfirmedBlockMsgCache.Flush(executionHeight - 1)
+	cache.ConfirmedBlockMsgCache.Flush(executionHeight)
 	cache.TxMsgCache.Flush(executionHeight)
 }
 
@@ -123,23 +123,6 @@ func (cache *BlockMessageCache) GetLowestBlockHeight() uint64 {
 		}
 	}
 	return lowestBlockHeight
-}
-
-func (cache *BlockMessageCache) GetBlockMsgsFromHeight(height uint64) []*realtimeTypes.BlockInfo {
-	cache.mu.RLock()
-	defer cache.mu.RUnlock()
-
-	blockMsgs := make([]*realtimeTypes.BlockInfo, 0)
-	for _, k := range cache.cache.Keys() {
-		if k >= height {
-			blockMsg, ok := cache.cache.Get(k)
-			if ok {
-				cache.cache.Remove(k)
-				blockMsgs = append(blockMsgs, blockMsg)
-			}
-		}
-	}
-	return blockMsgs
 }
 
 // -------------- Tx Message Cache --------------

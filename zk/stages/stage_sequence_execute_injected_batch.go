@@ -105,7 +105,7 @@ func processInjectedInitialBatch(
 	}
 	// Batch counters removed
 
-	if _, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injectedBatch.LastGlobalExitRoot, injectedBatch.L1ParentHash, 0, 0); err != nil {
+	if _, _, err = doFinishBlockAndUpdateState(batchContext, ibs, header, parentBlock, batchState, injectedBatch.LastGlobalExitRoot, injectedBatch.L1ParentHash, 0, 0); err != nil {
 		return err
 	}
 

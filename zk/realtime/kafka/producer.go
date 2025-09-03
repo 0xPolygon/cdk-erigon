@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/IBM/sarama"
-	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core/types"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
@@ -66,29 +65,7 @@ func (client *KafkaProducer) SendKafkaTransaction(blockNumber uint64, tx types.T
 	return nil
 }
 
-func (client *KafkaProducer) SendKafkaNewBlockInfo(header *types.Header) error {
-	msg := &realtimeTypes.BlockInfo{
-		Header:  header,
-		TxCount: -1,
-		Hash:    libcommon.Hash{},
-	}
-
-	return client.SendKafkaBlockMessage(msg)
-}
-
-func (client *KafkaProducer) SendKafkaConfirmedBlockInfo(block *types.Block) error {
-	// Get transaction count for the block
-	blockTxCount := int64(len(block.Transactions()))
-	msg := &realtimeTypes.BlockInfo{
-		Header:  block.Header(),
-		TxCount: blockTxCount,
-		Hash:    block.Hash(),
-	}
-
-	return client.SendKafkaBlockMessage(msg)
-}
-
-func (client *KafkaProducer) SendKafkaBlockMessage(msg *realtimeTypes.BlockInfo) error {
+func (client *KafkaProducer) SendKafkaBlockInfo(msg *realtimeTypes.BlockInfo) error {
 	// Marshal message to JSON
 	jsonData, err := json.Marshal(msg)
 	if err != nil {

@@ -148,7 +148,7 @@ func TestRealtimeRPC(t *testing.T) {
 
 	t.Run("RealtimeGetStorageAt", func(t *testing.T) {
 		// 0x2 is refered to _totalSupply field
-		value, err := client.RealtimeGetStorageAt(erc20Address, "0x2")
+		value, err := client.RealtimeGetStorageAt(erc20Address, "0x2", "pending")
 		require.NoError(t, err)
 		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2dcc80cd2e4000000", value, "Storage at index 0x2 should be equal to 1000000000000000000000")
 		log.Info(fmt.Sprintf("RealtimeGetStorageAt result for erc20 contract %s at index %s: %s", erc20Address, "0x2", value))
@@ -188,6 +188,50 @@ func TestRealtimeRPC(t *testing.T) {
 		gasEstimateCall, err := client.RealtimeEstimateGas(contractCallArgs)
 		require.NoError(t, err)
 		require.Greater(t, gasEstimateCall, gasEstimate, "Contract call should require more gas than simple transfer")
+	})
+
+	// Test call for block height specific
+	t.Run("RealtimeCallWithHeight", func(t *testing.T) {
+		data, err := erc20ABI.Pack("balanceOf", fromAddress)
+		require.NoError(t, err)
+
+		startValue, err := client.RealtimeCall(testAddress, erc20Address, "0x100000", "0x1", "0x0", fmt.Sprintf("0x%x", data))
+		require.NoError(t, err)
+		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2dcc80cd2e4000000", startValue, fmt.Sprintf("Balance of %s should be equal to 1e+26", fromAddress))
+
+		// Send balance transfer
+		transferAmount := new(big.Int).Mul(big.NewInt(1), big.NewInt(1e18)) // Adjust for token decimals (18 in this case)
+		nonce, err := client.RealtimeGetTransactionCount(fromAddress)
+		require.NoError(t, err)
+		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, testAddress, erc20Address, nonce)
+		err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
+		require.NoError(t, err)
+
+		// Get tx block number
+		receipt, err := client.RealtimeGetTransactionReceipt(signedTx.Hash())
+		require.NoError(t, err)
+		require.NotNil(t, receipt)
+		targetBlockNumber := receipt.BlockNumber.Uint64()
+
+		correctValue, err := client.RealtimeCall(testAddress, erc20Address, "0x100000", "0x1", "0x0", fmt.Sprintf("0x%x", data))
+		require.NoError(t, err)
+		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2cee7561f3c9c0000", correctValue, fmt.Sprintf("Balance of %s should be equal to 9.9999999e+25 after transfer", fromAddress))
+		require.NotEqual(t, startValue, correctValue)
+
+		// Send balance transfer
+		signedTx = erc20TransferTx(t, ctx, privateKey, client, transferAmount, testAddress, erc20Address, nonce+1)
+		err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
+		require.NoError(t, err)
+
+		endValue, err := client.RealtimeCall(testAddress, erc20Address, "0x100000", "0x1", "0x0", fmt.Sprintf("0x%x", data))
+		require.NoError(t, err)
+		require.NotEqual(t, endValue, correctValue)
+		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2c1069f6b95380000", endValue, fmt.Sprintf("Balance of %s should be equal to 9.9999998e+25 after transfer", fromAddress))
+
+		// Get block height specific state
+		testValue, err := client.EthGetTokenBalance(ctx, testAddress, erc20Address, new(big.Int).SetUint64(targetBlockNumber))
+		require.NoError(t, err)
+		require.NotEqual(t, testValue, correctValue)
 	})
 
 	t.Run("RealtimeGetBlockByNumber", func(t *testing.T) {
