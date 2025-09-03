@@ -458,7 +458,7 @@ type GenesisData struct {
 	Timestamp  uint64              `json:"timestamp,omitempty"`
 	ExtraData  []byte              `json:"extraData,omitempty"`
 	GasLimit   uint64              `json:"gasLimit,omitempty"`
-	Difficulty *big.Int            `json:"difficulty,omitempty"`
+	Difficulty string              `json:"difficulty,omitempty"`
 	Mixhash    string              `json:"mixHash,omitempty"`
 	Coinbase   string              `json:"coinbase,omitempty"`
 	Alloc      map[string]*AccInfo `json:"alloc,omitempty"`
@@ -473,10 +473,10 @@ type GenesisData struct {
 	ParentHash string `json:"parentHash,omitempty"`
 
 	// Header fields added in London and later hard forks
-	BaseFee               *big.Int `json:"baseFeePerGas,omitempty"`         // EIP-1559
-	BlobGasUsed           uint64   `json:"blobGasUsed,omitempty"`           // EIP-4844
-	ExcessBlobGas         uint64   `json:"excessBlobGas,omitempty"`         // EIP-4844
-	ParentBeaconBlockRoot string   `json:"parentBeaconBlockRoot,omitempty"` // EIP-4788
+	BaseFee               string `json:"baseFeePerGas,omitempty"`         // EIP-1559
+	BlobGasUsed           uint64 `json:"blobGasUsed,omitempty"`           // EIP-4844
+	ExcessBlobGas         uint64 `json:"excessBlobGas,omitempty"`         // EIP-4844
+	ParentBeaconBlockRoot string `json:"parentBeaconBlockRoot,omitempty"` // EIP-4788
 }
 
 func migrateGenesis(chaindata, input, output string) error {
