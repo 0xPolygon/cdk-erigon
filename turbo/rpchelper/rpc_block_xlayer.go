@@ -245,3 +245,8 @@ func GetCachedBlockGasLimit() (uint64, error) {
 	}
 	return *valPtr, nil
 }
+
+// SetCachedBlockGasLimit sets the cached block gas limit (for testing purposes)
+func SetCachedBlockGasLimit(gasLimit uint64) {
+	currentBlockGasLimit.Store(&gasLimit)
+}
