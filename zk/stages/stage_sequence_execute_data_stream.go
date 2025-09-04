@@ -138,14 +138,17 @@ func finalizeLastBatchInDatastreamIfNotFinalized(batchContext *BatchContext, bat
 func finalizeLastBatchInDatastream(batchContext *BatchContext, batchToClose, blockToCloseAt uint64) error {
 	ler, err := utils.GetBatchLocalExitRootFromSCStorageByBlock(blockToCloseAt, batchContext.sdb.hermezDb.HermezDbReader, batchContext.sdb.tx)
 	if err != nil {
+		log.Error("GetBatchLocalExitRootFromSCStorageByBlock", "error", err, "batchToClose", batchToClose, "blockToCloseAt", blockToCloseAt)
 		return err
 	}
 	lastBlock, err := rawdb.ReadBlockByNumber(batchContext.sdb.tx, blockToCloseAt)
 	if err != nil {
+		log.Error("ReadBlockByNumber", "error", err, "batchToClose", batchToClose, "blockToCloseAt", blockToCloseAt)
 		return err
 	}
 	root := lastBlock.Root()
 	if err = batchContext.cfg.dataStreamServer.WriteBatchEnd(batchContext.sdb.hermezDb, batchToClose, &root, &ler); err != nil {
+		log.Error("WriteBatchEnd", "error", err, "batchToClose", batchToClose, "blockToCloseAt", blockToCloseAt, "lastBlock.Root", lastBlock.Root(), "lastBlock.Number", lastBlock.NumberU64(), "lastBlock.Hash", lastBlock.Hash())
 		return err
 	}
 	return nil

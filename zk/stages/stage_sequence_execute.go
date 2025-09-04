@@ -145,16 +145,17 @@ func sequencingBatchStep(
 	if err != nil {
 		return err
 	}
-	defer func() {
-		sdb.Rollback()
+	defer sdb.Rollback()
 
+	defer func() {
 		if err != nil {
+			log.Error("sequencingBatchStep", "error", err)
 			if !cfg.zk.XLayer.EnableAsyncCommit {
 				return
 			}
 
-			executionAt, _ := s.ExecutionAt(sdb.tx)
-			if err != nil {
+			executionAt, e := s.ExecutionAt(sdb.tx)
+			if e != nil {
 				return
 			}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon-lib/kv/membatch"
@@ -88,9 +89,11 @@ func dispatchFlushTask(ctx context.Context, wg *sync.WaitGroup, workerPool chan 
 	case workerPool <- struct{}{}: // get working slot
 		wg.Add(1)
 		go func() {
+			now := time.Now()
 			defer func() {
 				<-workerPool // release working slot
 				wg.Done()
+				logger.Info("FlushDataToDB finished", "cost", time.Since(now), "blockHeight", saveData.BlockHeight)
 			}()
 			FlushDataToDB(ctx, db, logger, cache, saveData)
 		}()
