@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/smt/pkg/smt"
@@ -452,39 +451,13 @@ func BytesToPaddedHex(data []byte, length int) string {
 	return string(result)
 }
 
-type GenesisData struct {
-	Config     *chain.Config       `json:"config,omitempty"`
-	Nonce      uint64              `json:"nonce,omitempty"`
-	Timestamp  uint64              `json:"timestamp,omitempty"`
-	ExtraData  []byte              `json:"extraData,omitempty"`
-	GasLimit   uint64              `json:"gasLimit,omitempty"`
-	Difficulty *big.Int            `json:"difficulty,omitempty"`
-	Mixhash    string              `json:"mixHash,omitempty"`
-	Coinbase   string              `json:"coinbase,omitempty"`
-	Alloc      map[string]*AccInfo `json:"alloc,omitempty"`
-
-	AuRaStep uint64 `json:"auRaStep,omitempty"`
-	AuRaSeal []byte `json:"auRaSeal,omitempty"`
-
-	// These fields are used for consensus tests. Please don't use them
-	// in actual genesis blocks.
-	Number     uint64 `json:"number,omitempty"`
-	GasUsed    uint64 `json:"gasUsed,omitempty"`
-	ParentHash string `json:"parentHash,omitempty"`
-
-	// Header fields added in London and later hard forks
-	BaseFee               *big.Int `json:"baseFeePerGas,omitempty"`         // EIP-1559
-	BlobGasUsed           uint64   `json:"blobGasUsed,omitempty"`           // EIP-4844
-	ExcessBlobGas         uint64   `json:"excessBlobGas,omitempty"`         // EIP-4844
-	ParentBeaconBlockRoot string   `json:"parentBeaconBlockRoot,omitempty"` // EIP-4788
-}
-
 func migrateGenesis(chaindata, input, output string) error {
 	start := time.Now()
 	db := mdbx.MustOpen(chaindata)
 	defer db.Close()
 
-	var genesisData GenesisData
+	var genesisData map[string]interface{}
+	var allocData map[string]*AccInfo
 
 	if input == "" {
 		input = "genesis.json"
@@ -501,14 +474,21 @@ func migrateGenesis(chaindata, input, output string) error {
 			logger.Error("unmarshal json", "error", err)
 			return err
 		}
+		data, err := json.Marshal(genesisData["alloc"])
+		if err != nil {
+			logger.Error("marshal alloc", "error", err)
+			return err
+		}
+		if err := json.Unmarshal(data, &allocData); err != nil {
+			logger.Error("unmarshal alloc", "error", err)
+			return err
+		}
 	}
 
-	if len(genesisData.Alloc) == 0 {
+	if len(allocData) == 0 {
 		logger.Warn("No alloc field found in genesis stub.")
-		genesisData.Alloc = make(map[string]*AccInfo)
+		allocData = make(map[string]*AccInfo)
 	}
-
-	allocData := genesisData.Alloc
 
 	var acctCount uint64
 	var storageCount uint64
@@ -539,9 +519,8 @@ func migrateGenesis(chaindata, input, output string) error {
 					acc.Nonce = "0x" + strconv.FormatUint(a.Nonce, 16)
 				}
 
-				if !a.Balance.IsZero() {
-					acc.Balance = a.Balance.Hex()
-				}
+				// balance is required even it is zero
+				acc.Balance = a.Balance.Hex()
 
 				if a.CodeHash != EMPTY_CODE_HASH {
 					code, err := tx.GetOne(kv.Code, a.CodeHash[:])
@@ -576,6 +555,8 @@ func migrateGenesis(chaindata, input, output string) error {
 		return err
 	}
 	logger.Info("complete scan keys", "total acct count", acctCount, "storage count", storageCount, "total", total, "elapsed", time.Since(startScanKeys))
+
+	genesisData["alloc"] = allocData
 
 	startJsonMarshal := time.Now()
 	updatedData, err := json.MarshalIndent(genesisData, "", "  ")
