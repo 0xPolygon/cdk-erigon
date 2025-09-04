@@ -11,11 +11,11 @@ Hack is a set of developer focussed tools for dealing with the node and it's dat
 
 ## build
 ```
-go install ./cmd/hack 
+go install ./cmd/hack
 
 # alteratively
 make hack
-sudo DIST=/usr/local/bin make install 
+sudo DIST=/usr/local/bin make install
 ```
 
 ## run dump genesis
@@ -33,6 +33,33 @@ export chaindata_dir=$(pwd)/data/seq/chaindata
 export smtdata_dir=$(pwd)/data/seq/smt
 hack -action migrateGenesis -chaindata ${chaindata_dir} -input empty.json -output xlayer_dump_file.json
 hack -action checkStateRoot -chaindata ${chaindata_dir} -smt-db-path ${smtdata_dir} -standalone-smt-db=true -ignore-scalable=true -input xlayer_dump_file.json
+```
+
+## re-genesis state check ignoring scalable
+
+- Generate dump and check state under one command:
+```
+export chaindata_dir=$(pwd)/test/mainnet/seq/chaindata
+export smtdata_dir=$(pwd)/test/mainnet/seq/smt
+make hack
+./build/bin/hack -action migrateGenesisAndCheckRootFast -chaindata ${chaindata_dir} -smt-db-path ${smtdata_dir} -standalone-smt-db=true -input empty.json -output xlayer_dump_file.json -ignore-scalable=true
+```
+
+- Or use multiple commands:
+```
+export chaindata_dir=$(pwd)/test/mainnet/seq/chaindata
+export smtdata_dir=$(pwd)/test/mainnet/seq/smt
+#export chaindata_dir=$(pwd)/test/data/seq/chaindata
+#export smtdata_dir=$(pwd)/test/data/seq/smt
+make hack
+# generate genesis dump file (with and without scalable account)
+./build/bin/hack -action migrateGenesis -chaindata ${chaindata_dir} -input empty.json -output xlayer_dump_file.json -ignore-scalable=true
+# check state root fast (including scalable)
+./build/bin/hack -action checkStateRootFast -chaindata ${chaindata_dir} -smt-db-path ${smtdata_dir} -standalone-smt-db=true -input xlayer_dump_file.json
+# check state root fast (using json file with scalable, ignoring it during check)
+./build/bin/hack -action checkStateRootFast -chaindata ${chaindata_dir} -smt-db-path ${smtdata_dir} -standalone-smt-db=true -input xlayer_dump_file.json -ignore-scalable=true
+# check state root fast (using json file without scalable)
+./build/bin/hack -action checkStateRootFast -chaindata ${chaindata_dir} -smt-db-path ${smtdata_dir} -standalone-smt-db=true -input no_scalable_xlayer_dump_file.json
 ```
 
 ## run differential smt verify
