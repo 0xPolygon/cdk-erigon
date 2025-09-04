@@ -1543,8 +1543,9 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 
 	go func() {
 		if err := cli.StartDataStream(s.streamServer); err != nil {
-			log.Error(err.Error())
-			return
+			log.Error("Data stream server failed to start, forcing sequencer exit", "error", err)
+			// Force exit the sequencer process if data stream server fails to start
+			os.Exit(1)
 		}
 	}()
 
