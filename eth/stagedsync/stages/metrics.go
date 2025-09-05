@@ -11,6 +11,12 @@ import (
 
 var SyncMetrics = map[SyncStage]metrics.Gauge{}
 
+// BlockWriteLatencyMetric measures the latency between block timestamp and when it's written to DB
+var BlockWriteLatencyMetric = metrics.GetOrCreateGauge("block_write_latency_seconds")
+
+// NetworkReceiveLatencyMetric measures the latency between block timestamp and network receive time
+var NetworkReceiveLatencyMetric = metrics.GetOrCreateGauge("block_network_receive_latency_seconds")
+
 // TODO: this needs improving to support passing in different sets of stages
 func init() {
 	for _, v := range AllStages {

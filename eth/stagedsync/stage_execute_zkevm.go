@@ -419,6 +419,12 @@ func postExecuteCommitValues(
 		return fmt.Errorf("WriteTxLookupEntries_zkEvm: %w", err)
 	}
 
+	// Update block write latency metric: current time - block timestamp
+	currentTime := time.Now()
+	blockTime := time.Unix(int64(header.Time), 0)
+	latencySeconds := currentTime.Sub(blockTime).Seconds()
+	stages.BlockWriteLatencyMetric.Set(latencySeconds)
+
 	return nil
 }
 

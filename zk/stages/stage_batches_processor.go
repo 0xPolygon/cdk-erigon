@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync/atomic"
+	"time"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -342,6 +343,11 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 		blockEntry.ParentHash = previousHash
 	}
 
+	// Update network receive latency metric: current time (network receive time) - block timestamp
+	currentTime := time.Now()
+	blockTime := time.Unix(int64(blockEntry.Timestamp), 0)
+	latencySeconds := currentTime.Sub(blockTime).Seconds()
+	stages.NetworkReceiveLatencyMetric.Set(latencySeconds)
 	if err := p.writeL2Block(blockEntry); err != nil {
 		return false, fmt.Errorf("writeL2Block error: %w", err)
 	}
