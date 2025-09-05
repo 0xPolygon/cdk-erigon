@@ -7,6 +7,7 @@ import (
 	"github.com/apolloconfig/agollo/v4"
 	"github.com/apolloconfig/agollo/v4/env/config"
 	"github.com/apolloconfig/agollo/v4/storage"
+	"github.com/ledgerwatch/erigon/turbo/logging"
 	"github.com/urfave/cli/v2"
 
 	"github.com/ledgerwatch/erigon/cmd/utils"
@@ -64,6 +65,10 @@ func NewClient(ethCfg *ethconfig.Config) *Client {
 		namespaceMap: nsMap,
 		flags:        append(erigoncli.DefaultFlags, debug.Flags...),
 	}
+
+	apc.flags = append(apc.flags, utils.MetricFlags...)
+	apc.flags = append(apc.flags, logging.Flags...)
+
 	client.AddChangeListener(&CustomChangeListener{apc})
 
 	return apc
