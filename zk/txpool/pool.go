@@ -23,6 +23,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -50,6 +51,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common/assert"
 	"github.com/ledgerwatch/erigon-lib/common/dbg"
 	"github.com/ledgerwatch/erigon-lib/common/fixedgas"
+	common_util "github.com/ledgerwatch/erigon/common"
+
 	emath "github.com/ledgerwatch/erigon-lib/common/math"
 	"github.com/ledgerwatch/erigon-lib/common/u256"
 	"github.com/ledgerwatch/erigon-lib/gointerfaces"
@@ -94,6 +97,9 @@ type Pool interface {
 	GetRlp(tx kv.Tx, hash []byte) ([]byte, error)
 
 	AddNewGoodPeer(peerID types.PeerID)
+
+	// RemoveTx is the admin tx, used to remove transactions
+	RemoveTx(hash common.Hash) error
 }
 
 var _ Pool = (*TxPool)(nil) // compile-time interface check
@@ -155,7 +161,8 @@ const (
 
 	// For X Layer
 	ReceiverDisallowedReceiveTx DiscardReason = 127 // receiver is not allowed to receive transactions
-	NoWhiteListedSender         DiscardReason = 128 // the transaction is sent by a non-whitelisted account
+	NoWhiteListedSender         DiscardReason = 128 // the transaction is sent by a non-whitelisted
+	SequencerAdminRemoval       DiscardReason = 129 // removed by the seq admin
 )
 
 func (r DiscardReason) String() string {
@@ -701,12 +708,49 @@ func (p *TxPool) IdHashKnown(tx kv.Tx, hash []byte) (bool, error) {
 	}
 	return tx.Has(kv.PoolTransaction, hash)
 }
+
 func (p *TxPool) IsLocal(idHash []byte) bool {
 	// For X Layer, optimize tx pool
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	return p.isLocalLRU.Contains(string(idHash))
 }
+
+func (p *TxPool) RemoveTx(hash common.Hash) error {
+	start := time.Now()
+	//try to find in the memory pending pools
+	txMeta := p.findPendingTxByHash(hash)
+	if txMeta == nil {
+		log.Info("Admin RemoveTx failed for the tx not found", "hash", hash)
+		return errors.New("tx not found")
+	}
+	// remove the transaction from the corresponding pool
+	switch txMeta.currentSubPool {
+	case PendingSubPool:
+		p.pending.Remove(txMeta)
+	case BaseFeeSubPool:
+		p.baseFee.Remove(txMeta)
+	case QueuedSubPool:
+		p.queued.Remove(txMeta)
+	default:
+		//already removed
+	}
+	// update the related recorders
+	// Note: the transaction dropped by the admin can be resubmitted
+	p.safeDiscardLocked(txMeta, SequencerAdminRemoval, true)
+	log.Info("Admin RemoveTx success", "hash", hash, "timecost", common_util.PrettyDuration(time.Since(start)))
+	return nil
+}
+
+func (p *TxPool) findPendingTxByHash(hash common.Hash) *metaTx {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+	if metaTx, ok := p.byHash[string(hash.Bytes())]; ok {
+		return metaTx
+	}
+	return nil
+}
+
 func (p *TxPool) AddNewGoodPeer(peerID types.PeerID) { p.recentlyConnectedPeers.AddPeer(peerID) }
 func (p *TxPool) Started() bool                      { return p.started.Load() }
 
@@ -1329,10 +1373,24 @@ func (p *TxPool) addLocked(mt *metaTx, announcements *types.Announcements) Disca
 // dropping transaction from all sub-structures and from db
 // Important: don't call it while iterating by all
 func (p *TxPool) discardLocked(mt *metaTx, reason DiscardReason) {
+	p.discardLockedImpl(mt, reason, false)
+}
+
+func (p *TxPool) discardLockedImpl(mt *metaTx, reason DiscardReason, canResubmit bool) {
 	delete(p.byHash, string(mt.Tx.IDHash[:]))
 	p.deletedTxs = append(p.deletedTxs, mt)
 	p.all.delete(mt)
+	if canResubmit {
+		return
+	}
+	// Note: if the transaction is in the discardReasonsLRU, the IdHashKnown check will forbid to re-submit the same transaction again
 	p.discardReasonsLRU.Add(string(mt.Tx.IDHash[:]), reason)
+}
+
+func (p *TxPool) safeDiscardLocked(mt *metaTx, reason DiscardReason, canResubmit bool) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	p.discardLockedImpl(mt, reason, canResubmit)
 }
 
 func (p *TxPool) NonceFromAddress(addr [20]byte) (nonce uint64, inPool bool) {

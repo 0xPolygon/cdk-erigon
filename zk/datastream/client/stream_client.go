@@ -13,6 +13,7 @@ import (
 
 	"sync"
 
+	common_util "github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"github.com/ledgerwatch/erigon/zk/datastream/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
@@ -328,6 +329,7 @@ func (c *StreamClient) Stop() error {
 // Returns the current status of the header.
 // If started, terminate the connection.
 func (c *StreamClient) GetHeader() (*types.HeaderEntry, error) {
+	startT := time.Now()
 	log.Info("[Datastream client] Getting header", "client", c.conn)
 	if err := c.stopStreaming(); err != nil {
 		return nil, fmt.Errorf("stopStreaming: %w", err)
@@ -360,7 +362,7 @@ func (c *StreamClient) GetHeader() (*types.HeaderEntry, error) {
 	}
 
 	c.header = h
-	log.Info("[Datastream client] getHeader", "header", c.header)
+	log.Info("[Datastream client] getHeader", "header", c.header, "timecost", common_util.PrettyDuration(time.Since(startT)))
 
 	return h, nil
 }

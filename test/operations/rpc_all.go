@@ -3,6 +3,7 @@ package operations
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ledgerwatch/erigon/zkevm/log"
 	"math/big"
 
 	"github.com/ledgerwatch/erigon-lib/common"
@@ -315,7 +316,7 @@ func TxPoolContent() (interface{}, error) {
 }
 
 // TxPoolStatus returns the number of transactions in the pool
-func TxPoolStatus() (interface{}, error) {
+func TxPoolStatus() (map[string]any, error) {
 	response, err := client.JSONRPCCall(DefaultL2NetworkURL, "txpool_status")
 	if err != nil {
 		return nil, err
@@ -324,13 +325,22 @@ func TxPoolStatus() (interface{}, error) {
 		return nil, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
 	}
 
-	var result interface{}
+	var result map[string]any
 	err = json.Unmarshal(response.Result, &result)
 	if err != nil {
 		return nil, err
 	}
 
 	return result, nil
+}
+
+func RemoveTransaction(networkUrl string, txHash common.Hash) error {
+	response, err := client.JSONRPCCall(networkUrl, "txpool_removeTransaction", txHash)
+	if err != nil {
+		return err
+	}
+	log.Info("Removed transaction result: ", response.Result)
+	return nil
 }
 
 // EthBlockNumber returns the number of the most recent block

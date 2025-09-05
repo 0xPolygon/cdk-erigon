@@ -11,6 +11,7 @@ package txpool
 
 import (
 	context "context"
+	"github.com/ledgerwatch/erigon-lib/common"
 	reflect "reflect"
 
 	remote "github.com/ledgerwatch/erigon-lib/gointerfaces/remote"
@@ -79,6 +80,10 @@ func (c *MockPoolAddLocalTxsCall) Do(f func(context.Context, types.TxSlots, kv.T
 func (c *MockPoolAddLocalTxsCall) DoAndReturn(f func(context.Context, types.TxSlots, kv.Tx) ([]DiscardReason, error)) *MockPoolAddLocalTxsCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
+}
+
+func (m *MockPool) RemoveTx(hash common.Hash) error{
+	return nil
 }
 
 // AddNewGoodPeer mocks base method.

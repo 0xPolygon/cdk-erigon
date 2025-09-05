@@ -451,13 +451,13 @@ func IsAcquireTxPoolLock() bool {
 }
 
 func (p *PendingPool) RemoveNoLock(i *metaTx) {
-	if i.worstIndex >= 0 {
+	if p.worst.Len() > 0 && i.worstIndex >= 0 {
 		heap.Remove(p.worst, i.worstIndex)
 	}
-	if i.bestIndex >= 0 {
+	if p.best.Len() > 0 && i.bestIndex >= 0 {
 		p.best.UnsafeRemove(i)
 	}
-	if i.bestIndex != p.best.Len()-1 {
+	if p.best.Len() > 0 && i.bestIndex != p.best.Len()-1 {
 		p.sorted.Swap(false)
 	}
 	i.currentSubPool = 0
