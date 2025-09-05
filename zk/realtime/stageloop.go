@@ -110,7 +110,7 @@ func ListenKafkaConsumer(
 			if finishEntry.Height < realtimeCache.GetExecutionHeight() {
 				// Chain rollback. Reset realtime cache
 				resetFlag.Store(true)
-				log.Debug(fmt.Sprintf("[Realtime] Chain rollback detected, resetting realtime cache. finishHeight: %d", finishEntry.Height))
+				log.Error(fmt.Sprintf("[Realtime] Chain rollback detected, resetting realtime cache. finishHeight: %d", finishEntry.Height))
 			}
 			err := realtimeCache.UpdateExecution(finishEntry)
 			if err != nil {
@@ -155,7 +155,7 @@ func ListenKafkaConsumer(
 		case errorTriggerMsg := <-errorMsgsChan:
 			resetFlag.Store(true)
 			triggerHeight := errorTriggerMsg.BlockNumber
-			log.Debug(fmt.Sprintf("[Realtime] Received error trigger message, flushing realtime cache. triggerHeight: %d", triggerHeight))
+			log.Error(fmt.Sprintf("[Realtime] Received error trigger message, flushing realtime cache. triggerHeight: %d", triggerHeight))
 		case err := <-errorChan:
 			errorFlag.Store(true)
 			log.Error(fmt.Sprintf("[Realtime] Kafka consumer failed. error: %v", err))
@@ -169,7 +169,7 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Debug("[Realtime] context done, stopping realtime loop")
+			log.Info("[Realtime] context done, stopping realtime loop")
 			return
 		default:
 		}
@@ -224,6 +224,14 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 			kafkaCache.NewBlockMsgCache.Flush(nextHeight)
 		}
 
+		// Handle pending blocks
+		err := realtimeCache.HandlePendingBlocks(kafkaCache)
+		if err != nil {
+			// Handle pending blocks error. Reset cache
+			resetFlag.Store(true)
+			log.Error(fmt.Sprintf("[Realtime] Failed to handle pending blocks. error: %v", err))
+		}
+
 		// Handle confirmed block msg
 		if pendingHeight != 0 {
 			confirmBlockMsg, ok := kafkaCache.ConfirmedBlockMsgCache.Get(pendingHeight)
@@ -237,14 +245,6 @@ func realtimeLoop(ctx context.Context, realtimeCache *cache.RealtimeCache) {
 					kafkaCache.ConfirmedBlockMsgCache.Flush(pendingHeight)
 				}
 			}
-		}
-
-		// Handle pending blocks
-		err := realtimeCache.HandlePendingBlocks(kafkaCache)
-		if err != nil {
-			// Handle pending blocks error. Reset cache
-			resetFlag.Store(true)
-			log.Error(fmt.Sprintf("[Realtime] Failed to handle pending blocks. error: %v", err))
 		}
 
 		duration := time.Since(startTime)
@@ -262,14 +262,14 @@ func tryInitRealtimeCache(realtimeCache *cache.RealtimeCache) bool {
 	lowestKafkaHeight := kafkaCache.GetLowestNewBlockHeight()
 	if executionHeight == 0 || lowestKafkaHeight == 0 {
 		// No kafka message or rpc execution. Skip init
-		log.Debug(fmt.Sprintf("[Realtime] Init realtime cache failed, no kafka message or rpc execution. lowestKafkaHeight: %d, executionHeight: %d", lowestKafkaHeight, executionHeight))
+		log.Error(fmt.Sprintf("[Realtime] Init realtime cache failed, no kafka message or rpc execution. lowestKafkaHeight: %d, executionHeight: %d", lowestKafkaHeight, executionHeight))
 		return false
 	}
 
 	if lowestKafkaHeight > executionHeight {
 		// The current execution height is behind kafka cache height. We will wait for the execution
 		// height to catch up to kafka cache height before re-initializing the state cache.
-		log.Info(fmt.Sprintf("[Realtime] Init realtime cache failed, waiting for execution height to catch up to kafka cache height. lowestKafkaHeight: %d, executionHeight: %d", lowestKafkaHeight, executionHeight))
+		log.Error(fmt.Sprintf("[Realtime] Init realtime cache failed, waiting for execution height to catch up to kafka cache height. lowestKafkaHeight: %d, executionHeight: %d", lowestKafkaHeight, executionHeight))
 		return false
 	}
 
@@ -291,7 +291,7 @@ func tryInitRealtimeCache(realtimeCache *cache.RealtimeCache) bool {
 // resetRealtimeCache clears the realtime cache and resets the state flags
 func resetRealtimeCache(realtimeCache *cache.RealtimeCache) {
 	// Reset and clear realtime cache
-	log.Debug("[Realtime] Resetting realtime cache")
+	log.Info("[Realtime] Resetting realtime cache")
 	realtimeCache.ReadyFlag.Store(false)
 	realtimeCache.Clear()
 

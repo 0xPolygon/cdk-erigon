@@ -193,7 +193,6 @@ func (cache *RealtimeCache) TryCloseBlockFromConfirmedBlockMsg(blockNum uint64, 
 			break
 		}
 		if context.blockNum > blockNum {
-			// Next block header must be received first before previous block can be closed
 			return fmt.Errorf("block %d is not in pending blocks", blockNum)
 		}
 	}
@@ -353,7 +352,7 @@ func (cache *RealtimeCache) tryCloseBlock(pendingBlockContext *PendingBlockConte
 	}
 
 	if pendingBlockContext.txCount < 0 {
-		// Header not received yet. Skip close
+		// confirmed block info is not received yet. Skip close
 		return nil
 	}
 
