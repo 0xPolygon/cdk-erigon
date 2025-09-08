@@ -992,21 +992,23 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			backend.config.GasPriceHistoryCount,
 		)
 
-		natsConfig := natsstream.Config{
-			Host:             config.DataStreamNatsHost,
-			Port:             config.DataStreamNatsPort,
-			ServerName:       fmt.Sprintf("erigon-nats-chain-%d", config.NetworkID),
-			ClusterName:      fmt.Sprintf("erigon-cluster-chain-%d", config.NetworkID),
-			JetStreamEnabled: true,
-			StorageDir:       filepath.Join(stack.Config().Dirs.DataDir, "nats-data"),
-			Debug:            config.LogLevel >= log.LvlDebug,
-			Trace:            config.LogLevel >= log.LvlTrace,
-		}
+		if backend.config.DataStreamNATSEnable {
+			log.Info("Starting NATS data streaming server")
+			natsConfig := natsstream.Config{
+				Host:             config.DataStreamNatsHost,
+				Port:             config.DataStreamNatsPort,
+				ServerName:       fmt.Sprintf("erigon-nats-chain-%d", config.NetworkID),
+				ClusterName:      fmt.Sprintf("erigon-cluster-chain-%d", config.NetworkID),
+				JetStreamEnabled: true,
+				StorageDir:       filepath.Join(stack.Config().Dirs.DataDir, "nats-data"),
+				Debug:            config.LogLevel >= log.LvlDebug,
+				Trace:            config.LogLevel >= log.LvlTrace,
+			}
+			backend.natsManager = natsstream.NewManager(natsConfig, logger)
 
-		backend.natsManager = natsstream.NewManager(natsConfig, logger)
-
-		if err := backend.natsManager.Start(); err != nil {
-			log.Error(err.Error())
+			if err := backend.natsManager.Start(); err != nil {
+				log.Error(err.Error())
+			}
 		}
 
 		// zkevm: create a data stream server if we have the appropriate config for one.  This will be started on the call to Init

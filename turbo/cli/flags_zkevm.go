@@ -234,6 +234,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		L2DataStreamerTimeout:                  l2DataStreamTimeout,
 		DataStreamNatsHost:                     ctx.String(utils.DataStreamNatsHostFlag.Name),
 		DataStreamNatsPort:                     ctx.Int(utils.DataStreamNatsPortFlag.Name),
+		DataStreamNATSEnable:                   ctx.Bool(utils.DataStreamNatsEnableFlag.Name),
 		L2ShortCircuitToVerifiedBatch:          l2ShortCircuitToVerifiedBatchVal,
 		L1SyncStartBlock:                       ctx.Uint64(utils.L1SyncStartBlock.Name),
 		BlobRecovery:                           ctx.Bool(utils.BlobRecovery.Name),
