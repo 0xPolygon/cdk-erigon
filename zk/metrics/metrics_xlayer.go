@@ -71,6 +71,7 @@ func Init() {
 	prometheus.MustRegister(OperationGauge)
 	prometheus.MustRegister(SeqBlockGasUsed)
 	prometheus.MustRegister(RpcDynamicGasPrice)
+	prometheus.MustRegister(TxsInBlock)
 }
 
 // Block timing functions
