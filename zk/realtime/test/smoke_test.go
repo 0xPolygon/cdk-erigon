@@ -103,6 +103,14 @@ func TestRealtimeRPC(t *testing.T) {
 		includeExtraInfo := true
 		result, err := client.RealtimeGetTransactionByHash(common.HexToHash(txHash), &includeExtraInfo)
 		require.NoError(t, err)
+
+		receipt, err := client.RealtimeGetTransactionReceipt(common.HexToHash(txHash))
+		require.NoError(t, err)
+		require.NotNil(t, receipt, "GetTransactionReceipt should return receipt")
+
+		txHashIndex := int(*result.TransactionIndex)
+		receiptIndex := int(receipt.TransactionIndex)
+		require.Equal(t, receiptIndex, txHashIndex)
 		log.Info(fmt.Sprintf("RealtimeGetTransactionByHash result type: %T", result))
 	})
 

@@ -15,33 +15,17 @@ func (api *RealtimeAPIImpl) GetTransactionByHash(ctx context.Context, txnHash co
 		return api.APIImpl.GetTransactionByHash(ctx, txnHash, includeExtraInfo)
 	}
 
-	txn, _, blockNum, _, ok := api.cacheDB.Stateless.GetTxInfo(txnHash)
+	txn, receipt, blockNum, _, ok := api.cacheDB.Stateless.GetTxInfo(txnHash)
 	if !ok {
 		return api.APIImpl.GetTransactionByHash(ctx, txnHash, includeExtraInfo)
 	}
-	txHashes, ok := api.cacheDB.Stateless.GetBlockTxs(blockNum)
-	if !ok {
-		return api.APIImpl.GetTransactionByHash(ctx, txnHash, includeExtraInfo)
-	}
+
 	header, _, blockhash, ok := api.cacheDB.Stateless.GetBlockInfo(blockNum)
 	if !ok {
 		return api.APIImpl.GetTransactionByHash(ctx, txnHash, includeExtraInfo)
 	}
 
-	found := false
-	var txnIndex uint64
-	for i, hash := range txHashes {
-		if hash == txnHash {
-			found = true
-			txnIndex = uint64(i)
-			break
-		}
-	}
-	if !found || txn == nil {
-		return api.APIImpl.GetTransactionByHash(ctx, txnHash, includeExtraInfo)
-	}
-
-	return newRPCTransaction_realtime(txn, blockhash, blockNum, txnIndex, header.BaseFee), nil
+	return newRPCTransaction_realtime(txn, blockhash, blockNum, uint64(receipt.TransactionIndex), header.BaseFee), nil
 }
 
 // GetRawTransactionByHash implements the realtime eth_getRawTransactionByHash.

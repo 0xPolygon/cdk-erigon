@@ -254,16 +254,19 @@ func TestRealtimeComparison(t *testing.T) {
 		})
 
 		t.Run("getTransactionByHash", func(t *testing.T) {
-			txHashNew := transToken(t, context.Background(), client, uint256.NewInt(encoding.Gwei), testAddress.String())
-			realtimeTransaction, err := client.RealtimeGetTransactionByHash(libcommon.HexToHash(txHashNew), nil)
-			require.NoError(t, err)
+			numberOfTransactions := 5
+			txHashesNew := transTokenBatch(t, context.Background(), client, uint256.NewInt(encoding.Gwei), testAddress.String(), numberOfTransactions)
+			for _, txHashNew := range txHashesNew {
+				realtimeTransaction, err := client.RealtimeGetTransactionByHash(libcommon.HexToHash(txHashNew), nil)
+				require.NoError(t, err)
 
-			// Make direct RPC call to non-realtime node to get JSON response
-			var nonRealtimeTransaction rtclient.RpcTransaction
-			err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTransaction, "eth_getTransactionByHash", libcommon.HexToHash(txHashNew))
-			require.NoError(t, err)
+				// Make direct RPC call to non-realtime node to get JSON response
+				var nonRealtimeTransaction rtclient.RpcTransaction
+				err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeTransaction, "eth_getTransactionByHash", libcommon.HexToHash(txHashNew))
+				require.NoError(t, err)
 
-			require.Equal(t, realtimeTransaction, nonRealtimeTransaction, fmt.Sprintf("Transactions should be identical for hash %s", txHash))
+				require.Equal(t, realtimeTransaction, nonRealtimeTransaction, fmt.Sprintf("Transactions should be identical for hash %s", txHash))
+			}
 		})
 
 		t.Run("getRawTransactionByHash", func(t *testing.T) {
