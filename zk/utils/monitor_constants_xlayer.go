@@ -11,6 +11,10 @@ var (
 	StepRPCReceiveBlock = ProcessStep{15060, "xlayer_rpc_receive_block"}
 	StepRPCFinishBlock  = ProcessStep{15062, "xlayer_rpc_finish_block"}
 
+	// Realtime
+	StepRealtimeReceiveTx  = ProcessStep{15061, "xlayer_realtime_receive_tx"}
+	StepRealtimeCloseBlock = ProcessStep{15063, "xlayer_realtime_close_block"}
+
 	// Sequencer
 	StepSeqBeginBlock        = ProcessStep{15030, "xlayer_seq_begin_block"}
 	StepSeqReceiveTx         = ProcessStep{15032, "xlayer_seq_receive_tx"}
@@ -24,8 +28,8 @@ var (
 const (
 	Chain = "xlayer"
 
-	ServiceNameRPC       = "okx-defi-xlayer-rpcpay-pro"
 	ServiceNameSequencer = "okx-defi-xlayer-egseqz-pro"
+	ServiceNameRPC       = "okx-defi-xlayer-rpcpay-pro"
 
 	Business = "xlayer"
 	ChainID  = 196

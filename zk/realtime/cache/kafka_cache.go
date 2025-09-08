@@ -6,6 +6,7 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
+	"github.com/ledgerwatch/erigon/zk/utils"
 )
 
 // -------------- Kafka Cache --------------
@@ -152,6 +153,17 @@ func (cache *TransactionMessageCache) Add(txMsg *kafkaTypes.TransactionMessage) 
 	}
 	txMsgsList.Add(txMsg)
 	txMsgsList.Sort()
+
+	utils.LogTrace(
+		txMsg.Hash.String(),             // txhash
+		utils.ServiceNameRPC,            // serviceName
+		utils.StepRealtimeReceiveTx.ID,  // processId
+		utils.StepRealtimeReceiveTx.Key, // processWord
+		txMsg.BlockNumber,               // blockHeight
+		"",                              // blockHash
+		0,                               // blockTime
+		int8(txMsg.Type),                // transactionType
+	)
 }
 
 func (cache *TransactionMessageCache) Clear() {
