@@ -40,7 +40,7 @@ var (
 		},
 		[]string{"component", "metric_type"},
 	)
-	
+
 	// Gas metrics
 	SeqBlockGasUsed = prometheus.NewGauge(
 		prometheus.GaugeOpts{
@@ -53,6 +53,13 @@ var (
 		prometheus.GaugeOpts{
 			Name: "rpc_dynamic_gas_price",
 			Help: "Rpc dynamic gas price",
+		},
+	)
+
+	TxsInBlock = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "txs_in_block",
+			Help: "tx count per block",
 		},
 	)
 )
@@ -192,4 +199,8 @@ func IncBatchInvalidTxCount(invalidTxCount float64) {
 
 func IncRpcInnerTxExecuted(innerTxCount float64) {
 	OperationCounter.WithLabelValues("rpc", "inner_tx_count").Add(innerTxCount)
+}
+
+func CountTxInBlock(txCount float64) {
+	TxsInBlock.Set(txCount)
 }
