@@ -2,7 +2,7 @@
 set -e
 set -x
 
-SA_BENCH_BRANCH="yxq/senddet"
+SA_BENCH_BRANCH="dumi/senddet"
 
 # This should be run in the root directory of the repo
 ROOT_DIR=$(git rev-parse --show-toplevel)
@@ -28,7 +28,7 @@ fi
 function clone_repos {
     cd $TMP_DIR
     if [ ! -d $SA_BENCH_DIR ]; then
-        git clone -b $SA_BENCH_BRANCH https://github.com/okx/SA-Benchmark.git
+        git clone -b $SA_BENCH_BRANCH git@github.com:okx/SA-Benchmark.git
     fi
     cd $ROOT_DIR
 }

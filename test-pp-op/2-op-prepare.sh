@@ -22,14 +22,14 @@ else
   docker stop xlayer-seq
 fi
 
-docker-compose stop xlayer-rpc
+docker compose stop xlayer-rpc
 
-docker-compose stop xlayer-bridge-service
-docker-compose stop xlayer-bridge-ui
-docker-compose stop xlayer-agg-sender
+docker compose stop xlayer-bridge-service
+docker compose stop xlayer-bridge-ui
+docker compose stop xlayer-agg-sender
 
-docker-compose stop xlayer-agglayer
-docker-compose stop xlayer-agglayer-prover
+docker compose stop xlayer-agglayer
+docker compose stop xlayer-agglayer-prover
 
 LOG_OUTPUT=$(docker logs xlayer-seq 2>&1)
 echo "LOG_OUTPUT: $LOG_OUTPUT"
@@ -370,6 +370,28 @@ $MD5SUM_CMD config-op/genesis.json
 # genesis.json is too large to embed in go, so we compress it now and decompress it in go code
 gzip -c config-op/genesis.json > config-op/genesis.gz.json
 
+if [ "$DOCKER_TYPE" = "rootless" ]; then
+docker run --rm --privileged \
+    -v "$(pwd)/scripts:/scripts" \
+    -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/195-rollup.json" \
+    -v "$(pwd)/config-op/genesis.gz.json:/app/op-program/chainconfig/configs/195-genesis-l2.json" \
+    -v "$EXPORT_DIR:/app/op-program/bin" \
+    -w /app \
+    --network "${DOCKER_NETWORK}" \
+    "${OP_STACK_IMAGE_TAG}" \
+    bash -c "
+        echo '📊 Verifying Docker connection:'
+        /scripts/dind-install-start.sh
+        docker --version
+        docker ps --format 'table {{.Names}}\t{{.Status}}' | head -3
+
+        echo '🚀 Running make reproducible-prestate...'
+        make reproducible-prestate
+
+        echo '📁 Checking contents of op-program/bin:'
+        ls -la /app/op-program/bin/ || echo 'Directory is empty or does not exist'
+    "
+else
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$(pwd)/config-op/rollup.json:/app/op-program/chainconfig/configs/195-rollup.json" \
@@ -385,10 +407,11 @@ docker run --rm \
         apt-get install docker.io -y
         docker --version
         docker ps --format 'table {{.Names}}\t{{.Status}}' | head -3
-        
+
         echo '🚀 Running make reproducible-prestate...'
         make reproducible-prestate
-        
+
         echo '📁 Checking contents of op-program/bin:'
         ls -la /app/op-program/bin/ || echo 'Directory is empty or does not exist'
     "
+fi

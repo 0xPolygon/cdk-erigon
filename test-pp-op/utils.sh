@@ -62,7 +62,7 @@ build_op_stack_image() {
   rm -rf $PWD_DIR/tmp/optimism
   cd $PWD_DIR/tmp/
   echo "Cloning Optimism repository..."
-  git clone -b yxq/regenesis-op-mainnet https://github.com/okx/optimism.git
+  git clone --recurse-submodules -b dev-op https://github.com/okx/optimism.git
   cp $PWD_DIR/op-docker/Dockerfile-contracts optimism/Dockerfile-contracts
   cp $PWD_DIR/op-docker/Dockerfile-opstack optimism/Dockerfile-opstack
 
@@ -70,11 +70,12 @@ build_op_stack_image() {
   cp $PWD_DIR/contracts/Transactor.sol optimism/packages/contracts-bedrock/src/periphery/Transactor.sol
 
   # To support making prestate for our custom op-geth
-  mv op-geth optimism/op-geth
-  ln -s optimism/op-geth ./
-#  cd optimism
-#  git apply $PWD_DIR/patch/optimism-0001-support-regenesis-op-geth-prestate.patch
-#  cd -
+  # mv op-geth optimism/op-geth
+  # ln -s optimism/op-geth ./
+
+  #  cd optimism
+  #  git apply $PWD_DIR/patch/optimism-0001-support-regenesis-op-geth-prestate.patch
+  #  cd -
 
   cd optimism
   docker build -t $OP_CONTRACTS_IMAGE_TAG -f Dockerfile-contracts .

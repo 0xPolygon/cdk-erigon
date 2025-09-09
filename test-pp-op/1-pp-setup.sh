@@ -1,6 +1,10 @@
 set -e
 set -x
 
+if ! [ -f .env ]; then
+  cp example.env .env
+fi
+
 source .env
 
 if [ "$CHECK_TYPE" == "mainnet" ]; then
