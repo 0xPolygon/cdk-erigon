@@ -6,7 +6,7 @@ DOCKER := $(shell command -v docker 2> /dev/null)
 
 # Docker image configuration
 DOCKER_IMAGE_NAME ?= xlayer-erigon
-DOCKER_HUB_USERNAME ?= xlayerdev
+DOCKER_HUB_USERNAME ?= xlayer
 # Target platform for Docker builds (default: linux/amd64 for cloud servers)
 DOCKER_TARGET_PLATFORM ?= linux/amd64
 

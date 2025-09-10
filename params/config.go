@@ -81,7 +81,7 @@ var (
 	HermezCardonaGenesisHash           = libcommon.HexToHash("0x676c1a76a6c5855a32bdf7c61977a0d1510088a4eeac1330466453b3d08b60b9")
 	HermezBaliGenesisHash              = libcommon.HexToHash("0x7311011ce6ab98ef0a15e44fe29f7680909588322534d1736361daa678543038")
 	XLayerMainnetGenesisHash           = libcommon.HexToHash("0x11f32f605beb94a1acb783cb3b6da6d7975461ce3addf441e7ad60c2ec95e88f")
-	XLayerTestnetGenesisHash           = libcommon.HexToHash("0xc012c41e4583a2e3b776aff34aea0b4fd235d098484a455956554dbf69b8235e")
+	XLayerTestnetGenesisHash           = libcommon.HexToHash("0x79b0a6c165fe8f323534e6c87d0654ccc7a81c979367d36faea2ad3c70d6992f")
 	HermezEtrogGenesisHash             = libcommon.HexToHash("0x5e14aefe391fafa040ee0a0fff6afbc1c230853b9684afb9363f3af081db0192")
 )
 
