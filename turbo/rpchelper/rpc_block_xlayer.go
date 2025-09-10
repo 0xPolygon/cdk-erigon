@@ -26,7 +26,8 @@ var (
 
 	// Global variable storing a pointer to the current finalized batch number.
 	// A nil pointer indicates the value has not been fetched yet.
-	currentFinalizedBatchNumber atomic.Pointer[uint64]
+	currentFinalizedBatchNumber    atomic.Uint64
+	currentFinalizedBatchErrorFlag atomic.Bool
 
 	// Global variable storing a pointer to the current block gas limit.
 	// A nil pointer indicates the value has not been fetched yet.
@@ -38,6 +39,10 @@ var (
 	// ErrBlockGasLimitUnavailable is returned when the poller has not yet fetched the block gas limit.
 	ErrBlockGasLimitUnavailable = errors.New("block gas limit is not yet available from the poller")
 )
+
+func init() {
+	currentFinalizedBatchErrorFlag.Store(true)
+}
 
 // SetSequencerRpcUrl sets the global sequencer RPC URL
 func SetSequencerRpcUrl(url string) {
@@ -136,11 +141,15 @@ func startBackgroundQuery(ctx context.Context, interval time.Duration) {
 		return
 	}
 	// Initial fetch to warm up the cache and handle early requests.
-	if bn, err := getFinalizedBatchNumberFromSequencer(sequencerRpcUrl); err != nil {
+	bn, err := getFinalizedBatchNumberFromSequencer(sequencerRpcUrl)
+	if err != nil {
+		currentFinalizedBatchErrorFlag.Store(true)
 		log.Error("failed to get finalized batch number from sequencer (initial fetch)", "err", err)
 	} else {
-		newVal := bn
-		currentFinalizedBatchNumber.Store(&newVal)
+		currentFinalizedBatchErrorFlag.Store(false)
+		if bn != 0 {
+			currentFinalizedBatchNumber.Store(bn)
+		}
 	}
 
 	// Initial fetch for block gas limit
@@ -164,10 +173,13 @@ func startBackgroundQuery(ctx context.Context, interval time.Duration) {
 		case <-ticker.C:
 			bn, err := getFinalizedBatchNumberFromSequencer(sequencerRpcUrl)
 			if err != nil {
+				currentFinalizedBatchErrorFlag.Store(true)
 				log.Error("failed to get finalized batch number from sequencer", "err", err)
 			} else {
-				newVal := bn
-				currentFinalizedBatchNumber.Store(&newVal)
+				currentFinalizedBatchErrorFlag.Store(false)
+				if bn != 0 {
+					currentFinalizedBatchNumber.Store(bn)
+				}
 			}
 
 			// Also fetch block gas limit
@@ -217,11 +229,10 @@ func transHexToUint64(hex json.RawMessage) (uint64, error) {
 // getCachedFinalizedBatchNumber is the single source of truth for reading the latest batch number
 // fetched by the poller. It returns an error if the poller hasn't successfully fetched a value yet.
 func getCachedFinalizedBatchNumber() (uint64, error) {
-	valPtr := currentFinalizedBatchNumber.Load()
-	if valPtr == nil {
+	if currentFinalizedBatchErrorFlag.Load() {
 		return 0, ErrFinalizedBatchUnavailable
 	}
-	return *valPtr, nil
+	return currentFinalizedBatchNumber.Load(), nil
 }
 
 func getBlockGasLimitFromSequencer(sequencerRpcUrl string) (uint64, error) {
