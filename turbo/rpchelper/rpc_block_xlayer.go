@@ -15,7 +15,7 @@ import (
 	"github.com/ledgerwatch/erigon/zk/hermez_db"
 	"github.com/ledgerwatch/erigon/zk/sequencer"
 	"github.com/ledgerwatch/erigon/zkevm/jsonrpc/client"
-	"github.com/ledgerwatch/erigon/zkevm/log"
+	"github.com/ledgerwatch/log/v3"
 )
 
 var (
@@ -148,7 +148,12 @@ func startBackgroundQuery(ctx context.Context, interval time.Duration) {
 	} else {
 		currentFinalizedBatchErrorFlag.Store(false)
 		if bn != 0 {
+			if bn < currentFinalizedBatchNumber.Load() {
+				log.Warn("fetched finalized batch number less than currentFinalizedBatchNumber", "fetchedFinalizedBatchNumber", bn, "currentFinalizedBatchNumber", currentFinalizedBatchNumber.Load())
+			}
 			currentFinalizedBatchNumber.Store(bn)
+		} else {
+			log.Warn("fetched finalized batch number 0 from sequencer with no error, skipping updating currentFinalizedBatchNumber")
 		}
 	}
 
@@ -178,7 +183,12 @@ func startBackgroundQuery(ctx context.Context, interval time.Duration) {
 			} else {
 				currentFinalizedBatchErrorFlag.Store(false)
 				if bn != 0 {
+					if bn < currentFinalizedBatchNumber.Load() {
+						log.Warn("fetched finalized batch number less than currentFinalizedBatchNumber", "fetchedFinalizedBatchNumber", bn, "currentFinalizedBatchNumber", currentFinalizedBatchNumber.Load())
+					}
 					currentFinalizedBatchNumber.Store(bn)
+				} else {
+					log.Warn("fetched finalized batch number 0 from sequencer with no error, skipping updating currentFinalizedBatchNumber")
 				}
 			}
 
