@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/hexutil"
-	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/tx"
 	"github.com/erigontech/erigon/zkevm/jsonrpc/client"
@@ -24,6 +23,7 @@ type BlobInput struct {
 	BatchNumber    string         `json:"batchNumber"`
 	Coinbase       common.Address `json:"coinbase"`
 	LimitTimestamp string         `json:"limitTimestamp"`
+	GER            common.Hash    `json:"globalExitRoot"`
 	BatchL2Data    string         `json:"batchL2Data"`
 }
 
@@ -46,7 +46,7 @@ func GetOffChainBlobs(url string, limit, offset uint64) ([]*OffChainBlob, bool, 
 	return ocb, false, nil
 }
 
-func CreateL1BatchDataFromBlobInput(hermezDb *hermez_db.HermezDb, input BlobInput, zkCfg *ethconfig.Zk, isNormalcy bool, irt *InfoRootTracker) (uint64, []byte, error) {
+func CreateL1BatchDataFromBlobInput(hermezDb *hermez_db.HermezDb, input BlobInput) (uint64, []byte, error) {
 	batchNumber, err := hexutil.DecodeUint64(input.BatchNumber)
 	if err != nil {
 		return 0, nil, err
@@ -68,21 +68,9 @@ func CreateL1BatchDataFromBlobInput(hermezDb *hermez_db.HermezDb, input BlobInpu
 	}
 
 	var forkId uint64
-
-	if len(allForks) == 1 && allForks[0] == 0 {
-		// this indicates that the network has never had an FEP rollup type assigned to it, so no fork history.
-		// so instead use from the zkevm.pessimistic-fork-number flag.
-		ppFork := zkCfg.PessimisticForkNumber
-		if ppFork == 0 {
-			return 0, nil, fmt.Errorf("zkevm.pessimistic-fork-number flag must be set when running on a network that has never had an FEP rollup type assigned to it")
-		}
-
-		forkId = ppFork
-	} else {
-		for idx, batch := range allBatches {
-			if batchNumber >= batch {
-				forkId = allForks[idx]
-			}
+	for idx, batch := range allBatches {
+		if batchNumber >= batch {
+			forkId = allForks[idx]
 		}
 	}
 
@@ -98,45 +86,24 @@ func CreateL1BatchDataFromBlobInput(hermezDb *hermez_db.HermezDb, input BlobInpu
 		}
 	}
 
-	// we have a new root
-	if highestIndexUsed > 0 {
-		irt.Set(uint64(highestIndexUsed))
+	l1InfoRoot, err := hermezDb.GetL1InfoRootByIndex(uint64(highestIndexUsed))
+	if err != nil {
+		return 0, nil, err
 	}
 
 	// coinbase + l1InfoRoot + limitTimestamp + batchData
 	size := 20 + 32 + 8 + len(batchData)
 
 	// smart contract size limit
-	if !isNormalcy && size > tx.LIMIT_120_KB {
+	if size > 120_000 {
 		return 0, nil, fmt.Errorf("l1 batch data is too large: %d", size)
 	}
 
 	data := make([]byte, size)
 	copy(data, input.Coinbase.Bytes())
-	copy(data[20:], irt.Get().Bytes())
+	copy(data[20:], l1InfoRoot.Bytes())
 	copy(data[52:], limitTimestamp)
 	copy(data[60:], batchData)
 
 	return batchNumber, data, nil
-}
-
-type InfoRootTracker struct {
-	infoRoot     common.Hash
-	indexToRoots map[uint64]common.Hash
-}
-
-func NewInfoRootTracker(indexToRoots map[uint64]common.Hash) *InfoRootTracker {
-	initialRoot := indexToRoots[0]
-	return &InfoRootTracker{
-		infoRoot:     initialRoot,
-		indexToRoots: indexToRoots,
-	}
-}
-
-func (i *InfoRootTracker) Get() common.Hash {
-	return i.infoRoot
-}
-
-func (i *InfoRootTracker) Set(index uint64) {
-	i.infoRoot = i.indexToRoots[index]
 }

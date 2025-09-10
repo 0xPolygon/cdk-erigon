@@ -3,7 +3,6 @@ package stages
 import (
 	"context"
 	"fmt"
-	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/eth/ethconfig"
@@ -16,18 +15,16 @@ import (
 )
 
 type SequencerBlobRecoveryCfg struct {
-	db       kv.RwDB
-	zkCfg    *ethconfig.Zk
-	chainCfg *chain.Config
-	syncer   *syncer.L1Syncer
+	db     kv.RwDB
+	zkCfg  *ethconfig.Zk
+	syncer *syncer.L1Syncer
 }
 
-func StageSequencerBlobRecoveryCfg(db kv.RwDB, zkCfg *ethconfig.Zk, chainCfg *chain.Config, syncer *syncer.L1Syncer) SequencerBlobRecoveryCfg {
+func StageSequencerBlobRecoveryCfg(db kv.RwDB, zkCfg *ethconfig.Zk, syncer *syncer.L1Syncer) SequencerBlobRecoveryCfg {
 	return SequencerBlobRecoveryCfg{
-		db:       db,
-		zkCfg:    zkCfg,
-		chainCfg: chainCfg,
-		syncer:   syncer,
+		db:     db,
+		zkCfg:  zkCfg,
+		syncer: syncer,
 	}
 }
 
@@ -93,7 +90,6 @@ func SpawnSequencerBlobRecoveryStage(s *stagedsync.StageState, u stagedsync.Unwi
 	if highestBatch > 0 && highestKnownBatch == highestBatch {
 		log.Info(fmt.Sprintf("[%s] Blob recovery has completed!", logPrefix), "batch", highestBatch)
 		time.Sleep(5 * time.Second)
-		return nil
 	}
 
 	logTicker := time.NewTicker(5 * time.Second)
@@ -103,52 +99,41 @@ func SpawnSequencerBlobRecoveryStage(s *stagedsync.StageState, u stagedsync.Unwi
 	// starting limit and offset for pagination
 	offset := uint64(0)
 	limit := cfg.zkCfg.BlobRecoveryBlobLimit
-	if limit <= 0 {
-		log.Error(fmt.Sprintf("[%s] blob recovery blob limit must be greater than 0", logPrefix), "zkevm.blob-recovery-blob-limit", cfg.zkCfg.BlobRecoveryBlobLimit)
-		return nil
-	}
 
-	indexToRoots, err := hermezDb.GetL1InfoTreeIndexToRoots()
-	if err != nil {
-		return nil
-	}
-
-	irt := da.NewInfoRootTracker(indexToRoots)
-
+LOOP:
 	for {
 		select {
 		case <-logTicker.C:
 			log.Info(fmt.Sprintf("[%s] Syncing batches from Blob DA", logPrefix), "elapsed/s", time.Since(start).Seconds())
 		default:
-		}
-
-		ocb, finished, err := da.GetOffChainBlobs(cfg.zkCfg.BlobDAUrl, limit, offset)
-		if err != nil {
-			return err
-		}
-
-		if finished {
-			log.Info(fmt.Sprintf("[%s] Finished syncing batches from blobs in Blob DA", logPrefix))
-			break
-		}
-
-		for _, blob := range ocb {
-			for _, input := range blob.BlobInputs {
-				batchNumber, batchL1Data, err := da.CreateL1BatchDataFromBlobInput(hermezDb, input, cfg.zkCfg, cfg.chainCfg.IsNormalcy(s.BlockNumber), irt)
-				if err != nil {
-					return err
-				}
-
-				if err = hermezDb.WriteL1BatchData(batchNumber, batchL1Data); err != nil {
-					return err
-				}
+			ocb, finished, err := da.GetOffChainBlobs(cfg.zkCfg.BlobDAUrl, limit, offset)
+			if err != nil {
+				return err
 			}
 
-			log.Info(fmt.Sprintf("[%s] Processed batches from blob DA", logPrefix), "startBatch", blob.StartBatch, "endBatch", blob.EndBatch)
-		}
+			if finished {
+				log.Info(fmt.Sprintf("[%s] Finished syncing batches from blobs in Blob DA", logPrefix))
+				break LOOP
+			}
 
-		// increment the offset for the next iteration
-		offset += limit
+			for _, blob := range ocb {
+				for _, input := range blob.BlobInputs {
+					batchNumber, batchL1Data, err := da.CreateL1BatchDataFromBlobInput(hermezDb, input)
+					if err != nil {
+						return err
+					}
+
+					if err = hermezDb.WriteL1BatchData(batchNumber, batchL1Data); err != nil {
+						return err
+					}
+				}
+
+				log.Info(fmt.Sprintf("[%s] Processed batches from blob DA", logPrefix), "startBatch", blob.StartBatch, "endBatch", blob.EndBatch)
+			}
+
+			// increment the offset for the next iteration
+			offset += cfg.zkCfg.BlobRecoveryBlobLimit
+		}
 	}
 
 	if freshTx {
