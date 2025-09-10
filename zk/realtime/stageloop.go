@@ -57,7 +57,7 @@ func ListenKafkaProducer(
 		case txInfo := <-txInfoChan:
 			currHeight = txInfo.BlockNumber
 			changeset := state.CollectChangeset(txInfo.Entries)
-			err := kafkaProducer.SendKafkaTransaction(txInfo.BlockNumber, txInfo.Tx, txInfo.Receipt, txInfo.InnerTxs, changeset)
+			err := kafkaProducer.SendKafkaTransaction(txInfo.BlockNumber, txInfo.Tx, txInfo.Receipt, txInfo.InnerTxs, changeset, txInfo.BlockTime)
 			if err != nil {
 				log.Error(fmt.Sprintf("[Realtime] Failed to send kafka tx message. error: %v, currHeight: %d", err, currHeight))
 				err = kafkaProducer.SendKafkaErrorTrigger(currHeight)

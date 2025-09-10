@@ -143,6 +143,10 @@ func (tx *BlobTxWrapper) MarshalJSON() ([]byte, error) {
 	return json.Marshal(enc)
 }
 
+func MarshalTransactionToJSON(tx Transaction) ([]byte, error) {
+	return json.Marshal(tx)
+}
+
 func UnmarshalTransactionFromJSON(input []byte) (Transaction, error) {
 	var p fastjson.Parser
 	v, err := p.ParseBytes(input)

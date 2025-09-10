@@ -54,6 +54,7 @@ func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.S
 						log.Warn("[realtime subscription] error getting block info", "err", err)
 					}
 					result.Header = msg.BlockMsg.Header
+					result.BlockTime = msg.BlockMsg.Header.Time
 					sendFlag = true
 				}
 
@@ -64,6 +65,8 @@ func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.S
 					}
 					result.TxHash = tx.Hash().Hex()
 					sendFlag = true
+
+					result.BlockTime = msg.TxMsg.BlockTime
 
 					// Add tx data according to stream criteria
 					if criteria.TransactionExtraInfo {

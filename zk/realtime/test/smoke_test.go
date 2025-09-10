@@ -28,12 +28,16 @@ import (
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/ethclient"
+	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/test/operations"
+	"github.com/ledgerwatch/erigon/zk/realtime/realtimeapi"
 	"github.com/ledgerwatch/erigon/zk/realtime/rtclient"
 	zktypes "github.com/ledgerwatch/erigon/zk/types"
 	"github.com/ledgerwatch/erigon/zkevm/encoding"
 	"github.com/ledgerwatch/log/v3"
+	logger "github.com/ledgerwatch/log/v3"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestRealtimeRPC(t *testing.T) {
@@ -420,6 +424,63 @@ func TestRealtimeRPC(t *testing.T) {
 
 		require.Equal(t, block["hash"], blockByHash["hash"], "Block hashes should match")
 		require.Equal(t, block["number"], blockByHash["number"], "Block numbers should match")
+	})
+
+	t.Run("RealtimeSubscriptionWorking", func(t *testing.T) {
+		var iterations = 11
+		latestBlockNum, err := client.RealtimeBlockNumber()
+		require.NoError(t, err)
+		require.Greater(t, latestBlockNum, uint64(0), "Latest block number should be greater than 0")
+
+		logger := logger.New()
+		wsClient, err := rpc.Dial(DefaultL2NetworkWSURL, logger)
+		require.NoError(t, err)
+
+		realtimeMsgCh := make(chan realtimeapi.RealtimeSubResult)
+		realtimeSub, err := wsClient.Subscribe(ctx, "eth", realtimeMsgCh, "realtime", map[string]bool{"NewHeads": false, "TransactionExtraInfo": true, "TransactionReceipt": true, "TransactionInnerTxs": true})
+		require.NoError(t, err)
+		defer realtimeSub.Unsubscribe()
+
+		for i := 0; i < iterations; i++ {
+			// Send tx
+			signedTx := nativeTransferTx(t, ctx, client, uint256.NewInt(encoding.Gwei), testAddress.String())
+			g, _ := errgroup.WithContext(ctx)
+
+			// realtime subscription
+			g.Go(func() error {
+
+				for {
+					select {
+					case msg := <-realtimeMsgCh:
+						// BlockTime should always be returned
+						if msg.BlockTime == 0 {
+							return fmt.Errorf("block time is 0 and not sent")
+						}
+						// Since we set the TransactionExtraInfo, TransactionReceipt, and TransactionInnerTxs to true, these fields should not be nil
+						if msg.TxData == nil {
+							return fmt.Errorf("tx data is nil")
+						}
+						if msg.Receipt == nil {
+							return fmt.Errorf("receipt is nil")
+						}
+						if msg.InnerTxs == nil {
+							return fmt.Errorf("inner transactions is nil")
+						}
+						if msg.TxHash == signedTx.Hash().String() {
+							return nil
+						}
+					case err := <-realtimeSub.Err():
+						return err
+					case <-time.After(DefaultTimeoutTxToBeMined):
+						return fmt.Errorf("realtime subscription timeout")
+					}
+				}
+			})
+
+			// Wait for all goroutines to complete
+			err = g.Wait()
+			require.NoError(t, err)
+		}
 	})
 }
 

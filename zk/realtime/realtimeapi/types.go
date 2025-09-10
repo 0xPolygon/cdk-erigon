@@ -1,6 +1,7 @@
 package realtimeapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -9,11 +10,41 @@ import (
 )
 
 type RealtimeSubResult struct {
-	Header   *types.Header      `json:"Header,omitempty"`
-	TxHash   string             `json:"TxHash,omitempty"`
-	TxData   types.Transaction  `json:"TxData,omitempty"`
-	Receipt  *types.Receipt     `json:"Receipt,omitempty"`
-	InnerTxs []*zktypes.InnerTx `json:"InnerTxs,omitempty"`
+	Header    *types.Header      `json:"Header,omitempty"`
+	TxHash    string             `json:"TxHash,omitempty"`
+	TxData    types.Transaction  `json:"TxData,omitempty"`
+	Receipt   *types.Receipt     `json:"Receipt,omitempty"`
+	InnerTxs  []*zktypes.InnerTx `json:"InnerTxs,omitempty"`
+	BlockTime uint64             `json:"BlockTime,omitempty"`
+}
+
+func (r *RealtimeSubResult) UnmarshalJSON(data []byte) error {
+	type TempRealtimeSubResult struct {
+		Header    *types.Header      `json:"Header,omitempty"`
+		TxHash    string             `json:"TxHash,omitempty"`
+		TxData    json.RawMessage    `json:"TxData,omitempty"`
+		Receipt   *types.Receipt     `json:"Receipt,omitempty"`
+		InnerTxs  []*zktypes.InnerTx `json:"InnerTxs,omitempty"`
+		BlockTime uint64             `json:"BlockTime,omitempty"`
+	}
+
+	var temp TempRealtimeSubResult
+	if err := json.Unmarshal(data, &temp); err != nil {
+		return err
+	}
+
+	r.Header = temp.Header
+	r.TxHash = temp.TxHash
+	r.Receipt = temp.Receipt
+	r.InnerTxs = temp.InnerTxs
+	r.BlockTime = temp.BlockTime
+
+	if len(temp.TxData) > 0 {
+		// Unmarshal the raw TxData into types.Transaction
+		r.TxData, _ = types.UnmarshalTransactionFromJSON(temp.TxData)
+	}
+
+	return nil
 }
 
 type RealtimeDebugResult struct {

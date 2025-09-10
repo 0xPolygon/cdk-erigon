@@ -118,8 +118,10 @@ func TestKafka(t *testing.T) {
 	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), nil)
 	assert.NilError(t, err)
 
+	blockTime := uint64(1000)
+
 	for i := 1; i <= 10; i++ {
-		err = producer.SendKafkaTransaction(uint64(i), rightvrsTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset)
+		err = producer.SendKafkaTransaction(uint64(i), rightvrsTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset, blockTime)
 		assert.NilError(t, err)
 
 		err = producer.SendKafkaBlockInfo(&realtimeTypes.BlockInfo{
@@ -135,7 +137,7 @@ func TestKafka(t *testing.T) {
 
 	accessListTx.SetSender(testFromAddr)
 	for i := 11; i <= 20; i++ {
-		err = producer.SendKafkaTransaction(uint64(i), accessListTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset)
+		err = producer.SendKafkaTransaction(uint64(i), accessListTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset, blockTime)
 
 		assert.NilError(t, err)
 	}
@@ -223,9 +225,11 @@ func TestStressTestKafkaProducer(t *testing.T) {
 	producer, err := kafka.NewKafkaProducer(cfg, context.Background(), successChan)
 	assert.NilError(t, err)
 
+	blockTime := uint64(1000)
+
 	startTime := time.Now()
 	for i := 1; i <= 1000; i++ {
-		err = producer.SendKafkaTransaction(uint64(i), rightvrsTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset)
+		err = producer.SendKafkaTransaction(uint64(i), rightvrsTx, rightvrsTxReceipt, rightvrsTxInnerTxs, rightvrsTxChangeset, blockTime)
 		assert.NilError(t, err)
 	}
 

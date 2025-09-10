@@ -15,6 +15,7 @@ import (
 type TransactionMessage struct {
 	// Sequenced block number
 	BlockNumber uint64 `json:"blockNumber"`
+	BlockTime   uint64 `json:"blockTime"`
 
 	// Common tx fields
 	Type    uint8              `json:"type"`
@@ -50,7 +51,7 @@ type TransactionMessage struct {
 	Changeset *realtimeTypes.Changeset `json:"changeset"`
 }
 
-func ToKafkaTransactionMessage(tx ethTypes.Transaction, receipt *ethTypes.Receipt, innerTxs []*zktypes.InnerTx, changeset *realtimeTypes.Changeset, blockNumber uint64) (txMsg TransactionMessage, err error) {
+func ToKafkaTransactionMessage(tx ethTypes.Transaction, receipt *ethTypes.Receipt, innerTxs []*zktypes.InnerTx, changeset *realtimeTypes.Changeset, blockNumber uint64, blockTime uint64) (txMsg TransactionMessage, err error) {
 	// Parse tx
 	if tx == nil || receipt == nil || innerTxs == nil || changeset == nil {
 		return TransactionMessage{}, fmt.Errorf("nil tx data received")
@@ -106,6 +107,7 @@ func ToKafkaTransactionMessage(tx ethTypes.Transaction, receipt *ethTypes.Receip
 	txMsg.Receipt = receipt
 	txMsg.InnerTxs = innerTxs
 	txMsg.Changeset = changeset
+	txMsg.BlockTime = blockTime
 
 	return txMsg, nil
 }
@@ -209,6 +211,7 @@ func (msg TransactionMessage) Validate() error {
 func (msg TransactionMessage) MarshalJSON() ([]byte, error) {
 	type TransactionMessage struct {
 		BlockNumber         uint64                   `json:"blockNumber"`
+		BlockTime           uint64                   `json:"blockTime"`
 		Type                uint8                    `json:"type"`
 		Hash                libcommon.Hash           `json:"hash"`
 		From                libcommon.Address        `json:"from"`
@@ -234,6 +237,7 @@ func (msg TransactionMessage) MarshalJSON() ([]byte, error) {
 
 	var enc TransactionMessage
 	enc.BlockNumber = msg.BlockNumber
+	enc.BlockTime = msg.BlockTime
 	enc.Type = msg.Type
 	enc.Hash = msg.Hash
 	enc.From = msg.From
