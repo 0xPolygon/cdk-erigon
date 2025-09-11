@@ -8,6 +8,7 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/state"
+	"github.com/ledgerwatch/erigon/zk/metrics"
 	kafkaTypes "github.com/ledgerwatch/erigon/zk/realtime/kafka/types"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	"github.com/ledgerwatch/erigon/zk/utils"
@@ -130,6 +131,7 @@ func (cache *RealtimeCache) GetHighestConfirmHeight() uint64 {
 func (cache *RealtimeCache) PutHighestConfirmHeight(blockNum uint64) {
 	if blockNum > cache.highestConfirmHeight.Load() {
 		cache.highestConfirmHeight.Store(blockNum)
+		metrics.SetRealtimeBlockHeight(float64(blockNum))
 	}
 }
 
@@ -165,6 +167,7 @@ func (cache *RealtimeCache) GetHighestPendingHeight() uint64 {
 func (cache *RealtimeCache) PutHighestPendingHeight(blockNum uint64) {
 	if blockNum > cache.highestPendingHeight.Load() {
 		cache.highestPendingHeight.Store(blockNum)
+		metrics.SetRealtimePendingBlockHeight(float64(blockNum))
 	}
 }
 
