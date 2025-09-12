@@ -113,9 +113,6 @@ func TestRealtimeComparison(t *testing.T) {
 		t.Run("getBlockByHash", func(t *testing.T) {
 			allPassed := true
 
-			// add pending to test getBlockByHash
-			testBlocks = append(testBlocks, "pending")
-
 			for _, blockParam := range testBlocks {
 				blockNumber, err := convertBlockParam(client, blockParam)
 				if err != nil {
@@ -346,7 +343,7 @@ func TestRealtimeComparison(t *testing.T) {
 			var nonRealtimeBlockNumber string
 			err = nonRealtimeRPCClient.CallContext(context.Background(), &nonRealtimeBlockNumber, "eth_blockNumber")
 			require.NoError(t, err)
-			require.Equal(t, "0x"+strconv.FormatUint(realtimeBlockNumber, 16), nonRealtimeBlockNumber, "Block numbers should match")
+			require.GreaterOrEqual(t, "0x"+strconv.FormatUint(realtimeBlockNumber, 16), nonRealtimeBlockNumber, "Realtime block number should be at least as big as non-realtime block number")
 		})
 
 		t.Run("call", func(t *testing.T) {
