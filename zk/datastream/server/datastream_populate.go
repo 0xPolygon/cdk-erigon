@@ -323,9 +323,13 @@ func (srv *ZkEVMDataStreamServer) UnwindIfNecessary(logPrefix string, reader DbR
 			log.Warn(fmt.Sprintf("[%s] Datastream must unwind to batch", logPrefix), "prevBlockBatchNum", prevBlockBatchNum, "batchNum", batchNum)
 
 			//get latest block in prev batch
-			lastBlockInPrevbatch, _, err := reader.GetHighestBlockInBatch(prevBlockBatchNum)
+			lastBlockInPrevbatch, found, err := reader.GetHighestBlockInBatch(prevBlockBatchNum)
 			if err != nil {
 				return err
+			}
+
+			if !found {
+				log.Warn("datastream unwind failed: no block found in batch %d", prevBlockBatchNum)
 			}
 
 			// this represents a case where the block we must unwind to is part of a previous batch

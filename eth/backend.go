@@ -1530,7 +1530,7 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 		s.silkwormRPCDaemonService = &silkwormRPCDaemonService
 	} else {
 		go func() {
-			if err := cli.StartRpcServer(ctx, &httpRpcCfg, s.apiList, s.logger); err != nil {
+			if err := cli.StartRpcServerWithDB(ctx, &httpRpcCfg, s.apiList, s.logger, chainKv); err != nil {
 				s.logger.Error("cli.StartRpcServer error", "err", err)
 			}
 		}()

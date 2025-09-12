@@ -559,9 +559,13 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 	/////////////////////////////////////////////
 	// iterate until a block with lower batch number is found
 	// this is the last block of the previous batch and the highest hashable block for verifications
-	lastBatchHighestBlock, _, err := hermezDb.GetHighestBlockInBatch(fromBatchPrev - 1)
+	lastBatchHighestBlock, found, err := hermezDb.GetHighestBlockInBatch(fromBatchPrev - 1)
 	if err != nil {
 		return fmt.Errorf("GetHighestBlockInBatch: %w", err)
+	}
+
+	if !found {
+		log.Warn("no block found in previous batch %d - verification cannot proceed", fromBatchPrev-1)
 	}
 
 	if err := stages.SaveStageProgress(tx, stages.HighestHashableL2BlockNo, lastBatchHighestBlock); err != nil {
@@ -796,9 +800,13 @@ func getUnwindPoint(eriDb erigon_db.ReadOnlyErigonDb, hermezDb state.ReadOnlyHer
 			fmt.Errorf("failed to find batch number for the block %d (%s)", blockNum, blockHash)
 	}
 
-	unwindBlockNum, _, err := hermezDb.GetHighestBlockInBatch(batchNum - 1)
+	unwindBlockNum, found, err := hermezDb.GetHighestBlockInBatch(batchNum - 1)
 	if err != nil {
 		return 0, emptyHash, 0, fmt.Errorf("GetHighestBlockInBatch batch %d: %w", batchNum-1, err)
+	}
+
+	if !found {
+		log.Warn("cannot unwind: no block found in batch %d", batchNum-1)
 	}
 
 	unwindBlockHash, err := eriDb.ReadCanonicalHash(unwindBlockNum)

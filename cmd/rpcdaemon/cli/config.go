@@ -562,7 +562,15 @@ func RemoteServices(ctx context.Context, cfg *httpcfg.HttpCfg, logger log.Logger
 
 func StartRpcServer(ctx context.Context, cfg *httpcfg.HttpCfg, rpcAPI []rpc.API, logger log.Logger) error {
 	if cfg.Enabled {
-		return startRegularRpcServer(ctx, cfg, rpcAPI, logger)
+		return startRegularRpcServer(ctx, cfg, rpcAPI, logger, nil)
+	}
+
+	return nil
+}
+
+func StartRpcServerWithDB(ctx context.Context, cfg *httpcfg.HttpCfg, rpcAPI []rpc.API, logger log.Logger, db kv.RoDB) error {
+	if cfg.Enabled {
+		return startRegularRpcServer(ctx, cfg, rpcAPI, logger, db)
 	}
 
 	return nil
@@ -580,7 +588,7 @@ func StartRpcServerWithJwtAuthentication(ctx context.Context, cfg *httpcfg.HttpC
 	return nil
 }
 
-func startRegularRpcServer(ctx context.Context, cfg *httpcfg.HttpCfg, rpcAPI []rpc.API, logger log.Logger) error {
+func startRegularRpcServer(ctx context.Context, cfg *httpcfg.HttpCfg, rpcAPI []rpc.API, logger log.Logger, db kv.RoDB) error {
 	// register apis and create handler stack
 	srv := rpc.NewServer(cfg.RpcBatchConcurrency, cfg.TraceRequests, cfg.DebugSingleRequest, cfg.RpcStreamingDisable, logger, cfg.RPCSlowLogThreshold)
 
@@ -588,7 +596,7 @@ func startRegularRpcServer(ctx context.Context, cfg *httpcfg.HttpCfg, rpcAPI []r
 	rpc.SetRateLimit(cfg.MethodRateLimit)
 
 	if !sequencer.IsSequencer() {
-		rpchelper.StartFinalizedBatchPoller(ctx, time.Second)
+		rpchelper.StartFinalizedBatchPoller(ctx, time.Second, db)
 	}
 
 	allowListForRPC, err := parseAllowListForRPC(cfg.RpcAllowListFilePath)

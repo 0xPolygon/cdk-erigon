@@ -511,9 +511,12 @@ func (api *ZkEvmAPIImpl) GetBatchByNumber(ctx context.Context, rpcBatchNumber rp
 	if forkId < uint64(chain.ForkID12Banana) {
 		// get the previous batches exit roots
 		prevBatchNo := batchNo - 1
-		prevBatchHighestBlock, _, err := hermezDb.GetHighestBlockInBatch(prevBatchNo)
+		prevBatchHighestBlock, found, err := hermezDb.GetHighestBlockInBatch(prevBatchNo)
 		if err != nil {
 			return nil, err
+		}
+		if !found {
+			log.Warn("No blocks in previous batch for exit root calculation, using fallback", "prevBatchNo", prevBatchNo)
 		}
 		prevBatchGer, _, err := hermezDb.GetLastBlockGlobalExitRoot(prevBatchHighestBlock)
 		if err != nil {

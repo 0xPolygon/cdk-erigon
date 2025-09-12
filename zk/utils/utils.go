@@ -64,9 +64,14 @@ func ShouldShortCircuitExecution(tx kv.RwTx, logPrefix string, l2ShortCircuitToV
 		}
 
 		// we've got the highest batch to execute to, now get it's highest block
-		shortCircuitBlock, _, err = hermezDb.GetHighestBlockInBatch(shortCircuitBatch)
+		var found bool
+		shortCircuitBlock, found, err = hermezDb.GetHighestBlockInBatch(shortCircuitBatch)
 		if err != nil {
 			return false, 0, err
+		}
+
+		if !found {
+			log.Warn("No blocks found in short circuit batch, disabling short circuit", "batchNumber", shortCircuitBatch)
 		}
 	}
 

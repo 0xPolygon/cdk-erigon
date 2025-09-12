@@ -136,10 +136,13 @@ func getTargetBlockForSMTAlignment(sdb *stageDb, logPrefix string, executionAt u
 		return 0, err
 	}
 	smtBatchNo = smtBatchNo - 1
-	targetBlock, _, err = sdb.hermezDb.GetHighestBlockInBatch(smtBatchNo)
+	targetBlock, found, err := sdb.hermezDb.GetHighestBlockInBatch(smtBatchNo)
 	if err != nil {
 		log.Error(fmt.Sprintf("[%s] Failed to get highest block in batch", logPrefix), "error", err, "batchNo", smtBatchNo, "targetBlock", targetBlock)
 		return 0, err
+	}
+	if !found {
+		log.Warn(fmt.Sprintf("[%s] No blocks in SMT target batch, using execution position", logPrefix), "batchNo", smtBatchNo, "executionAt", executionAt)
 	}
 	log.Warn(fmt.Sprintf("[%s] Target block for SMT alignment", logPrefix), "targetBlock", targetBlock, "executionAt", executionAt, "smtMaxBlockNumber", smtMaxBlockNumber, "smtBatchNo", smtBatchNo)
 	return targetBlock, nil
