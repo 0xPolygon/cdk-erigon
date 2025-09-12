@@ -30,7 +30,6 @@ var defaultHTTPClient = &http.Client{
 		DisableKeepAlives:  false,
 		DisableCompression: false,
 	},
-	Timeout: 10 * time.Second, // default: no timeout
 }
 
 // Client defines typed wrappers for the zkEVM RPC API.
