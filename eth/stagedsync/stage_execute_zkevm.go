@@ -98,7 +98,7 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 		return fmt.Errorf("getBlockHashValues: %w", err)
 	}
 
-	to, total, err := getExecRange(cfg, tx, s.BlockNumber, toBlock, s.LogPrefix())
+	to, _, err := getExecRange(cfg, tx, s.BlockNumber, toBlock, s.LogPrefix())
 	if err != nil {
 		return fmt.Errorf("getExecRange: %w", err)
 	}
@@ -107,9 +107,9 @@ func SpawnExecuteBlocksStageZk(s *StageState, u Unwinder, tx kv.RwTx, toBlock ui
 
 	stateStream := !initialCycle && cfg.stateStream && to-s.BlockNumber < stateStreamLimit
 
-	logger := utils.NewTxGasLogger(logInterval, s.BlockNumber, total, gasState, s.LogPrefix(), &batch, tx, stages.SyncMetrics[stages.Execution])
-	logger.Start()
-	defer logger.Stop()
+	// logger := utils.NewTxGasLogger(logInterval, s.BlockNumber, total, gasState, s.LogPrefix(), &batch, tx, stages.SyncMetrics[stages.Execution])
+	// logger.Start()
+	// defer logger.Stop()
 
 	stageProgress := s.BlockNumber
 	var stoppedErr error
@@ -170,7 +170,7 @@ Loop:
 		stageProgress = blockNum
 		currentStateGas = currentStateGas + header.GasUsed
 
-		logger.AddBlock(uint64(block.Transactions().Len()), stageProgress, currentStateGas, blockNum)
+		// logger.AddBlock(uint64(block.Transactions().Len()), stageProgress, currentStateGas, blockNum)
 
 		utils.LogTrace(
 			"",                           // txhash
@@ -203,7 +203,7 @@ Loop:
 				}
 				defer tx.Rollback()
 				eridb = erigon_db.NewErigonDb(tx)
-				logger.SetTx(tx)
+				// logger.SetTx(tx)
 			}
 			batch = membatch.NewHashBatch(tx, quit, cfg.dirs.Tmp, log.New())
 			hermezDb = hermez_db.NewHermezDb(tx)
