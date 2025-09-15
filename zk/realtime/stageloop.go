@@ -18,7 +18,7 @@ import (
 
 var (
 	MaxKafkaChanSize        = 10_000
-	MaxKafkaCacheSize       = 10_000
+	MaxKafkaCacheSize       = 100
 	MinRealtimeLoopWaitTime = 10 * time.Millisecond
 
 	errorFlag  = atomic.Bool{}
