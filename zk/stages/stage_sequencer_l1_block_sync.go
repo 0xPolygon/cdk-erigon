@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	zktx "github.com/erigontech/erigon/zk/tx"
 	"time"
 
 	zktx "github.com/erigontech/erigon/zk/tx"
