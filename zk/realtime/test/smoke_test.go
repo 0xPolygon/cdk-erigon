@@ -255,8 +255,15 @@ func TestRealtimeRPC(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, block, "Block should not be nil")
 		require.NotNil(t, block["hash"], "Block hash should not be nil")
-
 		log.Info(fmt.Sprintf("RealtimeGetBlockByNumber result block number: %v, hash: %v, txCount: %v", block["number"], block["hash"], len(block["transactions"].([]interface{}))))
+	})
+
+	t.Run("RealtimeGetPendingBlock", func(t *testing.T) {
+		pendingBlock, err := client.RealtimeGetBlock("pending")
+		require.NoError(t, err)
+		require.NotNil(t, pendingBlock, "Pending block should not be nil")
+		require.Nil(t, pendingBlock["hash"], "Block hash should be nil")
+		fmt.Printf("RealtimeGetBlock result block number: %v, txCount: %v\n", pendingBlock["number"], len(pendingBlock["transactions"].([]interface{})))
 	})
 
 	t.Run("RealtimeGetBlockByHash", func(t *testing.T) {
@@ -550,7 +557,6 @@ func TestRealtimeStateIsConsistent(t *testing.T) {
 	// Dump state cache for further checking
 	err = client.RealtimeDumpCache()
 	require.NoError(t, err)
-
 	compareCacheWithSequenceDB(t, DefaultSequncerDBPath, DefaultStateCachePath)
 }
 

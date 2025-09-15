@@ -20,7 +20,7 @@ func (api *RealtimeAPIImpl) BlockNumber(ctx context.Context, tag *RealtimeTag) (
 		tag = &latestTag
 	}
 
-	blockNumber, _, err := api.getBlockNumber(rpc.BlockNumber(*tag))
+	blockNumber, _, _, err := api.getBlockNumber(rpc.BlockNumber(*tag))
 	if err != nil {
 		// Do not redirect to default eth api as block number with tag is custom for realtime
 		return hexutil.Uint64(0), err
@@ -33,7 +33,7 @@ func (api *RealtimeAPIImpl) GetBlockTransactionCountByNumber(ctx context.Context
 		return api.APIImpl.GetBlockTransactionCountByNumber(ctx, blockNr)
 	}
 
-	blockNum, _, err := api.getBlockNumber(blockNr)
+	blockNum, _, _, err := api.getBlockNumber(blockNr)
 	if err != nil {
 		return api.APIImpl.GetBlockTransactionCountByNumber(ctx, blockNr)
 	}
@@ -79,7 +79,7 @@ func (api *RealtimeAPIImpl) GetBlockByNumber(ctx context.Context, blockNr rpc.Bl
 		fullTx = new(bool)
 	}
 
-	blockNum, _, err := api.getBlockNumber(blockNr)
+	blockNum, _, isPending, err := api.getBlockNumber(blockNr)
 	if err != nil {
 		return api.APIImpl.GetBlockByNumber(ctx, blockNr, fullTx)
 	}
@@ -89,8 +89,8 @@ func (api *RealtimeAPIImpl) GetBlockByNumber(ctx context.Context, blockNr rpc.Bl
 		return api.APIImpl.GetBlockByNumber(ctx, blockNr, fullTx)
 	}
 
-	if blockNr == rpc.PendingBlockNumber {
-		for _, field := range []string{"hash", "nonce", "miner"} {
+	if isPending {
+		for _, field := range []string{"hash"} {
 			response[field] = nil
 		}
 	}
@@ -133,7 +133,7 @@ func (api *RealtimeAPIImpl) GetBlockInternalTransactions(ctx context.Context, bl
 		return api.APIImpl.GetBlockInternalTransactions(ctx, blockNr)
 	}
 
-	blockNum, _, err := api.getBlockNumber(blockNr)
+	blockNum, _, _, err := api.getBlockNumber(blockNr)
 	if err != nil {
 		return api.APIImpl.GetBlockInternalTransactions(ctx, blockNr)
 	}

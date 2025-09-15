@@ -64,9 +64,8 @@ func (api *RealtimeAPIImpl) Realtime(ctx context.Context, criteria realtimeSub.S
 						log.Warn("[realtime subscription] error getting tx data", "err", err)
 					}
 					result.TxHash = tx.Hash().Hex()
-					sendFlag = true
-
 					result.BlockTime = msg.TxMsg.BlockTime
+					sendFlag = true
 
 					// Add tx data according to stream criteria
 					if criteria.TransactionExtraInfo {

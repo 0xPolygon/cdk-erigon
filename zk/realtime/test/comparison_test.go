@@ -106,13 +106,11 @@ func TestRealtimeComparison(t *testing.T) {
 					allPassed = false
 				}
 			}
-
 			require.True(t, allPassed, "getBlockByNumber test failed - some scenarios did not pass")
 		})
 
 		t.Run("getBlockByHash", func(t *testing.T) {
 			allPassed := true
-
 			for _, blockParam := range testBlocks {
 				blockNumber, err := convertBlockParam(client, blockParam)
 				if err != nil {
@@ -155,9 +153,6 @@ func TestRealtimeComparison(t *testing.T) {
 					allPassed = false
 				}
 			}
-
-			testBlocks = testBlocks[:len(testBlocks)-1]
-
 			require.True(t, allPassed, "getBlockByHash test failed - some scenarios did not pass")
 		})
 

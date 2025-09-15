@@ -53,7 +53,7 @@ func NewRealtimeAPI(
 func (api *RealtimeAPIImpl) getBlockNumberOrHash(blockNrOrHash rpc.BlockNumberOrHash) (uint64, error) {
 	hash, ok := blockNrOrHash.Hash()
 	if !ok {
-		blockNum, _, err := api.getBlockNumber(*blockNrOrHash.BlockNumber)
+		blockNum, _, _, err := api.getBlockNumber(*blockNrOrHash.BlockNumber)
 		if err != nil {
 			return 0, err
 		}
@@ -67,40 +67,38 @@ func (api *RealtimeAPIImpl) getBlockNumberOrHash(blockNrOrHash rpc.BlockNumberOr
 	}
 }
 
-func (api *RealtimeAPIImpl) getBlockNumber(blockNr rpc.BlockNumber) (uint64, bool, error) {
+func (api *RealtimeAPIImpl) getBlockNumber(blockNr rpc.BlockNumber) (uint64, bool, bool, error) {
 	if api.cacheDB == nil || !api.cacheDB.ReadyFlag.Load() {
-		return 0, false, ErrRealtimeNotEnabled
+		return 0, false, false, ErrRealtimeNotEnabled
 	}
 
 	confirmHeight, err := api.getConfirmHeightFromCache()
 	if err != nil {
-		return 0, false, err
+		return 0, false, false, err
+	}
+	pendingHeight, err := api.getPendingHeightFromCache()
+	if err != nil {
+		return 0, false, false, err
 	}
 
 	switch blockNr {
 	case rpc.LatestBlockNumber:
-		return confirmHeight, true, nil
+		return confirmHeight, true, false, nil
 	case rpc.PendingBlockNumber:
-		pendingHeight, err := api.getPendingHeightFromCache()
-		if err != nil {
-			return 0, false, err
-		}
-		return pendingHeight, true, nil
+		return pendingHeight, false, true, nil
 	// Unsupported tags
 	case rpc.EarliestBlockNumber:
-		return 0, false, fmt.Errorf("earliest block number is not realtime supported")
+		return 0, false, false, fmt.Errorf("earliest block number is not realtime supported")
 	case rpc.FinalizedBlockNumber:
-		return 0, false, fmt.Errorf("finalized block number is not realtime supported")
+		return 0, false, false, fmt.Errorf("finalized block number is not realtime supported")
 	case rpc.SafeBlockNumber:
-		return 0, false, fmt.Errorf("safe block number is not realtime supported")
-	case rpc.LatestExecutedBlockNumber:
-		return 0, false, fmt.Errorf("latest executed block number is not realtime supported")
+		return 0, false, false, fmt.Errorf("safe block number is not realtime supported")
 	default:
 		blockNumber := uint64(blockNr.Int64())
 		if blockNumber > confirmHeight {
-			return 0, false, fmt.Errorf("block with number %d not found", blockNumber)
+			return 0, false, false, fmt.Errorf("block with number %d not found", blockNumber)
 		}
-		return blockNumber, blockNumber == confirmHeight, nil
+		return blockNumber, blockNumber == confirmHeight, blockNumber == pendingHeight, nil
 	}
 }
 
@@ -120,9 +118,9 @@ func (api *RealtimeAPIImpl) getConfirmHeightFromCache() (uint64, error) {
 	return confirmHeight, nil
 }
 
-func (api *RealtimeAPIImpl) createStateReader(blockNrOrHash *rpc.BlockNumberOrHash) (state.StateReader, uint64, error) {
+func (api *RealtimeAPIImpl) createStateReader(blockNrOrHash rpc.BlockNumberOrHash) (state.StateReader, uint64, error) {
 	if blockNrOrHash.BlockNumber == nil {
-		blockHeight, err := api.getBlockNumberOrHash(*blockNrOrHash)
+		blockHeight, err := api.getBlockNumberOrHash(blockNrOrHash)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -145,7 +143,7 @@ func (api *RealtimeAPIImpl) createStateReader(blockNrOrHash *rpc.BlockNumberOrHa
 	}
 
 	// Retrieve by height
-	blockHeight, _, err := api.getBlockNumber(*blockNrOrHash.BlockNumber)
+	blockHeight, _, _, err := api.getBlockNumber(*blockNrOrHash.BlockNumber)
 	if err != nil {
 		return nil, 0, err
 	}

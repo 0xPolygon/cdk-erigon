@@ -17,7 +17,7 @@ func (api *RealtimeAPIImpl) GetBalance(ctx context.Context, address libcommon.Ad
 		return api.APIImpl.GetBalance(ctx, address, blockNrOrHash)
 	}
 
-	reader, _, err := api.createStateReader(&blockNrOrHash)
+	reader, _, err := api.createStateReader(blockNrOrHash)
 	if err != nil || reader == nil {
 		return api.APIImpl.GetBalance(ctx, address, blockNrOrHash)
 	}
@@ -46,7 +46,7 @@ func (api *RealtimeAPIImpl) GetTransactionCount(ctx context.Context, address lib
 		}
 	}
 
-	reader, _, err := api.createStateReader(blockNrOrHash)
+	reader, _, err := api.createStateReader(*blockNrOrHash)
 	if err != nil || reader == nil {
 		return api.APIImpl.GetTransactionCount(ctx, address, blockNrOrHash)
 	}
@@ -87,7 +87,7 @@ func (api *RealtimeAPIImpl) GetCode(ctx context.Context, address libcommon.Addre
 		return api.APIImpl.GetCode(ctx, address, blockNrOrHash)
 	}
 
-	reader, _, err := api.createStateReader(&blockNrOrHash)
+	reader, _, err := api.createStateReader(blockNrOrHash)
 	if err != nil || reader == nil {
 		return api.APIImpl.GetCode(ctx, address, blockNrOrHash)
 	}
@@ -108,7 +108,7 @@ func (api *RealtimeAPIImpl) GetStorageAt(ctx context.Context, address libcommon.
 		return api.APIImpl.GetStorageAt(ctx, address, index, blockNrOrHash)
 	}
 
-	reader, _, err := api.createStateReader(&blockNrOrHash)
+	reader, _, err := api.createStateReader(blockNrOrHash)
 	if err != nil || reader == nil {
 		return api.APIImpl.GetStorageAt(ctx, address, index, blockNrOrHash)
 	}

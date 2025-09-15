@@ -28,7 +28,7 @@ func (api *RealtimeAPIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blo
 		return api.APIImpl.Call(ctx, args, blockNrOrHash, overrides)
 	}
 
-	reader, blockNumber, err := api.createStateReader(&blockNrOrHash)
+	reader, blockNumber, err := api.createStateReader(blockNrOrHash)
 	if err != nil || reader == nil {
 		return api.APIImpl.Call(ctx, args, blockNrOrHash, overrides)
 	}
@@ -105,7 +105,7 @@ func (api *RealtimeAPIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi.C
 	if blockNrOrHash != nil {
 		bNrOrHash = *blockNrOrHash
 	}
-	stateReader, blockNumber, err := api.createStateReader(&bNrOrHash)
+	stateReader, blockNumber, err := api.createStateReader(bNrOrHash)
 	if err != nil || stateReader == nil {
 		return api.APIImpl.EstimateGas(ctx, argsOrNil, blockNrOrHash)
 	}

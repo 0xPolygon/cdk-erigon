@@ -447,6 +447,26 @@ func (rc *RealtimeClient) EthGetTokenBalance(
 	return balance, nil
 }
 
+func (rc *RealtimeClient) RealtimeGetBlock(tag string) (map[string]interface{}, error) {
+	// Call eth_getBlockByNumber with fullTx=true to get full transaction details
+	fullTx := true
+	response, err := client.JSONRPCCall(rc.url, "eth_getBlockByNumber", tag, fullTx)
+	if err != nil {
+		return nil, err
+	}
+	if response.Error != nil {
+		return nil, fmt.Errorf("%d - %s", response.Error.Code, response.Error.Message)
+	}
+
+	var result map[string]interface{}
+	err = json.Unmarshal(response.Result, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 func (rc *RealtimeClient) RealtimeGetBlockByNumber(blockNumber uint64) (map[string]interface{}, error) {
 	// Call eth_getBlockByNumber with fullTx=true to get full transaction details
 	fullTx := true
