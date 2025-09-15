@@ -125,6 +125,7 @@ If the endpoint is not in the list below, it means this specific endpoint is not
 - eth_submitHashrate
 - eth_submitWork
 - eth_syncing
+- eth_transactionPreExec
 - eth_uninstallFilter
 
 ## graphql

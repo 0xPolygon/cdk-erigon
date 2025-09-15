@@ -12,11 +12,12 @@ runs:
       uses: actions/checkout@v4
       with:
         repository: 0xPolygon/kurtosis-cdk
-        ref: v0.4.3
+        ref: v0.4.7
         path: kurtosis-cdk
 
     - name: Install Kurtosis CDK tools
-      uses: ./kurtosis-cdk/.github/actions/setup-kurtosis-cdk
+      if: env.SKIP_ENCLAVE_SETUP != 'true'
+      uses: ./kurtosis-cdk/.github/actions/kurtosis-pre-run
 
     - name: Install Foundry
       uses: foundry-rs/foundry-toolchain@v1
@@ -68,10 +69,17 @@ runs:
       working-directory: ./kurtosis-cdk
       shell: bash
       run: |
-        echo 'args:' > params.yml
+        echo 'deployment_stages:' > params.yml
+          echo '  deploy_l2_contracts: true' >> params.yml
+          echo '  deploy_optimism_rollup: false' >> params.yml
+          echo '  deploy_op_succinct: false' >> params.yml
+        echo 'args:' >> params.yml
         echo '  consensus_contract_type: "pessimistic"' >> params.yml
         echo '  pp_vkey_hash: "0x00d6e4bdab9cac75a50d58262bb4e60b3107a6b61131ccdff649576c624b6fb7"' >> params.yml
         echo '  cdk_erigon_node_image: cdk-erigon:local' >> params.yml
+        echo '  sequencer_type: "erigon"' >> params.yml
+        echo '  agglayer_prover_primary_prover: mock-prover' >> params.yml
+        echo '  erigon_strict_mode: false' >> params.yml
         echo '  el-1-geth-lighthouse: ethpandaops/lighthouse@sha256:4902d9e4a6b6b8d4c136ea54f0e51582a32f356f3dec7194a1adee13ed2d662e' >> params.yml
         /usr/local/bin/yq -i '.args.data_availability_mode = "${{ matrix.da-mode }}"' params.yml
         sed -i 's/"londonBlock": [0-9]\+/"londonBlock": 0/' ./templates/cdk-erigon/chainspec.json
@@ -79,9 +87,17 @@ runs:
         sed -i 's/"shanghaiTime": [0-9]\+/"shanghaiTime": 0/' ./templates/cdk-erigon/chainspec.json
         sed -i 's/"cancunTime": [0-9]\+/"cancunTime": 0/' ./templates/cdk-erigon/chainspec.json
         sed -i '/"terminalTotalDifficulty"/d' ./templates/cdk-erigon/chainspec.json
+        echo "Kurtosis params file:"
+        cat params.yml
+
+    - name: Teardown existing enclave
+      shell: bash
+      run: |
+        kurtosis enclave stop cdk-v1 || true
+        kurtosis enclave rm   cdk-v1 || true
 
     - name: Deploy Kurtosis CDK package
       working-directory: ./kurtosis-cdk
       shell: bash
       run: |
-        kurtosis run --enclave cdk-v1 --args-file params.yml --image-download always . '{"args": {"erigon_strict_mode": false, "cdk_erigon_node_image": "cdk-erigon:local"}}'
+        kurtosis run --enclave cdk-v1 --args-file params.yml --image-download always .

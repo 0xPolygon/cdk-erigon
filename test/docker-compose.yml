@@ -139,7 +139,7 @@ services:
       cdk-erigon --http.vhosts=* --http.corsdomain=* --ws --config=/usr/src/app/config.yaml
 
   xlayer-kafka:
-    image: bitnami/kafka:latest
+    image: bitnamilegacy/kafka:4.0.0-debian-12-r10
     container_name: xlayer-kafka
     ports:
       - 9095:9094
