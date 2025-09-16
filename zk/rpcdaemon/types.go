@@ -236,6 +236,7 @@ type Block struct {
 	GasLimit        ArgUint64           `json:"gasLimit"`
 	GasUsed         ArgUint64           `json:"gasUsed"`
 	Timestamp       ArgUint64           `json:"timestamp"`
+	TimestampNano   *ArgUint64          `json:"timestampNano,omitempty"`
 	ExtraData       ArgBytes            `json:"extraData"`
 	MixHash         common.Hash         `json:"mixHash"`
 	Nonce           ArgBytes            `json:"nonce"`

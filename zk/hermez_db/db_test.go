@@ -9,9 +9,9 @@ import (
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/kv/mdbx"
+	"github.com/erigontech/erigon/zk/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/erigontech/erigon/zk/types"
 )
 
 type IHermezDb interface {
@@ -66,6 +66,38 @@ func TestGetSequenceByL1Block(t *testing.T) {
 	assert.Equal(t, uint64(2), info.L1BlockNo)
 	assert.Equal(t, uint64(1002), info.BatchNo)
 	assert.Equal(t, common.HexToHash("0xdef"), info.L1TxHash)
+}
+
+func TestBlockPreciseTimestampReadWrite(t *testing.T) {
+	tx, cleanup := GetDbTx()
+	defer cleanup()
+
+	db := NewHermezDb(tx)
+
+	// initially absent
+	ts, err := db.GetBlockPreciseTimestamp(42)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(0), ts)
+
+	// write and read back
+	want := uint64(1714427000123456789)
+	require.NoError(t, db.WriteBlockPreciseTimestamp(42, want))
+
+	got, err := db.GetBlockPreciseTimestamp(42)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+}
+
+func TestBlockPreciseTimestampAbsent(t *testing.T) {
+	tx, cleanup := GetDbTx()
+	defer cleanup()
+
+	db := NewHermezDb(tx)
+
+	// never written: should return 0 without error
+	got, err := db.GetBlockPreciseTimestamp(7)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(0), got)
 }
 
 func TestGetSequenceByBatchNo(t *testing.T) {

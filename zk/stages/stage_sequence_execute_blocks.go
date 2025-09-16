@@ -190,6 +190,11 @@ func finaliseBlock(
 		return nil, err
 	}
 
+	// Record precise sub-second timestamp at block close
+	if err := batchContext.sdb.hermezDb.WriteBlockPreciseTimestamp(newHeader.Number.Uint64(), uint64(time.Now().UnixNano())); err != nil {
+		return nil, err
+	}
+
 	quit := batchContext.ctx.Done()
 	batchContext.sdb.eridb.OpenBatch(quit)
 

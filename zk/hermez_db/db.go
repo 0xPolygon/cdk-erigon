@@ -35,6 +35,7 @@ const BLOCK_L1_INFO_TREE_INDEX_PROGRESS = "block_l1_info_tree_progress" // block
 const L1_INJECTED_BATCHES = "l1_injected_batches"                       // index increasing by 1 -> injected batch for the start of the chain
 const BLOCK_INFO_ROOTS = "block_info_roots"                             // block number -> block info root hash
 const BLOCK_L1_BLOCK_HASHES = "block_l1_block_hashes"                   // block number -> l1 block hash
+const BLOCK_PRECISE_TIMESTAMPS = "block_precise_timestamps"             // block number -> precise timestamp in nanoseconds
 const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots"  // l2blockno -> stateRoot
 const BATCH_WITNESSES = "hermez_batch_witnesses"                        // batch number -> witness
 const BATCH_COUNTERS = "hermez_batch_counters"                          // block number -> counters
@@ -76,6 +77,7 @@ var HermezDbTables = []string{
 	L1_INJECTED_BATCHES,
 	BLOCK_INFO_ROOTS,
 	BLOCK_L1_BLOCK_HASHES,
+	BLOCK_PRECISE_TIMESTAMPS,
 	INTERMEDIATE_TX_STATEROOTS,
 	BATCH_WITNESSES,
 	BATCH_COUNTERS,
@@ -858,6 +860,21 @@ func (db *HermezDbReader) GetBlockL1BlockHashes(fromBlockNo, toBlockNo uint64) (
 	}
 
 	return l1BlockHashes, nil
+}
+
+func (db *HermezDb) WriteBlockPreciseTimestamp(l2BlockNo uint64, tsNanos uint64) error {
+	return db.tx.Put(BLOCK_PRECISE_TIMESTAMPS, Uint64ToBytes(l2BlockNo), Uint64ToBytes(tsNanos))
+}
+
+func (db *HermezDbReader) GetBlockPreciseTimestamp(l2BlockNo uint64) (uint64, error) {
+	v, err := db.tx.GetOne(BLOCK_PRECISE_TIMESTAMPS, Uint64ToBytes(l2BlockNo))
+	if err != nil {
+		return 0, err
+	}
+	if len(v) == 0 {
+		return 0, nil
+	}
+	return BytesToUint64(v), nil
 }
 
 func (db *HermezDb) WriteBatchGlobalExitRoot(batchNumber uint64, ger *dstypes.GerUpdate) error {
