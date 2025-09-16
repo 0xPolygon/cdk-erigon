@@ -851,8 +851,9 @@ func (p *TxPool) validateTx(txn *types.TxSlot, isLocal bool, stateCache kvcache.
 		}
 		return GasLimitTooHigh
 	}
-
-	if !isLocal && uint64(p.all.count(txn.SenderID)) > p.cfg.AccountSlots {
+	// there are no tx from p2p, so isLocal is always true
+	// if !isLocal && uint64(p.all.count(txn.SenderID)) > p.cfg.AccountSlots {
+	if uint64(p.all.count(txn.SenderID)) > p.cfg.AccountSlots {
 		if txn.Traced {
 			log.Info(fmt.Sprintf("TX TRACING: validateTx marked as spamming idHash=%x slots=%d, limit=%d", txn.IDHash, p.all.count(txn.SenderID), p.cfg.AccountSlots))
 		}
