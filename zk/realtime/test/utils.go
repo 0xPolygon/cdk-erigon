@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/holiman/uint256"
+	ethereum "github.com/ledgerwatch/erigon"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
@@ -143,6 +144,7 @@ func erc20TransferTx(
 	privateKey *ecdsa.PrivateKey,
 	client *rtclient.RealtimeClient,
 	amount *big.Int,
+	gasPrice *big.Int,
 	toAddress common.Address,
 	erc20Address common.Address,
 	nonce uint64,
@@ -152,8 +154,11 @@ func erc20TransferTx(
 	data, err := erc20ABI.Pack("transfer", toAddress, amount)
 	require.NoError(t, err)
 
-	gasPrice, err := client.SuggestGasPrice(ctx)
-	require.NoError(t, err)
+	if gasPrice == nil {
+		gasPrice, err = client.SuggestGasPrice(ctx)
+		require.NoError(t, err)
+	}
+
 	transferERC20TokenTx := &types.LegacyTx{
 		CommonTx: types.CommonTx{
 			Nonce: nonce,
@@ -499,6 +504,60 @@ func SendCallPrecompileTx(t *testing.T, ctx context.Context, client *rtclient.Re
 	log.Info(fmt.Sprintf("signedTx: %s", signedTx.Hash().String()))
 
 	return signedTx
+}
+
+// WaitMined waits for tx to be mined on the blockchain.
+// It stops waiting when the context is canceled.
+func WaitMined(ctx context.Context, b bind.DeployBackend, txHash common.Hash) (*types.Receipt, error) {
+	queryTicker := time.NewTicker(time.Millisecond)
+	defer queryTicker.Stop()
+
+	for {
+		receipt, err := b.TransactionReceipt(ctx, txHash)
+		if err == nil {
+			return receipt, nil
+		}
+
+		// Wait for the next round.
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-queryTicker.C:
+		}
+	}
+}
+
+type ethClienter interface {
+	ethereum.TransactionReader
+	ethereum.ChainStateReader
+	ethereum.ContractCaller
+	bind.DeployBackend
+}
+
+func GetErc20Balance(ctx context.Context, client ethClienter, addr common.Address, erc20Addr common.Address, height *big.Int) (*big.Int, error) {
+	// Pack the balanceOf function call
+	data, err := erc20ABI.Pack("balanceOf", addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack balanceOf call: %v", err)
+	}
+
+	// Make the eth_call
+	result, err := client.CallContract(ctx, ethereum.CallMsg{
+		To:   &erc20Addr,
+		Data: data,
+	}, height)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call contract: %v", err)
+	}
+
+	// Unpack the result
+	var balance *big.Int
+	err = erc20ABI.UnpackIntoInterface(&balance, "balanceOf", result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unpack result: %v", err)
+	}
+
+	return balance, nil
 }
 
 // RevertReasonRealtime returns the revert reason for a tx that has a receipt with failed status

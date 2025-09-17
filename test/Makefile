@@ -246,6 +246,20 @@ test-realtime-e2e: stop realtime-run
 	trap '$(STOP)' EXIT; MallocNanoZone=0 go test -count=1 -failfast -race -v -p 1 -timeout 1200s ../ci/e2e-1/... ../zk/realtime/test/...
 	echo "Realtime E2E tests passed"
 
+.PHONY: test-realtime-e2e-10
+test-realtime-e2e-10: ## Runs test-realtime-e2e 10 times, stops immediately if any run fails
+	@echo "Starting 10 iterations of test-realtime-e2e at $$(date)"
+	@for i in $$(seq 1 10); do \
+		echo "\n========== Running iteration $$i/10... =========="; \
+		if make test-realtime-e2e; then \
+			echo "✅ Iteration $$i passed"; \
+		else \
+			echo "❌ Iteration $$i FAILED - stopping immediately"; \
+			exit 1; \
+		fi; \
+	done; \
+	echo "\n========== All 10 iterations completed successfully at $$(date) =========="
+
 .PHONY: min-apollo
 min-apollo: build-docker
 	$(RUN_DOCKER_APOLLO_MYSQL)

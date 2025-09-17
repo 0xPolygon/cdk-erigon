@@ -1310,7 +1310,11 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				} else {
 					backend.kafkaEnabled = true
 					backend.kafkaConsumer = kafkaConsumer
-					backend.realtimeCache = realtimeCache.NewRealtimeCache(backend.sentryCtx, backend.chainDB, cfg.Zk.XLayer.Realtime.CacheDumpPath, cfg.Zk.XLayer.Realtime.CacheHeightThreshold)
+					backend.realtimeCache, err = realtimeCache.NewRealtimeCache(backend.sentryCtx, backend.chainDB, tx, chainConfig.ChainName, cfg.Zk.XLayer.Realtime.CacheDumpPath, cfg.Zk.XLayer.Realtime.CacheHeightThreshold)
+					if err != nil {
+						backend.kafkaEnabled = false
+						log.Warn("[Realtime] Failed to initialize realtime cache", "error", err)
+					}
 					backend.finishChan = make(chan realtimeTypes.FinishedEntry)
 					if cfg.Zk.XLayer.Realtime.EnableSubscribe {
 						backend.realtimeSub = realtimeSub.NewRealtimeSubscription()
@@ -1374,7 +1378,6 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				streamClient,
 				dataStreamServer,
 				l1InfoTreeUpdater,
-				backend.realtimeCache,
 				backend.finishChan,
 			)
 

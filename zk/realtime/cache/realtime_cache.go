@@ -26,9 +26,7 @@ const (
 	DefaultStatelessTxCacheSize    = 1_000 * DefaultStatelessBlockCacheSize
 
 	// State cache size
-	DefaultGlobalStateCacheSize  = 1_000_000
-	DefaultPendingStateCacheSize = 1_000
-	DefaultBlockStateCacheSize   = 1_000
+	DefaultStateBlockCacheSize = 1_000
 
 	// Sync threshold config
 	PendingBlocksCacheSizeThreshold = 20
@@ -75,9 +73,15 @@ func ComparePendingBlockContext(a, b *PendingBlockContext) int {
 }
 
 type RealtimeCache struct {
+	// Chaindb
+	ctx       context.Context
+	db        kv.RoDB
+	chainName string
+
 	// Caches
-	State           *StateCache
-	Stateless       *StatelessCache
+	State     *StateCache
+	Stateless *StatelessCache
+
 	ReadyFlag       atomic.Bool
 	CacheDumpPath   string
 	HeightThreshold uint64
@@ -95,9 +99,12 @@ type RealtimeCache struct {
 	pendingBlocks *realtimeTypes.OrderedList[*PendingBlockContext]
 }
 
-func NewRealtimeCache(ctx context.Context, db kv.RoDB, cacheDumpPath string, heightThreshold uint64) *RealtimeCache {
+func NewRealtimeCache(ctx context.Context, db kv.RoDB, tx kv.Tx, chainName string, cacheDumpPath string, heightThreshold uint64) (*RealtimeCache, error) {
 	return &RealtimeCache{
-		State:                  NewStateCache(ctx, db, DefaultGlobalStateCacheSize, DefaultBlockStateCacheSize),
+		ctx:                    ctx,
+		db:                     db,
+		chainName:              chainName,
+		State:                  NewStateCache(DefaultStateBlockCacheSize),
 		Stateless:              NewStatelessCache(DefaultStatelessBlockCacheSize, DefaultStatelessTxCacheSize),
 		ReadyFlag:              atomic.Bool{},
 		CacheDumpPath:          cacheDumpPath,
@@ -106,7 +113,7 @@ func NewRealtimeCache(ctx context.Context, db kv.RoDB, cacheDumpPath string, hei
 		highestExecutionHeight: atomic.Uint64{},
 		highestPendingHeight:   atomic.Uint64{},
 		pendingBlocks:          NewPendingBlockContextList(DefaultPendingBlockSize),
-	}
+	}, nil
 }
 
 func (cache *RealtimeCache) Clear() {
@@ -305,28 +312,25 @@ func (cache *RealtimeCache) tryCreateNewPendingBlockContext(blockNum uint64, sta
 	}
 
 	// Create block state cache
-	bc := NewBlockStateCache(blockNum, DefaultPendingStateCacheSize)
+	bc := NewBlockStateCache(cache.ctx, cache.db, cache.chainName, blockNum)
 	// Get previous block state reader
 	prevBlockNum := blockNum - 1
 	if prevBlockNum == confirmHeight {
-		prevStateReader, isGlobal, err := cache.State.GetStateReaderWithHeight(prevBlockNum)
+		pbc, err := cache.State.GetConfirmBlockStateCache(prevBlockNum)
 		if err != nil {
-			return fmt.Errorf("failed to get prev block state reader from state cache, prevBlockNum: %d, err: %v", prevBlockNum, err)
+			pbc = nil
 		}
 
-		bc.SetPrevStateReader(prevStateReader, isGlobal)
-		if !isGlobal {
-			// Global creates the tail of the double-linked list. Only set for non-global
-			pbc := prevStateReader.(*BlockStateCache)
+		bc.SetPrevBlockCache(pbc)
+		if pbc != nil {
 			pbc.SetNextBlockCache(bc)
 		}
-
 	} else if prevBlockNum > confirmHeight {
 		pbc, err := cache.GetPendingBlockStateCache(prevBlockNum)
-		if err != nil {
+		if err != nil || pbc == nil {
 			return fmt.Errorf("failed to get prev block state reader from pending cache, prevBlockNum: %d, err: %v", prevBlockNum, err)
 		}
-		bc.SetPrevStateReader(pbc, false)
+		bc.SetPrevBlockCache(pbc)
 		pbc.SetNextBlockCache(bc)
 	} else {
 		return fmt.Errorf("failed to get prev block state reader, block num behind confirm height. prevBlockNum: %d, confirmHeight: %d", prevBlockNum, confirmHeight)
@@ -381,6 +385,10 @@ func (cache *RealtimeCache) tryCloseBlock(pendingBlockContext *PendingBlockConte
 	}
 
 	// Close block
+	err := cache.State.AddBlock(pendingBlockContext.blockNum, pendingBlockContext.blockStateCache)
+	if err != nil {
+		return err
+	}
 	items := cache.pendingBlocks.Items()
 	for i, item := range items {
 		if item.blockNum == pendingBlockContext.blockNum {
@@ -390,10 +398,6 @@ func (cache *RealtimeCache) tryCloseBlock(pendingBlockContext *PendingBlockConte
 			cache.pendingBlocks.Sort()
 			break
 		}
-	}
-	err := cache.State.AddBlock(pendingBlockContext.blockNum, pendingBlockContext.blockStateCache)
-	if err != nil {
-		return err
 	}
 	pendingBlockContext.blockStateCache = nil
 
@@ -429,28 +433,45 @@ func (cache *RealtimeCache) GetPendingBlockStateCache(blockNum uint64) (*BlockSt
 	return nil, fmt.Errorf("blockNum %d is not in the pending blocks", blockNum)
 }
 
-func (cache *RealtimeCache) GetPendingStateCache() (state.StateReader, error) {
+func (cache *RealtimeCache) GetPendingStateCache() (state.StateReader, uint64) {
 	if cache.pendingBlocks.Size() == 0 {
-		return nil, fmt.Errorf("no pending blocks in pending cache")
+		return nil, 0
 	}
 	pendingHeight := cache.GetPendingHeight()
-	return cache.GetPendingBlockStateCache(pendingHeight)
+	stateReader, err := cache.GetPendingBlockStateCache(pendingHeight)
+	if err != nil {
+		return nil, 0
+	}
+	return stateReader, pendingHeight
 }
 
-func (cache *RealtimeCache) GetLatestStateCache() state.StateReader {
-	stateReader, _, err := cache.State.GetStateReaderWithHeight(cache.GetHighestConfirmHeight())
+func (cache *RealtimeCache) GetLatestStateCache() (state.StateReader, uint64) {
+	confirmHeight := cache.GetHighestConfirmHeight()
+	stateReader, err := cache.State.GetConfirmBlockStateCache(confirmHeight)
 	if err != nil {
-		return nil
+		return nil, 0
 	}
-	return stateReader
+	return stateReader, confirmHeight
 }
 
-func (cache *RealtimeCache) GetStateReaderByHeight(blockNum uint64) state.StateReader {
-	stateReader, _, err := cache.State.GetStateReaderWithHeight(blockNum)
-	if err != nil {
-		return nil
+func (cache *RealtimeCache) GetStateCacheByHeight(blockNum uint64) state.StateReader {
+	var reader state.StateReader
+	var err error
+
+	confirmHeight := cache.GetHighestConfirmHeight()
+	if blockNum > confirmHeight {
+		reader, err = cache.GetPendingBlockStateCache(blockNum)
+		if err != nil {
+			reader = nil
+		}
 	}
-	return stateReader
+	if reader == nil {
+		reader, err = cache.State.GetConfirmBlockStateCache(blockNum)
+		if err != nil {
+			reader = nil
+		}
+	}
+	return reader
 }
 
 // -------------- Debug operations --------------

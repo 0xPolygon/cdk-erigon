@@ -1,13 +1,11 @@
 package cache
 
 import (
-	"context"
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"sync"
 
-	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/crypto"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
@@ -19,19 +17,14 @@ var emptyCodeHash = crypto.Keccak256(nil)
 // execution logic. The highest block number in the block state cache holds the latest
 // confirmed realtime state.
 type StateCache struct {
-	ctx context.Context
-
 	cacheLock    sync.RWMutex
 	globalHeight uint64
-	globalCache  *GlobalStateCache
 	blocksCache  map[uint64]*BlockStateCache
 }
 
-func NewStateCache(ctx context.Context, db kv.RoDB, globalSize int, blocksCacheSize int) *StateCache {
+func NewStateCache(blocksCacheSize int) *StateCache {
 	return &StateCache{
-		ctx:          ctx,
 		globalHeight: 0,
-		globalCache:  NewGlobalStateCache(ctx, db, globalSize),
 		blocksCache:  make(map[uint64]*BlockStateCache, blocksCacheSize),
 	}
 }
@@ -58,25 +51,22 @@ func (cache *StateCache) Clear() {
 		delete(cache.blocksCache, blockNum)
 	}
 
-	// Clear global state cache
-	cache.globalCache.Clear()
+	// Clear global height
 	cache.globalHeight = 0
 }
 
-func (cache *StateCache) GetStateReaderWithHeight(blockNum uint64) (state.StateReader, bool, error) {
+func (cache *StateCache) GetConfirmBlockStateCache(blockNum uint64) (*BlockStateCache, error) {
 	cache.cacheLock.RLock()
 	defer cache.cacheLock.RUnlock()
 
-	if blockNum < cache.globalHeight {
-		return nil, false, fmt.Errorf("block number %d is less than global height %d", blockNum, cache.globalHeight)
-	} else if blockNum == cache.globalHeight {
-		return cache.globalCache, true, nil
+	if blockNum <= cache.globalHeight {
+		return nil, fmt.Errorf("block number %d is less than or equal to state cache global height %d", blockNum, cache.globalHeight)
 	} else {
 		bc, exists := cache.blocksCache[blockNum]
 		if !exists {
-			return nil, false, fmt.Errorf("block number %d is not in the blocks cache", blockNum)
+			return nil, fmt.Errorf("block number %d not found in the state cache", blockNum)
 		}
-		return bc, false, nil
+		return bc, nil
 	}
 }
 
@@ -109,22 +99,21 @@ func (cache *StateCache) FlushBlock(blockNum uint64) error {
 	for flushHeight := cache.globalHeight + 1; flushHeight <= blockNum; flushHeight++ {
 		bc, exists := cache.blocksCache[flushHeight]
 		if !exists {
-			return fmt.Errorf("failed to flush block %d, block state cache not found in state cache. global cache height: %d", flushHeight, cache.globalHeight)
+			return fmt.Errorf("failed to flush block %d, block state cache not found in state cache. globalHeight: %d", flushHeight, cache.globalHeight)
 		}
 
-		// Verify the previous state reader is global for the first block in sequence
-		if !bc.isPrevGlobal.Load() {
-			return fmt.Errorf("failed to flush block %d, previous state reader is not global. global cache height: %d", flushHeight, cache.globalHeight)
+		// Verify that the block cache is head (previous state reader is nil)
+		if bc.GetPrevBlockCache() != nil {
+			return fmt.Errorf("failed to flush block %d, block is not at head, prev state reader is not nil. globalHeight: %d", flushHeight, cache.globalHeight)
 		}
 
-		// Flush global cache with this block's state
-		cache.globalCache.FlushState(bc.cache)
+		// Flush global height
 		cache.globalHeight = flushHeight
 
-		// Update linked list - set the next block's previous reader to global cache
-		nbc := bc.nextBlockCache
+		// Update linked list - set the next block previous reader to head
+		nbc := bc.GetNextBlockCache()
 		if nbc != nil {
-			nbc.SetPrevStateReader(cache.globalCache, true)
+			nbc.SetPrevBlockCache(nil)
 		}
 
 		// Remove from map and clear
@@ -229,9 +218,7 @@ func (cache *StateCache) flattenState() (*plainStateCache, error) {
 	cache.cacheLock.RLock()
 	defer cache.cacheLock.RUnlock()
 
-	flatten := newPlainStateCache(DefaultGlobalStateCacheSize)
-	flatten.Flatten(cache.globalCache.cache)
-
+	flatten := newPlainStateCache(DefaultStateBlockCacheSize * DefaultPlainStateCacheSize)
 	blockNum := cache.globalHeight + 1
 	for {
 		bc, exists := cache.blocksCache[blockNum]

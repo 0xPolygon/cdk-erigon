@@ -20,7 +20,6 @@ import (
 	bortypes "github.com/ledgerwatch/erigon/polygon/bor/types"
 	"github.com/ledgerwatch/erigon/turbo/engineapi/engine_helpers"
 	"github.com/ledgerwatch/erigon/turbo/services"
-	realtimeCache "github.com/ledgerwatch/erigon/zk/realtime/cache"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	"github.com/ledgerwatch/log/v3"
 
@@ -36,19 +35,17 @@ type FinishCfg struct {
 	forkValidator *engine_helpers.ForkValidator
 
 	// For X Layer, realtime
-	realtimeCache      *realtimeCache.RealtimeCache
 	realtimeEnable     bool
 	realtimeFinishChan chan realtimeTypes.FinishedEntry
 }
 
-func StageFinishCfg(db kv.RwDB, tmpDir string, forkValidator *engine_helpers.ForkValidator, realtimeCache *realtimeCache.RealtimeCache, realtimeEnable bool, realtimeFinishChan chan realtimeTypes.FinishedEntry) FinishCfg {
+func StageFinishCfg(db kv.RwDB, tmpDir string, forkValidator *engine_helpers.ForkValidator, realtimeEnable bool, realtimeFinishChan chan realtimeTypes.FinishedEntry) FinishCfg {
 	return FinishCfg{
 		db:            db,
 		tmpDir:        tmpDir,
 		forkValidator: forkValidator,
 
 		// For X Layer, realtime
-		realtimeCache:      realtimeCache,
 		realtimeEnable:     realtimeEnable,
 		realtimeFinishChan: realtimeFinishChan,
 	}
@@ -104,7 +101,7 @@ func FinishForward(s *StageState, tx kv.RwTx, cfg FinishCfg, initialCycle bool) 
 	}
 
 	// For X Layer, realtime
-	if cfg.realtimeEnable && cfg.realtimeFinishChan != nil && cfg.realtimeCache != nil {
+	if cfg.realtimeEnable && cfg.realtimeFinishChan != nil {
 		cfg.realtimeFinishChan <- realtimeTypes.FinishedEntry{
 			Height: executionAt,
 		}

@@ -18,7 +18,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync/freezeblocks"
 	"github.com/ledgerwatch/erigon/zk/datastream/server"
 	"github.com/ledgerwatch/erigon/zk/l1infotree"
-	realtimeCache "github.com/ledgerwatch/erigon/zk/realtime/cache"
 	realtimeTypes "github.com/ledgerwatch/erigon/zk/realtime/types"
 	zkStages "github.com/ledgerwatch/erigon/zk/stages"
 	"github.com/ledgerwatch/erigon/zk/syncer"
@@ -44,7 +43,6 @@ func NewDefaultZkStages(ctx context.Context,
 	dataStreamServer server.DataStreamServer,
 	infoTreeUpdater *l1infotree.Updater,
 	// For X Layer, realtime
-	realtimeCache *realtimeCache.RealtimeCache,
 	realtimeFinishChan chan realtimeTypes.FinishedEntry,
 ) []*stagedsync.Stage {
 	dirs := cfg.Dirs
@@ -105,7 +103,7 @@ func NewDefaultZkStages(ctx context.Context,
 		stagedsync.StageCallTracesCfg(db, cfg.Prune, 0, dirs.Tmp),
 		stagedsync.StageTxLookupCfg(db, cfg.Prune, dirs.Tmp, controlServer.ChainConfig.Bor, blockReader),
 		// For X Layer, realtime
-		stagedsync.StageFinishCfg(db, dirs.Tmp, forkValidator, realtimeCache, cfg.XLayer.Realtime.Enable, realtimeFinishChan),
+		stagedsync.StageFinishCfg(db, dirs.Tmp, forkValidator, cfg.XLayer.Realtime.Enable, realtimeFinishChan),
 		runInTestMode)
 }
 
@@ -182,6 +180,6 @@ func NewSequencerZkStages(ctx context.Context,
 		stagedsync.StageCallTracesCfg(db, cfg.Prune, 0, dirs.Tmp),
 		stagedsync.StageTxLookupCfg(db, cfg.Prune, dirs.Tmp, controlServer.ChainConfig.Bor, blockReader),
 		// For X Layer, realtime
-		stagedsync.StageFinishCfg(db, dirs.Tmp, forkValidator, nil, false, nil),
+		stagedsync.StageFinishCfg(db, dirs.Tmp, forkValidator, false, nil),
 		runInTestMode)
 }

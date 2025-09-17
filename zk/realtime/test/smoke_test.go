@@ -215,7 +215,7 @@ func TestRealtimeRPC(t *testing.T) {
 		transferAmount := new(big.Int).Mul(big.NewInt(1), big.NewInt(1e18)) // Adjust for token decimals (18 in this case)
 		nonce, err := client.RealtimeGetTransactionCount(fromAddress)
 		require.NoError(t, err)
-		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, testAddress, erc20Address, nonce)
+		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, nil, testAddress, erc20Address, nonce)
 		err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
 		require.NoError(t, err)
 
@@ -231,7 +231,7 @@ func TestRealtimeRPC(t *testing.T) {
 		require.NotEqual(t, startValue, correctValue)
 
 		// Send balance transfer
-		signedTx = erc20TransferTx(t, ctx, privateKey, client, transferAmount, testAddress, erc20Address, nonce+1)
+		signedTx = erc20TransferTx(t, ctx, privateKey, client, transferAmount, nil, testAddress, erc20Address, nonce+1)
 		err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
 		require.NoError(t, err)
 
@@ -241,7 +241,7 @@ func TestRealtimeRPC(t *testing.T) {
 		require.Equal(t, "0x00000000000000000000000000000000000000000052b7d2c1069f6b95380000", endValue, fmt.Sprintf("Balance of %s should be equal to 9.9999998e+25 after transfer", fromAddress))
 
 		// Get block height specific state
-		testValue, err := client.EthGetTokenBalance(ctx, testAddress, erc20Address, new(big.Int).SetUint64(targetBlockNumber))
+		testValue, err := GetErc20Balance(ctx, client, testAddress, erc20Address, new(big.Int).SetUint64(targetBlockNumber))
 		require.NoError(t, err)
 		require.NotEqual(t, testValue, correctValue)
 	})
@@ -405,7 +405,7 @@ func TestRealtimeRPC(t *testing.T) {
 		transferAmount := new(big.Int).Mul(big.NewInt(1), big.NewInt(1e18))
 		nonce, err := client.RealtimeGetTransactionCount(fromAddress)
 		require.NoError(t, err)
-		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, testAddress, erc20Address, nonce)
+		signedTx := erc20TransferTx(t, ctx, privateKey, client, transferAmount, nil, testAddress, erc20Address, nonce)
 		err = WaitTxToBeMined(ctx, client, signedTx, DefaultTimeoutTxToBeMined)
 		require.NoError(t, err)
 

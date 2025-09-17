@@ -65,7 +65,7 @@ func (api *RealtimeAPIImpl) GetBlockReceipts(ctx context.Context, number rpc.Blo
 		return api.APIImpl.GetBlockReceipts(ctx, number)
 	}
 
-	blockNum, err := api.getBlockNumberOrHash(number)
+	blockNum, _, _, err := api.getBlockNumberOrHash(number)
 	if err != nil {
 		return api.APIImpl.GetBlockReceipts(ctx, number)
 	}
