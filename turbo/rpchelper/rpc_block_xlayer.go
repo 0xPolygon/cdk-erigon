@@ -193,7 +193,7 @@ func updateFinalizedBatchNumber(db kv.RoDB) {
 // updateBlockGasLimit fetches and updates the block gas limit from sequencer
 func updateBlockGasLimit(isInitialFetch bool) {
 	if gasLimit, err := getBlockGasLimitFromSequencer(sequencerRpcUrl); err != nil {
-		log.Warn("failed to get block gas limit from sequencer", "err", err)
+		log.Debug("failed to get block gas limit from sequencer", "err", err)
 		// Only set default value on initial fetch
 		if isInitialFetch {
 			newVal := uint64(1000_0000)

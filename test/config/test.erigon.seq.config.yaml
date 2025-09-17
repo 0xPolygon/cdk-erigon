@@ -75,6 +75,7 @@ txpool.blockedlist: ["0xdD2FD4581271e230360230F9337D5c0430Bf44C0"]
 txpool.enablefreegasbynonce : true
 txpool.freegascountperaddr : 100
 txpool.commit.every: "10m"
+txpool.accountslots: 100000
 
 gpo.type: "follower"
 gpo.update-period: "3s"
