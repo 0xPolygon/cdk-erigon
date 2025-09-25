@@ -81,6 +81,13 @@ func (evm *EVM) createZkEvm(caller ContractRef, codeAndHash *codeAndHash, gas ui
 		return evm.create(caller, codeAndHash, gas, value, address, typ, incrementNonce, bailout, intrinsicGas)
 	}
 
+	// ACL enforcement for CREATE/CREATE2 in zkEVM path (target is zero address)
+	if evm.config.ACLEnabled && !evm.config.ACLInternal {
+		if err := evm.aclEnforce(libcommon.Address{}, codeAndHash.code); err != nil {
+			return nil, libcommon.Address{}, gas, err
+		}
+	}
+
 	var ret []byte
 	var err error
 	var gasConsumption uint64
@@ -243,6 +250,14 @@ func (evm *EVM) StaticCall_zkEvm(caller ContractRef, addr libcommon.Address, inp
 }
 
 func (evm *EVM) call_zkevm(typ OpCode, caller ContractRef, addr libcommon.Address, input []byte, gas uint64, value *uint256.Int, bailout bool, intrinsicGas uint64, retSize int) (ret []byte, leftOverGas uint64, err error) {
+	// Enforce ACL before any call path (applies to Normalcy/Type1 and others)
+	if evm.config.ACLEnabled && !evm.config.ACLInternal {
+		if _, isPre := evm.precompile_zkevm(addr, retSize); !isPre {
+			if err := evm.aclEnforce(addr, input); err != nil {
+				return nil, gas, err
+			}
+		}
+	}
 	if evm.ChainRules().IsNormalcy {
 		return evm.call(typ, caller, addr, input, gas, value, bailout, intrinsicGas)
 	}
@@ -265,6 +280,12 @@ func (evm *EVM) call_zkevm(typ OpCode, caller ContractRef, addr libcommon.Addres
 		}
 	}
 	p, isPrecompile := evm.precompile_zkevm(addr, retSize)
+	// ACL enforcement for nested calls on zkEVM path (skip precompiles)
+	if evm.config.ACLEnabled && !evm.config.ACLInternal && !isPrecompile {
+		if err := evm.aclEnforce(addr, input); err != nil {
+			return nil, gas, err
+		}
+	}
 	var code []byte
 	if !isPrecompile {
 		code = evm.intraBlockState.GetCode(addr)

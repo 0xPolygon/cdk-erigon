@@ -49,6 +49,8 @@ type Config struct {
     ACLEnabled  bool
     ACLAddress  libcommon.Address
     ACLFailOpen bool // if true, bypass on ACL call failure
+    // ACLInternal disables ACL enforcement for internal ACL staticcalls to avoid recursion.
+    ACLInternal bool
 }
 
 func NewTraceVmConfig() Config {
