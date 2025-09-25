@@ -143,15 +143,15 @@ func ComputeTxEnv(ctx context.Context, engine consensus.EngineReader, block *typ
 // executes the given message in the provided environment. The return value will
 // be tracer dependent.
 func TraceTx(
-	ctx context.Context,
-	message core.Message,
-	blockCtx evmtypes.BlockContext,
-	txCtx evmtypes.TxContext,
-	ibs evmtypes.IntraBlockState,
-	config *tracers.TraceConfig_ZkEvm,
-	chainConfig *chain.Config,
-	stream *jsoniter.Stream,
-	callTimeout time.Duration,
+    ctx context.Context,
+    message core.Message,
+    blockCtx evmtypes.BlockContext,
+    txCtx evmtypes.TxContext,
+    ibs evmtypes.IntraBlockState,
+    config *tracers.TraceConfig_ZkEvm,
+    chainConfig *chain.Config,
+    stream *jsoniter.Stream,
+    callTimeout time.Duration,
 ) error {
 	// Assemble the structured logger or the JavaScript tracer
 	var (
@@ -290,6 +290,162 @@ func TraceTx(
 		}
 	}
 	return nil
+}
+
+// TraceTxWithVMConfig is like TraceTx, but allows the caller to supply a base vm.Config
+// (e.g., to propagate ACL settings). Debug and Tracer fields are overridden for tracing.
+func TraceTxWithVMConfig(
+    ctx context.Context,
+    message core.Message,
+    blockCtx evmtypes.BlockContext,
+    txCtx evmtypes.TxContext,
+    ibs evmtypes.IntraBlockState,
+    config *tracers.TraceConfig_ZkEvm,
+    chainConfig *chain.Config,
+    stream *jsoniter.Stream,
+    callTimeout time.Duration,
+    baseVM vm.Config,
+) error {
+    // Assemble the structured logger or the JavaScript tracer
+    var (
+        tracer vm.EVMLogger
+        err    error
+    )
+    var streaming bool
+
+    var counterCollector *vm.TransactionCounter
+    var executionCounters *vm.CounterCollector
+    if config != nil {
+        counterCollector = config.CounterCollector
+        if counterCollector != nil {
+            executionCounters = counterCollector.ExecutionCounters()
+        }
+    }
+    switch {
+    case config != nil && config.Tracer != nil:
+        // Define a meaningful timeout of a single transaction trace
+        timeout := callTimeout
+        if config.Timeout != nil {
+            if timeout, err = time.ParseDuration(*config.Timeout); err != nil {
+                stream.WriteNil()
+                return err
+            }
+        }
+        // Construct the JavaScript tracer to execute with
+        cfg := json.RawMessage("{}")
+        if config != nil && config.TracerConfig != nil {
+            cfg = *config.TracerConfig
+        }
+        if tracer, err = tracers.New(*config.Tracer, &tracers.Context{
+            TxHash:            txCtx.TxHash,
+            Txn:               txCtx.Txn,
+            CumulativeGasUsed: txCtx.CumulativeGasUsed,
+            BlockNum:          blockCtx.BlockNumber,
+        }, cfg); err != nil {
+            stream.WriteNil()
+            return err
+        }
+        // Handle timeouts and RPC cancellations
+        deadlineCtx, cancel := context.WithTimeout(ctx, timeout)
+        go func() {
+            <-deadlineCtx.Done()
+            tracer.(tracers.Tracer).Stop(errors.New("execution timeout"))
+        }()
+        defer cancel()
+        streaming = false
+
+    case config == nil:
+        tracer = logger.NewJsonStreamLogger_ZkEvm(nil, ctx, stream, executionCounters)
+        streaming = true
+
+    default:
+        tracer = logger.NewJsonStreamLogger_ZkEvm(config.LogConfig, ctx, stream, executionCounters)
+        streaming = true
+    }
+
+    // Build zkEVM config from provided base config, overriding for tracing
+    baseVM.Debug = true
+    baseVM.Tracer = tracer
+    zkConfig := vm.NewZkConfig(baseVM, executionCounters)
+
+    // Run the transaction with tracing enabled.
+    vmenv := vm.NewZkEVM(blockCtx, txCtx, ibs, chainConfig, zkConfig)
+    var refunds = true
+    if config != nil && config.NoRefunds != nil && *config.NoRefunds {
+        refunds = false
+    }
+    if streaming {
+        stream.WriteObjectStart()
+
+        if executionCounters != nil {
+            stream.WriteObjectField("smtLevels")
+            stream.WriteInt(executionCounters.GetSmtLevels())
+            stream.WriteMore()
+        }
+
+        stream.WriteObjectField("structLogs")
+        stream.WriteArrayStart()
+    }
+
+    var result *evmtypes.ExecutionResult
+    result, err = core.ApplyMessage(vmenv, message, new(core.GasPool).AddGas(message.Gas()), refunds, false /* gasBailout */)
+
+    if err != nil {
+        if streaming {
+            stream.WriteArrayEnd()
+            stream.WriteObjectEnd()
+            stream.WriteMore()
+            stream.WriteObjectField("resultHack") // higher-level func will assing it to NULL
+        } else {
+            stream.WriteNil()
+        }
+        return fmt.Errorf("tracing failed: %w", err)
+    }
+    // Depending on the tracer type, format and return the output
+    if streaming {
+        stream.WriteArrayEnd()
+        stream.WriteMore()
+        stream.WriteObjectField("gas")
+        stream.WriteUint64(result.UsedGas)
+        stream.WriteMore()
+        stream.WriteObjectField("failed")
+        stream.WriteBool(result.Failed())
+        stream.WriteMore()
+        // If the result contains a revert reason, return it.
+        returnVal := hex.EncodeToString(result.Return())
+        if len(result.Revert()) > 0 {
+            returnVal = hex.EncodeToString(result.Revert())
+        }
+        stream.WriteObjectField("returnValue")
+        stream.WriteString(returnVal)
+
+        if config != nil && config.CounterCollector != nil {
+            differences := config.CounterCollector.CombineCounters().UsedAsMap()
+
+            stream.WriteMore()
+            stream.WriteObjectField("counters")
+            stream.WriteObjectStart()
+            first := true
+            for key, value := range differences {
+                if first {
+                    first = false
+                } else {
+                    stream.WriteMore()
+                }
+                stream.WriteObjectField(key)
+                stream.WriteInt(value)
+            }
+            stream.WriteObjectEnd()
+        }
+        stream.WriteObjectEnd()
+    } else {
+        if r, err1 := tracer.(tracers.Tracer).GetResult(); err1 == nil {
+            stream.Write(r)
+        } else {
+            return err1
+        }
+    }
+    return nil
 }
 
 func AssembleTracer(

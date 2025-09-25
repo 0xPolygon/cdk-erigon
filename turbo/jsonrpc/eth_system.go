@@ -1,18 +1,19 @@
 package jsonrpc
 
 import (
-	"context"
-	"math/big"
+    "context"
+    "math/big"
 
-	"github.com/erigontech/erigon-lib/chain"
-	"github.com/erigontech/erigon-lib/common"
-	"github.com/erigontech/erigon-lib/common/hexutil"
-	"github.com/erigontech/erigon-lib/kv"
-	"github.com/erigontech/erigon/consensus/misc"
-	"github.com/erigontech/erigon/core/rawdb"
-	"github.com/erigontech/erigon/core/types"
-	"github.com/erigontech/erigon/eth/ethconfig"
-	"github.com/erigontech/erigon/eth/gasprice"
+    "github.com/erigontech/erigon-lib/chain"
+    "github.com/erigontech/erigon-lib/common"
+    "github.com/erigontech/erigon-lib/common/hexutil"
+    "github.com/erigontech/erigon-lib/kv"
+    "github.com/erigontech/erigon-lib/log/v3"
+    "github.com/erigontech/erigon/consensus/misc"
+    "github.com/erigontech/erigon/core/rawdb"
+    "github.com/erigontech/erigon/core/types"
+    "github.com/erigontech/erigon/eth/ethconfig"
+    "github.com/erigontech/erigon/eth/gasprice"
 
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/rpc"
@@ -79,10 +80,11 @@ func (api *APIImpl) Syncing(ctx context.Context) (interface{}, error) {
 
 // ChainId implements eth_chainId. Returns the current ethereum chainId.
 func (api *APIImpl) ChainId(ctx context.Context) (hexutil.Uint64, error) {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return 0, err
-	}
+    log.Info("ACL ctx chainId", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen)
+    tx, err := api.db.BeginRo(ctx)
+    if err != nil {
+        return 0, err
+    }
 	defer tx.Rollback()
 
 	chainConfig, err := api.chainConfig(ctx, tx)
@@ -130,10 +132,11 @@ func (api *APIImpl) GasPrice_deprecated(ctx context.Context) (*hexutil.Big, erro
 
 // MaxPriorityFeePerGas returns a suggestion for a gas tip cap for dynamic fee transactions.
 func (api *APIImpl) MaxPriorityFeePerGas(ctx context.Context) (*hexutil.Big, error) {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return nil, err
-	}
+    log.Info("ACL ctx maxPriorityFeePerGas", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen)
+    tx, err := api.db.BeginRo(ctx)
+    if err != nil {
+        return nil, err
+    }
 	defer tx.Rollback()
 	oracle := gasprice.NewOracle(NewGasPriceOracleBackend(tx, api.BaseAPI), ethconfig.Defaults.GPO, api.gasCache)
 	tipcap, err := oracle.SuggestTipCap(ctx)
@@ -153,10 +156,11 @@ type feeHistoryResult struct {
 }
 
 func (api *APIImpl) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (*feeHistoryResult, error) {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return nil, err
-	}
+    log.Info("ACL ctx feeHistory", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen)
+    tx, err := api.db.BeginRo(ctx)
+    if err != nil {
+        return nil, err
+    }
 	defer tx.Rollback()
 	oracle := gasprice.NewOracle(NewGasPriceOracleBackend(tx, api.BaseAPI), ethconfig.Defaults.GPO, api.gasCache)
 

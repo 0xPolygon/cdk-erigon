@@ -27,11 +27,16 @@ import (
 )
 
 func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
+    if api.config != nil {
+        log.Info("ACL debug TraceBlock", "enabled", api.config.ACL.Enabled, "address", api.config.ACL.ContractAddress, "failOpen", api.config.ACL.FailOpen)
+    } else {
+        log.Info("ACL debug TraceBlock", "enabled", false, "address", common.Address{}, "failOpen", false)
+    }
+    tx, err := api.db.BeginRo(ctx)
+    if err != nil {
+        stream.WriteNil()
+        return err
+    }
 	defer tx.Rollback()
 	var (
 		block    *types.Block
@@ -98,11 +103,16 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 }
 
 func (api *PrivateDebugAPIImpl) TraceCallMany(ctx context.Context, bundles []Bundle, simulateContext StateContext, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {
-	var (
-		hash               common.Hash
-		replayTransactions types.Transactions
-		evm                *vm.EVM
-		blockCtx           evmtypes.BlockContext
+    if api.config != nil {
+        log.Info("ACL debug TraceCallMany", "enabled", api.config.ACL.Enabled, "address", api.config.ACL.ContractAddress, "failOpen", api.config.ACL.FailOpen)
+    } else {
+        log.Info("ACL debug TraceCallMany", "enabled", false, "address", common.Address{}, "failOpen", false)
+    }
+    var (
+        hash               common.Hash
+        replayTransactions types.Transactions
+        evm                *vm.EVM
+        blockCtx           evmtypes.BlockContext
 		txCtx              evmtypes.TxContext
 		overrideBlockHash  map[uint64]common.Hash
 		baseFee            uint256.Int
@@ -394,11 +404,16 @@ func (api *PrivateDebugAPIImpl) TraceTransactionCounters(ctx context.Context, ha
 }
 
 func (api *PrivateDebugAPIImpl) TraceBatchByNumber(ctx context.Context, batchNum rpc.BlockNumber, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
+    if api.config != nil {
+        log.Info("ACL debug TraceBatchByNumber", "enabled", api.config.ACL.Enabled, "address", api.config.ACL.ContractAddress, "failOpen", api.config.ACL.FailOpen, "batch", batchNum)
+    } else {
+        log.Info("ACL debug TraceBatchByNumber", "enabled", false, "address", common.Address{}, "failOpen", false, "batch", batchNum)
+    }
+    tx, err := api.db.BeginRo(ctx)
+    if err != nil {
+        stream.WriteNil()
+        return err
+    }
 	defer tx.Rollback()
 
 	reader := hermez_db.NewHermezDbReader(tx)

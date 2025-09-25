@@ -20,13 +20,14 @@ package utils
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/erigontech/erigon/core/types"
 	"math/big"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/erigontech/erigon/core/types"
 
 	"github.com/erigontech/erigon/zk/zk_config"
 	"github.com/erigontech/erigon/zk/zk_config/cfg_dynamic_genesis"
@@ -2704,6 +2705,18 @@ func LogActiveZkevmFlags(logger log.Logger, ctx *cli.Context) {
 				continue
 			}
 			logger.Info("[Flags] Zkevm flag set from config", "name", flagName, "value", ctx.Generic(flagName))
+		}
+	}
+}
+
+// LogActiveACLFlags prints any acl.* flags that are set (via CLI or config file)
+// on startup, mirroring the ZkEVM flag logging behaviour. This helps verify
+// that ACL enforcement is configured as expected (enable/address/failopen).
+func LogActiveACLFlags(logger log.Logger, ctx *cli.Context) {
+	for _, flag := range ctx.App.Flags {
+		flagName := flag.Names()[0]
+		if strings.HasPrefix(flagName, "acl.") && ctx.IsSet(flagName) {
+			logger.Info("[Flags] ACL flag set from config", "name", flagName, "value", ctx.Generic(flagName))
 		}
 	}
 }
