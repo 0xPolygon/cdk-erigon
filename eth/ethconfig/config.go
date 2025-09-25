@@ -106,7 +106,8 @@ var Defaults = Config{
 		Produce:    true,
 	},
 
-	Zk: &Zk{},
+    Zk:  &Zk{},
+    ACL: DefaultACLConfig,
 }
 
 func init() {
@@ -258,6 +259,9 @@ type Config struct {
 
 	//[zkevm]
 	*Zk
+
+	// ACL firewall configuration (MVP)
+	ACL ACLConfig
 
 	ForcePartialCommit bool
 
