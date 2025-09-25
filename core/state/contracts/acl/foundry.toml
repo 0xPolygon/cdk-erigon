@@ -1,0 +1,21 @@
+[profile.default]
+src = "."
+out = "out"
+script = "script"
+solc_version = "0.8.23"
+evm_version = "paris"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+libs = [
+    "../../../../lib/openzeppelin-contracts",
+    "../../../../lib/openzeppelin-contracts-upgradeable",
+    "../../../../zk/privacy/lib/openzeppelin-contracts/lib",
+    "../../../../zk/privacy/lib/openzeppelin-contracts-upgradeable/lib"
+]
+fs_permissions = [
+  { access = "read-write", path = "./out" }
+]
+
+[rpc_endpoints]
+devnet = "${RPC_URL}"

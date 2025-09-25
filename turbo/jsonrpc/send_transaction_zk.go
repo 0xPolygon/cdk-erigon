@@ -9,6 +9,7 @@ import (
 	zkchainconfig "github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/hexutility"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/zk/sequencer"
 	"github.com/erigontech/erigon/zkevm/jsonrpc/client"
 )
@@ -22,6 +23,8 @@ func (api *APIImpl) isZkNonSequencer(chainId *big.Int) bool {
 }
 
 func (api *APIImpl) sendTxZk(rpcUrl string, encodedTx hexutility.Bytes, chainId uint64) (common.Hash, error) {
+	// Log ACL config when forwarding tx to sequencer/pool manager
+	log.Info("ACL forward sendRawTransaction", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen, "rpcUrl", rpcUrl)
 	res, err := client.JSONRPCCall(rpcUrl, "eth_sendRawTransaction", encodedTx)
 	if err != nil {
 		return common.Hash{}, err

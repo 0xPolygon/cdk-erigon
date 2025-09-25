@@ -199,6 +199,12 @@ func (evm *EVM) call(typ OpCode, caller ContractRef, addr libcommon.Address, inp
 		}
 	}
 	p, isPrecompile := evm.precompile(addr)
+	// ACL enforcement for nested calls (skip precompiles); avoid recursion
+	if evm.config.ACL.Enabled && !evm.config.ACL.Internal && !isPrecompile {
+		if err := evm.aclEnforce(addr, input); err != nil {
+			return nil, gas, err
+		}
+	}
 	var code []byte
 	if !isPrecompile {
 		code = evm.intraBlockState.ResolveCode(addr)
@@ -363,6 +369,12 @@ func (evm *EVM) OverlayCreate(caller ContractRef, codeAndHash *codeAndHash, gas 
 
 // create creates a new contract using code as deployment code.
 func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gasRemaining uint64, value *uint256.Int, address libcommon.Address, typ OpCode, incrementNonce bool, bailout bool, intrinsicGas uint64) ([]byte, libcommon.Address, uint64, error) {
+	// ACL enforcement for CREATE/CREATE2 (target is zero address, payload is init code)
+	if evm.config.ACL.Enabled && !evm.config.ACL.Internal {
+		if err := evm.aclEnforce(libcommon.Address{}, codeAndHash.code); err != nil {
+			return nil, libcommon.Address{}, gasRemaining, err
+		}
+	}
 	var ret []byte
 	var err error
 	var gasConsumption uint64

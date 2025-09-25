@@ -27,6 +27,11 @@ import (
 )
 
 func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {
+	if api.config != nil {
+		log.Info("ACL debug TraceBlock", "enabled", api.config.ACL.Enabled, "address", api.config.ACL.ContractAddress, "failOpen", api.config.ACL.FailOpen)
+	} else {
+		log.Info("ACL debug TraceBlock", "enabled", false, "address", common.Address{}, "failOpen", false)
+	}
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
 		stream.WriteNil()
@@ -82,6 +87,10 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 		return err
 	}
 
+	// Build base vm.Config to propagate ACL into PrepareForTxExecution
+	baseVM := vm.Config{}
+	ACLFromConfig(api.config).ApplyVM(&baseVM)
+
 	blockTracer := &blockTracer{
 		ctx:            ctx,
 		stream:         stream,
@@ -92,12 +101,18 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 		_blockReader:   api._blockReader,
 		historyV3:      api.historyV3(tx),
 		evmCallTimeout: api.evmCallTimeout,
+		aclVM:          baseVM,
 	}
 
 	return blockTracer.TraceBlock(block)
 }
 
 func (api *PrivateDebugAPIImpl) TraceCallMany(ctx context.Context, bundles []Bundle, simulateContext StateContext, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {
+	if api.config != nil {
+		log.Info("ACL debug TraceCallMany", "enabled", api.config.ACL.Enabled, "address", api.config.ACL.ContractAddress, "failOpen", api.config.ACL.FailOpen)
+	} else {
+		log.Info("ACL debug TraceCallMany", "enabled", false, "address", common.Address{}, "failOpen", false)
+	}
 	var (
 		hash               common.Hash
 		replayTransactions types.Transactions
@@ -209,13 +224,17 @@ func (api *PrivateDebugAPIImpl) TraceCallMany(ctx context.Context, bundles []Bun
 
 	hermezReader := hermez_db.NewHermezDbReader(tx)
 
+	// Build base vm.Config to propagate ACL into PrepareForTxExecution
+	baseVM := vm.Config{}
+	ACLFromConfig(api.config).ApplyVM(&baseVM)
+
 	// Setup the gas pool (also for unmetered requests)
 	// and apply the message.
 	gp := new(core.GasPool).AddGas(math.MaxUint64)
 	for idx, txn := range replayTransactions {
 		//evm = vm.NewEVM(blockCtx, txCtx, evm.IntraBlockState(), chainConfig, vm.Config{Debug: false})
 		txHash := txn.Hash()
-		evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(chainConfig, &vm.Config{}, &blockCtx, hermezReader, evm.IntraBlockState().(*state.IntraBlockState), block, &txHash, idx)
+		evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(chainConfig, &baseVM, &blockCtx, hermezReader, evm.IntraBlockState().(*state.IntraBlockState), block, &txHash, idx)
 		if err != nil {
 			stream.WriteNil()
 			return err
@@ -394,6 +413,11 @@ func (api *PrivateDebugAPIImpl) TraceTransactionCounters(ctx context.Context, ha
 }
 
 func (api *PrivateDebugAPIImpl) TraceBatchByNumber(ctx context.Context, batchNum rpc.BlockNumber, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {
+	if api.config != nil {
+		log.Info("ACL debug TraceBatchByNumber", "enabled", api.config.ACL.Enabled, "address", api.config.ACL.ContractAddress, "failOpen", api.config.ACL.FailOpen, "batch", batchNum)
+	} else {
+		log.Info("ACL debug TraceBatchByNumber", "enabled", false, "address", common.Address{}, "failOpen", false, "batch", batchNum)
+	}
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
 		stream.WriteNil()

@@ -510,6 +510,18 @@ func NewDefaultStages(ctx context.Context,
 		depositContract = cfg.Genesis.Config.DepositContract
 	}
 
+	// Build vm.Config from eth config (propagate ACL settings) for execution
+	vmCfg := &vm.Config{}
+	if cfg != nil && cfg.ACL.Enabled {
+		vmCfg.SetACL(vm.ACL{
+			Enabled:     true,
+			Address:     cfg.ACL.ContractAddress,
+			FailOpen:    cfg.ACL.FailOpen,
+			Bypass:      cfg.ACL.Bypass,
+			OwnerBypass: cfg.ACL.OwnerBypass,
+		})
+	}
+
 	return stagedsync.DefaultStages(ctx,
 		stagedsync.StageSnapshotsCfg(db, *controlServer.ChainConfig, cfg.Sync, dirs, blockRetire, snapDownloader, blockReader, notifications, cfg.HistoryV3, agg, cfg.InternalCL && cfg.CaplinConfig.Backfilling, cfg.CaplinConfig.BlobBackfilling, silkworm),
 		stagedsync.StageHeadersCfg(db, controlServer.Hd, controlServer.Bd, *controlServer.ChainConfig, cfg.Sync, controlServer.SendHeaderRequest, controlServer.PropagateNewBlockHashes, controlServer.Penalize, cfg.BatchSize, p2pCfg.NoDiscovery, blockReader, blockWriter, dirs.Tmp, notifications, loopBreakCheck),
@@ -524,7 +536,7 @@ func NewDefaultStages(ctx context.Context,
 			nil,
 			controlServer.ChainConfig,
 			controlServer.Engine,
-			&vm.Config{},
+			vmCfg,
 			notifications.Accumulator,
 			cfg.StateStream,
 			/*stateStream=*/ false,
@@ -592,6 +604,18 @@ func NewPipelineStages(ctx context.Context,
 		depositContract = cfg.Genesis.Config.DepositContract
 	}
 
+	// Propagate ACL settings into vm.Config for execution
+	vmCfg := &vm.Config{}
+	if cfg != nil && cfg.ACL.Enabled {
+		vmCfg.SetACL(vm.ACL{
+			Enabled:     true,
+			Address:     cfg.ACL.ContractAddress,
+			FailOpen:    cfg.ACL.FailOpen,
+			Bypass:      cfg.ACL.Bypass,
+			OwnerBypass: cfg.ACL.OwnerBypass,
+		})
+	}
+
 	if len(cfg.Sync.UploadLocation) == 0 {
 		return stagedsync.PipelineStages(ctx,
 			stagedsync.StageSnapshotsCfg(db, *controlServer.ChainConfig, cfg.Sync, dirs, blockRetire, snapDownloader, blockReader, notifications, cfg.HistoryV3, agg, cfg.InternalCL && cfg.CaplinConfig.Backfilling, cfg.CaplinConfig.BlobBackfilling, silkworm),
@@ -604,7 +628,7 @@ func NewPipelineStages(ctx context.Context,
 				nil,
 				controlServer.ChainConfig,
 				controlServer.Engine,
-				&vm.Config{},
+				vmCfg,
 				notifications.Accumulator,
 				cfg.StateStream,
 				/*stateStream=*/ false,
@@ -641,7 +665,7 @@ func NewPipelineStages(ctx context.Context,
 			nil,
 			controlServer.ChainConfig,
 			controlServer.Engine,
-			&vm.Config{},
+			vmCfg,
 			notifications.Accumulator,
 			cfg.StateStream,
 			/*stateStream=*/ false,
@@ -669,6 +693,17 @@ func NewPipelineStages(ctx context.Context,
 func NewInMemoryExecution(ctx context.Context, db kv.RwDB, cfg *ethconfig.Config, controlServer *sentry_multi_client.MultiClient,
 	dirs datadir.Dirs, notifications *shards.Notifications, blockReader services.FullBlockReader, blockWriter *blockio.BlockWriter, agg *state.Aggregator,
 	silkworm *silkworm.Silkworm, logger log.Logger) *stagedsync.Sync {
+	// Build vm.Config (ACL) for in-memory exec
+	vmCfgMem := &vm.Config{}
+	if cfg != nil && cfg.ACL.Enabled {
+		vmCfgMem.SetACL(vm.ACL{
+			Enabled:     true,
+			Address:     cfg.ACL.ContractAddress,
+			FailOpen:    cfg.ACL.FailOpen,
+			Bypass:      cfg.ACL.Bypass,
+			OwnerBypass: cfg.ACL.OwnerBypass,
+		})
+	}
 	return stagedsync.New(
 		cfg.Sync,
 		stagedsync.StateStages(ctx,
@@ -683,7 +718,7 @@ func NewInMemoryExecution(ctx context.Context, db kv.RwDB, cfg *ethconfig.Config
 				nil,
 				controlServer.ChainConfig,
 				controlServer.Engine,
-				&vm.Config{},
+				vmCfgMem,
 				notifications.Accumulator,
 				cfg.StateStream,
 				true,

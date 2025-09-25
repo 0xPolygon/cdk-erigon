@@ -31,6 +31,8 @@ type blockTracer struct {
 	_blockReader   services.FullBlockReader
 	historyV3      bool
 	evmCallTimeout time.Duration
+	// Base vm.Config to propagate ACL settings during PrepareForTxExecution/tracing
+	aclVM vm.Config
 }
 
 func (bt *blockTracer) TraceBlock(block *types.Block) error {
@@ -54,6 +56,7 @@ func (bt *blockTracer) TraceBlock(block *types.Block) error {
 		hermezReader:  hermez_db.NewHermezDbReader(bt.tx),
 		chainConfig:   bt.chainConfig,
 		engine:        bt.engine,
+		baseVM:        &bt.aclVM,
 	}
 
 	for idx, txn := range txns {
@@ -140,13 +143,19 @@ type txTracerEnv struct {
 	block         *types.Block
 	cumulativeGas uint64
 	txEnv         transactions.TxEnv
+	baseVM        *vm.Config
 }
 
 func (tt *txTracerEnv) GetTxExecuteContext(txn types.Transaction, idx int) (evmtypes.TxContext, types.Message, error) {
 	txHash := txn.Hash()
+	// choose base vm.Config (for ACL), if provided
+	vmCfg := &vm.Config{}
+	if tt.baseVM != nil {
+		vmCfg = tt.baseVM
+	}
 	evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(
 		tt.chainConfig,
-		&vm.Config{},
+		vmCfg,
 		&tt.txEnv.BlockContext,
 		tt.hermezReader,
 		tt.txEnv.Ibs,

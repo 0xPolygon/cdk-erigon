@@ -1,20 +1,21 @@
 package jsonrpc
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
+    "context"
+    "encoding/json"
+    "fmt"
 
-	"github.com/erigontech/erigon-lib/chain"
-	"github.com/erigontech/erigon-lib/common"
-	"github.com/erigontech/erigon-lib/common/hexutil"
-	"github.com/erigontech/erigon-lib/common/hexutility"
-	"github.com/erigontech/erigon-lib/kv"
-	"github.com/erigontech/erigon/eth/tracers"
-	"github.com/erigontech/erigon/rpc"
-	db2 "github.com/erigontech/erigon/smt/pkg/db"
-	"github.com/erigontech/erigon/smt/pkg/smt"
-	"github.com/holiman/uint256"
+    "github.com/erigontech/erigon-lib/chain"
+    "github.com/erigontech/erigon-lib/common"
+    "github.com/erigontech/erigon-lib/common/hexutil"
+    "github.com/erigontech/erigon-lib/common/hexutility"
+    "github.com/erigontech/erigon-lib/kv"
+    "github.com/erigontech/erigon-lib/log/v3"
+    "github.com/erigontech/erigon/eth/tracers"
+    "github.com/erigontech/erigon/rpc"
+    db2 "github.com/erigontech/erigon/smt/pkg/db"
+    "github.com/erigontech/erigon/smt/pkg/smt"
+    "github.com/holiman/uint256"
 
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
@@ -116,12 +117,14 @@ func (tx *zkevmRPCTransaction) Tx(sr state.StateReader) (types.Transaction, erro
 
 // EstimateGas implements eth_estimateGas. Returns an estimate of how much gas is necessary to allow the transaction to complete. The transaction will not be added to the blockchain.
 func (zkapi *ZkEvmAPIImpl) EstimateCounters(ctx context.Context, rpcTx *zkevmRPCTransaction) (json.RawMessage, error) {
-	api := zkapi.ethApi
+    api := zkapi.ethApi
+    // Log ACL flags for zkevm_estimateCounters path (used by some tooling)
+    log.Info("ACL sim zkevm EstimateCounters", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen)
 
-	dbtx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return nil, err
-	}
+    dbtx, err := api.db.BeginRo(ctx)
+    if err != nil {
+        return nil, err
+    }
 	defer dbtx.Rollback()
 
 	chainConfig, err := api.chainConfig(ctx, dbtx)

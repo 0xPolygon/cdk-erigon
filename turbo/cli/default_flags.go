@@ -103,6 +103,13 @@ var DefaultFlags = []cli.Flag{
 	&OverlayGetLogsFlag,
 	&OverlayReplayBlockFlag,
 
+	// ACL firewall flags
+	&utils.ACLEnabledFlag,
+	&utils.ACLAddressFlag,
+	&utils.ACLFailOpenFlag,
+	&utils.ACLBypassFlag,
+	&utils.ACLOwnerBypassFlag,
+
 	&RpcSubscriptionFiltersMaxLogsFlag,
 	&RpcSubscriptionFiltersMaxHeadersFlag,
 	&RpcSubscriptionFiltersMaxTxsFlag,

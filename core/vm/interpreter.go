@@ -42,6 +42,28 @@ type Config struct {
 	RestoreState  bool      // Revert all changes made to the state (useful for constant system calls)
 
 	ExtraEips []int // Additional EIPS that are to be enabled
+
+	// ACL firewall controls (MVP): if enabled, top-level tx is preflight-checked
+	// against an on-chain ACL proxy contract before any execution.
+	// These flags are propagated from eth/ethconfig via backend when constructing vm.Config.
+	ACL ACL
+}
+
+// ACL groups runtime ACL settings for vm.Config.
+type ACL struct {
+	Enabled     bool
+	Address     libcommon.Address
+	FailOpen    bool
+	Bypass      []libcommon.Address
+	OwnerBypass bool
+	// Internal disables ACL enforcement for internal ACL staticcalls to avoid recursion.
+	Internal bool
+}
+
+// SetACL copies the provided ACL settings into the Config, updating both the
+// grouped ACL field as well as the legacy flat fields to keep existing code working.
+func (vmConfig *Config) SetACL(a ACL) {
+	vmConfig.ACL = a
 }
 
 func NewTraceVmConfig() Config {

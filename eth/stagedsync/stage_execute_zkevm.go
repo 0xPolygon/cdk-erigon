@@ -4,27 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/c2h5oh/datasize"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/cmp"
+	"github.com/erigontech/erigon-lib/common/math"
 	"github.com/erigontech/erigon-lib/config3"
 	"github.com/erigontech/erigon-lib/kv"
-	"github.com/erigontech/erigon-lib/wrap"
-
 	"github.com/erigontech/erigon-lib/kv/dbutils"
 	"github.com/erigontech/erigon-lib/kv/membatch"
 	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon-lib/wrap"
 
 	"github.com/erigontech/erigon/consensus/misc"
 	"github.com/erigontech/erigon/core"
-	"github.com/erigontech/erigon/zk/erigon_db"
-	"github.com/erigontech/erigon/zk/hermez_db"
-
-	"os"
-
-	"github.com/erigontech/erigon-lib/common/math"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/state"
 	"github.com/erigontech/erigon/core/types"
@@ -32,6 +27,8 @@ import (
 	"github.com/erigontech/erigon/eth/calltracer"
 	"github.com/erigontech/erigon/eth/stagedsync/stages"
 	"github.com/erigontech/erigon/eth/tracers/logger"
+	"github.com/erigontech/erigon/zk/erigon_db"
+	"github.com/erigontech/erigon/zk/hermez_db"
 	rawdbZk "github.com/erigontech/erigon/zk/rawdb"
 	"github.com/erigontech/erigon/zk/utils"
 )
@@ -444,7 +441,10 @@ func executeBlockZk(
 
 	callTracer := calltracer.NewCallTracer()
 	vmConfig.Debug = true
-	vmConfig.Tracer = callTracer
+	vmConfig.Tracer = vm.NewMultiTracer(
+		callTracer,
+		logger.NewJSONLogger(&logger.LogConfig{}, os.Stdout),
+	)
 
 	getHashFn := core.GetHashFn(block.Header(), getHeader)
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 
 	"github.com/erigontech/erigon-lib/kv/membatchwithdb"
 	"github.com/erigontech/erigon-lib/log/v3"
@@ -73,7 +74,18 @@ func (api *APIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blockNrOrHa
 		return nil, err
 	}
 	header := block.HeaderNoCopy()
-	result, err := transactions.DoCall(ctx, engine, args, tx, blockNrOrHash, header, overrides, api.GasCap, chainConfig, stateReader, api._blockReader, api.evmCallTimeout)
+	opsTracer := NewOperationsTracer(ctx)
+	vmCfg := vm.Config{
+		Debug:  true,
+		Tracer: vm.NewMultiTracer(opsTracer, logger.NewJSONLogger(&logger.LogConfig{}, os.Stdout)),
+	}
+	if api.aclEnabled {
+		api.aclRuntime().ApplyVM(&vmCfg)
+	}
+	vmCfg.ReadOnly = true
+	vmCfg.RestoreState = true
+	log.Info("ACL sim eth_call", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
+	result, err := transactions.DoCallWithVMConfig(ctx, engine, args, tx, blockNrOrHash, header, overrides, api.GasCap, chainConfig, stateReader, api._blockReader, api.evmCallTimeout, vmCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +266,14 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	if api.DisableVirtualCounters || chainConfig.IsNormalcy(header.Number.Uint64()) {
 		useCounters = false
 	}
-	caller, err := transactions.NewReusableCaller(engine, stateReader, overrides, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters)
+	vmCfg := vm.Config{}
+	if api.aclEnabled {
+		api.aclRuntime().ApplyVM(&vmCfg)
+	}
+	vmCfg.ReadOnly = true
+	vmCfg.RestoreState = true
+	log.Info("ACL sim estimateGas", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
+	caller, err := transactions.NewReusableCaller(engine, stateReader, overrides, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters, vmCfg)
 	if err != nil {
 		return 0, err
 	}
@@ -565,6 +584,9 @@ func (api *APIImpl) CreateAccessList(ctx context.Context, args ethapi2.CallArgs,
 		// Apply the transaction with the access list tracer
 		tracer := logger.NewAccessListTracer(accessList, excl, state)
 		config := vm.Config{Tracer: tracer, Debug: true, NoBaseFee: true}
+		if api.aclEnabled {
+			api.aclRuntime().ApplyVM(&config)
+		}
 		blockCtx := transactions.NewEVMBlockContext(engine, header, bNrOrHash.RequireCanonical, tx, api._blockReader, chainConfig)
 		txCtx := core.NewEVMTxContext(msg)
 

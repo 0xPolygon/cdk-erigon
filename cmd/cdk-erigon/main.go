@@ -9,7 +9,9 @@ import (
 	"strings"
 
 	"github.com/erigontech/erigon-lib/log/v3"
+	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/common"
+	"github.com/erigontech/erigon/core/vm"
 	zkutils "github.com/erigontech/erigon/zk/utils"
 	"github.com/pelletier/go-toml"
 	"github.com/urfave/cli/v2"
@@ -62,10 +64,26 @@ func runErigon(cliCtx *cli.Context) error {
 	// initializing the node and providing the current git commit there
 	log.Info("Build info", "git_branch", params.GitBranch, "git_tag", params.GitTag, "git_commit", params.GitCommit)
 
+	// Optional ACL tracing: set ACLTrace when ACL_TRACE=1 to log subject/target/selector and error
+    if os.Getenv("ACL_TRACE") == "1" {
+        vm.ACLTrace = func(stage string, subject, target libcommon.Address, input []byte, err error) {
+            var sel uint32
+            if len(input) >= 4 {
+                sel = uint32(input[0])<<24 | uint32(input[1])<<16 | uint32(input[2])<<8 | uint32(input[3])
+            }
+            log.Info("ACL trace", "stage", stage, "subject", subject, "target", target, "selector", fmt.Sprintf("0x%08x", sel), "err", err)
+        }
+        log.Info("ACL trace: enabled", "hook_set", vm.ACLTrace != nil)
+    } else {
+        // Explicitly log disabled state for clarity when debugging
+        log.Info("ACL trace: disabled")
+    }
+
 	logger := log.New()
 	nodeCfg := node.NewNodConfigUrfave(cliCtx, logger)
 	ethCfg := node.NewEthConfigUrfave(cliCtx, nodeCfg, logger)
 	utils.LogActiveZkevmFlags(logger, cliCtx)
+	utils.LogActiveACLFlags(logger, cliCtx)
 
 	ethNode, err := node.New(cliCtx.Context, nodeCfg, ethCfg, logger)
 	if err != nil {
