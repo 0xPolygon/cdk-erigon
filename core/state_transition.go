@@ -371,10 +371,10 @@ func (st *StateTransition) preCheck(gasBailout bool) error {
 // However if any consensus issue encountered, return the error directly with
 // nil evm execution result.
 func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtypes.ExecutionResult, error) {
-	coinbase := st.evm.Context.Coinbase
+    coinbase := st.evm.Context.Coinbase
 
-	senderInitBalance := st.state.GetBalance(st.msg.From()).Clone()
-	coinbaseInitBalance := st.state.GetBalance(coinbase).Clone()
+    senderInitBalance := st.state.GetBalance(st.msg.From()).Clone()
+    coinbaseInitBalance := st.state.GetBalance(coinbase).Clone()
 
 	// First check this message satisfies all consensus rules before
 	// applying the message. The rules include these clauses
@@ -386,10 +386,40 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 	// 5. there is no overflow when calculating intrinsic gas
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
-	// Check clauses 1-3 and 6, buy gas if everything is correct
-	if err := st.preCheck(gasBailout); err != nil {
-		return nil, err
-	}
+    // ACL preflight: optionally check admission against on-chain ACL before any state changes
+    if st.evm.Config().ACLEnabled {
+        aclAddr := st.evm.Config().ACLAddress
+        // zero address means misconfigured; respect FailOpen if set
+        if aclAddr != (libcommon.Address{}) {
+            var target libcommon.Address
+            if st.msg.To() != nil {
+                target = *st.msg.To()
+            } else {
+                // contract creation -> target is zero address per ACL contract semantics
+                target = libcommon.Address{}
+            }
+            // Build calldata for checkPermittedOrRevert(address,address,bytes)
+            data := buildACLCheckCallData(st.msg.From(), target, st.msg.Data())
+            // Use a bounded gas stipend for the staticcall; this does not affect tx gasRemaining
+            const aclCallGas uint64 = 500_000
+            // Perform STATICCALL from the sender context
+            _, _, err := st.evm.StaticCall(vm.AccountRef(st.msg.From()), aclAddr, data, aclCallGas)
+            if err != nil {
+                if st.evm.Config().ACLFailOpen {
+                    // Log at debug level if available; continue execution
+                } else {
+                    return nil, fmt.Errorf("ACL denied: %w", err)
+                }
+            }
+        } else if !st.evm.Config().ACLFailOpen {
+            return nil, fmt.Errorf("ACL misconfigured: empty contract address")
+        }
+    }
+
+    // Check clauses 1-3 and 6, buy gas if everything is correct
+    if err := st.preCheck(gasBailout); err != nil {
+        return nil, err
+    }
 	if st.evm.Config().Debug {
 		st.evm.Config().Tracer.CaptureTxStart(st.initialGas)
 		defer func() {
@@ -575,6 +605,47 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 	}
 
 	return result, nil
+}
+
+// buildACLCheckCallData ABI-encodes call data for
+// checkPermittedOrRevert(address,address,bytes)
+// Selector: 0xbf5afe38
+func buildACLCheckCallData(subject, target libcommon.Address, payload []byte) []byte {
+    // Head: 3 * 32 bytes, Tail: 32 (len) + padded payload
+    // Offsets are measured from after the 4-byte selector.
+    const selector uint32 = 0xbf5afe38
+    headWords := 3
+    headSize := 32 * headWords
+    tailLen := 32 + ((len(payload)+31)/32)*32
+    total := 4 + headSize + tailLen
+    out := make([]byte, total)
+    // selector
+    out[0] = byte(selector >> 24)
+    out[1] = byte(selector >> 16)
+    out[2] = byte(selector >> 8)
+    out[3] = byte(selector)
+    // subject (left-padded to 32)
+    copy(out[4+12:4+32], subject.Bytes())
+    // target
+    copy(out[4+32+12:4+64], target.Bytes())
+    // offset for bytes data = headSize
+    // write big-endian uint256(headSize)
+    off := uint64(headSize)
+    for i := 0; i < 8; i++ {
+        out[4+64+31-i] = byte(off)
+        off >>= 8
+    }
+    // tail start
+    tailStart := 4 + headSize
+    // length
+    l := uint64(len(payload))
+    for i := 0; i < 8; i++ {
+        out[tailStart+31-i] = byte(l)
+        l >>= 8
+    }
+    // data
+    copy(out[tailStart+32:], payload)
+    return out
 }
 
 func (st *StateTransition) refundGas() {

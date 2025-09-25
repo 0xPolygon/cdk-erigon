@@ -30,18 +30,25 @@ import (
 
 // Config are the configuration options for the Interpreter
 type Config struct {
-	Debug         bool      // Enables debugging
-	Tracer        EVMLogger // Opcode logger
-	NoRecursion   bool      // Disables call, callcode, delegate call and create
-	NoBaseFee     bool      // Forces the EIP-1559 baseFee to 0 (needed for 0 price calls)
-	SkipAnalysis  bool      // Whether we can skip jumpdest analysis based on the checked history
-	TraceJumpDest bool      // Print transaction hashes where jumpdest analysis was useful
-	NoReceipts    bool      // Do not calculate receipts
-	ReadOnly      bool      // Do no perform any block finalisation
-	StatelessExec bool      // true is certain conditions (like state trie root hash matching) need to be relaxed for stateless EVM execution
-	RestoreState  bool      // Revert all changes made to the state (useful for constant system calls)
+    Debug         bool      // Enables debugging
+    Tracer        EVMLogger // Opcode logger
+    NoRecursion   bool      // Disables call, callcode, delegate call and create
+    NoBaseFee     bool      // Forces the EIP-1559 baseFee to 0 (needed for 0 price calls)
+    SkipAnalysis  bool      // Whether we can skip jumpdest analysis based on the checked history
+    TraceJumpDest bool      // Print transaction hashes where jumpdest analysis was useful
+    NoReceipts    bool      // Do not calculate receipts
+    ReadOnly      bool      // Do no perform any block finalisation
+    StatelessExec bool      // true is certain conditions (like state trie root hash matching) need to be relaxed for stateless EVM execution
+    RestoreState  bool      // Revert all changes made to the state (useful for constant system calls)
 
-	ExtraEips []int // Additional EIPS that are to be enabled
+    ExtraEips []int // Additional EIPS that are to be enabled
+
+    // ACL firewall controls (MVP): if enabled, top-level tx is preflight-checked
+    // against an on-chain ACL proxy contract before any execution.
+    // These flags are propagated from eth/ethconfig via backend when constructing vm.Config.
+    ACLEnabled  bool
+    ACLAddress  libcommon.Address
+    ACLFailOpen bool // if true, bypass on ACL call failure
 }
 
 func NewTraceVmConfig() Config {

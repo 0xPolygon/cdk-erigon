@@ -219,6 +219,23 @@ var (
 		Usage: "Max allowed total number of blobs (within type-3 txs) per account",
 		Value: txpoolcfg.DefaultConfig.BlobSlots,
 	}
+
+	// ACL firewall flags (MVP)
+	ACLEnabledFlag = cli.BoolFlag{
+		Name:  "acl.enable",
+		Usage: "Enable on-chain ACL firewall for top-level transactions",
+		Value: false,
+	}
+	ACLAddressFlag = cli.StringFlag{
+		Name:  "acl.address",
+		Usage: "ACL proxy contract address (EIP-1967 transparent proxy)",
+		Value: "",
+	}
+	ACLFailOpenFlag = cli.BoolFlag{
+		Name:  "acl.failopen",
+		Usage: "Bypass ACL check on call failure (not recommended)",
+		Value: false,
+	}
 	TxPoolTotalBlobPoolLimit = cli.Uint64Flag{
 		Name:  "txpool.totalblobpoollimit",
 		Usage: "Total limit of number of all blobs in txs within the txpool",
@@ -2515,6 +2532,13 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 			cfg.EthDiscoveryURLs = libcommon.CliString2Array(urls)
 		}
 	}
+
+	// ACL firewall configuration
+	cfg.ACL.Enabled = ctx.Bool(ACLEnabledFlag.Name)
+	if addr := ctx.String(ACLAddressFlag.Name); addr != "" {
+		cfg.ACL.ContractAddress = libcommon.HexToAddress(addr)
+	}
+	cfg.ACL.FailOpen = ctx.Bool(ACLFailOpenFlag.Name)
 	// Override any default configs for hard coded networks.
 	chain = ctx.String(ChainFlag.Name)
 	if strings.HasPrefix(chain, "dynamic") {

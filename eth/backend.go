@@ -241,6 +241,18 @@ type Ethereum struct {
 	gasTracker         *jsonrpc.RecurringL1GasPriceTracker
 }
 
+// buildVMConfig constructs a vm.Config based on node configuration.
+// It propagates ACL firewall settings for execution-time admission checks.
+func (backend *Ethereum) buildVMConfig() *vm.Config {
+	cfg := &vm.Config{}
+	if backend.config != nil && backend.config.ACL.Enabled {
+		cfg.ACLEnabled = true
+		cfg.ACLAddress = backend.config.ACL.ContractAddress
+		cfg.ACLFailOpen = backend.config.ACL.FailOpen
+	}
+	return cfg
+}
+
 func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {
 	idx := strings.LastIndexByte(addr, ':')
 	if idx < 0 {
@@ -693,7 +705,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		stagedsync.MiningStages(backend.sentryCtx,
 			stagedsync.StageMiningCreateBlockCfg(backend.chainDB, miner, *backend.chainConfig, backend.engine, backend.txPool2DB, nil, tmpdir, backend.blockReader),
 			stagedsync.StageBorHeimdallCfg(backend.chainDB, snapDb, miner, *backend.chainConfig, heimdallClient, backend.blockReader, nil, nil, nil, recents, signatures, false, nil),
-			stagedsync.StageMiningExecCfg(backend.chainDB, miner, backend.notifications.Events, *backend.chainConfig, backend.engine, &vm.Config{}, tmpdir, nil, 0, backend.txPool2, backend.txPool2DB, blockReader),
+			// Propagate ACL settings into vm.Config for execution
+			stagedsync.StageMiningExecCfg(backend.chainDB, miner, backend.notifications.Events, *backend.chainConfig, backend.engine, backend.buildVMConfig(), tmpdir, nil, 0, backend.txPool2, backend.txPool2DB, blockReader),
 			stagedsync.StageHashStateCfg(backend.chainDB, dirs, config.HistoryV3, agg),
 			stagedsync.StageTrieCfg(backend.chainDB, false, true, true, tmpdir, blockReader, nil, config.HistoryV3, backend.agg),
 			stagedsync.StageMiningFinishCfg(backend.chainDB, *backend.chainConfig, backend.engine, miner, backend.miningSealingQuit, backend.blockReader, latestBlockBuiltStore),
@@ -714,7 +727,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			stagedsync.MiningStages(backend.sentryCtx,
 				stagedsync.StageMiningCreateBlockCfg(backend.chainDB, miningStatePos, *backend.chainConfig, backend.engine, backend.txPool2DB, param, tmpdir, backend.blockReader),
 				stagedsync.StageBorHeimdallCfg(backend.chainDB, snapDb, miningStatePos, *backend.chainConfig, heimdallClient, backend.blockReader, nil, nil, nil, recents, signatures, false, nil),
-				stagedsync.StageMiningExecCfg(backend.chainDB, miningStatePos, backend.notifications.Events, *backend.chainConfig, backend.engine, &vm.Config{}, tmpdir, interrupt, param.PayloadId, backend.txPool2, backend.txPool2DB, blockReader),
+				stagedsync.StageMiningExecCfg(backend.chainDB, miningStatePos, backend.notifications.Events, *backend.chainConfig, backend.engine, backend.buildVMConfig(), tmpdir, interrupt, param.PayloadId, backend.txPool2, backend.txPool2DB, blockReader),
 				stagedsync.StageHashStateCfg(backend.chainDB, dirs, config.HistoryV3, agg),
 				stagedsync.StageTrieCfg(backend.chainDB, false, true, true, tmpdir, blockReader, nil, config.HistoryV3, backend.agg),
 				stagedsync.StageMiningFinishCfg(backend.chainDB, *backend.chainConfig, backend.engine, miningStatePos, backend.miningSealingQuit, backend.blockReader, latestBlockBuiltStore),
