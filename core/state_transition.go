@@ -387,8 +387,9 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
 	// ACL preflight: optionally check admission against on-chain ACL before any state changes
-	if st.evm.Config().ACLEnabled {
-		aclAddr := st.evm.Config().ACLAddress
+    if st.evm.Config().ACLEnabled {
+        aclAddr := st.evm.Config().ACLAddress
+        log.Info("ACL preflight: enabled", "acl", aclAddr, "failOpen", st.evm.Config().ACLFailOpen, "from", st.msg.From(), "to", func() libcommon.Address { if st.msg.To()!=nil {return *st.msg.To()} ; return libcommon.Address{} }())
 		// zero address means misconfigured; respect FailOpen if set
 		if aclAddr != (libcommon.Address{}) {
 			var target libcommon.Address
@@ -409,14 +410,16 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 			cfg.ACLEnabled = false
 			tmpEVM := vm.NewEVM(st.evm.Context, st.evm.TxContext, st.evm.IntraBlockState(), st.evm.ChainConfig(), cfg)
 			// Perform STATICCALL from the sender context
-			_, _, err := tmpEVM.StaticCall(vm.AccountRef(st.msg.From()), aclAddr, data, aclCallGas)
-			if err != nil {
-				if st.evm.Config().ACLFailOpen {
-					// Log at debug level if available; continue execution
-				} else {
-					return nil, fmt.Errorf("ACL denied: %w", err)
-				}
-			}
+            _, _, err := tmpEVM.StaticCall(vm.AccountRef(st.msg.From()), aclAddr, data, aclCallGas)
+            if err != nil {
+                log.Info("ACL preflight: denied", "err", err)
+                if st.evm.Config().ACLFailOpen {
+                    // Log at debug level if available; continue execution
+                } else {
+                    return nil, fmt.Errorf("ACL denied: %w", err)
+                }
+            }
+            log.Info("ACL preflight: allowed")
 		} else if !st.evm.Config().ACLFailOpen {
 			return nil, fmt.Errorf("ACL misconfigured: empty contract address")
 		}

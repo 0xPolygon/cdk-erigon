@@ -1,0 +1,4 @@
+name: erigon-acl-e2e
+description: ACL integration package for Erigon
+entrypoint: main.star
+type: starlark

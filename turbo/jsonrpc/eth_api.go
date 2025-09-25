@@ -383,7 +383,12 @@ type APIImpl struct {
 	SenderLocks                   *SenderLock
 	LogsMaxRange                  uint64
 	DisableStateRootCheck         bool
-	DisableVirtualCounters        bool
+    DisableVirtualCounters        bool
+
+    // ACL settings for eth_call/estimateGas and tracing simulations
+    aclEnabled  bool
+    aclAddress  common.Address
+    aclFailOpen bool
 
 	// used to cache recent block headers so under load we don't waste CPU time loading the
 	// same block header repeatedly
@@ -404,8 +409,8 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		log.Error("failed to create sendTransactionBlockCache", "err", err)
 	}
 
-	return &APIImpl{
-		BaseAPI:                       base,
+    api := &APIImpl{
+            BaseAPI:                       base,
 		db:                            db,
 		ethBackend:                    eth,
 		txPool:                        txPool,
@@ -434,11 +439,18 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		BadTxAllowance:                ethCfg.BadTxAllowance,
 		SenderLocks:                   NewSenderLock(),
 		LogsMaxRange:                  LogsMaxRange,
-		DisableStateRootCheck:         disableStateRootCheck,
-		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
-		sendTransactionBlockCache:     sendTransactionBlockCache,
-		sendTransactionBlockGroup:     &singleflight.Group{},
-	}
+            DisableStateRootCheck:         disableStateRootCheck,
+            DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
+            // propagate ACL
+            aclEnabled:                    ethCfg.ACL.Enabled,
+            aclAddress:                    ethCfg.ACL.ContractAddress,
+            aclFailOpen:                   ethCfg.ACL.FailOpen,
+            sendTransactionBlockCache:     sendTransactionBlockCache,
+            sendTransactionBlockGroup:     &singleflight.Group{},
+        }
+    // One-time ACL config log at API construction
+    logger.Info("ACL config", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen)
+    return api
 }
 
 // // RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction

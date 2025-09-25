@@ -2,6 +2,7 @@ package vm
 
 import (
     libcommon "github.com/erigontech/erigon-lib/common"
+    "github.com/erigontech/erigon-lib/log/v3"
 )
 
 // ACLCheckSelector is the 4-byte method selector for
@@ -66,7 +67,8 @@ func (evm *EVM) aclEnforce(target libcommon.Address, input []byte) error {
 		}
 		return ErrExecutionReverted // generic error to abort
 	}
-	data := aclBuildCheckCallData(evm.Origin, target, input)
+    data := aclBuildCheckCallData(evm.Origin, target, input)
+    log.Info("ACL enforce: start", "origin", evm.Origin, "target", target, "acl", evm.config.ACLAddress, "failOpen", evm.config.ACLFailOpen, "internal", evm.config.ACLInternal, "calldata_len", len(input))
 	if ACLTrace != nil {
 		ACLTrace("before", evm.Origin, target, input, nil)
 	}
@@ -81,11 +83,13 @@ func (evm *EVM) aclEnforce(target libcommon.Address, input []byte) error {
 	if ACLTrace != nil {
 		ACLTrace("after", evm.Origin, target, input, err)
 	}
-	if err != nil {
-		if evm.config.ACLFailOpen {
-			return nil
-		}
-		return err
-	}
-	return nil
+    if err != nil {
+        log.Info("ACL enforce: denied", "err", err)
+        if evm.config.ACLFailOpen {
+            return nil
+        }
+        return err
+    }
+    log.Info("ACL enforce: allowed")
+    return nil
 }

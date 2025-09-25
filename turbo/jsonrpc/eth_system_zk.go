@@ -1,13 +1,14 @@
 package jsonrpc
 
 import (
-	"context"
-	"math/big"
+    "context"
+    "math/big"
 
-	"github.com/erigontech/erigon-lib/common/hexutil"
-	"github.com/erigontech/erigon/ethclient"
-	"github.com/erigontech/erigon/rpc"
-	"github.com/erigontech/erigon/turbo/rpchelper"
+    "github.com/erigontech/erigon-lib/common/hexutil"
+    "github.com/erigontech/erigon-lib/log/v3"
+    "github.com/erigontech/erigon/ethclient"
+    "github.com/erigontech/erigon/rpc"
+    "github.com/erigontech/erigon/turbo/rpchelper"
 )
 
 type RpcL1GasPriceTracker interface {
@@ -16,10 +17,11 @@ type RpcL1GasPriceTracker interface {
 }
 
 func (api *APIImpl) GasPrice(ctx context.Context) (*hexutil.Big, error) {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return nil, err
-	}
+    log.Info("ACL ctx gasPrice", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen)
+    tx, err := api.db.BeginRo(ctx)
+    if err != nil {
+        return nil, err
+    }
 	defer tx.Rollback()
 	cc, err := api.chainConfig(ctx, tx)
 	if err != nil {

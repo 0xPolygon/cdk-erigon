@@ -88,18 +88,18 @@ const (
 )
 
 func attemptAddTransaction(
-	cfg SequenceBlockCfg,
-	sdb *stageDb,
-	ibs *state.IntraBlockState,
-	batchCounters *vm.BatchCounterCollector,
-	blockContext *evmtypes.BlockContext,
-	header *types.Header,
-	transaction types.Transaction,
-	effectiveGasPrice uint8,
-	l1Recovery bool,
-	forkId, l1InfoIndex uint64,
-	blockDataSizeChecker *BlockDataChecker,
-	ethBlockGasPool *core.GasPool,
+    cfg SequenceBlockCfg,
+    sdb *stageDb,
+    ibs *state.IntraBlockState,
+    batchCounters *vm.BatchCounterCollector,
+    blockContext *evmtypes.BlockContext,
+    header *types.Header,
+    transaction types.Transaction,
+    effectiveGasPrice uint8,
+    l1Recovery bool,
+    forkId, l1InfoIndex uint64,
+    blockDataSizeChecker *BlockDataChecker,
+    ethBlockGasPool *core.GasPool,
 ) (*types.Receipt, *evmtypes.ExecutionResult, *vm.TransactionCounter, overflowType, error) {
 	var batchDataOverflow, overflow bool
 	var err error
@@ -135,15 +135,31 @@ func attemptAddTransaction(
 		gasPool = ethBlockGasPool
 	}
 
-	// set the counter collector on the config so that we can gather info during the execution
-	cfg.zkVmConfig.CounterCollector = txCounters.ExecutionCounters()
+    // set the counter collector on the config so that we can gather info during the execution
+    cfg.zkVmConfig.CounterCollector = txCounters.ExecutionCounters()
+
+    // Diagnostic: log ACL flags and selector seen by sequencer exec path
+    var sel uint32
+    input := transaction.GetData()
+    if len(input) >= 4 {
+        sel = uint32(input[0])<<24 | uint32(input[1])<<16 | uint32(input[2])<<8 | uint32(input[3])
+    }
+    // try recover sender for logging (best-effort)
+    sender, _ := transaction.GetSender()
+    if sender == (common.Address{}) {
+        signer := types.MakeSigner(cfg.chainConfig, header.Number.Uint64(), header.Time)
+        if s, err := transaction.Sender(*signer); err == nil {
+            sender = s
+        }
+    }
+    log.Info("ACL seq exec tx", "enabled", cfg.zkVmConfig.Config.ACLEnabled, "address", cfg.zkVmConfig.Config.ACLAddress, "failOpen", cfg.zkVmConfig.Config.ACLFailOpen, "from", sender, "to", transaction.GetTo(), "selector", sel)
 
 	// TODO: possibly inject zero tracer here!
 
 	snapshot := ibs.Snapshot()
 	ibs.Init(transaction.Hash(), common.Hash{}, 0)
 
-	evm := vm.NewZkEVM(*blockContext, evmtypes.TxContext{}, ibs, cfg.chainConfig, *cfg.zkVmConfig)
+    evm := vm.NewZkEVM(*blockContext, evmtypes.TxContext{}, ibs, cfg.chainConfig, *cfg.zkVmConfig)
 
 	gasUsed := header.GasUsed
 

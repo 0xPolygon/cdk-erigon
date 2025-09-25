@@ -209,11 +209,17 @@ func (api *PrivateDebugAPIImpl) traceBlock_deprecated(ctx context.Context, block
 
 // TraceTransaction implements debug_traceTransaction. Returns Geth style transaction traces.
 func (api *PrivateDebugAPIImpl) TraceTransaction(ctx context.Context, hash common.Hash, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		stream.WriteNil()
-		return err
-	}
+    // Print ACL flags for debug trace path (log even if config is nil)
+    if api.config != nil {
+        log.Info("ACL debug TraceTransaction", "enabled", api.config.ACL.Enabled, "address", api.config.ACL.ContractAddress, "failOpen", api.config.ACL.FailOpen)
+    } else {
+        log.Info("ACL debug TraceTransaction", "enabled", false, "address", common.Address{}, "failOpen", false)
+    }
+    tx, err := api.db.BeginRo(ctx)
+    if err != nil {
+        stream.WriteNil()
+        return err
+    }
 	defer tx.Rollback()
 	chainConfig, err := api.chainConfig(ctx, tx)
 	if err != nil {
@@ -361,8 +367,15 @@ func (api *PrivateDebugAPIImpl) TraceCall(ctx context.Context, args ethapi.CallA
 
 	blockCtx := transactions.NewEVMBlockContext(engine, header, blockNrOrHash.RequireCanonical, dbtx, api._blockReader, chainConfig)
 	txCtx := core.NewEVMTxContext(msg)
-	// Trace the transaction and return
-	return transactions.TraceTx(ctx, msg, blockCtx, txCtx, ibs, config, chainConfig, stream, api.evmCallTimeout)
+    // Trace the transaction and return with ACL config
+    vmCfg := vm.Config{}
+    if api.config != nil && api.config.ACL.Enabled {
+        vmCfg.ACLEnabled = true
+        vmCfg.ACLAddress = api.config.ACL.ContractAddress
+        vmCfg.ACLFailOpen = api.config.ACL.FailOpen
+    }
+    log.Info("ACL sim TraceCall", "enabled", vmCfg.ACLEnabled, "address", vmCfg.ACLAddress)
+    return transactions.TraceTxWithVMConfig(ctx, msg, blockCtx, txCtx, ibs, config, chainConfig, stream, api.evmCallTimeout, vmCfg)
 }
 
 func (api *PrivateDebugAPIImpl) TraceCallMany_deprecated(ctx context.Context, bundles []Bundle, simulateContext StateContext, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {

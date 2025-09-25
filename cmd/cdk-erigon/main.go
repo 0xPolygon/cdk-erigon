@@ -65,7 +65,8 @@ func runErigon(cliCtx *cli.Context) error {
 	logger := log.New()
 	nodeCfg := node.NewNodConfigUrfave(cliCtx, logger)
 	ethCfg := node.NewEthConfigUrfave(cliCtx, nodeCfg, logger)
-	utils.LogActiveZkevmFlags(logger, cliCtx)
+    utils.LogActiveZkevmFlags(logger, cliCtx)
+    utils.LogActiveACLFlags(logger, cliCtx)
 
 	ethNode, err := node.New(cliCtx.Context, nodeCfg, ethCfg, logger)
 	if err != nil {

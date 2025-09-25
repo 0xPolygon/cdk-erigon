@@ -73,7 +73,15 @@ func (api *APIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blockNrOrHa
 		return nil, err
 	}
 	header := block.HeaderNoCopy()
-	result, err := transactions.DoCall(ctx, engine, args, tx, blockNrOrHash, header, overrides, api.GasCap, chainConfig, stateReader, api._blockReader, api.evmCallTimeout)
+	// Build vm.Config with ACL settings for eth_call simulation
+	vmCfg := vm.Config{}
+	if api.aclEnabled {
+		vmCfg.ACLEnabled = true
+		vmCfg.ACLAddress = api.aclAddress
+		vmCfg.ACLFailOpen = api.aclFailOpen
+	}
+    log.Info("ACL sim eth_call", "enabled", vmCfg.ACLEnabled, "address", vmCfg.ACLAddress, "failOpen", vmCfg.ACLFailOpen)
+    result, err := transactions.DoCallWithVMConfig(ctx, engine, args, tx, blockNrOrHash, header, overrides, api.GasCap, chainConfig, stateReader, api._blockReader, api.evmCallTimeout, vmCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +262,14 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	if api.DisableVirtualCounters || chainConfig.IsNormalcy(header.Number.Uint64()) {
 		useCounters = false
 	}
-	caller, err := transactions.NewReusableCaller(engine, stateReader, overrides, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters)
+	vmCfg := vm.Config{}
+	if api.aclEnabled {
+		vmCfg.ACLEnabled = true
+		vmCfg.ACLAddress = api.aclAddress
+		vmCfg.ACLFailOpen = api.aclFailOpen
+	}
+    log.Info("ACL sim estimateGas", "enabled", vmCfg.ACLEnabled, "address", vmCfg.ACLAddress, "failOpen", vmCfg.ACLFailOpen)
+    caller, err := transactions.NewReusableCaller(engine, stateReader, overrides, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters, vmCfg)
 	if err != nil {
 		return 0, err
 	}
@@ -565,6 +580,11 @@ func (api *APIImpl) CreateAccessList(ctx context.Context, args ethapi2.CallArgs,
 		// Apply the transaction with the access list tracer
 		tracer := logger.NewAccessListTracer(accessList, excl, state)
 		config := vm.Config{Tracer: tracer, Debug: true, NoBaseFee: true}
+		if api.aclEnabled {
+			config.ACLEnabled = true
+			config.ACLAddress = api.aclAddress
+			config.ACLFailOpen = api.aclFailOpen
+		}
 		blockCtx := transactions.NewEVMBlockContext(engine, header, bNrOrHash.RequireCanonical, tx, api._blockReader, chainConfig)
 		txCtx := core.NewEVMTxContext(msg)
 

@@ -1,13 +1,14 @@
 package jsonrpc
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"math/big"
-	"strconv"
+    "context"
+    "errors"
+    "fmt"
+    "math/big"
+    "strconv"
 
-	"github.com/erigontech/erigon/zk/hermez_db"
+    "github.com/erigontech/erigon-lib/log/v3"
+    "github.com/erigontech/erigon/zk/hermez_db"
 
 	"github.com/erigontech/erigon-lib/chain"
 	"github.com/erigontech/erigon-lib/common"
@@ -24,13 +25,16 @@ import (
 
 // SendRawTransaction implements eth_sendRawTransaction. Creates new message call transaction or a contract creation for previously-signed transactions.
 func (api *APIImpl) SendRawTransaction(ctx context.Context, encodedTx hexutility.Bytes) (common.Hash, error) {
-	t := utils.StartTimer("rpc", "sendrawtransaction")
-	defer t.LogTimer()
+    t := utils.StartTimer("rpc", "sendrawtransaction")
+    defer t.LogTimer()
 
-	tx, err := api.db.BeginRo(ctx)
-	if err != nil {
-		return common.Hash{}, err
-	}
+    // Log ACL config at submission path for visibility with tooling like forge
+    log.Info("ACL submit sendRawTransaction", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen)
+
+    tx, err := api.db.BeginRo(ctx)
+    if err != nil {
+        return common.Hash{}, err
+    }
 	defer tx.Rollback()
 	cc, err := api.chainConfig(ctx, tx)
 	if err != nil {
