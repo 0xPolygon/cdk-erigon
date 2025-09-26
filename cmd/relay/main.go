@@ -56,6 +56,7 @@ func main() {
 		inactivityTimeout,   // Inactivity timeout
 		checkInterval,       // Check interval
 		nil,                 // No custom logger
+		nil,                 // No custom config
 	)
 
 	if err != nil {

@@ -241,17 +241,17 @@ func (c *MockDataStreamServerGetHighestClosedBatchNoCacheCall) DoAndReturn(f fun
 }
 
 // GetStreamServer mocks base method.
-func (m *MockDataStreamServer) GetStreamServer() server.StreamServer {
+func (m *MockDataStreamServer) GetStreamStore() server.StreamStore {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStreamServer")
-	ret0, _ := ret[0].(server.StreamServer)
+	ret := m.ctrl.Call(m, "GetStreamStore")
+	ret0, _ := ret[0].(server.StreamStore)
 	return ret0
 }
 
 // GetStreamServer indicates an expected call of GetStreamServer.
 func (mr *MockDataStreamServerMockRecorder) GetStreamServer() *MockDataStreamServerGetStreamServerCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStreamServer", reflect.TypeOf((*MockDataStreamServer)(nil).GetStreamServer))
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStreamServer", reflect.TypeOf((*MockDataStreamServer)(nil).GetStreamStore()))
 	return &MockDataStreamServerGetStreamServerCall{Call: call}
 }
 

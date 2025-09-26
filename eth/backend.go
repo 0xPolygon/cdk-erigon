@@ -224,7 +224,7 @@ type Ethereum struct {
 	logger         log.Logger
 
 	// zk
-	streamServer    server.StreamServer
+	streamServer    server.TcpStreamServer
 	l1Syncer        *syncer.L1Syncer
 	etherManClients []*etherman.Client
 
@@ -1000,7 +1000,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			}
 
 			// todo [zkevm] read the stream version from config and figure out what system id is used for
-			backend.streamServer, err = dataStreamServerFactory.CreateStreamServer(uint16(httpCfg.DataStreamPort), 1, datastreamer.StreamType(1), file, httpCfg.DataStreamWriteTimeout, httpCfg.DataStreamInactivityTimeout, httpCfg.DataStreamInactivityCheckInterval, logConfig)
+			backend.streamServer, err = dataStreamServerFactory.CreateStreamServer(uint16(httpCfg.DataStreamPort), 1, file, httpCfg.DataStreamWriteTimeout, httpCfg.DataStreamInactivityTimeout, httpCfg.DataStreamInactivityCheckInterval, logConfig, server.StreamStoreType(httpCfg.DataStreamStorageType))
 			if err != nil {
 				return nil, err
 			}

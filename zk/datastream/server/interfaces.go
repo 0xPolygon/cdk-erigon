@@ -18,23 +18,29 @@ import (
 
 type StreamServer interface {
 	Start() error
-	StartAtomicOp() error
-	AddStreamEntry(etype datastreamer.EntryType, data []byte) (uint64, error)
-	AddStreamBookmark(bookmark []byte) (uint64, error)
-	CommitAtomicOp() error
-	RollbackAtomicOp() error
-	TruncateFile(entryNum uint64) error
-	UpdateEntryData(entryNum uint64, etype datastreamer.EntryType, data []byte) error
-	GetHeader() datastreamer.HeaderEntry
+}
+
+type StreamStore interface {
+	datastreamer.StreamStore
+
 	GetEntry(entryNum uint64) (datastreamer.FileEntry, error)
-	GetBookmark(bookmark []byte) (uint64, error)
-	GetFirstEventAfterBookmark(bookmark []byte) (datastreamer.FileEntry, error)
-	GetDataBetweenBookmarks(bookmarkFrom, bookmarkTo []byte) ([]byte, error)
+	GetBookmark(data []byte) (uint64, error)
+
+	UpdateEntryData(entryNum uint64, etype datastreamer.EntryType, data []byte) error
+
 	BookmarkPrintDump()
 }
 
+type TcpStreamServer interface {
+	StreamServer
+	StreamStore
+}
+
+type GrpcDataStreamServer interface {
+	Start() error
+}
 type DataStreamServer interface {
-	GetStreamServer() StreamServer
+	GetStreamStore() StreamStore
 	GetChainId() uint64
 	IsLastEntryBatchEnd() (isBatchEnd bool, err error)
 	GetHighestBlockNumber() (uint64, error)

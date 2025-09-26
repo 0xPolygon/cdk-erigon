@@ -714,6 +714,11 @@ var (
 		Usage: "Define the host used for the zkevm data stream",
 		Value: "",
 	}
+	DataStreamStorageType = cli.StringFlag{
+		Name:  "zkevm.data-stream-store",
+		Usage: "Define the storage type used for the zkevm data stream (file, mdbx)",
+		Value: "file",
+	}
 	DataStreamWriteTimeout = cli.DurationFlag{
 		Name:  "zkevm.data-stream-writeTimeout",
 		Usage: "Define the TCP write timeout when sending data to a datastream client",

@@ -2,10 +2,13 @@ module github.com/erigontech/erigon
 
 go 1.24
 
+toolchain go1.23.7
+
 require (
 	github.com/erigontech/mdbx-go v0.27.24
 	github.com/erigontech/secp256k1 v1.1.0
 	github.com/erigontech/silkworm-go v0.18.0
+	github.com/gateway-fm/zkevm-data-streamer v0.2.10-0.20250508001840-99bc56b54bb6
 )
 
 replace github.com/erigontech/erigon-lib => ./erigon-lib
@@ -43,7 +46,6 @@ require (
 	github.com/erigontech/erigon-lib v1.0.0
 	github.com/erigontech/erigonwatch v0.1.16
 	github.com/fjl/gencodec v0.0.0-20220412091415-8bb9e558978c
-	github.com/gateway-fm/zkevm-data-streamer v0.2.9
 	github.com/gballet/go-verkle v0.0.0-20221121182333-31427a1f2d35
 	github.com/gfx-labs/sse v0.0.0-20231226060816-f747e26a9baa
 	github.com/go-chi/chi/v5 v5.0.12
@@ -192,7 +194,7 @@ require (
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
 	github.com/hermeznetwork/tracerr v0.3.2 // indirect
-	github.com/ianlancetaylor/cgosymbolizer v0.0.0-20220405231054-a1ae3e4bba26 // indirect
+	github.com/ianlancetaylor/cgosymbolizer v0.0.0-20241129212102-9c50ad6b591e // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/ipfs/go-cid v0.4.1 // indirect

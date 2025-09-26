@@ -2,10 +2,12 @@ package server
 
 import (
 	"fmt"
-	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
-	dslog "github.com/gateway-fm/zkevm-data-streamer/log"
+	"github.com/c2h5oh/datasize"
 	"sync"
 	"time"
+
+	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
+	dslog "github.com/gateway-fm/zkevm-data-streamer/log"
 
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
@@ -45,7 +47,7 @@ const (
 )
 
 type ZkEVMDataStreamServer struct {
-	streamServer StreamServer
+	streamServer TcpStreamServer
 	chainId      uint64
 	highestBlockWritten,
 	highestClosedBatchWritten,
@@ -65,27 +67,63 @@ type DataStreamEntryProto interface {
 type ZkEVMDataStreamServerFactory struct {
 }
 
+type StorageType uint8
+
+const (
+	StorageTypeFile StorageType = iota
+	StorageTypeMDBX
+)
+
+type ServerType uint8
+
+const (
+	ServerTypeTCP ServerType = iota
+	ServerTypeGRPC
+)
+
 func NewZkEVMDataStreamServerFactory() *ZkEVMDataStreamServerFactory {
 	return &ZkEVMDataStreamServerFactory{}
 }
 
-func (f *ZkEVMDataStreamServerFactory) CreateStreamServer(port uint16, systemID uint64, streamType datastreamer.StreamType, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config) (StreamServer, error) {
+func (f *ZkEVMDataStreamServerFactory) CreateStreamServer(port uint16, systemID uint64, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config, storageType StreamStoreType) (TcpStreamServer, error) {
 	// after we moved to protobuff encoding we no longer need to support multiple versions.
 	const datastreamVersion = 3
+
+	var storageFactory func() (datastreamer.StreamStore, error)
+
+	if storageType == StreamStoreTypeMDBX {
+		// Create MDBX-based storage
+		config := &StreamStoreConfig{
+			SystemID:    systemID,
+			FilePath:    fileName,
+			MDBXMaxDBS:  3,
+			MDBXMapSize: int64(3 * datasize.GB),
+		}
+
+		mdbxStore, err := NewMDBXStreamStore(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create MDBX store: %w", err)
+		}
+
+		storageFactory = func() (datastreamer.StreamStore, error) {
+			return mdbxStore, nil
+		}
+	}
+
 	// the library still requires version as a input in it's arguments.
-	return datastreamer.NewServer(port, datastreamVersion, systemID, streamType, fileName, writeTimeout, inactivityTimeout, inactivityCheckInterval, cfg)
+	return datastreamer.NewServer(port, datastreamVersion, systemID, 1, fileName, writeTimeout, inactivityTimeout, inactivityCheckInterval, cfg, storageFactory)
 }
 
-func (f *ZkEVMDataStreamServerFactory) CreateDataStreamServer(streamServer StreamServer, chainId uint64) DataStreamServer {
+func (f *ZkEVMDataStreamServerFactory) CreateDataStreamServer(streamStore TcpStreamServer, chainId uint64) DataStreamServer {
 	return &ZkEVMDataStreamServer{
-		streamServer:        streamServer,
+		streamServer:        streamStore,
 		chainId:             chainId,
 		highestBlockWritten: nil,
 		highestBatchWritten: nil,
 	}
 }
 
-func (srv *ZkEVMDataStreamServer) GetStreamServer() StreamServer {
+func (srv *ZkEVMDataStreamServer) GetStreamStore() StreamStore {
 	return srv.streamServer
 }
 
@@ -632,12 +670,12 @@ func (srv *ZkEVMDataStreamServer) getLastEntryOfType(entryType datastreamer.Entr
 }
 
 type dataStreamServerIterator struct {
-	stream      StreamServer
+	stream      StreamStore
 	curEntryNum uint64
 	header      uint64
 }
 
-func newDataStreamServerIterator(stream StreamServer, start uint64) *dataStreamServerIterator {
+func newDataStreamServerIterator(stream StreamStore, start uint64) *dataStreamServerIterator {
 	return &dataStreamServerIterator{
 		stream:      stream,
 		curEntryNum: start,
