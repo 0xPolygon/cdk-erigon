@@ -388,6 +388,10 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 
 	// ACL preflight: optionally check admission against on-chain ACL before any state changes
     if st.evm.Config().ACL.Enabled {
+        // Skip ACL preflight for simulation calls with zero-origin (common in tooling / ENS lookups)
+        if st.msg.From() == (libcommon.Address{}) {
+            goto ACL_PREFLIGHT_DONE
+        }
         aclAddr := st.evm.Config().ACL.Address
         log.Info("ACL preflight: enabled", "acl", aclAddr, "failOpen", st.evm.Config().ACL.FailOpen, "from", st.msg.From(), "to", func() libcommon.Address { if st.msg.To()!=nil {return *st.msg.To()} ; return libcommon.Address{} }())
         // Superuser bypass: explicit list or owner (if enabled)

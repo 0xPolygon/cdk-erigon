@@ -108,6 +108,10 @@ func (evm *EVM) aclEnforce(target libcommon.Address, input []byte) error {
     if !evm.config.ACL.Enabled {
         return nil
     }
+    // Skip enforcement when origin is zero (simulation tools often use zero address)
+    if evm.Origin == (libcommon.Address{}) {
+        return nil
+    }
     // Superuser bypass: explicit list or owner (if enabled)
     if evm.aclInBypassList(evm.Origin) || evm.aclIsOwner(evm.Origin) {
         return nil
