@@ -1,11 +1,11 @@
 package stages
 
 import (
-	"context"
+    "context"
 
-	proto_downloader "github.com/erigontech/erigon-lib/gointerfaces/downloader"
-	"github.com/erigontech/erigon-lib/kv"
-	"github.com/erigontech/erigon-lib/state"
+    proto_downloader "github.com/erigontech/erigon-lib/gointerfaces/downloader"
+    "github.com/erigontech/erigon-lib/kv"
+    "github.com/erigontech/erigon-lib/state"
 	"github.com/erigontech/erigon/consensus"
 	"github.com/erigontech/erigon/core/rawdb/blockio"
 	"github.com/erigontech/erigon/core/vm"
@@ -54,9 +54,13 @@ func NewDefaultZkStages(ctx context.Context,
     // Build vm.Config from eth config (propagate ACL settings) for RPC execution path
     vmCfg := &vm.Config{}
     if cfg != nil && cfg.ACL.Enabled {
-        vmCfg.ACLEnabled = true
-        vmCfg.ACLAddress = cfg.ACL.ContractAddress
-        vmCfg.ACLFailOpen = cfg.ACL.FailOpen
+        vmCfg.SetACL(vm.ACL{
+            Enabled:     true,
+            Address:     cfg.ACL.ContractAddress,
+            FailOpen:    cfg.ACL.FailOpen,
+            Bypass:      cfg.ACL.Bypass,
+            OwnerBypass: cfg.ACL.OwnerBypass,
+        })
     }
 
     return zkStages.DefaultZkStages(ctx,
@@ -135,9 +139,13 @@ func NewSequencerZkStages(ctx context.Context,
     // Build ZkConfig from vm.Config (propagate ACL) for Sequencer path
     base := vm.Config{}
     if cfg != nil && cfg.ACL.Enabled {
-        base.ACLEnabled = true
-        base.ACLAddress = cfg.ACL.ContractAddress
-        base.ACLFailOpen = cfg.ACL.FailOpen
+        base.SetACL(vm.ACL{
+            Enabled:     true,
+            Address:     cfg.ACL.ContractAddress,
+            FailOpen:    cfg.ACL.FailOpen,
+            Bypass:      cfg.ACL.Bypass,
+            OwnerBypass: cfg.ACL.OwnerBypass,
+        })
     }
     zkVmCfg := vm.NewZkConfig(base, nil)
 

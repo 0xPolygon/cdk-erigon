@@ -385,11 +385,15 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
 	// ACL preflight: optionally check admission against on-chain ACL before any state changes
-    if st.evm.Config().ACLEnabled {
-        aclAddr := st.evm.Config().ACLAddress
-        log.Info("ACL preflight: enabled", "acl", aclAddr, "failOpen", st.evm.Config().ACLFailOpen, "from", st.msg.From(), "to", func() libcommon.Address { if st.msg.To()!=nil {return *st.msg.To()} ; return libcommon.Address{} }())
-		// zero address means misconfigured; respect FailOpen if set
-		if aclAddr != (libcommon.Address{}) {
+    if st.evm.Config().ACL.Enabled {
+        aclAddr := st.evm.Config().ACL.Address
+        log.Info("ACL preflight: enabled", "acl", aclAddr, "failOpen", st.evm.Config().ACL.FailOpen, "from", st.msg.From(), "to", func() libcommon.Address { if st.msg.To()!=nil {return *st.msg.To()} ; return libcommon.Address{} }())
+        // Superuser bypass: explicit list or owner (if enabled)
+        if aclInBypassList(st.evm.Config().ACL.Bypass, st.msg.From()) || (st.evm.Config().ACL.OwnerBypass && aclIsOwnerPreflight(st, aclAddr, st.msg.From())) {
+            goto ACL_PREFLIGHT_DONE
+        }
+        // zero address means misconfigured; respect FailOpen if set
+        if aclAddr != (libcommon.Address{}) {
 			var target libcommon.Address
 			if st.msg.To() != nil {
 				target = *st.msg.To()
@@ -403,25 +407,27 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 			const aclCallGas uint64 = 500_000
 			// Use a temporary EVM with RestoreState to avoid any state touches
 			cfg := st.evm.Config()
-			cfg.RestoreState = true
-			cfg.ReadOnly = true
-			cfg.ACLEnabled = false
-			tmpEVM := vm.NewEVM(st.evm.Context, st.evm.TxContext, st.evm.IntraBlockState(), st.evm.ChainConfig(), cfg)
+            cfg.RestoreState = true
+            cfg.ReadOnly = true
+            // Disable ACL for the preflight to avoid recursion
+            cfg.ACL.Enabled = false
+            tmpEVM := vm.NewEVM(st.evm.Context, st.evm.TxContext, st.evm.IntraBlockState(), st.evm.ChainConfig(), cfg)
 			// Perform STATICCALL from the sender context
             _, _, err := tmpEVM.StaticCall(vm.AccountRef(st.msg.From()), aclAddr, data, aclCallGas)
             if err != nil {
                 log.Info("ACL preflight: denied", "err", err)
-                if st.evm.Config().ACLFailOpen {
+                if st.evm.Config().ACL.FailOpen {
                     // Log at debug level if available; continue execution
                 } else {
                     return nil, fmt.Errorf("ACL denied: %w", err)
                 }
             }
             log.Info("ACL preflight: allowed")
-		} else if !st.evm.Config().ACLFailOpen {
-			return nil, fmt.Errorf("ACL misconfigured: empty contract address")
-		}
-	}
+        } else if !st.evm.Config().ACL.FailOpen {
+            return nil, fmt.Errorf("ACL misconfigured: empty contract address")
+        }
+    }
+ACL_PREFLIGHT_DONE:
 
 	// Check clauses 1-3 and 6, buy gas if everything is correct
 	if err := st.preCheck(gasBailout); err != nil {
@@ -653,6 +659,51 @@ func buildACLCheckCallData(subject, target libcommon.Address, payload []byte) []
 	// data
 	copy(out[tailStart+32:], payload)
 	return out
+}
+
+// buildOwnerCallData ABI-encodes owner()
+func buildOwnerCallData() []byte {
+    out := make([]byte, 4)
+    // selector: keccak256("owner()")[:4] == 0x8da5cb5b
+    s := vm.ACLOwnerSelector
+    out[0] = byte(s >> 24)
+    out[1] = byte(s >> 16)
+    out[2] = byte(s >> 8)
+    out[3] = byte(s)
+    return out
+}
+
+func aclInBypassList(list []libcommon.Address, addr libcommon.Address) bool {
+    if len(list) == 0 {
+        return false
+    }
+    for _, a := range list {
+        if a == addr {
+            return true
+        }
+    }
+    return false
+}
+
+// aclIsOwnerPreflight resolves owner() of the ACL proxy and compares to subject.
+func aclIsOwnerPreflight(st *StateTransition, aclAddr, subject libcommon.Address) bool {
+    if aclAddr == (libcommon.Address{}) {
+        return false
+    }
+    data := buildOwnerCallData()
+    const gas uint64 = 50_000
+    cfg := st.evm.Config()
+    cfg.RestoreState = true
+    cfg.ReadOnly = true
+    cfg.ACL.Enabled = false
+    tmpEVM := vm.NewEVM(st.evm.Context, st.evm.TxContext, st.evm.IntraBlockState(), st.evm.ChainConfig(), cfg)
+    ret, _, err := tmpEVM.StaticCall(vm.AccountRef(st.msg.From()), aclAddr, data, gas)
+    if err != nil || len(ret) < 32 {
+        return false
+    }
+    var owner libcommon.Address
+    copy(owner[:], ret[12:32])
+    return owner == subject
 }
 
 func (st *StateTransition) refundGas() {

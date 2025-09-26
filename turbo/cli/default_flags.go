@@ -107,6 +107,8 @@ var DefaultFlags = []cli.Flag{
 	&utils.ACLEnabledFlag,
 	&utils.ACLAddressFlag,
 	&utils.ACLFailOpenFlag,
+	&utils.ACLBypassFlag,
+	&utils.ACLOwnerBypassFlag,
 
 	&RpcSubscriptionFiltersMaxLogsFlag,
 	&RpcSubscriptionFiltersMaxHeadersFlag,

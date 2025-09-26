@@ -595,9 +595,13 @@ func NewPipelineStages(ctx context.Context,
     // Propagate ACL settings into vm.Config for execution
     vmCfg := &vm.Config{}
     if cfg != nil && cfg.ACL.Enabled {
-        vmCfg.ACLEnabled = true
-        vmCfg.ACLAddress = cfg.ACL.ContractAddress
-        vmCfg.ACLFailOpen = cfg.ACL.FailOpen
+        vmCfg.SetACL(vm.ACL{
+            Enabled:     true,
+            Address:     cfg.ACL.ContractAddress,
+            FailOpen:    cfg.ACL.FailOpen,
+            Bypass:      cfg.ACL.Bypass,
+            OwnerBypass: cfg.ACL.OwnerBypass,
+        })
     }
 
     if len(cfg.Sync.UploadLocation) == 0 {
@@ -680,9 +684,13 @@ func NewInMemoryExecution(ctx context.Context, db kv.RwDB, cfg *ethconfig.Config
     // Build vm.Config (ACL) for in-memory exec
     vmCfgMem := &vm.Config{}
     if cfg != nil && cfg.ACL.Enabled {
-        vmCfgMem.ACLEnabled = true
-        vmCfgMem.ACLAddress = cfg.ACL.ContractAddress
-        vmCfgMem.ACLFailOpen = cfg.ACL.FailOpen
+        vmCfgMem.SetACL(vm.ACL{
+            Enabled:     true,
+            Address:     cfg.ACL.ContractAddress,
+            FailOpen:    cfg.ACL.FailOpen,
+            Bypass:      cfg.ACL.Bypass,
+            OwnerBypass: cfg.ACL.OwnerBypass,
+        })
     }
     return stagedsync.New(
         cfg.Sync,

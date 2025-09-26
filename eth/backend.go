@@ -244,13 +244,17 @@ type Ethereum struct {
 // buildVMConfig constructs a vm.Config based on node configuration.
 // It propagates ACL firewall settings for execution-time admission checks.
 func (backend *Ethereum) buildVMConfig() *vm.Config {
-	cfg := &vm.Config{}
-	if backend.config != nil && backend.config.ACL.Enabled {
-		cfg.ACLEnabled = true
-		cfg.ACLAddress = backend.config.ACL.ContractAddress
-		cfg.ACLFailOpen = backend.config.ACL.FailOpen
-	}
-	return cfg
+    cfg := &vm.Config{}
+    if backend.config != nil && backend.config.ACL.Enabled {
+        cfg.SetACL(vm.ACL{
+            Enabled:     true,
+            Address:     backend.config.ACL.ContractAddress,
+            FailOpen:    backend.config.ACL.FailOpen,
+            Bypass:      backend.config.ACL.Bypass,
+            OwnerBypass: backend.config.ACL.OwnerBypass,
+        })
+    }
+    return cfg
 }
 
 func splitAddrIntoHostAndPort(addr string) (host string, port int, err error) {

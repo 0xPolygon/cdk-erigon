@@ -68,7 +68,7 @@ func DoCallWithVMConfig(
 		}
 	*/
 
-    log.Info("ACL sim DoCall", "enabled", baseVM.ACLEnabled, "address", baseVM.ACLAddress, "failOpen", baseVM.ACLFailOpen)
+    log.Info("ACL sim DoCall", "enabled", baseVM.ACL.Enabled, "address", baseVM.ACL.Address, "failOpen", baseVM.ACL.FailOpen)
     state := state.New(stateReader)
 
 	// Override the fields of specified contracts before execution.

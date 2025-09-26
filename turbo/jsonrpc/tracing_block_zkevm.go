@@ -30,7 +30,9 @@ type blockTracer struct {
 	chainConfig    *chain.Config
 	_blockReader   services.FullBlockReader
 	historyV3      bool
-	evmCallTimeout time.Duration
+    evmCallTimeout time.Duration
+    // Base vm.Config to propagate ACL settings during PrepareForTxExecution/tracing
+    aclVM          vm.Config
 }
 
 func (bt *blockTracer) TraceBlock(block *types.Block) error {
@@ -47,14 +49,15 @@ func (bt *blockTracer) TraceBlock(block *types.Block) error {
 		txns = append(txns, borTx)
 	}
 
-	txTracerEnv := txTracerEnv{
-		block:         block,
-		txEnv:         txEnv,
-		cumulativeGas: uint64(0),
-		hermezReader:  hermez_db.NewHermezDbReader(bt.tx),
-		chainConfig:   bt.chainConfig,
-		engine:        bt.engine,
-	}
+    txTracerEnv := txTracerEnv{
+        block:         block,
+        txEnv:         txEnv,
+        cumulativeGas: uint64(0),
+        hermezReader:  hermez_db.NewHermezDbReader(bt.tx),
+        chainConfig:   bt.chainConfig,
+        engine:        bt.engine,
+        baseVM:        &bt.aclVM,
+    }
 
 	for idx, txn := range txns {
 		if err := bt.traceLastTxFlushed(txTracerEnv, txn, idx); err != nil {
@@ -134,26 +137,32 @@ func (bt *blockTracer) handleError(err error) {
 }
 
 type txTracerEnv struct {
-	hermezReader  state.ReadOnlyHermezDb
-	chainConfig   *chain.Config
-	engine        consensus.EngineReader
-	block         *types.Block
-	cumulativeGas uint64
-	txEnv         transactions.TxEnv
+    hermezReader  state.ReadOnlyHermezDb
+    chainConfig   *chain.Config
+    engine        consensus.EngineReader
+    block         *types.Block
+    cumulativeGas uint64
+    txEnv         transactions.TxEnv
+    baseVM        *vm.Config
 }
 
 func (tt *txTracerEnv) GetTxExecuteContext(txn types.Transaction, idx int) (evmtypes.TxContext, types.Message, error) {
 	txHash := txn.Hash()
-	evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(
-		tt.chainConfig,
-		&vm.Config{},
-		&tt.txEnv.BlockContext,
-		tt.hermezReader,
-		tt.txEnv.Ibs,
-		tt.block,
-		&txHash,
-		idx,
-	)
+    // choose base vm.Config (for ACL), if provided
+    vmCfg := &vm.Config{}
+    if tt.baseVM != nil {
+        vmCfg = tt.baseVM
+    }
+    evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(
+        tt.chainConfig,
+        vmCfg,
+        &tt.txEnv.BlockContext,
+        tt.hermezReader,
+        tt.txEnv.Ibs,
+        tt.block,
+        &txHash,
+        idx,
+    )
 	if err != nil {
 		return evmtypes.TxContext{}, types.Message{}, err
 	}

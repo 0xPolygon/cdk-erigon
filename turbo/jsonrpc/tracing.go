@@ -110,7 +110,11 @@ func (api *PrivateDebugAPIImpl) traceBlock_deprecated(ctx context.Context, block
 	ibs := txEnv.Ibs
 
 	rules := chainConfig.Rules(block.NumberU64(), block.Time())
-	stream.WriteArrayStart()
+    stream.WriteArrayStart()
+
+    // Build base vm.Config to propagate ACL settings into PrepareForTxExecution
+    baseVM := vm.Config{}
+    ACLFromConfig(api.config).ApplyVM(&baseVM)
 
 	borTx := rawdb.ReadBorTransactionForBlock(tx, block.NumberU64())
 	txns := block.Transactions()
@@ -156,7 +160,7 @@ func (api *PrivateDebugAPIImpl) traceBlock_deprecated(ctx context.Context, block
 		} else {
 			txnHash = txn.Hash()
 		}
-		evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(chainConfig, &vm.Config{}, &blockCtx, hermezReader, ibs, block, &txnHash, idx)
+        evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(chainConfig, &baseVM, &blockCtx, hermezReader, ibs, block, &txnHash, idx)
 		if err != nil {
 			stream.WriteNil()
 			return err
@@ -369,12 +373,8 @@ func (api *PrivateDebugAPIImpl) TraceCall(ctx context.Context, args ethapi.CallA
 	txCtx := core.NewEVMTxContext(msg)
     // Trace the transaction and return with ACL config
     vmCfg := vm.Config{}
-    if api.config != nil && api.config.ACL.Enabled {
-        vmCfg.ACLEnabled = true
-        vmCfg.ACLAddress = api.config.ACL.ContractAddress
-        vmCfg.ACLFailOpen = api.config.ACL.FailOpen
-    }
-    log.Info("ACL sim TraceCall", "enabled", vmCfg.ACLEnabled, "address", vmCfg.ACLAddress)
+    ACLFromConfig(api.config).ApplyVM(&vmCfg)
+    log.Info("ACL sim TraceCall", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address)
     return transactions.TraceTxWithVMConfig(ctx, msg, blockCtx, txCtx, ibs, config, chainConfig, stream, api.evmCallTimeout, vmCfg)
 }
 
