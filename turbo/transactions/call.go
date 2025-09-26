@@ -68,8 +68,8 @@ func DoCallWithVMConfig(
 		}
 	*/
 
-    log.Info("ACL sim DoCall", "enabled", baseVM.ACL.Enabled, "address", baseVM.ACL.Address, "failOpen", baseVM.ACL.FailOpen)
-    state := state.New(stateReader)
+	log.Info("ACL sim DoCall", "enabled", baseVM.ACL.Enabled, "address", baseVM.ACL.Address, "failOpen", baseVM.ACL.FailOpen)
+	state := state.New(stateReader)
 
 	// Override the fields of specified contracts before execution.
 	if overrides != nil {
@@ -108,6 +108,9 @@ func DoCallWithVMConfig(
 	txCtx := core.NewEVMTxContext(msg)
 
 	baseVM.NoBaseFee = true
+	// Mark as read-only simulation and restore state to avoid persisting changes
+	baseVM.ReadOnly = true
+	baseVM.RestoreState = true
 	evm := vm.NewEVM(blockCtx, txCtx, state, chainConfig, baseVM)
 
 	// Wait for the context to be done and cancel the evm. Even if the

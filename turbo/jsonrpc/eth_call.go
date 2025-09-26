@@ -76,6 +76,8 @@ func (api *APIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blockNrOrHa
     // Build vm.Config with ACL settings for eth_call simulation
     vmCfg := vm.Config{}
     api.aclRuntime().ApplyVM(&vmCfg)
+    vmCfg.ReadOnly = true
+    vmCfg.RestoreState = true
     log.Info("ACL sim eth_call", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
     result, err := transactions.DoCallWithVMConfig(ctx, engine, args, tx, blockNrOrHash, header, overrides, api.GasCap, chainConfig, stateReader, api._blockReader, api.evmCallTimeout, vmCfg)
 	if err != nil {
@@ -260,6 +262,8 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	}
     vmCfg := vm.Config{}
     api.aclRuntime().ApplyVM(&vmCfg)
+    vmCfg.ReadOnly = true
+    vmCfg.RestoreState = true
     log.Info("ACL sim estimateGas", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
     caller, err := transactions.NewReusableCaller(engine, stateReader, overrides, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters, vmCfg)
 	if err != nil {
