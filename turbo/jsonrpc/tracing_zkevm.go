@@ -87,17 +87,22 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 		return err
 	}
 
-	blockTracer := &blockTracer{
-		ctx:            ctx,
-		stream:         stream,
-		engine:         api.engine(),
-		tx:             tx,
-		config:         config,
-		chainConfig:    chainConfig,
-		_blockReader:   api._blockReader,
-		historyV3:      api.historyV3(tx),
-		evmCallTimeout: api.evmCallTimeout,
-	}
+    // Build base vm.Config to propagate ACL into PrepareForTxExecution
+    baseVM := vm.Config{}
+    ACLFromConfig(api.config).ApplyVM(&baseVM)
+
+    blockTracer := &blockTracer{
+        ctx:            ctx,
+        stream:         stream,
+        engine:         api.engine(),
+        tx:             tx,
+        config:         config,
+        chainConfig:    chainConfig,
+        _blockReader:   api._blockReader,
+        historyV3:      api.historyV3(tx),
+        evmCallTimeout: api.evmCallTimeout,
+        aclVM:          baseVM,
+    }
 
 	return blockTracer.TraceBlock(block)
 }
@@ -217,7 +222,11 @@ func (api *PrivateDebugAPIImpl) TraceCallMany(ctx context.Context, bundles []Bun
 
 	// Get a new instance of the EVM
 
-	hermezReader := hermez_db.NewHermezDbReader(tx)
+    hermezReader := hermez_db.NewHermezDbReader(tx)
+
+    // Build base vm.Config to propagate ACL into PrepareForTxExecution
+    baseVM := vm.Config{}
+    ACLFromConfig(api.config).ApplyVM(&baseVM)
 
 	// Setup the gas pool (also for unmetered requests)
 	// and apply the message.
@@ -225,7 +234,7 @@ func (api *PrivateDebugAPIImpl) TraceCallMany(ctx context.Context, bundles []Bun
 	for idx, txn := range replayTransactions {
 		//evm = vm.NewEVM(blockCtx, txCtx, evm.IntraBlockState(), chainConfig, vm.Config{Debug: false})
 		txHash := txn.Hash()
-		evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(chainConfig, &vm.Config{}, &blockCtx, hermezReader, evm.IntraBlockState().(*state.IntraBlockState), block, &txHash, idx)
+        evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(chainConfig, &baseVM, &blockCtx, hermezReader, evm.IntraBlockState().(*state.IntraBlockState), block, &txHash, idx)
 		if err != nil {
 			stream.WriteNil()
 			return err

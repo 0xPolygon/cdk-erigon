@@ -152,7 +152,7 @@ func attemptAddTransaction(
             sender = s
         }
     }
-    log.Info("ACL seq exec tx", "enabled", cfg.zkVmConfig.Config.ACLEnabled, "address", cfg.zkVmConfig.Config.ACLAddress, "failOpen", cfg.zkVmConfig.Config.ACLFailOpen, "from", sender, "to", transaction.GetTo(), "selector", sel)
+    log.Info("ACL seq exec tx", "enabled", cfg.zkVmConfig.Config.ACL.Enabled, "address", cfg.zkVmConfig.Config.ACL.Address, "failOpen", cfg.zkVmConfig.Config.ACL.FailOpen, "from", sender, "to", transaction.GetTo(), "selector", sel)
 
 	// TODO: possibly inject zero tracer here!
 

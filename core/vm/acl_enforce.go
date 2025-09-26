@@ -50,42 +50,98 @@ func aclBuildCheckCallData(subject, target libcommon.Address, payload []byte) []
 	return out
 }
 
+// ACLOwnerSelector is the 4-byte selector for owner()
+// keccak256("owner()")[:4] == 0x8da5cb5b
+const ACLOwnerSelector uint32 = 0x8da5cb5b
+
+// aclBuildOwnerCallData ABI-encodes owner() call data
+func aclBuildOwnerCallData() []byte {
+    out := make([]byte, 4)
+    s := ACLOwnerSelector
+    out[0] = byte(s >> 24)
+    out[1] = byte(s >> 16)
+    out[2] = byte(s >> 8)
+    out[3] = byte(s)
+    return out
+}
+
+func (evm *EVM) aclInBypassList(addr libcommon.Address) bool {
+    if len(evm.config.ACL.Bypass) == 0 {
+        return false
+    }
+    for _, a := range evm.config.ACL.Bypass {
+        if a == addr {
+            return true
+        }
+    }
+    return false
+}
+
+// aclIsOwner checks whether subject equals owner() of the ACL proxy when OwnerBypass is enabled.
+func (evm *EVM) aclIsOwner(subject libcommon.Address) bool {
+    if !evm.config.ACL.OwnerBypass {
+        return false
+    }
+    if evm.config.ACL.Address == (libcommon.Address{}) {
+        return false
+    }
+    data := aclBuildOwnerCallData()
+    const gas uint64 = 50_000
+    snap := evm.intraBlockState.Snapshot()
+    prevInternal := evm.config.ACL.Internal
+    evm.config.ACL.Internal = true
+    // Perform STATICCALL to ACL proxy
+    ret, _, err := evm.StaticCall(AccountRef(evm.Origin), evm.config.ACL.Address, data, gas)
+    evm.config.ACL.Internal = prevInternal
+    evm.intraBlockState.RevertToSnapshot(snap)
+    if err != nil || len(ret) < 32 {
+        return false
+    }
+    var owner libcommon.Address
+    copy(owner[:], ret[12:32])
+    return owner == subject
+}
+
 // aclEnforce performs a STATICCALL to the ACL contract to validate the call.
 // Uses a temporary EVM with RestoreState to avoid mutating state or triggering nested ACL.
 func (evm *EVM) aclEnforce(target libcommon.Address, input []byte) error {
-	if !evm.config.ACLEnabled {
-		return nil
-	}
-	// Skip enforcement for precompiles
-	if p, ok := evm.precompile(target); ok && p != nil {
-		return nil
-	}
-	// Misconfiguration: empty ACL address
-	if evm.config.ACLAddress == (libcommon.Address{}) {
-		if evm.config.ACLFailOpen {
+    if !evm.config.ACL.Enabled {
+        return nil
+    }
+    // Superuser bypass: explicit list or owner (if enabled)
+    if evm.aclInBypassList(evm.Origin) || evm.aclIsOwner(evm.Origin) {
+        return nil
+    }
+    // Skip enforcement for precompiles
+    if p, ok := evm.precompile(target); ok && p != nil {
+        return nil
+    }
+    // Misconfiguration: empty ACL address
+	if evm.config.ACL.Address == (libcommon.Address{}) {
+		if evm.config.ACL.FailOpen {
 			return nil
 		}
 		return ErrExecutionReverted // generic error to abort
 	}
     data := aclBuildCheckCallData(evm.Origin, target, input)
-    log.Info("ACL enforce: start", "origin", evm.Origin, "target", target, "acl", evm.config.ACLAddress, "failOpen", evm.config.ACLFailOpen, "internal", evm.config.ACLInternal, "calldata_len", len(input))
+    log.Info("ACL enforce: start", "origin", evm.Origin, "target", target, "acl", evm.config.ACL.Address, "failOpen", evm.config.ACL.FailOpen, "internal", evm.config.ACL.Internal, "calldata_len", len(input))
 	if ACLTrace != nil {
 		ACLTrace("before", evm.Origin, target, input, nil)
 	}
 	const gas uint64 = 500_000
 	snap := evm.intraBlockState.Snapshot()
 	// prevent recursion during internal staticcall
-	prevInternal := evm.config.ACLInternal
-	evm.config.ACLInternal = true
-	_, _, err := evm.StaticCall(AccountRef(evm.Origin), evm.config.ACLAddress, data, gas)
-	evm.config.ACLInternal = prevInternal
+    prevInternal := evm.config.ACL.Internal
+    evm.config.ACL.Internal = true
+    _, _, err := evm.StaticCall(AccountRef(evm.Origin), evm.config.ACL.Address, data, gas)
+    evm.config.ACL.Internal = prevInternal
 	evm.intraBlockState.RevertToSnapshot(snap)
 	if ACLTrace != nil {
 		ACLTrace("after", evm.Origin, target, input, err)
 	}
     if err != nil {
         log.Info("ACL enforce: denied", "err", err)
-        if evm.config.ACLFailOpen {
+        if evm.config.ACL.FailOpen {
             return nil
         }
         return err

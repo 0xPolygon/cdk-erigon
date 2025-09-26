@@ -60,6 +60,7 @@ type OtterscanAPIImpl struct {
 	*BaseAPI
 	db          kv.RoDB
 	maxPageSize uint64
+	aclRuntime  *ACLRuntime
 }
 
 func NewOtterscanAPI(base *BaseAPI, db kv.RoDB, maxPageSize uint64) *OtterscanAPIImpl {
@@ -67,6 +68,19 @@ func NewOtterscanAPI(base *BaseAPI, db kv.RoDB, maxPageSize uint64) *OtterscanAP
 		BaseAPI:     base,
 		db:          db,
 		maxPageSize: maxPageSize,
+	}
+}
+
+// NewOtterscanAPIWithACL allows wiring ACL settings so tracing matches node execution rules.
+// Tests may use NewOtterscanAPI (which leaves ACL disabled for tracing paths).
+func NewOtterscanAPIWithACL(base *BaseAPI, db kv.RoDB, maxPageSize uint64,
+	aclRuntime *ACLRuntime,
+) *OtterscanAPIImpl {
+	return &OtterscanAPIImpl{
+		BaseAPI:     base,
+		db:          db,
+		maxPageSize: maxPageSize,
+		aclRuntime:  aclRuntime,
 	}
 }
 
@@ -142,6 +156,16 @@ func (api *OtterscanAPIImpl) runTracer(ctx context.Context, tx kv.Tx, hash commo
 	} else {
 		vmConfig = vm.Config{Debug: true, Tracer: tracer}
 	}
+	// Propagate ACL into tracing VM, if configured for this API
+    if api.aclRuntime != nil {
+        vmConfig.SetACL(vm.ACL{
+            Enabled:     api.aclRuntime.Enabled,
+            Address:     api.aclRuntime.Address,
+            FailOpen:    api.aclRuntime.FailOpen,
+            Bypass:      api.aclRuntime.Bypass,
+            OwnerBypass: api.aclRuntime.OwnerBypass,
+        })
+    }
 	vmenv := vm.NewEVM(txEnv.BlockContext, txEnv.TxContext, txEnv.Ibs, chainConfig, vmConfig)
 
 	result, err := core.ApplyMessage(vmenv, txEnv.Msg, new(core.GasPool).AddGas(txEnv.Msg.Gas()), true, false /* gasBailout */)

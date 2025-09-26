@@ -236,6 +236,15 @@ var (
 		Usage: "Bypass ACL check on call failure (not recommended)",
 		Value: false,
 	}
+	ACLBypassFlag = cli.StringSliceFlag{
+		Name:  "acl.bypass",
+		Usage: "Address(es) with ACL superuser bypass (comma-separated or repeated)",
+	}
+	ACLOwnerBypassFlag = cli.BoolFlag{
+		Name:  "acl.owner-bypass",
+		Usage: "Treat ACL owner() as superuser (bypass)",
+		Value: false,
+	}
 	TxPoolTotalBlobPoolLimit = cli.Uint64Flag{
 		Name:  "txpool.totalblobpoollimit",
 		Usage: "Total limit of number of all blobs in txs within the txpool",
@@ -2539,6 +2548,17 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 		cfg.ACL.ContractAddress = libcommon.HexToAddress(addr)
 	}
 	cfg.ACL.FailOpen = ctx.Bool(ACLFailOpenFlag.Name)
+	// ACL superuser bypass configuration
+	if ctx.IsSet(ACLBypassFlag.Name) {
+		addrs := ctx.StringSlice(ACLBypassFlag.Name)
+		for _, s := range addrs {
+			if s == "" {
+				continue
+			}
+			cfg.ACL.Bypass = append(cfg.ACL.Bypass, libcommon.HexToAddress(s))
+		}
+	}
+	cfg.ACL.OwnerBypass = ctx.Bool(ACLOwnerBypassFlag.Name)
 	// Override any default configs for hard coded networks.
 	chain = ctx.String(ChainFlag.Name)
 	if strings.HasPrefix(chain, "dynamic") {
