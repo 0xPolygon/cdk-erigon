@@ -1,0 +1,16 @@
+[profile.default]
+src = "contracts"
+out = "out"
+script = "script"
+solc_version = "0.8.27"
+evm_version = "paris"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+
+remappings = [
+  "@iden3/contracts/=lib/contracts/contracts/",
+  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "solidity-bytes-utils/=lib/solidity-bytes-utils/",
+]

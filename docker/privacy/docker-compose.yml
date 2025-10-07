@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-issuer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-issuerpass}
+      POSTGRES_DB: ${POSTGRES_DB:-issuer}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - redisdata:/data
+
+  issuer-node:
+    image: 0xpolygonid/issuer-node:latest
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://issuer:issuerpass@postgres:5432/issuer?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      PORT: ${ISSUER_PORT:-3001}
+      HOST: 0.0.0.0
+      NODE_ENV: ${NODE_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_SECRET: ${JWT_SECRET}
+      BASE_URL: ${ISSUER_BASE_URL}
+    ports:
+      - "${ISSUER_PORT:-3001}:3001"
+    volumes:
+      - issuerdata:/data
+
+  # Optional web UI; replace with actual image/config for your org
+  # issuer-ui:
+  #   image: 0xpolygonid/issuer-frontend:latest
+  #   depends_on:
+  #     - issuer-node
+  #   environment:
+  #     ISSUER_API_URL: http://issuer-node:3001
+  #   ports:
+  #     - "${ISSUER_UI_PORT:-3002}:3000"
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  issuerdata: {}
