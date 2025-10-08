@@ -249,7 +249,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx = context.WithValue(ctx, "remote", r.RemoteAddr)
+    ctx = context.WithValue(ctx, "remote", r.RemoteAddr)
 	ctx = context.WithValue(ctx, "scheme", r.Proto)
 	ctx = context.WithValue(ctx, "local", r.Host)
 	if ua := r.Header.Get("User-Agent"); ua != "" {
@@ -265,7 +265,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("content-type", contentType)
+    // Attach the full header map to the context for downstream handlers (e.g., to read Authorization)
+    ctx = withHTTPHeaders(ctx, r.Header)
+
+    w.Header().Set("content-type", contentType)
 	codec := newHTTPServerConn(r, w)
 	defer codec.Close()
 	var stream *jsoniter.Stream

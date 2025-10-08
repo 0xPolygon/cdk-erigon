@@ -1,45 +1,96 @@
 package jsonrpc
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"math/big"
+    "context"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "math/big"
+    "net/http"
+    "os"
+    "strings"
+    "time"
 
-	"github.com/erigontech/erigon-lib/kv/membatchwithdb"
-	"github.com/erigontech/erigon-lib/log/v3"
-	"github.com/holiman/uint256"
-	"google.golang.org/grpc"
+    "github.com/erigontech/erigon-lib/kv/membatchwithdb"
+    "github.com/erigontech/erigon-lib/log/v3"
+    "github.com/holiman/uint256"
+    "google.golang.org/grpc"
 
-	libcommon "github.com/erigontech/erigon-lib/common"
-	"github.com/erigontech/erigon-lib/common/hexutil"
-	"github.com/erigontech/erigon-lib/common/hexutility"
-	"github.com/erigontech/erigon-lib/gointerfaces"
-	txpool_proto "github.com/erigontech/erigon-lib/gointerfaces/txpool"
-	"github.com/erigontech/erigon-lib/kv"
-	types2 "github.com/erigontech/erigon-lib/types"
+    libcommon "github.com/erigontech/erigon-lib/common"
+    "github.com/erigontech/erigon-lib/common/hexutil"
+    "github.com/erigontech/erigon-lib/common/hexutility"
+    "github.com/erigontech/erigon-lib/gointerfaces"
+    txpool_proto "github.com/erigontech/erigon-lib/gointerfaces/txpool"
+    "github.com/erigontech/erigon-lib/kv"
+    types2 "github.com/erigontech/erigon-lib/types"
 
-	"github.com/erigontech/erigon-lib/crypto"
-	"github.com/erigontech/erigon/core"
-	"github.com/erigontech/erigon/core/state"
-	"github.com/erigontech/erigon/core/types"
-	"github.com/erigontech/erigon/core/types/accounts"
-	"github.com/erigontech/erigon/core/vm"
-	"github.com/erigontech/erigon/core/vm/evmtypes"
-	"github.com/erigontech/erigon/eth/stagedsync"
-	"github.com/erigontech/erigon/eth/tracers/logger"
-	"github.com/erigontech/erigon/params"
-	"github.com/erigontech/erigon/rpc"
-	ethapi2 "github.com/erigontech/erigon/turbo/adapter/ethapi"
-	"github.com/erigontech/erigon/turbo/rpchelper"
-	"github.com/erigontech/erigon/turbo/transactions"
-	"github.com/erigontech/erigon/turbo/trie"
+    "github.com/erigontech/erigon-lib/crypto"
+    "github.com/erigontech/erigon/core"
+    "github.com/erigontech/erigon/core/state"
+    "github.com/erigontech/erigon/core/types"
+    "github.com/erigontech/erigon/core/types/accounts"
+    "github.com/erigontech/erigon/core/vm"
+    "github.com/erigontech/erigon/core/vm/evmtypes"
+    "github.com/erigontech/erigon/eth/stagedsync"
+    "github.com/erigontech/erigon/eth/tracers/logger"
+    "github.com/erigontech/erigon/params"
+    "github.com/erigontech/erigon/rpc"
+    ethapi2 "github.com/erigontech/erigon/turbo/adapter/ethapi"
+    "github.com/erigontech/erigon/turbo/rpchelper"
+    "github.com/erigontech/erigon/turbo/transactions"
+    "github.com/erigontech/erigon/turbo/trie"
 )
 
 var latestNumOrHash = rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
 
 // Call implements eth_call. Executes a new message call immediately without creating a transaction on the block chain.
 func (api *APIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *ethapi2.StateOverrides) (hexutility.Bytes, error) {
+    // Authorization gating (MVP): if no Authorization is provided and OFFCHAIN_VERIFIER_URL is set,
+    // create a verification session with the offchain verifier and return a structured JSON-RPC error
+    // instructing the client to complete verification.
+    if headers := rpc.HTTPHeadersFromContext(ctx); headers != nil {
+        auth := headers.Get("Authorization")
+        if strings.TrimSpace(auth) == "" {
+            if verifierURL := os.Getenv("OFFCHAIN_VERIFIER_URL"); verifierURL != "" {
+                // Prepare minimal payload for the verifier
+                payload := map[string]interface{}{
+                    "callType":  "eth_call",
+                    "schemaType": "Balance",
+                    "args": map[string]interface{}{
+                        "from": args.From,
+                        "to":   args.To,
+                        "gas":  args.Gas,
+                        "gasPrice": args.GasPrice,
+                        "value":    args.Value,
+                        "data":     args.Data,
+                    },
+                }
+                body, _ := json.Marshal(payload)
+                req, _ := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(verifierURL, "/")+"/sessions", strings.NewReader(string(body)))
+                req.Header.Set("content-type", "application/json")
+
+                httpClient := &http.Client{Timeout: 5 * time.Second}
+                var challengeURL, challengeID string
+                var expiresAt int64
+                if resp, err := httpClient.Do(req); err == nil && resp != nil {
+                    defer resp.Body.Close()
+                    var respObj struct {
+                        URL         string `json:"url"`
+                        ChallengeID string `json:"challengeId"`
+                        ExpiresAt   int64  `json:"expiresAt"`
+                    }
+                    if decErr := json.NewDecoder(resp.Body).Decode(&respObj); decErr == nil {
+                        challengeURL = respObj.URL
+                        challengeID = respObj.ChallengeID
+                        expiresAt = respObj.ExpiresAt
+                    }
+                }
+                // Return a custom JSON-RPC error with data for the client
+                return nil, verificationRequired{URL: challengeURL, ChallengeID: challengeID, ExpiresAt: expiresAt}
+            }
+        }
+    }
+
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -73,13 +124,13 @@ func (api *APIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blockNrOrHa
 		return nil, err
 	}
 	header := block.HeaderNoCopy()
-    // Build vm.Config with ACL settings for eth_call simulation
-    vmCfg := vm.Config{}
-    api.aclRuntime().ApplyVM(&vmCfg)
-    vmCfg.ReadOnly = true
-    vmCfg.RestoreState = true
-    log.Info("ACL sim eth_call", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
-    result, err := transactions.DoCallWithVMConfig(ctx, engine, args, tx, blockNrOrHash, header, overrides, api.GasCap, chainConfig, stateReader, api._blockReader, api.evmCallTimeout, vmCfg)
+	// Build vm.Config with ACL settings for eth_call simulation
+	vmCfg := vm.Config{}
+	api.aclRuntime().ApplyVM(&vmCfg)
+	vmCfg.ReadOnly = true
+	vmCfg.RestoreState = true
+	log.Info("ACL sim eth_call", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
+	result, err := transactions.DoCallWithVMConfig(ctx, engine, args, tx, blockNrOrHash, header, overrides, api.GasCap, chainConfig, stateReader, api._blockReader, api.evmCallTimeout, vmCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +145,31 @@ func (api *APIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blockNrOrHa
 	}
 
 	return result.Return(), result.Err
+}
+
+// verificationRequired is returned when an Authorization token is missing and
+// an offchain verification session has been initiated. It implements rpc.Error and
+// rpc.DataError so JSON-RPC clients receive a code and a data payload.
+type verificationRequired struct {
+    URL         string
+    ChallengeID string
+    ExpiresAt   int64
+}
+
+func (e verificationRequired) Error() string { return "verification required" }
+func (e verificationRequired) ErrorCode() int { return -32051 }
+func (e verificationRequired) ErrorData() interface{} {
+    data := map[string]interface{}{}
+    if e.URL != "" {
+        data["url"] = e.URL
+    }
+    if e.ChallengeID != "" {
+        data["challengeId"] = e.ChallengeID
+    }
+    if e.ExpiresAt != 0 {
+        data["expiresAt"] = e.ExpiresAt
+    }
+    return data
 }
 
 // headerByNumberOrHash - intent to read recent headers only, tries from the lru cache before reading from the db
@@ -260,12 +336,12 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 	if api.DisableVirtualCounters || chainConfig.IsNormalcy(header.Number.Uint64()) {
 		useCounters = false
 	}
-    vmCfg := vm.Config{}
-    api.aclRuntime().ApplyVM(&vmCfg)
-    vmCfg.ReadOnly = true
-    vmCfg.RestoreState = true
-    log.Info("ACL sim estimateGas", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
-    caller, err := transactions.NewReusableCaller(engine, stateReader, overrides, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters, vmCfg)
+	vmCfg := vm.Config{}
+	api.aclRuntime().ApplyVM(&vmCfg)
+	vmCfg.ReadOnly = true
+	vmCfg.RestoreState = true
+	log.Info("ACL sim estimateGas", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
+	caller, err := transactions.NewReusableCaller(engine, stateReader, overrides, header, args, api.GasCap, latestNumOrHash, dbtx, api._blockReader, chainConfig, api.evmCallTimeout, api.VirtualCountersSmtReduction, useCounters, vmCfg)
 	if err != nil {
 		return 0, err
 	}
@@ -577,7 +653,7 @@ func (api *APIImpl) CreateAccessList(ctx context.Context, args ethapi2.CallArgs,
 		tracer := logger.NewAccessListTracer(accessList, excl, state)
 		config := vm.Config{Tracer: tracer, Debug: true, NoBaseFee: true}
 		if api.aclEnabled {
-        api.aclRuntime().ApplyVM(&config)
+			api.aclRuntime().ApplyVM(&config)
 		}
 		blockCtx := transactions.NewEVMBlockContext(engine, header, bNrOrHash.RequireCanonical, tx, api._blockReader, chainConfig)
 		txCtx := core.NewEVMTxContext(msg)
