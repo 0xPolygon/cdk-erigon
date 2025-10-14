@@ -147,11 +147,11 @@ func SpawnSequencerBlobRecoveryStage(s *stagedsync.StageState, u stagedsync.Unwi
 					for bn, bf := range input.BaseFeeChanges {
 						blockNum, err := hexutil.DecodeUint64(bn)
 						if err != nil {
-							return fmt.Errorf("failed to decode block number %s: %w", blockNum, err)
+							return fmt.Errorf("failed to decode block number %s: %w", bn, err)
 						}
 						baseFee, err := hexutil.DecodeUint64(bf)
 						if err != nil {
-							return fmt.Errorf("failed to decode base fee %s: %w", baseFee, err)
+							return fmt.Errorf("failed to decode base fee %s: %w", bn, err)
 						}
 						if err = hermezDb.WriteRecoveryBlockBaseFee(blockNum, baseFee); err != nil {
 							return err
