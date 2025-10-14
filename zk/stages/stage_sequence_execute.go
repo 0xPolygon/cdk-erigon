@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/erigontech/erigon/consensus/misc"
+	"math/big"
 	"time"
 
 	"github.com/erigontech/erigon-lib/common"
@@ -370,6 +371,16 @@ func sequencingBatchStep(
 		header, parentBlock, err = prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg), cfg.chainConfig, cfg.miningConfig)
 		if err != nil {
 			return err
+		}
+
+		// If we are in blob recovery, override the block base fee with what we stored in the recovery from the blob da.
+		// We need to do this because the original network may have had 0 base fee up to a certain block due to 0 fee bridging on network startup.
+		if cfg.zk.IsBlobRecovery() {
+			recoveredBaseFee, err := sdb.hermezDb.GetRecoveryBlockBaseFee(blockNumber)
+			if err != nil {
+				return err
+			}
+			header.BaseFee = new(big.Int).SetUint64(recoveredBaseFee)
 		}
 
 		if batchDataOverflow := blockDataSizeChecker.AddBlockStartData(); batchDataOverflow {

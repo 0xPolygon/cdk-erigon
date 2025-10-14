@@ -39,6 +39,7 @@ const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots"  // l2blo
 const BATCH_WITNESSES = "hermez_batch_witnesses"                        // batch number -> witness
 const BATCH_COUNTERS = "hermez_batch_counters"                          // block number -> counters
 const L1_BATCH_DATA = "l1_batch_data"                                   // batch number -> l1 batch data from transaction call data
+const RECOVERY_BLOCK_BASE_FEE = "recovery_base_fee_changes"             // block number -> base fee
 const REUSED_L1_INFO_TREE_INDEX = "reused_l1_info_tree_index"           // block number => const 1
 const LATEST_USED_GER = "latest_used_ger"                               // batch number -> GER latest used GER
 const BATCH_BLOCKS = "batch_blocks"                                     // batch number -> block numbers (concatenated together)
@@ -80,6 +81,7 @@ var HermezDbTables = []string{
 	BATCH_WITNESSES,
 	BATCH_COUNTERS,
 	L1_BATCH_DATA,
+	RECOVERY_BLOCK_BASE_FEE,
 	REUSED_L1_INFO_TREE_INDEX,
 	LATEST_USED_GER,
 	BATCH_BLOCKS,
@@ -1528,6 +1530,18 @@ func (db *HermezDbReader) GetLastL1BatchData() (uint64, error) {
 	}
 
 	return BytesToUint64(k), nil
+}
+
+func (db *HermezDb) WriteRecoveryBlockBaseFee(blockNumber, baseFee uint64) error {
+	return db.tx.Put(RECOVERY_BLOCK_BASE_FEE, Uint64ToBytes(blockNumber), Uint64ToBytes(baseFee))
+}
+
+func (db *HermezDbReader) GetRecoveryBlockBaseFee(blockNumber uint64) (uint64, error) {
+	v, err := db.tx.GetOne(RECOVERY_BLOCK_BASE_FEE, Uint64ToBytes(blockNumber))
+	if err != nil {
+		return 0, err
+	}
+	return BytesToUint64(v), nil
 }
 
 func (db *HermezDb) WriteLatestUsedGer(blockNumber uint64, ger common.Hash) error {

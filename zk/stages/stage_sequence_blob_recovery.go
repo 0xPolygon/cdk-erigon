@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/erigontech/erigon-lib/chain"
+	"github.com/erigontech/erigon-lib/common/hexutil"
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/eth/ethconfig"
@@ -69,6 +70,12 @@ func SpawnSequencerBlobRecoveryStage(s *stagedsync.StageState, u stagedsync.Unwi
 		return err
 	}
 
+	// wait for execution to catch up to blob recovery stage so that it does not pull the batches again
+	if highestBatch > 0 && highestBatch < highestKnownBatch {
+		log.Info(fmt.Sprintf("[%s] Skipping blob recovery stage as execution has not caught up yet", logPrefix), "currentExecutedBatch", highestBatch, "highestKnownBatch", highestKnownBatch)
+		return nil
+	}
+
 	if cfg.zkCfg.RecoveryStopBatch > 0 {
 		// stop completely if we have executed past the stop batch in config
 		if highestKnownBatch > cfg.zkCfg.RecoveryStopBatch {
@@ -87,13 +94,6 @@ func SpawnSequencerBlobRecoveryStage(s *stagedsync.StageState, u stagedsync.Unwi
 			time.Sleep(1 * time.Second)
 			return nil
 		}
-	}
-
-	// check if execution has caught up to the tip of the chain
-	if highestBatch > 0 && highestKnownBatch == highestBatch {
-		log.Info(fmt.Sprintf("[%s] Blob recovery has completed!", logPrefix), "batch", highestBatch)
-		time.Sleep(5 * time.Second)
-		return nil
 	}
 
 	logTicker := time.NewTicker(5 * time.Second)
@@ -141,6 +141,22 @@ func SpawnSequencerBlobRecoveryStage(s *stagedsync.StageState, u stagedsync.Unwi
 
 				if err = hermezDb.WriteL1BatchData(batchNumber, batchL1Data); err != nil {
 					return err
+				}
+
+				if len(input.BaseFeeChanges) > 0 {
+					for bn, bf := range input.BaseFeeChanges {
+						blockNum, err := hexutil.DecodeUint64(bn)
+						if err != nil {
+							return fmt.Errorf("failed to decode block number %s: %w", blockNum, err)
+						}
+						baseFee, err := hexutil.DecodeUint64(bf)
+						if err != nil {
+							return fmt.Errorf("failed to decode base fee %s: %w", baseFee, err)
+						}
+						if err = hermezDb.WriteRecoveryBlockBaseFee(blockNum, baseFee); err != nil {
+							return err
+						}
+					}
 				}
 			}
 
