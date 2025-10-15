@@ -39,7 +39,7 @@ const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots"  // l2blo
 const BATCH_WITNESSES = "hermez_batch_witnesses"                        // batch number -> witness
 const BATCH_COUNTERS = "hermez_batch_counters"                          // block number -> counters
 const L1_BATCH_DATA = "l1_batch_data"                                   // batch number -> l1 batch data from transaction call data
-const RECOVERY_BLOCK_BASE_FEE = "recovery_base_fee_changes"             // block number -> base fee
+const RECOVERY_BLOCK_BASE_FEE = "recovery_block_base_fee"               // block number -> base fee
 const REUSED_L1_INFO_TREE_INDEX = "reused_l1_info_tree_index"           // block number => const 1
 const LATEST_USED_GER = "latest_used_ger"                               // batch number -> GER latest used GER
 const BATCH_BLOCKS = "batch_blocks"                                     // batch number -> block numbers (concatenated together)
