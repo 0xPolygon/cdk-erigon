@@ -224,9 +224,10 @@ type Ethereum struct {
 	logger         log.Logger
 
 	// zk
-	streamServer    server.StreamServer
-	l1Syncer        *syncer.L1Syncer
-	etherManClients []*etherman.Client
+	streamServer      server.StreamServer
+	streamServerReady chan error
+	l1Syncer          *syncer.L1Syncer
+	etherManClients   []*etherman.Client
 
 	preStartTasks *PreStartTasks
 
@@ -312,8 +313,9 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			Events:      shards.NewEvents(),
 			Accumulator: shards.NewAccumulator(),
 		},
-		preStartTasks: &PreStartTasks{},
-		logger:        logger,
+		preStartTasks:     &PreStartTasks{},
+		logger:            logger,
+		streamServerReady: make(chan error, 1),
 		stopNode: func() error {
 			return stack.Close()
 		},
@@ -1419,8 +1421,10 @@ func (s *Ethereum) Init(stack *node.Node, config *ethconfig.Config, chainConfig 
 	go func() {
 		if err := cli.StartDataStream(s.streamServer); err != nil {
 			log.Error(err.Error())
+			s.streamServerReady <- err
 			return
 		}
+		s.streamServerReady <- nil
 	}()
 
 	// Register the backend on the node
@@ -1439,6 +1443,14 @@ func (s *Ethereum) PreStart() error {
 		log.Info("[PreStart] Warming up data stream")
 		// we don't know when the server has actually started as it doesn't expose a signal that is has spun up
 		// so here we loop and take a brief pause waiting for it to be ready
+		if s.streamServer != nil && s.streamServerReady != nil {
+			log.Info("[PreStart] Waiting for data stream server to be ready")
+			dsErr := <-s.streamServerReady
+			if dsErr != nil {
+				return fmt.Errorf("data stream server failed to start: %w", dsErr)
+			}
+			log.Info("[PreStart] Data stream server is ready")
+		}
 		attempts := 0
 		dataStreamServer := dataStreamServerFactory.CreateDataStreamServer(s.streamServer, s.chainConfig.ChainID.Uint64())
 		for {
