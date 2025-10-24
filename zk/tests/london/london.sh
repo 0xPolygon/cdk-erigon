@@ -177,8 +177,7 @@ testEIP3529() {
 
     echo "Step 2: clearVal() → val goes 1→0 (should refund 4 000 under EIP-3529)"
     RESPONSE=$(cast send "$CONTRACT_ADDR" \
-        "clearVal()" "" \
-        --legacy \
+        "clearVal()" \
         --rpc-url "$RPC_URL" \
         --private-key "$PRIVATE_KEY" \
         --gas-limit 100000 \
