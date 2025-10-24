@@ -343,7 +343,7 @@ type TxPool struct {
 	// we cannot be in a flushing state whilst getting transactions from the pool, so we have this mutex which is
 	// exposed publicly so anything wanting to get "best" transactions can ensure a flush isn't happening and
 	// vice versa
-	flushMtx *sync.Mutex
+	flushMtx sync.Mutex
 
 	// limbo specific fields where bad batch transactions identified by the executor go
 	limbo *Limbo
@@ -353,6 +353,9 @@ type TxPool struct {
 	// PoolMetrics contains metrics for tx/s in and out of the pool
 	// and a median wait time of tx/s waiting in the pool
 	metrics *Metrics
+
+	// yielded txs (returned by best) that must be skipped by subsequent best() calls
+	yielded map[[32]byte]struct{}
 }
 
 func CreateTxPoolBuckets(tx kv.RwTx) error {
@@ -432,7 +435,7 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		unprocessedRemoteTxs:    &types.TxSlots{},
 		unprocessedRemoteByHash: map[string]int{},
 		ethCfg:                  ethCfg,
-		flushMtx:                &sync.Mutex{},
+		flushMtx:                sync.Mutex{},
 		aclDB:                   aclDB,
 		limbo:                   newLimbo(),
 		logLevel:                logLevel,
@@ -446,6 +449,7 @@ func New(newTxs chan types.Announcements, coreDB kv.RoDB, cfg txpoolcfg.Config, 
 		normalcyBlock:           normalcyBlock,
 		auths:                   map[common.Address]*metaTx{},
 		priorityList:            priorityList,
+		yielded:                 make(map[[32]byte]struct{}),
 	}
 
 	res.updatePendingPoolPrioritySenders()
@@ -538,12 +542,15 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 	pendingBaseFee, baseFeeChanged := p.setBaseFee(stateChanges.PendingBlockBaseFee, p.ethCfg.AllowFreeTransactions)
 	// Update pendingBase for all pool queues and slices
 	if baseFeeChanged {
+		oldBaseFee := p.pendingBaseFee.Load()
 		p.pending.best.pendingBaseFee = pendingBaseFee
 		p.pending.worst.pendingBaseFee = pendingBaseFee
-		p.baseFee.best.pendingBastFee = pendingBaseFee
+		p.baseFee.best.pendingBaseFee = pendingBaseFee
 		p.baseFee.worst.pendingBaseFee = pendingBaseFee
-		p.queued.best.pendingBastFee = pendingBaseFee
+		p.queued.best.pendingBaseFee = pendingBaseFee
 		p.queued.worst.pendingBaseFee = pendingBaseFee
+
+		p.invalidateSortKeysForBaseFeeChange(oldBaseFee, pendingBaseFee)
 	}
 
 	pendingBlobFee := stateChanges.PendingBlobFeePerGas
@@ -632,6 +639,16 @@ func (p *TxPool) OnNewBlock(ctx context.Context, stateChanges *remote.StateChang
 	p.finalizeLimboOnNewBlock(limboTxs)
 	if p.isDeniedYieldingTransactions() {
 		p.allowYieldingTransactions()
+	}
+
+	// Clear yielded marks for mined and unwound txs
+	if len(p.yielded) > 0 {
+		for _, s := range minedTxs.Txs {
+			delete(p.yielded, s.IDHash)
+		}
+		for _, s := range unwindTxs.Txs {
+			delete(p.yielded, s.IDHash)
+		}
 	}
 
 	//log.Info("[txpool] new block", "number", p.lastSeenBlock.Load(), "pendngBaseFee", pendingBaseFee, "in", time.Since(t))
@@ -778,11 +795,12 @@ func (p *TxPool) AddNewGoodPeer(peerID types.PeerID) { p.recentlyConnectedPeers.
 func (p *TxPool) Started() bool                      { return p.started.Load() }
 
 func (p *TxPool) YieldBest(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64) (bool, int, error) {
-	return p.best(n, txs, tx, onTopOf, availableGas, availableBlobGas)
+	return p.best(n, txs, tx, onTopOf, availableGas, availableBlobGas, true /* yield */)
 }
 
+// PeekBest now only peeks (no removal from best slice)
 func (p *TxPool) PeekBest(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64) (bool, error) {
-	onTime, _, err := p.best(n, txs, tx, onTopOf, availableGas, availableBlobGas)
+	onTime, _, err := p.best(n, txs, tx, onTopOf, availableGas, availableBlobGas, false /* yield */)
 	return onTime, err
 }
 
@@ -1591,6 +1609,7 @@ func (p *TxPool) discardLocked(mt *metaTx, reason DiscardReason) {
 	p.deletedTxs = append(p.deletedTxs, mt)
 	p.all.delete(mt)
 	p.discardReasonsLRU.Add(hashStr, reason)
+	delete(p.yielded, mt.Tx.IDHash)
 
 	if mt.Tx.Type == types.BlobTxType {
 		t := p.totalBlobsInPool.Load()
@@ -1869,7 +1888,7 @@ func MainLoop(ctx context.Context, db kv.RwDB, coreDB kv.RoDB, p *TxPool, newTxs
 					// drain newTxs for emptying newTx channel
 					// newTx channel will be filled only with local transactions
 					// early return to avoid outbound transaction propagation
-					log.Debug("[txpool] tx gossip disabled", "state", "drain new transactions")
+					// log.Debug("[txpool] tx gossip disabled", "state", "drain new transactions")
 					return
 				}
 
@@ -2766,7 +2785,7 @@ func (s *bestSlice) Less(i, j int) bool {
 		}
 	}
 
-	return s.ms[i].better(s.ms[j], s.pendingBaseFee)
+	return s.ms[i].betterUsingSortKey(s.ms[j], s.pendingBaseFee)
 }
 func (s *bestSlice) UnsafeRemove(i *metaTx) {
 	s.Swap(i.bestIndex, len(s.ms)-1)
@@ -2795,6 +2814,30 @@ func (p *PendingPool) EnforceBestInvariants() {
 			sort.Sort(p.best)
 		}
 		p.sorted = true
+	}
+}
+
+func (p *PendingPool) invalidateAllSortKeys() {
+	for _, tx := range p.best.ms {
+		tx.invalidateSortKey()
+	}
+	for _, tx := range p.worst.ms {
+		tx.invalidateSortKey()
+	}
+}
+
+// invalidateSortKeysForBaseFeeChange selectively invalidates sort keys only for transactions
+// whose EnoughFeeCapBlock bit would change due to the base fee change
+func (p *PendingPool) invalidateSortKeysForBaseFeeChange(oldBaseFee, newBaseFee uint64) {
+	for _, tx := range p.best.ms {
+		if tx.sortKeyValid && wouldEnoughFeeCapBlockChange(tx, oldBaseFee, newBaseFee) {
+			tx.invalidateSortKey()
+		}
+	}
+	for _, tx := range p.worst.ms {
+		if tx.sortKeyValid && wouldEnoughFeeCapBlockChange(tx, oldBaseFee, newBaseFee) {
+			tx.invalidateSortKey()
+		}
 	}
 }
 
@@ -2872,6 +2915,28 @@ func NewSubPool(t SubPoolType, limit int) *SubPool {
 	return &SubPool{limit: limit, t: t, best: &BestQueue{}, worst: &WorstQueue{}}
 }
 
+func (p *SubPool) invalidateAllSortKeys() {
+	for _, tx := range p.best.ms {
+		tx.invalidateSortKey()
+	}
+	for _, tx := range p.worst.ms {
+		tx.invalidateSortKey()
+	}
+}
+
+func (p *SubPool) invalidateSortKeysForBaseFeeChange(oldBaseFee, newBaseFee uint64) {
+	for _, tx := range p.best.ms {
+		if tx.sortKeyValid && wouldEnoughFeeCapBlockChange(tx, oldBaseFee, newBaseFee) {
+			tx.invalidateSortKey()
+		}
+	}
+	for _, tx := range p.worst.ms {
+		if tx.sortKeyValid && wouldEnoughFeeCapBlockChange(tx, oldBaseFee, newBaseFee) {
+			tx.invalidateSortKey()
+		}
+	}
+}
+
 func (p *SubPool) EnforceInvariants() {
 	heap.Init(p.worst)
 	heap.Init(p.best)
@@ -2933,7 +2998,7 @@ func (p *SubPool) DebugPrint(prefix string) {
 
 type BestQueue struct {
 	ms             []*metaTx
-	pendingBastFee uint64
+	pendingBaseFee uint64
 }
 
 // Returns true if the txn "mt" is better than the parameter txn "than"
@@ -3006,6 +3071,119 @@ func (mt *metaTx) better(than *metaTx, pendingBaseFee uint64) bool {
 	return mt.timestamp < than.timestamp
 }
 
+// generateSortKey creates a binary sort key that encodes all sorting criteria
+// The key is designed so that lexicographic byte comparison produces the same
+// ordering as the better() function, but much faster.
+//
+// Key structure:
+// [0]     : subPool with EnoughFeeCapBlock bit (1 byte) - INVERTED for desc order
+// [1-32]  : effectiveTip or minFeeCap (32 bytes) - INVERTED for desc order
+// [33-40] : nonceDistance (8 bytes) - normal order (lower is better)
+// [41-48] : cumulativeBalanceDistance (8 bytes) - normal order (lower is better)
+// [49-56] : timestamp (8 bytes) - normal order (lower is better)
+const sortKeySize = 57
+
+func (mt *metaTx) generateSortKey(pendingBaseFee uint64) {
+	if mt.sortKeyValid {
+		return
+	}
+
+	key := make([]byte, sortKeySize) // Total key size
+
+	// Calculate subPool with EnoughFeeCapBlock bit
+	subPool := mt.subPool
+	difference := &uint256.Int{}
+	difference.SubUint64(&mt.minFeeCap, pendingBaseFee)
+	if difference.Sign() >= 0 {
+		subPool |= EnoughFeeCapBlock
+	}
+
+	// Byte 0: SubPool (inverted for descending order - higher subPool values should come first)
+	key[0] = ^uint8(subPool)
+
+	// Bytes 1-32: Priority value based on pool type (inverted for descending order)
+	var priorityValue uint256.Int
+	switch mt.currentSubPool {
+	case PendingSubPool:
+		// Use effective tip for pending pool
+		if (subPool & EnoughFeeCapBlock) == EnoughFeeCapBlock {
+			if difference.CmpUint64(mt.minTip) <= 0 {
+				priorityValue = *difference
+			} else {
+				priorityValue.SetUint64(mt.minTip)
+			}
+		}
+		// For pending pool, higher effective tip is better, so we invert
+		invertUint256(&priorityValue, key[1:33])
+	case BaseFeeSubPool:
+		// Use minFeeCap for basefee pool
+		priorityValue = mt.minFeeCap
+		// For basefee pool, higher minFeeCap is better, so we invert
+		invertUint256(&priorityValue, key[1:33])
+	default:
+		// For queued pool, we don't use priority value, just set to zero (max when inverted)
+		for i := 1; i < 33; i++ {
+			key[i] = 0xFF
+		}
+	}
+
+	// Bytes [33:41]: nonceDistance (normal order - lower is better)
+	binary.BigEndian.PutUint64(key[33:41], mt.nonceDistance)
+
+	// Bytes [41:49]: cumulativeBalanceDistance (normal order - lower is better)
+	binary.BigEndian.PutUint64(key[41:49], mt.cumulativeBalanceDistance)
+
+	// Bytes [49:57]: timestamp (normal order - lower is better)
+	binary.BigEndian.PutUint64(key[49:57], mt.timestamp)
+
+	mt.sortKey = key
+	mt.sortKeyValid = true
+}
+
+// invertUint256 inverts a uint256 value and stores it in the destination slice
+// This allows higher values to sort first in lexicographic comparison
+func invertUint256(value *uint256.Int, dst []byte) {
+	// Convert uint256 to big-endian bytes
+	valueBytes := value.Bytes32()
+	// Invert each byte
+	for i := 0; i < 32; i++ {
+		dst[i] = ^valueBytes[i]
+	}
+}
+
+func (mt *metaTx) invalidateSortKey() {
+	mt.sortKeyValid = false
+}
+
+// wouldEnoughFeeCapBlockChange determines if a transaction's EnoughFeeCapBlock bit
+// would change due to a base fee change. This is used for selective sort key invalidation.
+func wouldEnoughFeeCapBlockChange(tx *metaTx, oldBaseFee, newBaseFee uint64) bool {
+	// Check if the EnoughFeeCapBlock bit would be different with the new base fee
+	oldHasEnoughFee := tx.minFeeCap.CmpUint64(oldBaseFee) >= 0
+	newHasEnoughFee := tx.minFeeCap.CmpUint64(newBaseFee) >= 0
+
+	// If the bit would change, we need to invalidate the sort key
+	return oldHasEnoughFee != newHasEnoughFee
+}
+
+func (p *TxPool) invalidateAllSortKeys() {
+	p.pending.invalidateAllSortKeys()
+	p.baseFee.invalidateAllSortKeys()
+	p.queued.invalidateAllSortKeys()
+}
+
+func (p *TxPool) invalidateSortKeysForBaseFeeChange(oldBaseFee, newBaseFee uint64) {
+	p.pending.invalidateSortKeysForBaseFeeChange(oldBaseFee, newBaseFee)
+	p.baseFee.invalidateSortKeysForBaseFeeChange(oldBaseFee, newBaseFee)
+	p.queued.invalidateSortKeysForBaseFeeChange(oldBaseFee, newBaseFee)
+}
+
+func (mt *metaTx) betterUsingSortKey(than *metaTx, pendingBaseFee uint64) bool {
+	mt.generateSortKey(pendingBaseFee)
+	than.generateSortKey(pendingBaseFee)
+	return bytes.Compare(mt.sortKey, than.sortKey) < 0
+}
+
 func (mt *metaTx) worse(than *metaTx, pendingBaseFee uint64) bool {
 	subPool := mt.subPool
 	thanSubPool := than.subPool
@@ -3043,7 +3221,7 @@ func (mt *metaTx) worse(than *metaTx, pendingBaseFee uint64) bool {
 
 func (p BestQueue) Len() int { return len(p.ms) }
 func (p BestQueue) Less(i, j int) bool {
-	return p.ms[i].better(p.ms[j], p.pendingBastFee)
+	return p.ms[i].better(p.ms[j], p.pendingBaseFee)
 }
 func (p BestQueue) Swap(i, j int) {
 	p.ms[i], p.ms[j] = p.ms[j], p.ms[i]
