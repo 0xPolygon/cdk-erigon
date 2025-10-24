@@ -84,6 +84,9 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 			mt.nonceDistance = mt.Tx.Nonce - senderNonce
 		}
 
+		// Invalidate sort key since we updated sorting-relevant fields
+		mt.invalidateSortKey()
+
 		// Sender has enough balance for: gasLimit x feeCap + transferred_value
 		needBalance := uint256.NewInt(mt.Tx.Gas)
 		needBalance.Mul(needBalance, &mt.Tx.FeeCap)
@@ -126,6 +129,9 @@ func (p *TxPool) onSenderStateChange(senderID uint64, senderNonce uint64, sender
 				}
 			}
 		}
+
+		// Invalidate sort key since we updated subPool and cumulativeBalanceDistance
+		mt.invalidateSortKey()
 
 		mt.subPool &^= NotTooMuchGas
 		// zk: here we don't care about block limits any more and care about only the transaction gas limit in ZK
@@ -194,7 +200,7 @@ func (p *TxPool) shouldSkipBaseFee(mt *metaTx) bool {
 
 // zk: the implementation of best here is changed only to not take into account block gas limits as we don't care about
 // these in zk.  Instead we do a quick check on the transaction maximum gas in zk
-func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64) (bool, int, error) {
+func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableGas, availableBlobGas uint64, yield bool) (bool, int, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -228,6 +234,11 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 
 		mt := best.ms[i]
 		// p.Trace("Processing transaction", "txID", mt.Tx.IDHash)
+
+		// Skip txs that are already yielded
+		if _, ok := p.yielded[mt.Tx.IDHash]; ok {
+			continue
+		}
 
 		if !isLondon && mt.Tx.Type == 0x2 {
 			// remove ldn txs when not in london
@@ -284,6 +295,10 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 		txs.TxIds[count] = mt.Tx.IDHash
 		copy(txs.Senders.At(count), sender.Bytes())
 		txs.IsLocal[count] = isLocal
+
+		if yield {
+			p.yielded[mt.Tx.IDHash] = struct{}{}
+		}
 		count++
 	}
 
@@ -295,6 +310,7 @@ func (p *TxPool) best(n uint16, txs *types.TxsRlp, tx kv.Tx, onTopOf, availableG
 			log.Debug("Removed transaction from pending pool", "txID", mt.Tx.IDHash)
 		}
 	}
+
 	return true, count, nil
 }
 
@@ -365,7 +381,17 @@ func (p *TxPool) TriggerSenderStateChanges(ctx context.Context, tx kv.Tx, blockG
 func (p *TxPool) discardOverflowZkCountersFromPending(pending *PendingPool, discard func(*metaTx, DiscardReason), sendersWithChangedState map[uint64]struct{}) {
 	for _, mt := range p.overflowZkCounters {
 		log.Info("[tx_pool] Removing TX from pending due to counter overflow", "tx", common.BytesToHash(mt.Tx.IDHash[:]))
-		pending.Remove(mt)
+		// Remove from the correct sub-pool
+		switch mt.currentSubPool {
+		case PendingSubPool:
+			pending.Remove(mt)
+		case BaseFeeSubPool:
+			p.baseFee.Remove(mt)
+		case QueuedSubPool:
+			p.queued.Remove(mt)
+		default:
+			// already removed; nothing to do
+		}
 		discard(mt, OverflowZkCounters)
 		sendersWithChangedState[mt.Tx.SenderID] = struct{}{}
 		// do not hold on to the discard reason for an OOC issue

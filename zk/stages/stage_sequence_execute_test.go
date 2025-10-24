@@ -138,7 +138,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 
 	ethermanMock.EXPECT().BlockByNumber(gomock.Any(), nil).Return(latestL1Block, nil).AnyTimes()
 
-	l1Syncer := syncer.NewL1Syncer(ctx, []syncer.IEtherman{ethermanMock}, l1ContractAddresses, l1ContractTopics, 10, 0, "latest", 0)
+	l1Syncer := syncer.NewL1Syncer(ctx, []syncer.IEtherman{ethermanMock}, l1ContractAddresses, l1ContractTopics, 10, 1, "latest", 0)
 	updater := l1infotree.NewUpdater(ctx, &ethconfig.Zk{}, l1Syncer, l1infotree.NewInfoTreeL2RpcSyncer(ctx, &ethconfig.Zk{}))
 
 	cacheMock := cMocks.NewMockCache(mockCtrl)
@@ -232,7 +232,7 @@ func TestSpawnSequencingStage(t *testing.T) {
 	// batch/block sealing timeouts are small, so it could happen that an extra block is not added to the batch
 	// No requirement prevents adding and extra block to the batch or not adding it. For more specific cases, create a separate test.
 	assert.True(t, expectedBlockNum <= blockNumber && blockNumber <= expectedBlockNum+1, "value is not in range")
-	assert.Equal(t, uint64(1), stateVersion)
+	assert.LessOrEqual(t, stateVersion, uint64(2)) // Could be a couple of increments for the reason above
 	tx.Rollback()
 }
 

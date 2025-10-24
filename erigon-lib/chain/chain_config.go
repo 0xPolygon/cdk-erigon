@@ -131,9 +131,8 @@ type Config struct {
 	EffectiveGasPriceForContractDeployment uint8  `json:"effectiveGasPriceForContractDeployment,omitempty"`
 
 	// used for sovereign chains, will turn off IBS interaction for info tree / GER / etc.
-	// this option should only be used in conjunction with normalcy.  This should only
-	// be used on a chain from genesis otherwise expect problems!
-	SovereignMode bool `json:"sovereignMode,omitempty"`
+	// this option should only be used in conjunction with normalcy.
+	SovereignModeBlock *big.Int `json:"sovereignModeBlock,omitempty"`
 }
 
 type BlobConfig struct {
@@ -463,6 +462,10 @@ func (c *Config) IsForkID12Banana(num uint64) bool {
 
 func (c *Config) IsForkID13Durian(num uint64) bool {
 	return isForked(c.ForkId13Durian, num)
+}
+
+func (c *Config) IsSovereignModeEnabled(num uint64) bool {
+	return isForked(c.SovereignModeBlock, num)
 }
 
 func (c *Config) SecondsPerSlot() uint64 {
