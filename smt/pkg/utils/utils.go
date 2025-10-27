@@ -13,7 +13,7 @@ import (
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/length"
-	poseidon "github.com/okx/poseidongold/go"
+	poseidongold "github.com/okx/poseidongold/go"
 	"golang.org/x/exp/slices"
 )
 
@@ -66,7 +66,7 @@ const (
 var (
 	LeafCapacity   = [4]uint64{1, 0, 0, 0}
 	BranchCapacity = [4]uint64{0, 0, 0, 0}
-	hashFunc       = poseidon.HashWithResult
+	hashFunc       = poseidongold.HashWithResult
 
 	byteBufPool = &sync.Pool{
 		New: func() any {
