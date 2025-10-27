@@ -7,7 +7,6 @@ env:
 on:
   push:
     branches:
-        - release/*
         - pectra_e2
   workflow_call:
   workflow_dispatch:
