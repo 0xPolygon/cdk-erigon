@@ -201,6 +201,29 @@ func (ec *Client) HeaderByNumber(ctx context.Context, number *big.Int) (*types.H
 	return head, err
 }
 
+// HeadersByNumbers returns a list of block headers corresponding to the provided block numbers.
+// The returned slice order matches the input numbers order.
+func (ec *Client) HeadersByNumbers(ctx context.Context, numbers []*big.Int) ([]*types.Header, error) {
+	if len(numbers) == 0 {
+		return nil, nil
+	}
+	heads := make([]*types.Header, len(numbers))
+	reqs := make([]rpc.BatchElem, len(numbers))
+	for i, n := range numbers {
+		reqs[i] = rpc.BatchElem{
+			Method: "eth_getBlockByNumber",
+			Args:   []interface{}{toBlockNumArg(n), false},
+			Result: &heads[i],
+		}
+	}
+	if err := ec.c.BatchCallContext(ctx, reqs); err != nil {
+		return nil, err
+	}
+	// Do not fail the entire batch on per-element errors; callers may
+	// inspect nil entries and decide how to handle missing headers.
+	return heads, nil
+}
+
 type BigInt struct {
 	*big.Int
 }
@@ -684,39 +707,23 @@ func (ec *Client) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
 	return (*big.Int)(&hex), nil
 }
 
-type feeHistoryResultMarshaling struct {
-	OldestBlock  *hexutil.Big     `json:"oldestBlock"`
-	Reward       [][]*hexutil.Big `json:"reward,omitempty"`
-	BaseFee      []*hexutil.Big   `json:"baseFeePerGas,omitempty"`
-	GasUsedRatio []float64        `json:"gasUsedRatio"`
+type FeeHistory struct {
+	OldestBlock      *hexutil.Big     `json:"oldestBlock"`
+	Reward           [][]*hexutil.Big `json:"reward,omitempty"`
+	BaseFee          []*hexutil.Big   `json:"baseFeePerGas,omitempty"`
+	GasUsedRatio     []float64        `json:"gasUsedRatio"`
+	BlobBaseFee      []*hexutil.Big   `json:"baseFeePerBlobGas,omitempty"`
+	BlobGasUsedRatio []float64        `json:"blobGasUsedRatio,omitempty"`
 }
 
-/*
 // FeeHistory retrieves the fee market history.
-func (ec *Client) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
-	var res feeHistoryResultMarshaling
-	if err := ec.c.CallContext(ctx, &res, "eth_feeHistory", hexutil.Uint(blockCount), toBlockNumArg(lastBlock), rewardPercentiles); err != nil {
+func (ec *Client) FeeHistory(ctx context.Context, blockCount uint64, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (*FeeHistory, error) {
+	var res FeeHistory
+	if err := ec.c.CallContext(ctx, &res, "eth_feeHistory", hexutil.Uint(blockCount), lastBlock, rewardPercentiles); err != nil {
 		return nil, err
 	}
-	reward := make([][]*big.Int, len(res.Reward))
-	for i, r := range res.Reward {
-		reward[i] = make([]*big.Int, len(r))
-		for j, r := range r {
-			reward[i][j] = (*big.Int)(r)
-		}
-	}
-	baseFee := make([]*big.Int, len(res.BaseFee))
-	for i, b := range res.BaseFee {
-		baseFee[i] = (*big.Int)(b)
-	}
-	return &ethereum.FeeHistory{
-		OldestBlock:  (*big.Int)(res.OldestBlock),
-		Reward:       reward,
-		BaseFee:      baseFee,
-		GasUsedRatio: res.GasUsedRatio,
-	}, nil
+	return &res, nil
 }
-*/
 
 // EstimateGas tries to estimate the gas needed to execute a specific transaction based on
 // the current pending state of the backend blockchain. There is no guarantee that this is
