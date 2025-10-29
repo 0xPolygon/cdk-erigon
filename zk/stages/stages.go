@@ -27,7 +27,6 @@ func SequencerZkStages(
 	l1InfoTreeCfg L1InfoTreeCfg,
 	sequencerL1BlockSyncCfg SequencerL1BlockSyncCfg,
 	sequencerBlobRecoveryCfg SequencerBlobRecoveryCfg,
-	sequencerBlobRecoveryCfg SequencerBlobRecoveryCfg,
 	exec SequenceBlockCfg,
 	zkInterHashesCfg ZkInterHashesCfg,
 	history stages.HistoryCfg,
