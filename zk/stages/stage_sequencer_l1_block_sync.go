@@ -2,14 +2,12 @@ package stages
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
-	zktx "github.com/erigontech/erigon/zk/tx"
 	"time"
 
 	zktx "github.com/erigontech/erigon/zk/tx"
-
-	"encoding/binary"
 
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/log/v3"
