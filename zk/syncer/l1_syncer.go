@@ -11,7 +11,6 @@ import (
 	ethereum "github.com/erigontech/erigon"
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/log/v3"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/iden3/go-iden3-crypto/keccak256"
 	"golang.org/x/sync/singleflight"
 
@@ -64,19 +63,6 @@ type jobResult struct {
 	Logs  []ethTypes.Log
 }
 
-type LogEvent struct {
-	Logs     []ethTypes.Log
-	Progress uint64 // set only on Done
-	Done     bool
-}
-
-type LogsRetrieveMode int
-
-const (
-	LogsModeImmediate LogsRetrieveMode = iota
-	LogsModeOnCompletion
-)
-
 type L1Syncer struct {
 	ctx                 context.Context
 	etherMans           []IEtherman
@@ -98,20 +84,18 @@ type L1Syncer struct {
 	flagStop           atomic.Bool
 
 	// Channels
-	logsConsumChan   chan LogEvent
-	logsProduceChan  chan LogEvent
+	logsConsumChan   chan []ethTypes.Log
+	logsProduceChan  chan []ethTypes.Log
 	logsSwapMutex    sync.Mutex
 	logsChanProgress chan string
-	closeLogsChannel atomic.Bool
 
-	highestBlockType string                                   // finalized, latest, safe
-	headersCache     *expirable.LRU[uint64, *ethTypes.Header] // cache for headers
+	highestBlockType string   // finalized, latest, safe
+	headersCache     sync.Map // map[uint64]*ethTypes.Header // cache for headers
 	sfGroup          singleflight.Group
 	fetchHeaders     bool
 }
 
 func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay uint64, highestBlockType string, firstL1Block uint64) *L1Syncer {
-	headersCache := expirable.NewLRU[uint64, *ethTypes.Header](int(blockRange), nil, time.Minute*10)
 	return &L1Syncer{
 		ctx:                 ctx,
 		etherMans:           etherMans,
@@ -121,11 +105,11 @@ func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses
 		topics:              topics,
 		blockRange:          blockRange,
 		queryDelay:          queryDelay,
-		logsProduceChan:     make(chan LogEvent, logsChannelSize),
-		logsChanProgress:    make(chan string, logsChannelSize),
+		logsProduceChan:     make(chan []ethTypes.Log, logsChannelSize),
+		logsChanProgress:    make(chan string, 1),
 		highestBlockType:    highestBlockType,
 		firstL1Block:        firstL1Block,
-		headersCache:        headersCache,
+		headersCache:        sync.Map{},
 	}
 }
 
@@ -171,16 +155,11 @@ func (s *L1Syncer) WaitQueryBlocksToFinish() {
 }
 
 // Channels
-func (s *L1Syncer) GetLogsChan(mode LogsRetrieveMode) <-chan LogEvent {
+func (s *L1Syncer) GetLogsChan() <-chan []ethTypes.Log {
 	s.logsSwapMutex.Lock()
 	defer s.logsSwapMutex.Unlock()
 
 	s.logsConsumChan = s.logsProduceChan
-
-	// If not downloading, grab existing data and close the channel
-	if !s.isDownloading.Load() && mode == LogsModeImmediate {
-		s.closeLogsChannel.Store(true)
-	}
 	return s.logsConsumChan
 }
 
@@ -190,9 +169,11 @@ func (s *L1Syncer) GetProgressMessageChan() <-chan string {
 
 func (s *L1Syncer) RunQueryBlocks(from uint64) {
 	//if already started, don't start another thread
-	if !s.isSyncStarted.CompareAndSwap(false, true) {
+	if s.isSyncStarted.Load() {
 		return
 	}
+
+	s.isSyncStarted.Store(true)
 
 	// set it to true to catch the first cycle run case where the check can pass before the latest block is checked
 	s.lastCheckedL1Block.Store(from)
@@ -208,46 +189,32 @@ func (s *L1Syncer) RunQueryBlocks(from uint64) {
 		log.Info("Starting L1 syncer thread")
 		defer log.Info("Stopping L1 syncer thread")
 
-		ticker := time.NewTicker(time.Duration(s.queryDelay) * time.Millisecond)
-		defer ticker.Stop()
-
-		sleepTicker := time.NewTicker(10 * time.Millisecond)
-		defer sleepTicker.Stop()
-
 		for {
 			if s.flagStop.Load() {
 				s.resetChannels()
 				return
 			}
 
-			select {
-			case <-s.ctx.Done():
-				s.resetChannels()
-				return
-			case <-ticker.C:
-				latestL1Block, err := s.getLatestL1Block()
-				if err != nil {
-					log.Error("Error getting latest L1 block", "err", err)
-				} else {
-					if latestL1Block > s.lastCheckedL1Block.Load() {
-						// It should not be checked again in the new cycle, so +1 is added here.
-						// Fixed receiving duplicate log events.
-						// lastCheckedL1Block means that it has already been checked in the previous cycle.
-						startBlock := s.lastCheckedL1Block.Load() + 1
-						endBlock := latestL1Block
-						if _, err = s.queryBlocks(startBlock, endBlock); err != nil {
-							log.Error("Error querying blocks", "err", err)
-						} else {
-							s.lastCheckedL1Block.Store(latestL1Block)
-						}
+			latestL1Block, err := s.getLatestL1Block()
+			if err != nil {
+				log.Error("Error getting latest L1 block", "err", err)
+			} else {
+				if latestL1Block > s.lastCheckedL1Block.Load() {
+					// It should not be checked again in the new cycle, so +1 is added here.
+					// Fixed receiving duplicate log events.
+					// lastCheckedL1Block means that it has already been checked in the previous cycle.
+					startBlock := s.lastCheckedL1Block.Load() + 1
+					endBlock := latestL1Block
+					if _, err = s.queryBlocks(startBlock, endBlock); err != nil {
+						log.Error("Error querying blocks", "err", err)
+					} else {
+						s.lastCheckedL1Block.Store(latestL1Block)
 					}
 				}
+
 				s.resetChannels()
-			case <-sleepTicker.C:
-				if s.closeLogsChannel.Load() && !s.isDownloading.Load() {
-					s.resetChannels()
-				}
 			}
+			time.Sleep(time.Duration(s.queryDelay) * time.Millisecond)
 		}
 	}()
 }
@@ -258,8 +225,8 @@ func (s *L1Syncer) GetHeader(number uint64) (*ethTypes.Header, error) {
 }
 
 func (s *L1Syncer) getHeader(em IEtherman, number uint64) (*ethTypes.Header, error) {
-	if header, ok := s.headersCache.Get(number); ok {
-		return header, nil
+	if header, ok := s.headersCache.Load(number); ok {
+		return header.(*ethTypes.Header), nil
 	}
 
 	// Deduplicate concurrent requests
@@ -268,7 +235,7 @@ func (s *L1Syncer) getHeader(em IEtherman, number uint64) (*ethTypes.Header, err
 		if err != nil {
 			return nil, err
 		}
-		s.headersCache.Add(number, header)
+		s.headersCache.Store(number, header)
 		return header, nil
 	})
 
@@ -276,6 +243,10 @@ func (s *L1Syncer) getHeader(em IEtherman, number uint64) (*ethTypes.Header, err
 		return nil, err
 	}
 	return v.(*ethTypes.Header), nil
+}
+
+func (s *L1Syncer) ClearHeaderCache() {
+	s.headersCache = sync.Map{}
 }
 
 func (s *L1Syncer) GetBlock(number uint64) (*ethTypes.Block, error) {
@@ -356,7 +327,7 @@ func (s *L1Syncer) l1QueryHeaders(logs []ethTypes.Log) error {
 				logQueue <- l
 				continue
 			}
-			s.headersCache.Add(l.BlockNumber, header)
+			s.headersCache.Store(header.Number.Uint64(), header)
 			wg.Done()
 		}
 	}
@@ -469,16 +440,15 @@ loop:
 				numLogs += uint64(len(res.Logs))
 
 				wg.Add(1)
-				logs := res.Logs
-				go func(logs []ethTypes.Log) {
+				go func() {
 					defer wg.Done()
 
 					if s.fetchHeaders {
-						s.l1QueryHeaders(logs)
+						s.l1QueryHeaders(res.Logs)
 					}
 
-					s.logsProduceChan <- LogEvent{Logs: logs}
-				}(logs)
+					s.logsProduceChan <- res.Logs
+				}()
 			}
 
 			if complete == len(fetches) {
@@ -492,7 +462,7 @@ loop:
 			s.logsChanProgress <- fmt.Sprintf("L1 Blocks processed progress (amounts): %d/%d (%d%%)", progress, aimingFor, (progress*100)/aimingFor)
 			if progress > prevProgress {
 				prevProgress = progress
-				s.logsProduceChan <- LogEvent{Logs: nil} // send a nil log to indicate activity in case no logs for long in big range
+				s.logsProduceChan <- nil // send a nil log to indicate activity in case no logs for long in big range
 			}
 		}
 	}
@@ -681,11 +651,9 @@ func (s *L1Syncer) SetFetchHeaders(fetchHeaders bool) {
 
 func (s *L1Syncer) resetChannels() {
 	s.logsSwapMutex.Lock()
-	defer s.logsSwapMutex.Unlock()
 	if s.logsConsumChan == s.logsProduceChan {
-		s.logsConsumChan <- LogEvent{Logs: nil, Done: true, Progress: s.lastCheckedL1Block.Load()} // send a nil log to indicate activity in case no logs for long in big range
 		close(s.logsConsumChan)
-		s.logsProduceChan = make(chan LogEvent, logsChannelSize)
+		s.logsProduceChan = make(chan []ethTypes.Log, logsChannelSize)
 	}
-	s.closeLogsChannel.Store(false)
+	s.logsSwapMutex.Unlock()
 }
