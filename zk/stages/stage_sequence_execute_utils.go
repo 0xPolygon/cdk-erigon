@@ -701,11 +701,11 @@ func sequencerRegentIntermediateHashesPMT(ctx context.Context, s *stagedsync.Sta
 	timeStart := time.Now()
 	_, err := stagedsync.RegenerateIntermediateHashes(s.LogPrefix(), tx, trieConfigSequencer(cfg.intersCfg), common.Hash{}, ctx, log.New())
 	if err != nil {
-		log.Error(fmt.Sprintf("[%s] Failed to regenerate intermediate hashes PMT: %v", s.LogPrefix(), err))
+		log.Error(fmt.Sprintf("[%s] [SR-DEBUG] Failed to regenerate intermediate hashes PMT: %v", s.LogPrefix(), err))
 		return err
 	}
 	timeFinish := time.Now()
-	log.Info(fmt.Sprintf("[%s] Regenerated intermediate hashes PMT in %s", s.LogPrefix(), timeFinish.Sub(timeStart)))
+	log.Info(fmt.Sprintf("[%s] [SR-DEBUG] Regenerated intermediate hashes PMT in %s", s.LogPrefix(), timeFinish.Sub(timeStart)))
 
 	return nil
 }

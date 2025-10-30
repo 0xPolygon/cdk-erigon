@@ -58,7 +58,7 @@ func WriteGlobalExitRoot(stateReader state.StateReader, stateWriter state.Writer
 	}
 
 	// write global exit root to state
-	log.Info("Writing Global Exit Root to state", "ger", ger.String(), "timestamp", timestamp)
+	log.Info("[SR-DEBUG] Writing Global Exit Root to state", "ger", ger.String(), "timestamp", timestamp)
 	if err := stateWriter.WriteAccountStorage(addr, uint64(1), &gerp, emptyUint256, headerTime); err != nil {
 		return err
 	}

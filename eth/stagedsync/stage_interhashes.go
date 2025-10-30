@@ -600,7 +600,7 @@ func IncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, to
 
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
-	logger.Info(fmt.Sprintf("[%s] PMT Increment intermediate hashes finished promotion", logPrefix), "retainListSize", rl.Len(), "allocMB", memStats.Alloc/1024/1024, "headAllocMB", memStats.HeapAlloc/1024/1024, "heapObjects", memStats.HeapObjects, "numGC", memStats.NumGC)
+	logger.Info(fmt.Sprintf("[%s] [SR-DEBUG] PMT Increment intermediate hashes finished promotion", logPrefix), "retainListSize", rl.Len(), "allocMB", memStats.Alloc/1024/1024, "headAllocMB", memStats.HeapAlloc/1024/1024, "heapObjects", memStats.HeapObjects, "numGC", memStats.NumGC)
 
 	accTrieCollector := etl.NewCollector(logPrefix, cfg.tmpDir, etl.NewSortableBuffer(etl.BufferOptimalSize), logger)
 	defer accTrieCollector.Close()

@@ -119,14 +119,14 @@ func sequencingBatchStep(
 
 	if cfg.zk.ForcePMTInterhashesRegenOnRestart {
 		if cfg.zk.UsingPMT() {
-			log.Info(fmt.Sprintf("[%s] Forcing PMT interhashes regeneration as per configuration", logPrefix))
+			log.Info(fmt.Sprintf("[%s] [SR-DEBUG] Forcing PMT interhashes regeneration as per configuration", logPrefix))
 			regenPmtOnce.Do(func() {
 				if err = sequencerRegentIntermediateHashesPMT(ctx, s, sdb.tx, cfg); err != nil {
 					panic(fmt.Sprintf("failed to regen PMT interhashes: %v", err))
 				}
 			})
 		} else {
-			log.Warn(fmt.Sprintf("[%s] Not regenerating PMT as zkevm.force-pmt-interhashes-regen-on-restart is set but PMT is not being used", logPrefix))
+			log.Warn(fmt.Sprintf("[%s] [SR-DEBUG] Not regenerating PMT as zkevm.force-pmt-interhashes-regen-on-restart is set but PMT is not being used", logPrefix))
 		}
 	}
 
