@@ -696,10 +696,10 @@ func sequencerRegenIntermediateHashes(ctx context.Context, s *stagedsync.StageSt
 }
 
 // sequencerRegentIntermediateHashesPMT will build the intermediate hashes PMT for the given block number.
-// This will run then flag `zkevm.force-pmt-interhashes-regen-on-restart` is enabled to forcefully regenerate the PMT if there is any issues there.
+// This will run when flag `zkevm.force-pmt-interhashes-regen-on-restart` is enabled to forcefully regenerate the PMT if there is any issues there.
 func sequencerRegentIntermediateHashesPMT(ctx context.Context, s *stagedsync.StageState, tx kv.RwTx, cfg SequenceBlockCfg) error {
 	timeStart := time.Now()
-	_, err := stagedsync.RegenerateIntermediateHashes(s.LogPrefix(), tx, trieConfigSequencer(cfg.intersCfg), common.Hash{}, context.Background(), log.New())
+	_, err := stagedsync.RegenerateIntermediateHashes(s.LogPrefix(), tx, trieConfigSequencer(cfg.intersCfg), common.Hash{}, ctx, log.New())
 	if err != nil {
 		log.Error(fmt.Sprintf("[%s] Failed to regenerate intermediate hashes PMT: %v", s.LogPrefix(), err))
 		return err

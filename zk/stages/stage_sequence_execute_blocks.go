@@ -61,7 +61,7 @@ func handleStateForNewBlockStarting(
 			l1BlockHash := ibs.ReadGerManagerL1BlockHash(l1info.GER)
 			if l1BlockHash == (common.Hash{}) {
 				// not in the contract so let's write it!
-				log.Info("Writing GER manager L1 block hash to Intra Block State", "ger", l1info.GER.String(), "l1BlockHash", l1info.ParentHash.String())
+				log.Info(fmt.Sprintf("[%s] Writing GER manager L1 block hash to Intra Block State", batchContext.s.LogPrefix()), "ger", l1info.GER.String(), "l1BlockHash", l1info.ParentHash.String())
 				ibs.WriteGerManagerL1BlockHash(l1info.GER, l1info.ParentHash)
 				if err := hermezDb.WriteLatestUsedGer(blockNumber, l1info.GER); err != nil {
 					return err

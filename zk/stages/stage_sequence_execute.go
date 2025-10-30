@@ -117,7 +117,7 @@ func sequencingBatchStep(
 	}
 	defer sdb.tx.Rollback()
 
-	if cfg.zk.ForcePMTInterhashesRegenOnRestart {
+	if cfg.zk.ForcePMTInterhashesRegenOnRestart && cfg.zk.UsingPMT() {
 		log.Info(fmt.Sprintf("[%s] Forcing PMT interhashes regeneration as per configuration", logPrefix))
 		regenPmtOnce.Do(func() {
 			if err = sequencerRegentIntermediateHashesPMT(ctx, s, sdb.tx, cfg); err != nil {
