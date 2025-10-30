@@ -14,7 +14,6 @@ import (
 	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/zk/contracts"
 	"github.com/erigontech/erigon/zk/hermez_db"
-	"github.com/erigontech/erigon/zk/syncer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -34,9 +33,9 @@ func (m *MockSyncer) RunQueryBlocks(lastCheckedBlock uint64) {
 	m.Called(lastCheckedBlock)
 }
 
-func (m *MockSyncer) GetLogsChan(mode syncer.LogsRetrieveMode) <-chan syncer.LogEvent {
-	args := m.Called(mode)
-	return args.Get(0).(<-chan syncer.LogEvent)
+func (m *MockSyncer) GetLogsChan() <-chan []types.Log {
+	args := m.Called()
+	return args.Get(0).(<-chan []types.Log)
 }
 
 func (m *MockSyncer) GetProgressMessageChan() <-chan string {
@@ -76,6 +75,15 @@ func (m *MockSyncer) QueryForRootLog(to uint64) (*types.Log, error) {
 	return args.Get(0).(*types.Log), args.Error(1)
 }
 
+func (m *MockSyncer) ClearHeaderCache() {
+	m.Called()
+}
+
+func (m *MockSyncer) GetDoneChan() <-chan uint64 {
+	args := m.Called()
+	return args.Get(0).(<-chan uint64)
+}
+
 func (m *MockSyncer) GetLastCheckedL1Block() uint64 {
 	args := m.Called()
 	return uint64(args.Int(0))
@@ -99,7 +107,7 @@ func TestUpdater_WarmUp(t *testing.T) {
 	updater := NewUpdater(context.Background(), cfg, mockSyncer, nil)
 
 	// Set up mock expectations
-	mockSyncer.On("IsSyncStarted").Return(false).Maybe()
+	mockSyncer.On("IsSyncStarted").Return(false)
 	mockSyncer.On("RunQueryBlocks", uint64(999)).Once()
 
 	err = updater.WarmUp(tx)
@@ -420,15 +428,16 @@ func TestCheckForInfoTreeUpdates(t *testing.T) {
 			cfg := &ethconfig.Zk{L1FirstBlock: 1000}
 			updater := NewUpdater(context.Background(), cfg, mockSyncer, nil)
 
-			logsChan := make(chan syncer.LogEvent, 10)
+			logsChan := make(chan []types.Log, 10)
 
 			// Set up mock expectations
-			mockSyncer.On("GetLogsChan", syncer.LogsModeImmediate).Return((<-chan syncer.LogEvent)(logsChan))
+			mockSyncer.On("GetLogsChan").Return((<-chan []types.Log)(logsChan))
 			mockSyncer.On("GetProgressMessageChan").Return((<-chan string)(make(chan string)))
+			mockSyncer.On("ClearHeaderCache").Return()
 			mockSyncer.On("StopQueryBlocks").Return().Maybe()
 			mockSyncer.On("ConsumeQueryBlocks").Return().Maybe()
 			mockSyncer.On("WaitQueryBlocksToFinish").Return().Maybe()
-			mockSyncer.On("RunQueryBlocks", mock.AnythingOfType("uint64")).Maybe()
+			mockSyncer.On("RunQueryBlocks", mock.AnythingOfType("uint64")).Return().Maybe()
 
 			// Set up header mocks
 			for blockNum, header := range tc.mockHeaders {
@@ -439,7 +448,7 @@ func TestCheckForInfoTreeUpdates(t *testing.T) {
 
 			time.AfterFunc(1*time.Millisecond, func() {
 				// Send logs to channel
-				logsChan <- syncer.LogEvent{Logs: tc.logs}
+				logsChan <- tc.logs
 				close(logsChan)
 			})
 
