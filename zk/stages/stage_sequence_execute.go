@@ -121,8 +121,17 @@ func sequencingBatchStep(
 	}
 	defer sdb.tx.Rollback()
 
+	if err := cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
+		return err
+	}
+
+	executionAt, err := s.ExecutionAt(sdb.tx)
+	if err != nil {
+		return err
+	}
+
 	if cfg.zk.ForcePMTInterhashesRegenOnRestart {
-		if cfg.zk.UsingPMT() {
+		if cfg.chainConfig.IsPmtEnabled(executionAt) {
 			log.Info(fmt.Sprintf("[%s] [SR-DEBUG] Forcing PMT interhashes regeneration as per configuration", logPrefix))
 			regenPmtOnce.Do(func() {
 				if err = sequencerRegentIntermediateHashesPMT(ctx, s, sdb.tx, cfg); err != nil {
@@ -132,15 +141,6 @@ func sequencingBatchStep(
 		} else {
 			log.Warn(fmt.Sprintf("[%s] [SR-DEBUG] Not regenerating PMT as zkevm.force-pmt-interhashes-regen-on-restart is set but PMT is not being used", logPrefix))
 		}
-	}
-
-	if err := cfg.infoTreeUpdater.WarmUp(sdb.tx); err != nil {
-		return err
-	}
-
-	executionAt, err := s.ExecutionAt(sdb.tx)
-	if err != nil {
-		return err
 	}
 
 	lastBatch, err := stages.GetStageProgress(sdb.tx, stages.HighestSeenBatchNumber)

@@ -131,13 +131,14 @@ type Zk struct {
 	L2InfoTreeUpdatesBatchSize     uint64
 	L2InfoTreeUpdatesURL           string
 
-	InjectGers             bool
-	HonourChainspec        bool `yaml:"zkevm.honour-chainspec"`
-	SimultaneousPmtAndSmt  bool
-	SkipSmt                bool
-	OnlySmtV2              bool
-	SequencerBlockGasLimit uint64
-	PessimisticForkNumber  uint64
+	InjectGers                        bool
+	HonourChainspec                   bool `yaml:"zkevm.honour-chainspec"`
+	SimultaneousPmtAndSmt             bool
+	SkipSmt                           bool
+	OnlySmtV2                         bool
+	ForcePMTInterhashesRegenOnRestart bool
+	SequencerBlockGasLimit            uint64
+	PessimisticForkNumber             uint64
 }
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {

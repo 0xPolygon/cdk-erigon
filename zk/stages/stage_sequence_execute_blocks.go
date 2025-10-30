@@ -198,9 +198,9 @@ func finaliseBlock(
 	// this is actually the interhashes stage
 	startTime := time.Now()
 	var newRoot common.Hash
-	commitment := "smt"
-	if batchContext.cfg.zk.UsingPMT() {
-		commitment = "pmt"
+	var commitmentToLog string
+	if batchContext.cfg.chainConfig.IsPmtEnabled(newHeader.Number.Uint64()) {
+		commitmentToLog = "pmt"
 		logger := log.New()
 		log.Info(fmt.Sprintf("[%s] [SR-DEBUG] Hashing State for the PMT", batchContext.s.LogPrefix()), "startingBlock", newHeader.Number.Uint64()-1, "endingBlock", newHeader.Number.Uint64())
 		if err = stagedsync.HashStateFromTo(batchContext.s.LogPrefix(), batchContext.sdb.tx, batchContext.cfg.hashStateCfg, newHeader.Number.Uint64()-1, newHeader.Number.Uint64(), batchContext.ctx, logger); err != nil {
