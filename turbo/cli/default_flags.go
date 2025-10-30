@@ -349,6 +349,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.InjectGers,
 	&utils.SkipSmt,
 	&utils.OnlySmtV2,
+	&utils.ForcePMTInterhashesRegenOnRestart,
 	&utils.SequencerBlockGasLimit,
 	&utils.PessimisticForkNumber,
 }

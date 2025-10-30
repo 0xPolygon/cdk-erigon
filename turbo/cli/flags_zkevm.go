@@ -341,6 +341,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		InjectGers:                             ctx.Bool(utils.InjectGers.Name),
 		SkipSmt:                                ctx.Bool(utils.SkipSmt.Name),
 		OnlySmtV2:                              ctx.Bool(utils.OnlySmtV2.Name),
+		ForcePMTInterhashesRegenOnRestart:      ctx.Bool(utils.ForcePMTInterhashesRegenOnRestart.Name),
 		SequencerBlockGasLimit:                 ctx.Uint64(utils.SequencerBlockGasLimit.Name),
 		PessimisticForkNumber:                  ctx.Uint64(utils.PessimisticForkNumber.Name),
 	}
