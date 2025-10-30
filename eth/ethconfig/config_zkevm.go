@@ -134,10 +134,11 @@ type Zk struct {
 	InjectGers      bool
 	HonourChainspec bool `yaml:"zkevm.honour-chainspec"`
 
-	SkipSmt                bool
-	OnlySmtV2              bool
-	SequencerBlockGasLimit uint64
-	PessimisticForkNumber  uint64
+	SkipSmt                           bool
+	OnlySmtV2                         bool
+	ForcePMTInterhashesRegenOnRestart bool
+	SequencerBlockGasLimit            uint64
+	PessimisticForkNumber             uint64
 }
 
 type Hardfork string
