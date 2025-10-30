@@ -965,6 +965,11 @@ var (
 		Usage: "Only use SMT v2 for state changes",
 		Value: true,
 	}
+	ForcePMTInterhashesRegenOnRestart = cli.BoolFlag{
+		Name:  "zkevm.force-pmt-interhashes-regen-on-restart",
+		Usage: "Force regeneration of PMT interhashes on node restart",
+		Value: false,
+	}
 	SequencerBlockGasLimit = cli.Uint64Flag{
 		Name:  "zkevm.sequencer-block-gas-limit",
 		Usage: "The gas limit of the sequencer block.  Default (0) means no limit.",

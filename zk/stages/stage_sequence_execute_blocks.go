@@ -201,15 +201,19 @@ func finaliseBlock(
 	if batchContext.cfg.zk.UsingPMT() {
 		commitment = "pmt"
 		logger := log.New()
+		log.Info(fmt.Sprintf("[%s] Hashing State for the PMT", batchContext.s.LogPrefix()), "startingBlock", newHeader.Number.Uint64()-1, "endingBlock", newHeader.Number.Uint64())
 		if err = stagedsync.HashStateFromTo(batchContext.s.LogPrefix(), batchContext.sdb.tx, batchContext.cfg.hashStateCfg, newHeader.Number.Uint64()-1, newHeader.Number.Uint64(), batchContext.ctx, logger); err != nil {
 			return nil, err
 		}
 
+		log.Info(fmt.Sprintf("[%s] IncrementIntermediateHashes for the PMT", batchContext.s.LogPrefix()), "startingBlock", batchContext.s.BlockNumber, "endingBlock", thisBlockNumber)
 		newRoot, err = stagedsync.IncrementIntermediateHashes(batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, thisBlockNumber, trieConfigSequencer(batchContext.cfg.intersCfg), common.Hash{}, quit, logger)
 	} else {
+		log.Info(fmt.Sprintf("[%s] IncrementIntermediateHashes for the SMT", batchContext.s.LogPrefix()), "startingBlock", newHeader.Number.Uint64()-1, "endingBlock", newHeader.Number.Uint64())
 		newRoot, err = zkIncrementIntermediateHashes(batchContext.ctx, batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, batchContext.sdb.eridb, batchContext.sdb.smt, newHeader.Number.Uint64()-1, newHeader.Number.Uint64())
 	}
 	if err != nil {
+		log.Error(fmt.Sprintf("[%s] IncrementIntermediateHashes failed", batchContext.s.LogPrefix()), "err", err)
 		batchContext.sdb.eridb.RollbackBatch()
 		return nil, err
 	}
