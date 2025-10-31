@@ -43,7 +43,7 @@ require (
 	github.com/erigontech/erigon-lib v1.0.0
 	github.com/erigontech/erigonwatch v0.1.16
 	github.com/fjl/gencodec v0.0.0-20220412091415-8bb9e558978c
-	github.com/gateway-fm/zkevm-data-streamer v0.2.11
+	github.com/gateway-fm/zkevm-data-streamer v0.2.12
 	github.com/gballet/go-verkle v0.0.0-20221121182333-31427a1f2d35
 	github.com/gfx-labs/sse v0.0.0-20231226060816-f747e26a9baa
 	github.com/go-chi/chi/v5 v5.0.12

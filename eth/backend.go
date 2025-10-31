@@ -1009,6 +1009,12 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			if err := backend.natsManager.Start(); err != nil {
 				log.Error(err.Error())
 			}
+		} else if config.Zk.L2NatsUrl != "" {
+			log.Info("Configuring NATS client-only mode", "remoteURL", config.Zk.L2NatsUrl)
+			backend.natsManager = natsstream.NewManager(natsstream.Config{}, logger)
+			if err := backend.natsManager.ConnectRemote(config.Zk.L2NatsUrl); err != nil {
+				log.Error("Failed to configure NATS client mode", "error", err)
+			}
 		}
 
 		// zkevm: create a data stream server if we have the appropriate config for one.  This will be started on the call to Init

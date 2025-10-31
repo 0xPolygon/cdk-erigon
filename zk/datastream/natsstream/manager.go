@@ -221,13 +221,26 @@ func (m *Manager) Stop() {
 	m.url = ""
 }
 
+func (m *Manager) ConnectRemote(url string) error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	if m.server != nil {
+		return fmt.Errorf("cannot use remote mode when server is running")
+	}
+
+	m.url = url
+	m.logger.Info("NATS client-only mode configured", "remoteURL", url)
+	return nil
+}
+
 // URL returns the client URL for connecting to the NATS server
 func (m *Manager) URL() (string, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	if m.server == nil {
-		return "", fmt.Errorf("NATS server not running")
+	if m.url == "" {
+		return "", fmt.Errorf("NATS not configured")
 	}
 
 	return m.url, nil
