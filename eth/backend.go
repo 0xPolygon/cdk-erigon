@@ -2075,7 +2075,9 @@ func (s *Ethereum) Stop() error {
 
 	s.gasTracker.Stop()
 
-	s.natsManager.Stop()
+	if s.natsManager != nil {
+		s.natsManager.Stop()
+	}
 
 	if s.silkwormRPCDaemonService != nil {
 		if err := s.silkwormRPCDaemonService.Stop(); err != nil {
