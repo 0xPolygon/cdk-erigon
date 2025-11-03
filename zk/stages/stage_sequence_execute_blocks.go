@@ -209,6 +209,7 @@ func finaliseBlock(
 
 		log.Info(fmt.Sprintf("[%s] [SR-DEBUG] IncrementIntermediateHashes for the PMT", batchContext.s.LogPrefix()), "startingBlock", batchContext.s.BlockNumber, "endingBlock", thisBlockNumber)
 		newRoot, err = stagedsync.IncrementIntermediateHashes(batchContext.s.LogPrefix(), batchContext.s, batchContext.sdb.tx, thisBlockNumber, trieConfigSequencer(batchContext.cfg.intersCfg), common.Hash{}, quit, logger)
+		batchContext.s.BlockNumber = thisBlockNumber
 	} else {
 		log.Info(fmt.Sprintf("[%s] [SR-DEBUG] IncrementIntermediateHashes for the SMT", batchContext.s.LogPrefix()), "startingBlock", newHeader.Number.Uint64()-1, "endingBlock", newHeader.Number.Uint64())
 		commitmentToLog = "smt"
