@@ -40,6 +40,7 @@ func newL2BlockProto(
 	l1BlockHash libcommon.Hash,
 	minTimestamp uint64,
 	blockInfoRoot libcommon.Hash,
+	allowFreeTxs *bool,
 ) *types.L2BlockProto {
 	return &types.L2BlockProto{
 		L2Block: &datastream.L2Block{
@@ -55,6 +56,7 @@ func newL2BlockProto(
 			GlobalExitRoot:  ger.Bytes(),
 			Coinbase:        block.Coinbase().Bytes(),
 			BlockInfoRoot:   blockInfoRoot.Bytes(),
+			AllowFreeTxs:    allowFreeTxs,
 		},
 	}
 }

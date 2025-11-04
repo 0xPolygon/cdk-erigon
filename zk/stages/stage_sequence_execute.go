@@ -366,6 +366,14 @@ func sequencingBatchStep(
 			}
 		}
 
+		if batchState.isResequence() {
+			if resequenceBlock := batchState.resequenceBatchJob.CurrentBlock(); resequenceBlock != nil {
+				if resequenceBlock.AllowFreeTxs != nil {
+					cfg.chainConfig.AllowFreeTransactions = *resequenceBlock.AllowFreeTxs
+				}
+			}
+		}
+
 		var parentBlock *types.Block
 		header, parentBlock, err = prepareHeader(sdb.tx, blockNumber-1, batchState.blockState.getDeltaTimestamp(), batchState.getBlockHeaderForcedTimestamp(), batchState.forkId, batchState.getCoinbase(&cfg), cfg.chainConfig, cfg.miningConfig)
 		if err != nil {

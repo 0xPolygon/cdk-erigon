@@ -34,5 +34,3 @@ http.corsdomain: "*"
 ws: true
 rpc.batch.limit: 500
 zkevm.default-gas-price: 1000000000
-
-zkevm.l1-cache-enabled: false

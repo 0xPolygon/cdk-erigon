@@ -296,6 +296,17 @@ func getExecRange(cfg ExecuteBlockCfg, tx kv.RwTx, stageProgress, toBlock uint64
 
 // gets the pre-execute values for a block and sets the previous block hash
 func getPreexecuteValues(cfg ExecuteBlockCfg, ctx context.Context, tx kv.RwTx, blockNum uint64, prevBlockHash common.Hash) (common.Hash, *types.Block, []common.Address, error) {
+	allowFreeTxs := false
+	hermezReader := hermez_db.NewHermezDbReader(tx)
+	if hermezReader != nil {
+		value, err := hermezReader.GetBlockAllowFreeTransactions(blockNum)
+		if err != nil {
+			return common.Hash{}, nil, nil, fmt.Errorf("GetBlockAllowFreeTransactions: %w", err)
+		}
+		allowFreeTxs = value
+	}
+
+	cfg.chainConfig.AllowFreeTransactions = allowFreeTxs
 	preExecuteHeaderHash, err := rawdb.ReadCanonicalHash(tx, blockNum)
 	if err != nil {
 		return common.Hash{}, nil, nil, fmt.Errorf("ReadCanonicalHash: %w", err)

@@ -35,6 +35,7 @@ const BLOCK_L1_INFO_TREE_INDEX_PROGRESS = "block_l1_info_tree_progress" // block
 const L1_INJECTED_BATCHES = "l1_injected_batches"                       // index increasing by 1 -> injected batch for the start of the chain
 const BLOCK_INFO_ROOTS = "block_info_roots"                             // block number -> block info root hash
 const BLOCK_L1_BLOCK_HASHES = "block_l1_block_hashes"                   // block number -> l1 block hash
+const BLOCK_ALLOW_FREE_TRANSACTIONS = "block_allow_free_transactions"   // block number -> allow free txs flag
 const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots"  // l2blockno -> stateRoot
 const BATCH_WITNESSES = "hermez_batch_witnesses"                        // batch number -> witness
 const BATCH_COUNTERS = "hermez_batch_counters"                          // block number -> counters
@@ -76,6 +77,7 @@ var HermezDbTables = []string{
 	L1_INJECTED_BATCHES,
 	BLOCK_INFO_ROOTS,
 	BLOCK_L1_BLOCK_HASHES,
+	BLOCK_ALLOW_FREE_TRANSACTIONS,
 	INTERMEDIATE_TX_STATEROOTS,
 	BATCH_WITNESSES,
 	BATCH_COUNTERS,
@@ -825,6 +827,14 @@ func (db *HermezDb) WriteBlockL1BlockHash(l2BlockNo uint64, l1BlockHash common.H
 	return db.tx.Put(BLOCK_L1_BLOCK_HASHES, Uint64ToBytes(l2BlockNo), l1BlockHash.Bytes())
 }
 
+func (db *HermezDb) WriteBlockAllowFreeTransactions(l2BlockNo uint64, allowFree bool) error {
+	value := []byte{0}
+	if allowFree {
+		value[0] = 1
+	}
+	return db.tx.Put(BLOCK_ALLOW_FREE_TRANSACTIONS, Uint64ToBytes(l2BlockNo), value)
+}
+
 func (db *HermezDbReader) GetBlockL1BlockHash(l2BlockNo uint64) (common.Hash, error) {
 	bytes, err := db.tx.GetOne(BLOCK_L1_BLOCK_HASHES, Uint64ToBytes(l2BlockNo))
 	if err != nil {
@@ -832,6 +842,44 @@ func (db *HermezDbReader) GetBlockL1BlockHash(l2BlockNo uint64) (common.Hash, er
 	}
 
 	return common.BytesToHash(bytes), nil
+}
+
+func (db *HermezDbReader) GetBlockAllowFreeTransactions(blockNum uint64) (bool, error) {
+	c, err := db.tx.Cursor(BLOCK_ALLOW_FREE_TRANSACTIONS)
+	if err != nil {
+		return false, err
+	}
+	defer c.Close()
+
+	key := Uint64ToBytes(blockNum)
+	k, v, err := c.Seek(key)
+	if err != nil {
+		return false, err
+	}
+
+	if k == nil {
+		k, v, err = c.Last()
+		if err != nil {
+			return false, err
+		}
+		if k == nil {
+			return false, nil
+		}
+	} else {
+		current := BytesToUint64(k)
+		if current > blockNum {
+			k, v, err = c.Prev()
+			if err != nil {
+				return false, err
+			}
+			if k == nil {
+				return false, nil
+			}
+		}
+	}
+
+	value := len(v) > 0 && v[0] == 1
+	return value, nil
 }
 
 // from and to are inclusive
@@ -979,6 +1027,10 @@ func (db *HermezDb) DeleteBlockGlobalExitRoots(fromBlockNum, toBlockNum uint64) 
 
 func (db *HermezDb) DeleteBlockL1BlockHashes(fromBlockNum, toBlockNum uint64) error {
 	return db.deleteFromBucketWithUintKeysRange(BLOCK_L1_BLOCK_HASHES, fromBlockNum, toBlockNum)
+}
+
+func (db *HermezDb) DeleteBlockAllowFreeTransactions(fromBlockNum, toBlockNum uint64) error {
+	return db.deleteFromBucketWithUintKeysRange(BLOCK_ALLOW_FREE_TRANSACTIONS, fromBlockNum, toBlockNum)
 }
 
 func (db *HermezDb) DeleteBlockL1InfoTreeIndexes(fromBlockNum, toBlockNum uint64) error {

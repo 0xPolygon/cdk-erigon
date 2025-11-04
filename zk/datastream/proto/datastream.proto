@@ -34,6 +34,7 @@ message L2Block {
   uint64 block_gas_limit = 12;
   bytes block_info_root = 13;
   Debug debug = 14;
+  optional bool allow_free_txs = 15;
 }
 
 

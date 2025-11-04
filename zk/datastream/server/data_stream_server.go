@@ -2,10 +2,12 @@ package server
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
 	dslog "github.com/gateway-fm/zkevm-data-streamer/log"
-	"sync"
-	"time"
 
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
@@ -29,6 +31,7 @@ type DbReader interface {
 	GetL1InfoTreeUpdate(index uint64) (*zktypes.L1InfoTreeUpdate, error)
 	GetBlockInfoRoot(blockNumber uint64) (libcommon.Hash, error)
 	GetIntermediateTxStateRoot(blockNumber uint64, txHash libcommon.Hash) (libcommon.Hash, error)
+	GetBlockAllowFreeTransactions(blockNumber uint64) (bool, error)
 	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
 	GetHighestBlockInBatch(batchNumber uint64) (uint64, bool, error)
 	GetInvalidBatch(batchNumber uint64) (bool, error)
@@ -63,6 +66,37 @@ type DataStreamEntryProto interface {
 }
 
 type ZkEVMDataStreamServerFactory struct {
+}
+
+// allowFree tracking: initialise once from DB, then only emit on toggles.
+var (
+	allowFreeInitOnce sync.Once
+	allowFreeLastSent atomic.Bool
+)
+
+// getAllowFreeForStream reads the current value from DB and returns a pointer
+// to the value only on first emission or when it toggles. Nil means omit.
+func getAllowFreeForStream(reader DbReader, blockNum uint64) (*bool, error) {
+	current, err := reader.GetBlockAllowFreeTransactions(blockNum)
+	if err != nil {
+		return nil, err
+	}
+	executed := false
+	allowFreeInitOnce.Do(func() {
+		allowFreeLastSent.Store(current)
+		executed = true
+	})
+	if executed {
+		v := current
+		return &v, nil
+	}
+	prev := allowFreeLastSent.Load()
+	if current != prev {
+		allowFreeLastSent.Store(current)
+		v := current
+		return &v, nil
+	}
+	return nil, nil
 }
 
 func NewZkEVMDataStreamServerFactory() *ZkEVMDataStreamServerFactory {
@@ -337,8 +371,13 @@ func createFullBlockStreamEntriesProto(
 		return nil, err
 	}
 
-	// L2 BLOCK
-	entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot))
+	allowPtr, err := getAllowFreeForStream(reader, blockNum)
+	if err != nil {
+		return nil, err
+	}
+
+	// L2 BLOCK: include allow_free_txs only when toggled (nil omits field)
+	entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot, allowPtr))
 
 	var transaction DataStreamEntryProto
 	isEtrog := forkId <= EtrogBatchNumber

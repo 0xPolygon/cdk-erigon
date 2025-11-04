@@ -6,7 +6,7 @@ zkevm.l2-chain-id: 779
 zkevm.l2-sequencer-rpc-url: "http://34.175.214.161:18123"
 zkevm.l2-datastreamer-url: "0.0.0.0:6900"
 zkevm.l1-chain-id: 11155111
-zkevm.l1-rpc-url: "http://localhost:8545" # not used for the test
+zkevm.l1-rpc-url: https://rpc.eu-central-8.gateway.fm/v4/ethereum/non-archival/sepolia
 
 zkevm.l1-contract-address-retrieve: false
 zkevm.l1-contract-address-check: false
@@ -32,7 +32,5 @@ http.corsdomain: "*"
 ws: true
 rpc.batch.limit: 500
 zkevm.default-gas-price: 1000000000
-
-zkevm.l1-cache-enabled: false
 
 zkevm.honour-chainspec: true

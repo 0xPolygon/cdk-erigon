@@ -558,7 +558,8 @@ const (
 	// Hermez SMT v2
 	TableSmtIntermediateHashes = "HermezSmtIntermediateHashes"
 
-	PP_ROLLUP_TYPES = "pp_rollup_types" // rollup type id -> true
+	PP_ROLLUP_TYPES               = "pp_rollup_types"               // rollup type id -> true
+	BLOCK_ALLOW_FREE_TRANSACTIONS = "block_allow_free_transactions" // block number -> true
 )
 
 // Keys
@@ -805,6 +806,7 @@ var ChaindataTables = []string{
 	BAD_TX_HASHES,
 	CONFIRMED_L1_INFO_TREE_UPDATE,
 	PP_ROLLUP_TYPES,
+	BLOCK_ALLOW_FREE_TRANSACTIONS,
 }
 
 const (
