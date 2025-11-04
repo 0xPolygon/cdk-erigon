@@ -29,6 +29,7 @@ type DbReader interface {
 	GetL1InfoTreeUpdate(index uint64) (*zktypes.L1InfoTreeUpdate, error)
 	GetBlockInfoRoot(blockNumber uint64) (libcommon.Hash, error)
 	GetIntermediateTxStateRoot(blockNumber uint64, txHash libcommon.Hash) (libcommon.Hash, error)
+	GetBlockAllowFreeTransactions(blockNumber uint64) (bool, error)
 	GetEffectiveGasPricePercentage(txHash libcommon.Hash) (uint8, error)
 	GetHighestBlockInBatch(batchNumber uint64) (uint64, bool, error)
 	GetInvalidBatch(batchNumber uint64) (bool, error)
@@ -337,8 +338,13 @@ func createFullBlockStreamEntriesProto(
 		return nil, err
 	}
 
+	allowFreeTxs, err := reader.GetBlockAllowFreeTransactions(blockNum)
+	if err != nil {
+		return nil, err
+	}
+
 	// L2 BLOCK
-	entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot))
+	entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot, allowFreeTxs))
 
 	var transaction DataStreamEntryProto
 	isEtrog := forkId <= EtrogBatchNumber

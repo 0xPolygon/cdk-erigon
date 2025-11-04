@@ -1021,7 +1021,24 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		// entering ZK territory!
 		cfg := backend.config
 
-		backend.chainConfig.AllowFreeTransactions = cfg.AllowFreeTransactions
+		hermezDb := hermez_db.NewHermezDb(tx)
+		gaslessStored, err := hermezDb.GetBlockAllowFreeTransactions(executionProgress)
+		if err != nil {
+			return nil, err
+		}
+
+		isSequencer := sequencer.IsSequencer()
+		if isSequencer {
+			if gaslessStored != cfg.AllowFreeTransactions {
+				if err := hermezDb.WriteBlockAllowFreeTransactions(executionProgress, cfg.AllowFreeTransactions); err != nil {
+					return nil, err
+				}
+			}
+			backend.chainConfig.AllowFreeTransactions = cfg.AllowFreeTransactions
+		} else {
+			backend.chainConfig.AllowFreeTransactions = gaslessStored
+		}
+
 		backend.chainConfig.ZkDefaultGasPrice = cfg.DefaultGasPrice
 		backend.chainConfig.FreeInjectedBatch = cfg.FreeInjectedBatch
 		// Map zk EGP-per-type flags into chain config for runtime checks
@@ -1035,8 +1052,6 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		for i, url := range l1Urls {
 			backend.etherManClients[i] = newEtherMan(cfg, chainConfig.ChainName, url)
 		}
-
-		isSequencer := sequencer.IsSequencer()
 
 		// if the L1 block sync is set we're in recovery so can't run as a sequencer
 		if cfg.IsL1Recovery() {

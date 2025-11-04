@@ -38,6 +38,7 @@ type ProcessorHermezDb interface {
 	WriteEffectiveGasPricePercentage(txHash common.Hash, effectiveGasPricePercentage uint8) error
 
 	WriteStateRoot(l2BlockNumber uint64, rpcRoot common.Hash) error
+	WriteBlockAllowFreeTransactions(l2BlockNumber uint64, allowFree bool) error
 	GetStateRoot(l2BlockNumber uint64) (common.Hash, error)
 
 	CheckGlobalExitRootWritten(ger common.Hash) (bool, error)
@@ -388,6 +389,13 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 		gasLimit = utils.GetBlockGasLimitForFork(l2Block.ForkId)
 	} else {
 		gasLimit = p.miningConfig.GasLimit
+	}
+
+	if p.chainConfig.AllowFreeTransactions != l2Block.AllowFreeTxs {
+		p.chainConfig.AllowFreeTransactions = l2Block.AllowFreeTxs
+		if err := p.hermezDb.WriteBlockAllowFreeTransactions(l2Block.L2BlockNumber, l2Block.AllowFreeTxs); err != nil {
+			return fmt.Errorf("write allow-free flag error: %w", err)
+		}
 	}
 
 	if _, err := p.eriDb.WriteHeader(bn, l2Block.L2Blockhash, l2Block.StateRoot, txHash, l2Block.ParentHash, l2Block.Coinbase, uint64(l2Block.Timestamp), gasLimit, p.chainConfig); err != nil {

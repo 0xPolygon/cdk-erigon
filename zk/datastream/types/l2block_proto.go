@@ -44,6 +44,7 @@ type FullL2Block struct {
 	L2BlockNumber   uint64
 	Timestamp       int64
 	DeltaTimestamp  uint32
+	AllowFreeTxs    bool
 	L1InfoTreeIndex uint32
 	GlobalExitRoot  libcommon.Hash
 	Coinbase        libcommon.Address
@@ -92,5 +93,6 @@ func ConvertToFullL2Block(block *datastream.L2Block) *FullL2Block {
 		BlockGasLimit:   block.GetBlockGasLimit(),
 		BlockInfoRoot:   libcommon.BytesToHash(block.GetBlockInfoRoot()),
 		Debug:           ProcessDebug(block.GetDebug()),
+		AllowFreeTxs:    block.GetAllowFreeTxs(),
 	}
 }

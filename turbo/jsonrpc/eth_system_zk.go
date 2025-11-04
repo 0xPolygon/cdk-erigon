@@ -49,7 +49,7 @@ func (api *APIImpl) GasPrice(ctx context.Context) (*hexutil.Big, error) {
 		return (*hexutil.Big)(price), nil
 	}
 
-	if api.BaseAPI.gasless {
+	if cc.AllowFreeTransactions {
 		var price hexutil.Big
 		return &price, nil
 	}
