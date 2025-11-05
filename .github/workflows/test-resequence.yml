@@ -17,12 +17,15 @@ jobs:
     strategy:
       matrix:
         da-mode: [ "rollup" ]
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4
 
-      - name: Setup kurtosis
-        uses: ./.github/actions/setup-kurtosis
+      - name: Setup kurtosis type-1 PMT
+        uses: ./.github/actions/setup-kurtosis-type1
 
       - name: Ensure jq is installed
         run: |
