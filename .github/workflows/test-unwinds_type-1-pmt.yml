@@ -9,6 +9,8 @@ jobs:
   unwind-tests-type-1:
     runs-on: ubuntu-22.04
 
+    secrets:
+      PRIVATE_KEY: "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625"
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4
@@ -18,7 +20,7 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: '1.25'
-          
+
       - name: Set Go toolchain
         run: go env -w GOTOOLCHAIN=go1.25.0+auto
 
@@ -42,11 +44,5 @@ jobs:
       - name: Run tests
         run: |
           cd ./cdk-erigon
-          chmod +x ./zk/tests/unwinds/unwind.sh
-          dsDir=dynamic-integration8-normalcy-pmt-prague
-          dsFile=dynamic-integration8-normalcy-pmt-prague.tar.gz
-          firstStop=678
-          secondStop=1000
-          unwindToBatch=18
-          smtV2Only=false
-          ./zk/tests/unwinds/unwind.sh $dsDir $dsFile $firstStop $secondStop $unwindToBatch $smtV2Only
+          chmod +x ./zk/tests/unwinds/unwind_pmt.sh
+          ./zk/tests/unwinds/unwind_pmt.sh

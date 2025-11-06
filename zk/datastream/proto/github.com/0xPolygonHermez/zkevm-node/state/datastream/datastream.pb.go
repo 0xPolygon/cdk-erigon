@@ -7,10 +7,11 @@
 package datastream
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -350,7 +351,7 @@ type L2Block struct {
 	BlockGasLimit   uint64 `protobuf:"varint,12,opt,name=block_gas_limit,json=blockGasLimit,proto3" json:"block_gas_limit,omitempty"`
 	BlockInfoRoot   []byte `protobuf:"bytes,13,opt,name=block_info_root,json=blockInfoRoot,proto3" json:"block_info_root,omitempty"`
 	Debug           *Debug `protobuf:"bytes,14,opt,name=debug,proto3" json:"debug,omitempty"`
-	AllowFreeTxs    bool   `protobuf:"varint,16,opt,name=allow_free_txs,json=allowFreeTxs,proto3" json:"allow_free_txs,omitempty"`
+	AllowFreeTxs    bool   `protobuf:"varint,15,opt,name=allow_free_txs,json=allowFreeTxs,proto3" json:"allow_free_txs,omitempty"`
 }
 
 func (x *L2Block) Reset() {

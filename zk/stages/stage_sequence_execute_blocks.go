@@ -266,10 +266,6 @@ func finaliseBlock(
 		return nil, fmt.Errorf("write block batch error: %v", err)
 	}
 
-	if err := batchContext.sdb.hermezDb.WriteBlockAllowFreeTransactions(newNum.Uint64(), batchContext.cfg.chainConfig.AllowFreeTransactions); err != nil {
-		return nil, err
-	}
-
 	// write batch counters
 	err = batchContext.sdb.hermezDb.WriteBatchCounters(newNum.Uint64(), batchCounters.CombineCollectorsNoChanges().UsedAsArray())
 	if err != nil {

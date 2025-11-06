@@ -2,10 +2,12 @@ package server
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
 	dslog "github.com/gateway-fm/zkevm-data-streamer/log"
-	"sync"
-	"time"
 
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
@@ -64,6 +66,36 @@ type DataStreamEntryProto interface {
 }
 
 type ZkEVMDataStreamServerFactory struct {
+}
+
+// allowFree tracking: initialise once from DB, then only emit on toggles.
+var (
+	allowFreeInitOnce sync.Once
+	allowFreeLastSent atomic.Bool
+)
+
+// getAllowFreeForStream reads the current value from DB and returns whether
+// we should include it in the stream (only on first block or when it toggles),
+// along with the value to include when needed.
+func getAllowFreeForStream(reader DbReader, blockNum uint64) (include bool, val bool, err error) {
+	current, err := reader.GetBlockAllowFreeTransactions(blockNum)
+	if err != nil {
+		return false, false, err
+	}
+	executed := false
+	allowFreeInitOnce.Do(func() {
+		allowFreeLastSent.Store(current)
+		executed = true
+	})
+	if executed {
+		return true, current, nil
+	}
+	prev := allowFreeLastSent.Load()
+	if current != prev {
+		allowFreeLastSent.Store(current)
+		return true, current, nil
+	}
+	return false, false, nil
 }
 
 func NewZkEVMDataStreamServerFactory() *ZkEVMDataStreamServerFactory {
@@ -338,13 +370,17 @@ func createFullBlockStreamEntriesProto(
 		return nil, err
 	}
 
-	allowFreeTxs, err := reader.GetBlockAllowFreeTransactions(blockNum)
+	includeAllow, allowVal, err := getAllowFreeForStream(reader, blockNum)
 	if err != nil {
 		return nil, err
 	}
 
-	// L2 BLOCK
-	entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot, allowFreeTxs))
+	// L2 BLOCK: only include allowFreeTxs when toggled; otherwise pass false (zero value) so proto omits the field
+	if includeAllow {
+		entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot, allowVal))
+	} else {
+		entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot, false))
+	}
 
 	var transaction DataStreamEntryProto
 	isEtrog := forkId <= EtrogBatchNumber
