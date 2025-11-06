@@ -644,8 +644,7 @@ func (n *NATSStreamServer) GetFirstEventAfterBookmark(bookmark []byte) (datastre
 func (n *NATSStreamServer) GetDataBetweenBookmarks(bookmarkFrom, bookmarkTo []byte) ([]byte, error) {
 	// TODO: This method appears to be unused and should be removed from the interface
 	// after the original datastreamer is retired. We're not implementing it for NATS.
-	panic("GetDataBetweenBookmarks is not implemented for NATS and appears to be unused. " +
-		"This method should be removed from the interface after datastreamer is fully retired.")
+	return nil, fmt.Errorf("GetDataBetweenBookmarks is not implemented for NATS and should be removed from the interface after datastreamer is fully retired")
 }
 
 // BookmarkPrintDump prints the metadata dump from NATS KV - NATS is the authoritative source

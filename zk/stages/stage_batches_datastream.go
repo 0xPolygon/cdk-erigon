@@ -26,7 +26,7 @@ func NewDatastreamClientRunner(dsClient types.DatastreamClient, logPrefix string
 }
 
 func (r *DatastreamClientRunner) StartRead(errorChan chan struct{}, diffBlock uint64) error {
-	if r.isReading.Load() {
+	if !r.isReading.CompareAndSwap(false, true) {
 		return fmt.Errorf("tried starting datastream client runner thread while another is running")
 	}
 
@@ -44,7 +44,6 @@ func (r *DatastreamClientRunner) StartRead(errorChan chan struct{}, diffBlock ui
 		log.Info(fmt.Sprintf("[%s] Started downloading L2Blocks routine ID: %d", r.logPrefix, routineId))
 		defer log.Info(fmt.Sprintf("[%s] Ended downloading L2Blocks routine ID: %d", r.logPrefix, routineId))
 
-		r.isReading.Store(true)
 		defer r.isReading.Store(false)
 
 		if err := r.dsClient.ReadAllEntriesToChannel(); err != nil {

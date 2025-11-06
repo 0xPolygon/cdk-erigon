@@ -70,9 +70,8 @@ func NewZkEVMDataStreamServerFactory() *ZkEVMDataStreamServerFactory {
 }
 
 func (f *ZkEVMDataStreamServerFactory) CreateStreamServer(port uint16, systemID uint64, streamType datastreamer.StreamType, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config) (StreamServer, error) {
-	// The version parameter from the interface is ignored as we've hardcoded the version to 3
+	// Version 3 is hardcoded for protobuf encoding support
 	const datastreamVersion = 3
-	// the library still requires version as a input in it's arguments.
 	return datastreamer.NewServer(port, datastreamVersion, systemID, streamType, fileName, writeTimeout, inactivityTimeout, inactivityCheckInterval, cfg)
 }
 
