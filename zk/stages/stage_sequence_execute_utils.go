@@ -486,6 +486,9 @@ func calculateNextL1TreeUpdateToUse(recentlyUsed uint64, hermezDb *hermez_db.Her
 func updateSequencerProgress(tx kv.RwTx, newHeight uint64, newBatch uint64, unwinding bool) error {
 	// now update stages that will be used later on in stageloop.go and other stages. As we're the sequencer
 	// we won't have headers stage for example as we're already writing them here
+	if err := stages.SaveStageProgress(tx, stages.HashState, newHeight); err != nil {
+		return err
+	}
 	if err := stages.SaveStageProgress(tx, stages.Execution, newHeight); err != nil {
 		return err
 	}
