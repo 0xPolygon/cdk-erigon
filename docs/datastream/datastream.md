@@ -110,6 +110,15 @@ There are bookmarks for Batches (type = 1) and L2Blocks (type = 2).
 
   - For ForkIDs < 7: 0x000…00,unused 
 
+### Allow Free Transactions Flag
+
+Some networks allow blocks to toggle whether free transactions are permitted. The sequencer stays in sync with the RPC nodes through the datastream by carrying that flag alongside the block data:
+
+* The sequencer writes the current flag value into the `block_allow_free_transactions` table at genesis and every time the `allow-free-txs` setting in the zkevm config changes. The table stores rows in the form `blockNumber -> bool`.
+* The datastream server includes the flag **only** on entries where the value changed (and always for the genesis block), so older clients that do not understand the field can ignore it.
+* When a datastream client sees the flag in the stream and the value differs from the last known one, it updates both the DB table and the in-memory chain config so future execution/fees use the same setting.
+* RPC nodes consult the table when computing base fees so that their gas accounting matches the sequencer’s behaviour when the flag is toggled mid-run.
+
 ### Transaction
 
 ​​​​- L2BlockNumber

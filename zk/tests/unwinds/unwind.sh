@@ -709,7 +709,6 @@ timeout 300 ./build/bin/cdk-erigon \
     --zkevm.data-stream-port="$rpcDatastreamHostPort" \
     --zkevm.data-stream-host="127.0.0.1" \
     --zkevm.shadow-sequencer=false \
-    --zkevm.l1-rpc-url="http://127.0.0.1:6969?chainid=779&endpoint=https://rpc.eu-central-8.gateway.fm/v4/ethereum/non-archival/sepolia"
     
 
 log "Completed sync to first stop"
