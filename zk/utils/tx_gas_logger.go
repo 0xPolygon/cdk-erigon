@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/erigontech/erigon-lib/common"
@@ -15,6 +16,7 @@ import (
 
 type TxGasLogger struct {
 	ctx             context.Context
+	cancel          context.CancelFunc
 	logEvery        *time.Ticker
 	initialBlock    uint64
 	logBlock        uint64
@@ -30,11 +32,14 @@ type TxGasLogger struct {
 	batch           *kv.PendingMutations
 	tx              kv.RwTx
 	metric          metrics.Gauge
+	wg              sync.WaitGroup
 }
 
 func NewTxGasLogger(ctx context.Context, logInterval time.Duration, logBlock, total, gasLimit uint64, logPrefix string, batch *kv.PendingMutations, tx kv.RwTx, metric metrics.Gauge) *TxGasLogger {
+	ctx, cancel := context.WithCancel(ctx)
 	return &TxGasLogger{
 		ctx:          ctx,
+		cancel:       cancel,
 		logEvery:     time.NewTicker(logInterval),
 		initialBlock: logBlock,
 		logBlock:     logBlock,
@@ -51,8 +56,9 @@ func NewTxGasLogger(ctx context.Context, logInterval time.Duration, logBlock, to
 }
 
 func (g *TxGasLogger) Start() {
+	g.wg.Add(1)
 	go func() {
-		defer g.logEvery.Stop()
+		defer g.wg.Done()
 		for {
 			select {
 			case <-g.ctx.Done():
@@ -82,7 +88,9 @@ func (g *TxGasLogger) Start() {
 }
 
 func (g *TxGasLogger) Stop() {
+	g.cancel()
 	g.logEvery.Stop()
+	g.wg.Wait()
 }
 
 func (g *TxGasLogger) SetTx(tx kv.RwTx) {
