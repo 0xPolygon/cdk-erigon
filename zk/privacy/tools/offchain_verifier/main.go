@@ -62,7 +62,10 @@ func newServer() *server {
 	}
 	schemaCtx := os.Getenv("SCHEMA_CTX")
 	if schemaCtx == "" {
-		schemaCtx = "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/non-zero-balance.jsonld"
+		// schemaCtx = "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/non-zero-balance.jsonld"
+		// schemaCtx = "https://gist.githubusercontent.com/IvanBelyakoff/bc8eeadb3756300cfc01753f96facf91/raw/membership_schema.jsonld"
+		// IMPORTANT: use the exact ipfs:// URL that the credential uses to avoid literal string mismatches
+		schemaCtx = "ipfs://QmNhAbDz6U6iQ8LX1EqnX5NXkaV9PJ17FffH2mbg3hfgFf"
 	}
 
 	resolver := os.Getenv("STATE_RESOLVER_URL")
@@ -70,9 +73,10 @@ func newServer() *server {
 	network := os.Getenv("STATE_RESOLVER_NETWORK")
 
 	resolvers := map[string]pubsignals.StateResolver{
-		"privado:main": state.NewETHResolver("https://rpc-mainnet.privado.id", "0x3C9acB2205Aa72A05F6D77d708b5Cf85FCa3a896"),
-		"polygon:amoy": state.NewETHResolver("https://rpc-amoy.polygon.technology", "0x1a4cC30f2aA0377b0c3bc9848766D90cb4404124"),
-		"zkevm:test":   state.NewETHResolver("https://rpc.cardona.zkevm-rpc.com", "0x3C9acB2205Aa72A05F6D77d708b5Cf85FCa3a896"),
+		"privado:main":    state.NewETHResolver("https://rpc-mainnet.privado.id", "0x3C9acB2205Aa72A05F6D77d708b5Cf85FCa3a896"),
+		"polygon:amoy":    state.NewETHResolver("https://rpc-amoy.polygon.technology", "0x1a4cC30f2aA0377b0c3bc9848766D90cb4404124"),
+		"zkevm:test":      state.NewETHResolver("https://rpc.cardona.zkevm-rpc.com", "0x3C9acB2205Aa72A05F6D77d708b5Cf85FCa3a896"),
+		"polygon:cardona": state.NewETHResolver("http://192.168.1.134:62644", "0x69efd7416e071e528e2951e92c3b30d564ca58e9"),
 	}
 
 	if resolver != "" && contract != "" && network != "" {
@@ -81,7 +85,14 @@ func newServer() *server {
 		log.Fatalln("STATE_RESOLVER_URL, STATE_RESOLVER_CONTRACT and STATE_RESOLVER_NETWORK must be set")
 	}
 
-	vf, err := auth.NewVerifier(loaders.NewEmbeddedKeyLoader(), resolvers)
+    // Configure IPFS gateway so schema loader can resolve ipfs:// contexts
+    ipfsGW := os.Getenv("IPFS_GATEWAY")
+    if ipfsGW == "" {
+        // Default to Privado IPFS proxy cache; any public gateway works
+        ipfsGW = "https://ipfs-proxy-cache.privado.id"
+    }
+
+    vf, err := auth.NewVerifier(loaders.NewEmbeddedKeyLoader(), resolvers, auth.WithIPFSGateway(ipfsGW))
 	if err != nil || vf == nil {
 		log.Fatalf("failed to init verifier: %v", err)
 	}
@@ -116,23 +127,71 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	if v, ok := in.Args["to"].(string); ok {
 		token = v
 	}
-	sess := &session{ID: id, CallType: in.CallType, SchemaType: in.SchemaType, Args: in.Args, Sender: sender, TokenAddress: token, CreatedAt: now, ExpiresAt: exp}
+    sess := &session{ID: id, CallType: in.CallType, SchemaType: in.SchemaType, Args: in.Args, Sender: sender, TokenAddress: token, CreatedAt: now, ExpiresAt: exp}
 
-	req := auth.CreateAuthorizationRequest("Prove balance > 0", "offchain-verifier", fmt.Sprintf("%s/callback?challengeId=%s", s.baseURL, id))
+	// req := auth.CreateAuthorizationRequest("Prove balance > 0", "offchain-verifier", fmt.Sprintf("%s/callback?challengeId=%s", s.baseURL, id))
+	// var pr protocol.ZeroKnowledgeProofRequest
+	// pr.ID = uint32(s.reqID)
+	// pr.CircuitID = string(circuits.AtomicQuerySigV2CircuitID)
+	// q := map[string]interface{}{
+	// 	"allowedIssuers": []string{"*"},
+	// 	"credentialSubject": map[string]interface{}{
+	// 		"address": map[string]interface{}{"value": token},
+	// 		"balance": map[string]interface{}{"$gte": 1},
+	// 	},
+	// 	"context": s.schemaCtx,
+	// 	"type":    "Balance",
+	// }
+    // Verifier DID shown as sender in the request; must start with 'did:'
+    verifierDID := os.Getenv("VERIFIER_DID")
+    if verifierDID == "" {
+        // Use a syntactically valid fallback; not resolved.
+        verifierDID = "did:example:verifier"
+    }
+    req := auth.CreateAuthorizationRequest("Prove membership in GWFM", verifierDID, fmt.Sprintf("%s/callback?challengeId=%s", s.baseURL, id))
 	var pr protocol.ZeroKnowledgeProofRequest
 	pr.ID = uint32(s.reqID)
-	pr.CircuitID = string(circuits.AtomicQuerySigV2CircuitID)
-	q := map[string]interface{}{
-		"allowedIssuers": []string{"*"},
-		"credentialSubject": map[string]interface{}{
-			"address": map[string]interface{}{"value": token},
-			"balance": map[string]interface{}{"$gte": 1},
-		},
-		"context": s.schemaCtx,
-		"type":    "Balance",
-	}
-	pr.Query = q
-	req.Body.Scope = append(req.Body.Scope, pr)
+    // Read expected values (allow env override)
+    email := os.Getenv("OFFCHAIN_EMAIL")
+    if email == "" {
+        email = "ivan.belyakoff@example.com"
+    }
+    org := os.Getenv("OFFCHAIN_ORG")
+    if org == "" {
+        org = "GWFM"
+    }
+
+    // Build two separate SigV2 queries (one attribute per scope),
+    // matching the example shape expected by wallets.
+    // Query #1: email == <value>
+    pr.CircuitID = string(circuits.AtomicQuerySigV2CircuitID)
+    q1 := map[string]interface{}{
+        "allowedIssuers": []string{"*"},
+        "credentialSubject": map[string]interface{}{
+            "email": map[string]interface{}{"$eq": email},
+        },
+        "skipClaimRevocationCheck": true,
+        "context": s.schemaCtx,
+        "type":    "OrganizationMembership",
+    }
+    pr.Query = q1
+    req.Body.Scope = append(req.Body.Scope, pr)
+
+    // Query #2: organisation == <value>
+    pr2 := protocol.ZeroKnowledgeProofRequest{}
+    pr2.ID = uint32(s.reqID + 1)
+    pr2.CircuitID = string(circuits.AtomicQuerySigV2CircuitID)
+    q2 := map[string]interface{}{
+        "allowedIssuers": []string{"*"},
+        "credentialSubject": map[string]interface{}{
+            "organisation": map[string]interface{}{"$eq": org},
+        },
+        "skipClaimRevocationCheck": true,
+        "context": s.schemaCtx,
+        "type":    "OrganizationMembership",
+    }
+    pr2.Query = q2
+    req.Body.Scope = append(req.Body.Scope, pr2)
 	// Note: some wallets derive 'challenge' differently; for gating JWT only we omit explicit challenge here.
 	sess.Request = &req
 
@@ -176,7 +235,24 @@ func (s *server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ar := *sess.Request
-	if _, err := s.verifier.FullVerify(r.Context(), string(tokenBytes), ar); err != nil {
+	// Verification options (tunable via env)
+	var opts []pubsignals.VerifyOpt
+	if v := strings.ToLower(os.Getenv("OFFCHAIN_ALLOW_EXPIRED")); v == "1" || v == "true" {
+		opts = append(opts, pubsignals.WithAllowExpiredMessages(true))
+	}
+	if v := os.Getenv("OFFCHAIN_ACCEPTED_PROOF_DELAY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			opts = append(opts, pubsignals.WithAcceptedProofGenerationDelay(d))
+		}
+	}
+	if v := os.Getenv("OFFCHAIN_ACCEPTED_STATE_DELAY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			opts = append(opts, pubsignals.WithAcceptedStateTransitionDelay(d))
+		}
+	}
+
+	if _, err := s.verifier.FullVerify(r.Context(), string(tokenBytes), ar, opts...); err != nil {
+		log.Printf("FullVerify error: %v", err)
 		http.Error(w, fmt.Sprintf("verify failed: %v", err), http.StatusBadRequest)
 		return
 	}

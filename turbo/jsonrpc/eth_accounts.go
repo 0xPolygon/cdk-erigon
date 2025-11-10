@@ -25,11 +25,11 @@ import (
 
 // GetBalance implements eth_getBalance. Returns the balance of an account for a given address.
 func (api *APIImpl) GetBalance(ctx context.Context, address libcommon.Address, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Big, error) {
-    log.Info("ACL ctx getBalance", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen, "addr", address)
-    tx, err1 := api.db.BeginRo(ctx)
-    if err1 != nil {
-        return nil, fmt.Errorf("getBalance cannot open tx: %w", err1)
-    }
+	log.Info("ACL ctx getBalance", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen, "addr", address)
+	tx, err1 := api.db.BeginRo(ctx)
+	if err1 != nil {
+		return nil, fmt.Errorf("getBalance cannot open tx: %w", err1)
+	}
 	defer tx.Rollback()
 	reader, err := rpchelper.CreateStateReader(ctx, tx, blockNrOrHash, 0, api.filters, api.stateCache, api.historyV3(tx), "")
 	if err != nil {
@@ -50,13 +50,13 @@ func (api *APIImpl) GetBalance(ctx context.Context, address libcommon.Address, b
 
 // GetTransactionCount implements eth_getTransactionCount. Returns the number of transactions sent from an address (the nonce).
 func (api *APIImpl) GetTransactionCount(ctx context.Context, address libcommon.Address, blockNrOrHash *rpc.BlockNumberOrHash) (*hexutil.Uint64, error) {
-    // Log ACL flags on nonce requests as forge scripts typically call this endpoint
-    log.Info("ACL ctx getTransactionCount", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen, "addr", address)
-    // zkevm: forward requests to the sequencer
-    if !sequencer.IsSequencer() {
-        res, err := api.sendGetTransactionCountToSequencer(api.l2RpcUrl, address, blockNrOrHash)
-        if err != nil {
-            return nil, err
+	// Log ACL flags on nonce requests as forge scripts typically call this endpoint
+	log.Info("ACL ctx getTransactionCount", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen, "addr", address)
+	// zkevm: forward requests to the sequencer
+	if !sequencer.IsSequencer() {
+		res, err := api.sendGetTransactionCountToSequencer(api.l2RpcUrl, address, blockNrOrHash)
+		if err != nil {
+			return nil, err
 		}
 		return res, nil
 	}
@@ -111,11 +111,11 @@ func (api *APIImpl) GetTransactionCount(ctx context.Context, address libcommon.A
 
 // GetCode implements eth_getCode. Returns the byte code at a given address (if it's a smart contract).
 func (api *APIImpl) GetCode(ctx context.Context, address libcommon.Address, blockNrOrHash rpc.BlockNumberOrHash) (hexutility.Bytes, error) {
-    log.Info("ACL ctx getCode", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen, "addr", address)
-    tx, err1 := api.db.BeginRo(ctx)
-    if err1 != nil {
-        return nil, fmt.Errorf("getCode cannot open tx: %w", err1)
-    }
+	log.Info("ACL ctx getCode", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen, "addr", address)
+	tx, err1 := api.db.BeginRo(ctx)
+	if err1 != nil {
+		return nil, fmt.Errorf("getCode cannot open tx: %w", err1)
+	}
 	defer tx.Rollback()
 	chainConfig, err := api.chainConfig(ctx, tx)
 	if err != nil {

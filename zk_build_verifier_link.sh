@@ -19,6 +19,8 @@ TO="${TO:-}"
 DATA="${DATA:-0x70a082310000000000000000000000000000000000000000000000000000000000000000}"
 BLOCKTAG="${BLOCKTAG:-latest}"
 ID="${ID:-1}"
+WAIT="${WAIT:-0}"
+WAIT_TIMEOUT="${WAIT_TIMEOUT:-300}"
 
 # Allow CLI overrides: ./zk_build_verifier_link.sh --to 0x.. --data 0x.. --block latest
 while [[ $# -gt 0 ]]; do
@@ -28,6 +30,8 @@ while [[ $# -gt 0 ]]; do
     --block|--blocktag) BLOCKTAG="$2"; shift 2 ;;
     --id) ID="$2"; shift 2 ;;
     --rpc-url) RPC_URL="$2"; shift 2 ;;
+    --wait) WAIT=1; shift 1 ;;
+    --timeout) WAIT_TIMEOUT="$2"; shift 2 ;;
     --help|-h)
       cat <<EOF
 Usage: $0 [--rpc-url URL] [--to ADDR] [--data HEX] [--blocktag TAG] [--id N]
@@ -38,10 +42,13 @@ Env vars:
   DATA      default: $DATA
   BLOCKTAG  default: $BLOCKTAG
   ID        default: $ID
+  WAIT      default: $WAIT (1 to poll verifier and replay call)
+  WAIT_TIMEOUT seconds, default: $WAIT_TIMEOUT
 
 Examples:
   RPC_URL=http://localhost:8545 $0
   $0 --rpc-url http://localhost:8545 --to 0xabc... --data 0x70a08231... --blocktag latest
+  $0 --wait --timeout 180
 EOF
       exit 0 ;;
     *)
@@ -97,4 +104,62 @@ if [[ "$QR_MISSING" -eq 0 ]]; then
   printf '%s' "$UNIVERSAL" | qrencode -t ANSIUTF8
 else
   echo "(qrencode not found; install it to render a terminal QR: e.g., brew install qrencode)"
+fi
+
+# Optionally wait for proof and replay eth_call with Authorization header
+if [[ "$WAIT" -eq 1 ]]; then
+  if [[ -z "$CHALLENGE_ID" || -z "$VERIFIER_REQ_URL" ]]; then
+    echo "Cannot wait: missing challengeId or verifierURL" >&2
+    exit 1
+  fi
+  # Allow override
+  BASE_URL="${VERIFIER_BASE_URL:-}"
+  # Try robust derivation from request URL
+  if [[ -z "$BASE_URL" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+      BASE_URL=$(python3 - "$VERIFIER_REQ_URL" <<'PY'
+import sys, urllib.parse as u
+try:
+    v = u.urlsplit(sys.argv[1])
+    print(f"{v.scheme}://{v.netloc}")
+except Exception:
+    pass
+PY
+)
+    fi
+  fi
+  if [[ -z "$BASE_URL" ]]; then
+    BASE_URL=$(printf %s "$VERIFIER_REQ_URL" | sed -E 's#^([a-zA-Z]+://[^/]+).*$#\1#')
+  fi
+  if [[ -z "$BASE_URL" ]]; then
+    BASE_URL=$(printf %s "$VERIFIER_REQ_URL" | sed -E 's#/requests/.*$##')
+  fi
+  if [[ -z "$BASE_URL" ]]; then
+    echo "Cannot derive verifier base URL from $VERIFIER_REQ_URL" >&2
+    exit 1
+  fi
+  echo "verifierBase: $BASE_URL"
+  echo
+  echo "Waiting up to ${WAIT_TIMEOUT}s for proof..."
+  SECONDS=0
+  TOKEN=""
+  while [[ $SECONDS -lt $WAIT_TIMEOUT ]]; do
+    SRESP=$(curl -sS "$BASE_URL/sessions/$CHALLENGE_ID") || true
+    VERIFIED=$(echo "$SRESP" | jq -r '.verified // false')
+    TOKEN=$(echo "$SRESP" | jq -r '.token // empty')
+    if [[ "$VERIFIED" == "true" && -n "$TOKEN" && "$TOKEN" != "null" ]]; then
+      break
+    fi
+    sleep 1
+  done
+  if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
+    echo "Timed out waiting for proof/token." >&2
+    exit 1
+  fi
+  echo "Got token; replaying eth_call with Authorization header..."
+  RESP2=$(curl -sS -X POST "$RPC_URL" \
+    -H 'content-type: application/json' \
+    -H "Authorization: Bearer $TOKEN" \
+    -d "$REQ")
+  echo "$RESP2" | jq . || true
 fi

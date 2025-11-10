@@ -1,95 +1,152 @@
 package jsonrpc
 
 import (
-    "context"
-    "encoding/json"
-    "errors"
-    "fmt"
-    "math/big"
-    "net/http"
-    "os"
-    "strings"
-    "time"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math/big"
+	"net/http"
+	"os"
+	"strings"
+	"time"
 
-    "github.com/erigontech/erigon-lib/kv/membatchwithdb"
-    "github.com/erigontech/erigon-lib/log/v3"
-    "github.com/holiman/uint256"
-    "google.golang.org/grpc"
+	"github.com/erigontech/erigon-lib/kv/membatchwithdb"
+	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/holiman/uint256"
+	"google.golang.org/grpc"
 
-    libcommon "github.com/erigontech/erigon-lib/common"
-    "github.com/erigontech/erigon-lib/common/hexutil"
-    "github.com/erigontech/erigon-lib/common/hexutility"
-    "github.com/erigontech/erigon-lib/gointerfaces"
-    txpool_proto "github.com/erigontech/erigon-lib/gointerfaces/txpool"
-    "github.com/erigontech/erigon-lib/kv"
-    types2 "github.com/erigontech/erigon-lib/types"
+	libcommon "github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/common/hexutil"
+	"github.com/erigontech/erigon-lib/common/hexutility"
+	"github.com/erigontech/erigon-lib/gointerfaces"
+	txpool_proto "github.com/erigontech/erigon-lib/gointerfaces/txpool"
+	"github.com/erigontech/erigon-lib/kv"
+	types2 "github.com/erigontech/erigon-lib/types"
 
-    "github.com/erigontech/erigon-lib/crypto"
-    "github.com/erigontech/erigon/core"
-    "github.com/erigontech/erigon/core/state"
-    "github.com/erigontech/erigon/core/types"
-    "github.com/erigontech/erigon/core/types/accounts"
-    "github.com/erigontech/erigon/core/vm"
-    "github.com/erigontech/erigon/core/vm/evmtypes"
-    "github.com/erigontech/erigon/eth/stagedsync"
-    "github.com/erigontech/erigon/eth/tracers/logger"
-    "github.com/erigontech/erigon/params"
-    "github.com/erigontech/erigon/rpc"
-    ethapi2 "github.com/erigontech/erigon/turbo/adapter/ethapi"
-    "github.com/erigontech/erigon/turbo/rpchelper"
-    "github.com/erigontech/erigon/turbo/transactions"
-    "github.com/erigontech/erigon/turbo/trie"
+	"github.com/erigontech/erigon-lib/crypto"
+	"github.com/erigontech/erigon/core"
+	"github.com/erigontech/erigon/core/state"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/core/types/accounts"
+	"github.com/erigontech/erigon/core/vm"
+	"github.com/erigontech/erigon/core/vm/evmtypes"
+	"github.com/erigontech/erigon/eth/stagedsync"
+	"github.com/erigontech/erigon/eth/tracers/logger"
+	"github.com/erigontech/erigon/params"
+	"github.com/erigontech/erigon/rpc"
+	ethapi2 "github.com/erigontech/erigon/turbo/adapter/ethapi"
+	"github.com/erigontech/erigon/turbo/rpchelper"
+	"github.com/erigontech/erigon/turbo/transactions"
+	"github.com/erigontech/erigon/turbo/trie"
 )
 
 var latestNumOrHash = rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
 
 // Call implements eth_call. Executes a new message call immediately without creating a transaction on the block chain.
 func (api *APIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *ethapi2.StateOverrides) (hexutility.Bytes, error) {
+    log.Info("eth_Call", "from", args.From, "to", args.To, "gas", args.Gas, "gasPrice", args.GasPrice, "value", args.Value)
     // Authorization gating (MVP): if no Authorization is provided and OFFCHAIN_VERIFIER_URL is set,
     // create a verification session with the offchain verifier and return a structured JSON-RPC error
     // instructing the client to complete verification.
-    if headers := rpc.HTTPHeadersFromContext(ctx); headers != nil {
-        auth := headers.Get("Authorization")
-        if strings.TrimSpace(auth) == "" {
-            if verifierURL := os.Getenv("OFFCHAIN_VERIFIER_URL"); verifierURL != "" {
-                // Prepare minimal payload for the verifier
-                payload := map[string]interface{}{
-                    "callType":  "eth_call",
-                    "schemaType": "Balance",
-                    "args": map[string]interface{}{
-                        "from": args.From,
-                        "to":   args.To,
-                        "gas":  args.Gas,
-                        "gasPrice": args.GasPrice,
-                        "value":    args.Value,
-                        "data":     args.Data,
-                    },
-                }
-                body, _ := json.Marshal(payload)
-                req, _ := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(verifierURL, "/")+"/sessions", strings.NewReader(string(body)))
-                req.Header.Set("content-type", "application/json")
-
-                httpClient := &http.Client{Timeout: 5 * time.Second}
-                var challengeURL, challengeID string
-                var expiresAt int64
-                if resp, err := httpClient.Do(req); err == nil && resp != nil {
-                    defer resp.Body.Close()
-                    var respObj struct {
-                        URL         string `json:"url"`
-                        ChallengeID string `json:"challengeId"`
-                        ExpiresAt   int64  `json:"expiresAt"`
-                    }
-                    if decErr := json.NewDecoder(resp.Body).Decode(&respObj); decErr == nil {
-                        challengeURL = respObj.URL
-                        challengeID = respObj.ChallengeID
-                        expiresAt = respObj.ExpiresAt
-                    }
-                }
-                // Return a custom JSON-RPC error with data for the client
-                return nil, verificationRequired{URL: challengeURL, ChallengeID: challengeID, ExpiresAt: expiresAt}
+    // Bypass list: OFFCHAIN_VERIFIER_BYPASS_TO=0xaddr1,0xaddr2 (case-insensitive)
+    // Useful to allow on-chain state resolver (State contract) calls while the verifier is performing checks.
+    var bypass bool
+    if list := os.Getenv("OFFCHAIN_VERIFIER_BYPASS_TO"); list != "" && args.To != nil {
+        toHex := strings.ToLower(args.To.Hex())
+        for _, a := range strings.Split(list, ",") {
+            if strings.TrimSpace(a) == "" {
+                continue
+            }
+            if strings.ToLower(strings.TrimSpace(a)) == toHex {
+                bypass = true
+                break
             }
         }
     }
+
+	if headers := rpc.HTTPHeadersFromContext(ctx); headers != nil {
+		auth := headers.Get("Authorization")
+
+		// Optional debug: log JWT from Authorization header and decode header/payload
+		if v := os.Getenv("OFFCHAIN_LOG_AUTH"); strings.EqualFold(v, "1") || strings.EqualFold(v, "true") {
+			authTrim := strings.TrimSpace(auth)
+			if authTrim != "" {
+				// Extract token (strip optional "Bearer ")
+				tok := authTrim
+				if len(tok) > 7 && strings.EqualFold(tok[:7], "Bearer ") {
+					tok = strings.TrimSpace(tok[7:])
+				}
+				log.Info("eth_call Authorization", "jwt", tok)
+				parts := strings.Split(tok, ".")
+				if len(parts) >= 2 {
+					if h, err := base64.RawURLEncoding.DecodeString(parts[0]); err == nil {
+						log.Info("JWT header", "json", string(h))
+					}
+					if p, err := base64.RawURLEncoding.DecodeString(parts[1]); err == nil {
+						log.Info("JWT payload", "json", string(p))
+					}
+				}
+			}
+		}
+		if strings.TrimSpace(auth) == "" && !bypass {
+			if verifierURL := os.Getenv("OFFCHAIN_VERIFIER_URL"); verifierURL != "" {
+				schemaType := os.Getenv("OFFCHAIN_SCHEMA_TYPE")
+				if schemaType == "" {
+					schemaType = "OrganizationMembership"
+                }
+				schemaCtx := os.Getenv("OFFCHAIN_SCHEMA_CTX")
+				if schemaCtx == "" {
+					schemaCtx = os.Getenv("SCHEMA_CTX")
+				}
+				// Prepare minimal payload for the verifier
+				payload := map[string]interface{}{
+					"callType":   "eth_call",
+					"schemaType": schemaType,
+					"args": map[string]interface{}{
+						"from":     args.From,
+						"to":       args.To,
+						"gas":      args.Gas,
+						"gasPrice": args.GasPrice,
+						"value":    args.Value,
+						"data":     args.Data,
+					},
+				}
+				if schemaCtx != "" {
+					payload["schemaCtx"] = schemaCtx
+				}
+				body, _ := json.Marshal(payload)
+				req, _ := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(verifierURL, "/")+"/sessions", strings.NewReader(string(body)))
+				req.Header.Set("content-type", "application/json")
+
+				httpClient := &http.Client{Timeout: 5 * time.Second}
+				var challengeURL, challengeID string
+				var expiresAt int64
+				if resp, err := httpClient.Do(req); err == nil && resp != nil {
+					defer resp.Body.Close()
+					var respObj struct {
+						URL         string `json:"url"`
+						ChallengeID string `json:"challengeId"`
+						ExpiresAt   int64  `json:"expiresAt"`
+					}
+					if decErr := json.NewDecoder(resp.Body).Decode(&respObj); decErr == nil {
+						challengeURL = respObj.URL
+						challengeID = respObj.ChallengeID
+						expiresAt = respObj.ExpiresAt
+					}
+				}
+				// Return a custom JSON-RPC error with data for the client
+				return nil, verificationRequired{
+					URL:           challengeURL,
+					ChallengeID:   challengeID,
+					ExpiresAt:     expiresAt,
+					SchemaType:    schemaType,
+					SchemaContext: schemaCtx,
+				}
+			}
+		}
+	}
 
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
@@ -151,25 +208,33 @@ func (api *APIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blockNrOrHa
 // an offchain verification session has been initiated. It implements rpc.Error and
 // rpc.DataError so JSON-RPC clients receive a code and a data payload.
 type verificationRequired struct {
-    URL         string
-    ChallengeID string
-    ExpiresAt   int64
+	URL           string
+	ChallengeID   string
+	ExpiresAt     int64
+	SchemaType    string
+	SchemaContext string
 }
 
-func (e verificationRequired) Error() string { return "verification required" }
+func (e verificationRequired) Error() string  { return "verification required" }
 func (e verificationRequired) ErrorCode() int { return -32051 }
 func (e verificationRequired) ErrorData() interface{} {
-    data := map[string]interface{}{}
-    if e.URL != "" {
-        data["url"] = e.URL
-    }
-    if e.ChallengeID != "" {
-        data["challengeId"] = e.ChallengeID
-    }
-    if e.ExpiresAt != 0 {
-        data["expiresAt"] = e.ExpiresAt
-    }
-    return data
+	data := map[string]interface{}{}
+	if e.URL != "" {
+		data["url"] = e.URL
+	}
+	if e.ChallengeID != "" {
+		data["challengeId"] = e.ChallengeID
+	}
+	if e.ExpiresAt != 0 {
+		data["expiresAt"] = e.ExpiresAt
+	}
+	if e.SchemaType != "" {
+		data["schemaType"] = e.SchemaType
+	}
+	if e.SchemaContext != "" {
+		data["schemaContext"] = e.SchemaContext
+	}
+	return data
 }
 
 // headerByNumberOrHash - intent to read recent headers only, tries from the lru cache before reading from the db
