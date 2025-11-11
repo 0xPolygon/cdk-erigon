@@ -66,10 +66,10 @@ func APIList(db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, r
 		}
 	}
 
-    // Otterscan: wire ACL config so tracing obeys ACL like execution
-    // Build a runtime ACL snapshot from ethCfg and pass it along
-    aclRt := ACLFromConfig(ethCfg)
-    otsImpl := NewOtterscanAPIWithACL(base, db, cfg.OtsMaxPageSize, &aclRt)
+	// Otterscan: wire ACL config so tracing obeys ACL like execution
+	// Build a runtime ACL snapshot from ethCfg and pass it along
+	aclRt := ACLFromConfig(ethCfg)
+	otsImpl := NewOtterscanAPIWithACL(base, db, cfg.OtsMaxPageSize, &aclRt)
 	gqlImpl := NewGraphQLAPI(base, db)
 	overlayImpl := NewOverlayAPI(base, db, cfg.Gascap, cfg.OverlayGetLogsTimeout, cfg.OverlayReplayBlockTimeout, otsImpl)
 	zkEvmImpl := NewZkEvmAPI(ethImpl, db, cfg.ReturnDataLimit, ethCfg, l1Syncer, rpcUrl, dataStreamServer)

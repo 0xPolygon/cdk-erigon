@@ -93,19 +93,19 @@ func (api *ZkEvmAPIImpl) GetL2BlockInfoTree(ctx context.Context, blockNum rpc.Bl
 	if err != nil {
 		return nil, err
 	}
-    vmConfig := vm.NewTraceVmConfig()
-    vmConfig.Debug = false
-    vmConfig.NoReceipts = false
-    // Propagate ACL into vmConfig if enabled
-    if api.ethApi != nil && api.ethApi.aclEnabled {
-        vmConfig.SetACL(vm.ACL{
-            Enabled:     true,
-            Address:     api.ethApi.aclAddress,
-            FailOpen:    api.ethApi.aclFailOpen,
-            Bypass:      api.ethApi.aclBypass,
-            OwnerBypass: api.ethApi.aclOwnerBypass,
-        })
-    }
+	vmConfig := vm.NewTraceVmConfig()
+	vmConfig.Debug = false
+	vmConfig.NoReceipts = false
+	// Propagate ACL into vmConfig if enabled
+	if api.ethApi != nil && api.ethApi.aclEnabled {
+		vmConfig.SetACL(vm.ACL{
+			Enabled:     true,
+			Address:     api.ethApi.aclAddress,
+			FailOpen:    api.ethApi.aclFailOpen,
+			Bypass:      api.ethApi.aclBypass,
+			OwnerBypass: api.ethApi.aclOwnerBypass,
+		})
+	}
 
 	txEnv, err := transactions.ComputeTxEnv_ZkEvm(ctx, api.ethApi._engine, block, chainConfig, api.ethApi._blockReader, tx, 0, api.ethApi.historyV3(tx))
 	if err != nil {

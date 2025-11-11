@@ -739,15 +739,15 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
 
 	// ACL enforcement at opcode level to ensure nested calls cannot bypass
-    if interpreter.evm.config.ACL.Enabled && !interpreter.evm.config.ACL.Internal {
-        if errAcl := interpreter.evm.aclEnforce(toAddr, args); errAcl != nil {
-            // Simulate failed CALL: push 0 (false), do not write return memory
-            temp.Clear()
-            stack.Push(&temp)
-            interpreter.returnData = nil
-            return nil, nil
-        }
-    }
+	if interpreter.evm.config.ACL.Enabled && !interpreter.evm.config.ACL.Internal {
+		if errAcl := interpreter.evm.aclEnforce(toAddr, args); errAcl != nil {
+			// Simulate failed CALL: push 0 (false), do not write return memory
+			temp.Clear()
+			stack.Push(&temp)
+			interpreter.returnData = nil
+			return nil, nil
+		}
+	}
 
 	if !value.IsZero() {
 		if interpreter.readOnly {

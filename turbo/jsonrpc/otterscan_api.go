@@ -157,15 +157,15 @@ func (api *OtterscanAPIImpl) runTracer(ctx context.Context, tx kv.Tx, hash commo
 		vmConfig = vm.Config{Debug: true, Tracer: tracer}
 	}
 	// Propagate ACL into tracing VM, if configured for this API
-    if api.aclRuntime != nil {
-        vmConfig.SetACL(vm.ACL{
-            Enabled:     api.aclRuntime.Enabled,
-            Address:     api.aclRuntime.Address,
-            FailOpen:    api.aclRuntime.FailOpen,
-            Bypass:      api.aclRuntime.Bypass,
-            OwnerBypass: api.aclRuntime.OwnerBypass,
-        })
-    }
+	if api.aclRuntime != nil {
+		vmConfig.SetACL(vm.ACL{
+			Enabled:     api.aclRuntime.Enabled,
+			Address:     api.aclRuntime.Address,
+			FailOpen:    api.aclRuntime.FailOpen,
+			Bypass:      api.aclRuntime.Bypass,
+			OwnerBypass: api.aclRuntime.OwnerBypass,
+		})
+	}
 	vmenv := vm.NewEVM(txEnv.BlockContext, txEnv.TxContext, txEnv.Ibs, chainConfig, vmConfig)
 
 	result, err := core.ApplyMessage(vmenv, txEnv.Msg, new(core.GasPool).AddGas(txEnv.Msg.Gas()), true, false /* gasBailout */)

@@ -51,19 +51,19 @@ type Config struct {
 
 // ACL groups runtime ACL settings for vm.Config.
 type ACL struct {
-    Enabled     bool
-    Address     libcommon.Address
-    FailOpen    bool
-    Bypass      []libcommon.Address
-    OwnerBypass bool
-    // Internal disables ACL enforcement for internal ACL staticcalls to avoid recursion.
-    Internal    bool
+	Enabled     bool
+	Address     libcommon.Address
+	FailOpen    bool
+	Bypass      []libcommon.Address
+	OwnerBypass bool
+	// Internal disables ACL enforcement for internal ACL staticcalls to avoid recursion.
+	Internal bool
 }
 
 // SetACL copies the provided ACL settings into the Config, updating both the
 // grouped ACL field as well as the legacy flat fields to keep existing code working.
 func (vmConfig *Config) SetACL(a ACL) {
-    vmConfig.ACL = a
+	vmConfig.ACL = a
 }
 
 func NewTraceVmConfig() Config {

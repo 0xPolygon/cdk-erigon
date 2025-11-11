@@ -157,11 +157,11 @@ func (api *APIImpl) CallMany_deprecated(ctx context.Context, bundles []Bundle, s
 
 	blockCtx = core.NewEVMBlockContext(header, getHash, api.engine(), nil /* author */, chainConfig)
 
-    // Build vm.Config with ACL for sim
-    vmCfg := vm.Config{Debug: false}
-    api.aclRuntime().ApplyVM(&vmCfg)
-    log.Info("ACL sim callMany:init", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
-    evm = vm.NewEVM(blockCtx, txCtx, st, chainConfig, vmCfg)
+	// Build vm.Config with ACL for sim
+	vmCfg := vm.Config{Debug: false}
+	api.aclRuntime().ApplyVM(&vmCfg)
+	log.Info("ACL sim callMany:init", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
+	evm = vm.NewEVM(blockCtx, txCtx, st, chainConfig, vmCfg)
 	signer := types.MakeSigner(chainConfig, blockNum, blockCtx.Time)
 	rules := chainConfig.Rules(blockNum, blockCtx.Time)
 
@@ -202,8 +202,8 @@ func (api *APIImpl) CallMany_deprecated(ctx context.Context, bundles []Bundle, s
 		}
 
 		txCtx = core.NewEVMTxContext(msg)
-        log.Info("ACL sim callMany:replay", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address)
-        evm = vm.NewEVM(blockCtx, txCtx, evm.IntraBlockState(), chainConfig, vmCfg)
+		log.Info("ACL sim callMany:replay", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address)
+		evm = vm.NewEVM(blockCtx, txCtx, evm.IntraBlockState(), chainConfig, vmCfg)
 		// Execute the transaction message
 		_, err = core.ApplyMessage(evm, msg, gp, true /* refunds */, false /* gasBailout */)
 		if err != nil {
@@ -264,8 +264,8 @@ func (api *APIImpl) CallMany_deprecated(ctx context.Context, bundles []Bundle, s
 				return nil, err
 			}
 			txCtx = core.NewEVMTxContext(msg)
-            log.Info("ACL sim callMany:bundle", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address)
-            evm = vm.NewEVM(blockCtx, txCtx, evm.IntraBlockState(), chainConfig, vmCfg)
+			log.Info("ACL sim callMany:bundle", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address)
+			evm = vm.NewEVM(blockCtx, txCtx, evm.IntraBlockState(), chainConfig, vmCfg)
 			result, err := core.ApplyMessage(evm, msg, gp, true, false)
 			if err != nil {
 				return nil, err

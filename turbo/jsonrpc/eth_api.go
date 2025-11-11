@@ -383,14 +383,14 @@ type APIImpl struct {
 	SenderLocks                   *SenderLock
 	LogsMaxRange                  uint64
 	DisableStateRootCheck         bool
-    DisableVirtualCounters        bool
+	DisableVirtualCounters        bool
 
-    // ACL settings for eth_call/estimateGas and tracing simulations
-    aclEnabled      bool
-    aclAddress      common.Address
-    aclFailOpen     bool
-    aclBypass       []common.Address
-    aclOwnerBypass  bool
+	// ACL settings for eth_call/estimateGas and tracing simulations
+	aclEnabled     bool
+	aclAddress     common.Address
+	aclFailOpen    bool
+	aclBypass      []common.Address
+	aclOwnerBypass bool
 
 	// used to cache recent block headers so under load we don't waste CPU time loading the
 	// same block header repeatedly
@@ -411,8 +411,8 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		log.Error("failed to create sendTransactionBlockCache", "err", err)
 	}
 
-    api := &APIImpl{
-            BaseAPI:                       base,
+	api := &APIImpl{
+		BaseAPI:                       base,
 		db:                            db,
 		ethBackend:                    eth,
 		txPool:                        txPool,
@@ -441,31 +441,31 @@ func NewEthAPI(base *BaseAPI, db kv.RoDB, eth rpchelper.ApiBackend, txPool txpoo
 		BadTxAllowance:                ethCfg.BadTxAllowance,
 		SenderLocks:                   NewSenderLock(),
 		LogsMaxRange:                  LogsMaxRange,
-            DisableStateRootCheck:         disableStateRootCheck,
-            DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
-            // propagate ACL
-            aclEnabled:                    ethCfg.ACL.Enabled,
-            aclAddress:                    ethCfg.ACL.ContractAddress,
-            aclFailOpen:                   ethCfg.ACL.FailOpen,
-            aclBypass:                     ethCfg.ACL.Bypass,
-            aclOwnerBypass:                ethCfg.ACL.OwnerBypass,
-            sendTransactionBlockCache:     sendTransactionBlockCache,
-            sendTransactionBlockGroup:     &singleflight.Group{},
-        }
-    // One-time ACL config log at API construction
-    logger.Info("ACL config", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen)
-    return api
+		DisableStateRootCheck:         disableStateRootCheck,
+		DisableVirtualCounters:        ethCfg.DisableVirtualCounters,
+		// propagate ACL
+		aclEnabled:                ethCfg.ACL.Enabled,
+		aclAddress:                ethCfg.ACL.ContractAddress,
+		aclFailOpen:               ethCfg.ACL.FailOpen,
+		aclBypass:                 ethCfg.ACL.Bypass,
+		aclOwnerBypass:            ethCfg.ACL.OwnerBypass,
+		sendTransactionBlockCache: sendTransactionBlockCache,
+		sendTransactionBlockGroup: &singleflight.Group{},
+	}
+	// One-time ACL config log at API construction
+	logger.Info("ACL config", "enabled", api.aclEnabled, "address", api.aclAddress, "failOpen", api.aclFailOpen)
+	return api
 }
 
 // aclRuntime returns the ACLRuntime view for this API
 func (api *APIImpl) aclRuntime() ACLRuntime {
-    return ACLRuntime{
-        Enabled:     api.aclEnabled,
-        Address:     api.aclAddress,
-        FailOpen:    api.aclFailOpen,
-        Bypass:      append([]common.Address(nil), api.aclBypass...),
-        OwnerBypass: api.aclOwnerBypass,
-    }
+	return ACLRuntime{
+		Enabled:     api.aclEnabled,
+		Address:     api.aclAddress,
+		FailOpen:    api.aclFailOpen,
+		Bypass:      append([]common.Address(nil), api.aclBypass...),
+		OwnerBypass: api.aclOwnerBypass,
+	}
 }
 
 // // RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction

@@ -592,36 +592,36 @@ func NewPipelineStages(ctx context.Context,
 		depositContract = cfg.Genesis.Config.DepositContract
 	}
 
-    // Propagate ACL settings into vm.Config for execution
-    vmCfg := &vm.Config{}
-    if cfg != nil && cfg.ACL.Enabled {
-        vmCfg.SetACL(vm.ACL{
-            Enabled:     true,
-            Address:     cfg.ACL.ContractAddress,
-            FailOpen:    cfg.ACL.FailOpen,
-            Bypass:      cfg.ACL.Bypass,
-            OwnerBypass: cfg.ACL.OwnerBypass,
-        })
-    }
+	// Propagate ACL settings into vm.Config for execution
+	vmCfg := &vm.Config{}
+	if cfg != nil && cfg.ACL.Enabled {
+		vmCfg.SetACL(vm.ACL{
+			Enabled:     true,
+			Address:     cfg.ACL.ContractAddress,
+			FailOpen:    cfg.ACL.FailOpen,
+			Bypass:      cfg.ACL.Bypass,
+			OwnerBypass: cfg.ACL.OwnerBypass,
+		})
+	}
 
-    if len(cfg.Sync.UploadLocation) == 0 {
+	if len(cfg.Sync.UploadLocation) == 0 {
 		return stagedsync.PipelineStages(ctx,
 			stagedsync.StageSnapshotsCfg(db, *controlServer.ChainConfig, cfg.Sync, dirs, blockRetire, snapDownloader, blockReader, notifications, cfg.HistoryV3, agg, cfg.InternalCL && cfg.CaplinConfig.Backfilling, cfg.CaplinConfig.BlobBackfilling, silkworm),
 			stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig, blockWriter),
 			stagedsync.StageSendersCfg(db, controlServer.ChainConfig, false, dirs.Tmp, cfg.Prune, blockReader, controlServer.Hd, loopBreakCheck),
-            stagedsync.StageExecuteBlocksCfg(
-                db,
-                cfg.Prune,
-                cfg.BatchSize,
-                nil,
-                controlServer.ChainConfig,
-                controlServer.Engine,
-                vmCfg,
-                notifications.Accumulator,
-                cfg.StateStream,
-                /*stateStream=*/ false,
-                cfg.HistoryV3,
-                dirs,
+			stagedsync.StageExecuteBlocksCfg(
+				db,
+				cfg.Prune,
+				cfg.BatchSize,
+				nil,
+				controlServer.ChainConfig,
+				controlServer.Engine,
+				vmCfg,
+				notifications.Accumulator,
+				cfg.StateStream,
+				/*stateStream=*/ false,
+				cfg.HistoryV3,
+				dirs,
 				blockReader,
 				controlServer.Hd,
 				cfg.Genesis,
@@ -640,25 +640,25 @@ func NewPipelineStages(ctx context.Context,
 			runInTestMode)
 	}
 
-    return stagedsync.UploaderPipelineStages(ctx,
+	return stagedsync.UploaderPipelineStages(ctx,
 		stagedsync.StageSnapshotsCfg(db, *controlServer.ChainConfig, cfg.Sync, dirs, blockRetire, snapDownloader, blockReader, notifications, cfg.HistoryV3, agg, cfg.InternalCL && cfg.CaplinConfig.Backfilling, cfg.CaplinConfig.BlobBackfilling, silkworm),
 		stagedsync.StageHeadersCfg(db, controlServer.Hd, controlServer.Bd, *controlServer.ChainConfig, cfg.Sync, controlServer.SendHeaderRequest, controlServer.PropagateNewBlockHashes, controlServer.Penalize, cfg.BatchSize, p2pCfg.NoDiscovery, blockReader, blockWriter, dirs.Tmp, notifications, loopBreakCheck),
 		stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig, blockWriter),
 		stagedsync.StageSendersCfg(db, controlServer.ChainConfig, false, dirs.Tmp, cfg.Prune, blockReader, controlServer.Hd, loopBreakCheck),
 		stagedsync.StageBodiesCfg(db, controlServer.Bd, controlServer.SendBodyRequest, controlServer.Penalize, controlServer.BroadcastNewBlock, cfg.Sync.BodyDownloadTimeoutSeconds, *controlServer.ChainConfig, blockReader, cfg.HistoryV3, blockWriter, loopBreakCheck),
-        stagedsync.StageExecuteBlocksCfg(
-            db,
-            cfg.Prune,
-            cfg.BatchSize,
-            nil,
-            controlServer.ChainConfig,
-            controlServer.Engine,
-            vmCfg,
-            notifications.Accumulator,
-            cfg.StateStream,
-            /*stateStream=*/ false,
-            cfg.HistoryV3,
-            dirs,
+		stagedsync.StageExecuteBlocksCfg(
+			db,
+			cfg.Prune,
+			cfg.BatchSize,
+			nil,
+			controlServer.ChainConfig,
+			controlServer.Engine,
+			vmCfg,
+			notifications.Accumulator,
+			cfg.StateStream,
+			/*stateStream=*/ false,
+			cfg.HistoryV3,
+			dirs,
 			blockReader,
 			controlServer.Hd,
 			cfg.Genesis,
@@ -679,39 +679,39 @@ func NewPipelineStages(ctx context.Context,
 }
 
 func NewInMemoryExecution(ctx context.Context, db kv.RwDB, cfg *ethconfig.Config, controlServer *sentry_multi_client.MultiClient,
-    dirs datadir.Dirs, notifications *shards.Notifications, blockReader services.FullBlockReader, blockWriter *blockio.BlockWriter, agg *state.Aggregator,
-    silkworm *silkworm.Silkworm, logger log.Logger) *stagedsync.Sync {
-    // Build vm.Config (ACL) for in-memory exec
-    vmCfgMem := &vm.Config{}
-    if cfg != nil && cfg.ACL.Enabled {
-        vmCfgMem.SetACL(vm.ACL{
-            Enabled:     true,
-            Address:     cfg.ACL.ContractAddress,
-            FailOpen:    cfg.ACL.FailOpen,
-            Bypass:      cfg.ACL.Bypass,
-            OwnerBypass: cfg.ACL.OwnerBypass,
-        })
-    }
-    return stagedsync.New(
-        cfg.Sync,
-        stagedsync.StateStages(ctx,
+	dirs datadir.Dirs, notifications *shards.Notifications, blockReader services.FullBlockReader, blockWriter *blockio.BlockWriter, agg *state.Aggregator,
+	silkworm *silkworm.Silkworm, logger log.Logger) *stagedsync.Sync {
+	// Build vm.Config (ACL) for in-memory exec
+	vmCfgMem := &vm.Config{}
+	if cfg != nil && cfg.ACL.Enabled {
+		vmCfgMem.SetACL(vm.ACL{
+			Enabled:     true,
+			Address:     cfg.ACL.ContractAddress,
+			FailOpen:    cfg.ACL.FailOpen,
+			Bypass:      cfg.ACL.Bypass,
+			OwnerBypass: cfg.ACL.OwnerBypass,
+		})
+	}
+	return stagedsync.New(
+		cfg.Sync,
+		stagedsync.StateStages(ctx,
 			stagedsync.StageHeadersCfg(db, controlServer.Hd, controlServer.Bd, *controlServer.ChainConfig, cfg.Sync, controlServer.SendHeaderRequest, controlServer.PropagateNewBlockHashes, controlServer.Penalize, cfg.BatchSize, false, blockReader, blockWriter, dirs.Tmp, nil, nil),
 			stagedsync.StageBodiesCfg(db, controlServer.Bd, controlServer.SendBodyRequest, controlServer.Penalize, controlServer.BroadcastNewBlock, cfg.Sync.BodyDownloadTimeoutSeconds, *controlServer.ChainConfig, blockReader, cfg.HistoryV3, blockWriter, nil),
 			stagedsync.StageBlockHashesCfg(db, dirs.Tmp, controlServer.ChainConfig, blockWriter),
 			stagedsync.StageSendersCfg(db, controlServer.ChainConfig, true, dirs.Tmp, cfg.Prune, blockReader, controlServer.Hd, nil),
-            stagedsync.StageExecuteBlocksCfg(
-                db,
-                cfg.Prune,
-                cfg.BatchSize,
-                nil,
-                controlServer.ChainConfig,
-                controlServer.Engine,
-                vmCfgMem,
-                notifications.Accumulator,
-                cfg.StateStream,
-                true,
-                cfg.HistoryV3,
-                cfg.Dirs,
+			stagedsync.StageExecuteBlocksCfg(
+				db,
+				cfg.Prune,
+				cfg.BatchSize,
+				nil,
+				controlServer.ChainConfig,
+				controlServer.Engine,
+				vmCfgMem,
+				notifications.Accumulator,
+				cfg.StateStream,
+				true,
+				cfg.HistoryV3,
+				cfg.Dirs,
 				blockReader,
 				controlServer.Hd,
 				cfg.Genesis,

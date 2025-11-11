@@ -75,7 +75,7 @@ func TestACL_TopLevel_AllowAndDeny(t *testing.T) {
 	allowAddr := libcrypto.CreateAddress(addrOf(owner), 0)
 
 	// Enable ACL
-    b.SetVMConfig(vm.Config{ACL: vm.ACL{Enabled: true, Address: allowAddr}})
+	b.SetVMConfig(vm.Config{ACL: vm.ACL{Enabled: true, Address: allowAddr}})
 
 	// Send a simple tx (should pass)
 	to := libcommon.HexToAddress("0x1111111111111111111111111111111111111111")
@@ -97,7 +97,7 @@ func TestACL_TopLevel_AllowAndDeny(t *testing.T) {
 		t.Fatalf("deploy deny acl: %v", err)
 	}
 	denyAddr := libcrypto.CreateAddress(addrOf(owner), 1)
-    b.SetVMConfig(vm.Config{ACL: vm.ACL{Enabled: true, Address: denyAddr}})
+	b.SetVMConfig(vm.Config{ACL: vm.ACL{Enabled: true, Address: denyAddr}})
 
 	// Next tx should be denied by ACL
 	tx2 := types.NewTransaction(1, to, uint256.NewInt(0), 21000, uint256.NewInt(1), nil)
@@ -139,7 +139,7 @@ func TestACL_NestedCall_Deny(t *testing.T) {
 	if code, _ := b.PendingCodeAt(context.Background(), aclAddr); len(code) == 0 {
 		t.Fatalf("acl code not found in pending state")
 	}
-    b.SetVMConfig(vm.Config{ACL: vm.ACL{Enabled: true, Address: aclAddr}})
+	b.SetVMConfig(vm.Config{ACL: vm.ACL{Enabled: true, Address: aclAddr}})
 
 	// Sanity-check ACL runtime: staticcall should fail when target == bAddr
 	// (omit external staticcall sanity checks; rely on nested-call failure)
@@ -214,7 +214,7 @@ func TestACL_Create_AllowAndDeny(t *testing.T) {
 		t.Fatalf("deploy allow acl: %v", err)
 	}
 	allowAddr := libcrypto.CreateAddress(addrOf(owner), 0)
-    b.SetVMConfig(vm.Config{ACL: vm.ACL{Enabled: true, Address: allowAddr}})
+	b.SetVMConfig(vm.Config{ACL: vm.ACL{Enabled: true, Address: allowAddr}})
 
 	// Contract creation should be allowed under allow ACL
 	initCode := initAllow // deploy a trivial contract
@@ -236,7 +236,7 @@ func TestACL_Create_AllowAndDeny(t *testing.T) {
 		t.Fatalf("deploy deny acl: %v", err)
 	}
 	denyAddr := libcrypto.CreateAddress(addrOf(owner), 1)
-    b.SetVMConfig(vm.Config{ACL: vm.ACL{Enabled: true, Address: denyAddr}})
+	b.SetVMConfig(vm.Config{ACL: vm.ACL{Enabled: true, Address: denyAddr}})
 
 	// Next contract creation should be denied by ACL
 	create2 := types.NewContractCreation(1, uint256.NewInt(0), 1_000_000, uint256.NewInt(1), initCode)
