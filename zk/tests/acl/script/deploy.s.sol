@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.23;
 
-// Minimal cheatcode interface (avoid external dependencies)
 interface Vm {
     function startBroadcast(uint256 privateKey) external;
     function stopBroadcast() external;
@@ -13,9 +12,10 @@ interface Vm {
 
 Vm constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
-import "acl/AccessControlFirewall.sol";
-import "acl/AdminUpgradeableProxy.sol";
-import "acl/ProxyAdmin.sol";
+import "acl/AccessControlRBACChecker.sol";
+import "acl/AccessControlRBACRegistry.sol";
+import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
+import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ATarget, BTarget} from "../contracts/Targets.sol";
 
 contract DeployACL {
@@ -25,30 +25,32 @@ contract DeployACL {
 
         vm.startBroadcast(pk);
 
-        // Deploy ProxyAdmin and ACL logic with regular CREATE (works on all chains)
+        AccessControlRBACRegistry registry = new AccessControlRBACRegistry();
+        registry.initialize(owner);
+        AccessControlRBACChecker checker = new AccessControlRBACChecker();
         ProxyAdmin proxyAdmin = new ProxyAdmin(owner);
-        AccessControlFirewall logic = new AccessControlFirewall();
+        bytes memory initData = abi.encodeWithSignature("initialize(address)", address(registry));
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(address(checker), address(proxyAdmin), initData);
 
-        // Encode initializer for ACL proxy
-        bytes memory initData = abi.encodeWithSignature("initialize(address)", owner);
-
-        // Deploy upgradeable proxy via CREATE
-        AdminUpgradeableProxy proxy = new AdminUpgradeableProxy(
-            address(logic),
-            address(proxyAdmin),
-            initData
-        );
-
-        // Deploy sample target contracts
-        ATarget a = new ATarget();
-        BTarget b = new BTarget();
+        ATarget a;
+        BTarget b;
+        bool deployTargets;
+        try vm.envUint("DEPLOY_SAMPLE_TARGETS") returns (uint256 flag) {
+            deployTargets = flag != 0;
+        } catch {
+            deployTargets = true;
+        }
+        if (deployTargets) {
+            a = new ATarget();
+            b = new BTarget();
+        }
 
         vm.stopBroadcast();
 
-        // Persist addresses for the test stage
         string memory obj;
         obj = vm.serializeAddress("acl", "proxy", address(proxy));
-        obj = vm.serializeAddress("acl", "logic", address(logic));
+        obj = vm.serializeAddress("acl", "logic", address(checker));
+        obj = vm.serializeAddress("acl", "registry", address(registry));
         obj = vm.serializeAddress("acl", "admin", address(proxyAdmin));
         obj = vm.serializeAddress("acl", "A", address(a));
         obj = vm.serializeAddress("acl", "B", address(b));

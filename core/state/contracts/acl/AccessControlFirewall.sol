@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: UNLICENSED
+// forge-lint-disable-file unsafe-typecast asm-keccak256
 pragma solidity ^0.8.23;
 
 import {IAccessControlFirewall} from "./IAccessControlFirewall.sol";
@@ -19,13 +21,17 @@ contract AccessControlFirewall is IAccessControlFirewall {
     bool private _initialized;
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "ACL: not owner");
+        _onlyOwner();
         _;
     }
 
+    function _onlyOwner() internal view {
+        require(msg.sender == owner, "ACL: not owner");
+    }
+
     // --- Selector bitmap storage ---
-    // subject => target => bucket(uint24) => 256-bit bitmap
-    mapping(address => mapping(address => mapping(uint24 => uint256))) private _selBitmap;
+    // subject => target => bucket => 256-bit bitmap
+    mapping(address => mapping(address => mapping(uint256 => uint256))) private _selBitmap;
 
     // subject => target => allow any selector (fast path)
     mapping(address => mapping(address => bool)) private _anySelector;
@@ -141,7 +147,7 @@ contract AccessControlFirewall is IAccessControlFirewall {
         }
 
         // Bitmap check
-        (uint24 bucket, uint8 idx) = _bucketIndex(selector);
+        (uint256 bucket, uint256 idx) = _bucketIndex(selector);
         uint256 bitmap = _selBitmap[subject][target][bucket];
         bool bitAllowed = ((bitmap >> idx) & 1) == 1;
         if (!bitAllowed) return false;
@@ -161,7 +167,7 @@ contract AccessControlFirewall is IAccessControlFirewall {
     // --- Internal helpers ---
     function _setSelector(address subject, address target, bytes4 selector, bool allowed) internal {
         require(subject != address(0) && target != address(0), "ACL: zero addr");
-        (uint24 bucket, uint8 idx) = _bucketIndex(selector);
+        (uint256 bucket, uint256 idx) = _bucketIndex(selector);
         uint256 mask = (uint256(1) << idx);
         if (allowed) {
             _selBitmap[subject][target][bucket] |= mask;
@@ -170,16 +176,17 @@ contract AccessControlFirewall is IAccessControlFirewall {
         }
     }
 
-    function _bucketIndex(bytes4 selector) internal pure returns (uint24 bucket, uint8 idx) {
+    function _bucketIndex(bytes4 selector) internal pure returns (uint256 bucket, uint256 idx) {
         uint32 sel;
         assembly {
             sel := shr(224, selector)
         }
-        bucket = uint24(sel >> 8);
-        idx = uint8(sel & 0xff);
+        bucket = uint256(sel >> 8);
+        idx = uint256(sel & 0xff);
     }
 
     function _constraintKey(address subject, address target, bytes4 selector) internal pure returns (bytes32) {
+        // forge-lint-disable-next-line asm-keccak256 -- abi.encodePacked is adequate for this small tuple
         return keccak256(abi.encodePacked(subject, target, selector));
     }
 }
