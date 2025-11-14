@@ -81,6 +81,8 @@ function configure_acl() {
   local org_id=$(cast keccak "acl.e2e")
   local writer_addr=$(cast wallet address "$WRITER_KEY")
   local owner_addr=$(cast wallet address "$OWNER_KEY")
+  local admin_group=$(cast keccak "admins.group")
+  local writer_group=$(cast keccak "writers.group")
 
   local policy_writer
   policy_writer=$(cast call --rpc-url "$RPC_URL" "$registry" "POLICY_WRITER()(uint8)")
@@ -94,10 +96,12 @@ function configure_acl() {
   log "configuring ACL registry $registry"
   cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "addOrg(bytes32)" "$org_id"
   cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setOrgAdmin(bytes32,address,bool)" "$org_id" "$owner_addr" true
-  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "grantRole(bytes32,address,uint256)" "$org_id" "$owner_addr" "$role_admin"
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setGroupRoleBits(bytes32,bytes32,uint256)" "$org_id" "$admin_group" "$role_admin"
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setGroupMember(bytes32,bytes32,address,bool)" "$org_id" "$admin_group" "$owner_addr" true
   cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "bindContractToOrg(address,bytes32)" "$guard" "$org_id"
   cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setContractDefaultPolicy(address,uint8)" "$guard" "$policy_writer"
-  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "grantRole(bytes32,address,uint256)" "$org_id" "$writer_addr" "$role_writer"
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setGroupRoleBits(bytes32,bytes32,uint256)" "$org_id" "$writer_group" "$role_writer"
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setGroupMember(bytes32,bytes32,address,bool)" "$org_id" "$writer_group" "$writer_addr" true
 
   cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "bindContractToOrg(address,bytes32)" "$registry" "$org_id"
   cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setContractDefaultPolicy(address,uint8)" "$registry" "$policy_admin"

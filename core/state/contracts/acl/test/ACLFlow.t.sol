@@ -10,7 +10,10 @@ contract ACLFlowTest is Test {
     AccessControlRBACChecker public checker;
     TestTarget public target;
     bytes32 public orgId;
-    bytes32 public groupId;
+    bytes32 public readerGroupId;
+    bytes32 public writerGroupId;
+    bytes32 public adminGroupId;
+    bytes32 public backupWriterGroupId;
     address public owner;
     address public reader;
     address public editor;
@@ -29,14 +32,23 @@ contract ACLFlowTest is Test {
 
         target = new TestTarget();
         orgId = keccak256("example.org");
-        groupId = keccak256("writers.group");
+        readerGroupId = keccak256("readers.group");
+        writerGroupId = keccak256("writers.group");
+        adminGroupId = keccak256("admins.group");
+        backupWriterGroupId = keccak256("writers.backup");
 
         registry.addOrg(orgId);
         registry.setOrgAdmin(orgId, owner, true);
         registry.bindContractToOrg(address(target), orgId);
         registry.setContractDefaultPolicy(address(target), registry.POLICY_WRITER());
-        registry.grantRole(orgId, reader, registry.ROLE_READER());
-        registry.grantRole(orgId, editor, registry.ROLE_WRITER());
+        registry.setGroupRoleBits(orgId, readerGroupId, registry.ROLE_READER());
+        registry.setGroupRoleBits(orgId, writerGroupId, registry.ROLE_WRITER());
+        registry.setGroupRoleBits(orgId, adminGroupId, registry.ROLE_ADMIN());
+        registry.setGroupRoleBits(orgId, backupWriterGroupId, registry.ROLE_WRITER());
+
+        registry.setGroupMember(orgId, readerGroupId, reader, true);
+        registry.setGroupMember(orgId, writerGroupId, editor, true);
+        registry.setGroupMember(orgId, adminGroupId, owner, true);
     }
 
     function testWriterPermitted() public {
@@ -56,10 +68,9 @@ contract ACLFlowTest is Test {
         // Bind the registry itself to the org and require ROLE_ADMIN for mutations.
         registry.bindContractToOrg(address(registry), orgId);
         registry.setContractDefaultPolicy(address(registry), registry.POLICY_ADMIN());
-        registry.grantRole(orgId, owner, registry.ROLE_ADMIN());
 
         bytes memory callData = abi.encodeWithSignature(
-            "grantRole(bytes32,address,uint256)", orgId, stranger, registry.ROLE_WRITER()
+            "setGroupMember(bytes32,bytes32,address,bool)", orgId, writerGroupId, stranger, true
         );
 
         // Owner has ROLE_ADMIN, so the checker must allow the call.
@@ -101,7 +112,6 @@ contract ACLFlowTest is Test {
 
     function testPolicyTighteningToAdmin() public {
         // Elevate requirement to ROLE_ADMIN and grant only owner this role.
-        registry.grantRole(orgId, owner, registry.ROLE_ADMIN());
         registry.setContractDefaultPolicy(address(target), registry.POLICY_ADMIN());
 
         vm.prank(editor);
@@ -113,19 +123,18 @@ contract ACLFlowTest is Test {
 
     function testRoleRevocationIsEnforced() public {
         // Remove writer role and ensure access is revoked immediately.
-        registry.revokeRole(orgId, editor, registry.ROLE_WRITER());
+        registry.setGroupMember(orgId, writerGroupId, editor, false);
         vm.prank(editor);
         assertFalse(checker.isPermitted(editor, address(target), ""));
     }
 
     function testGroupRoleBitsFlow() public {
         // Give the group writer permissions and toggle membership on/off.
-        registry.setGroupRoleBits(orgId, groupId, registry.ROLE_WRITER());
-        registry.setGroupMember(orgId, groupId, stranger, true);
+        registry.setGroupMember(orgId, writerGroupId, stranger, true);
         vm.prank(stranger);
         assertTrue(checker.isPermitted(stranger, address(target), ""));
 
-        registry.setGroupMember(orgId, groupId, stranger, false);
+        registry.setGroupMember(orgId, writerGroupId, stranger, false);
         vm.prank(stranger);
         assertFalse(checker.isPermitted(stranger, address(target), ""));
     }
@@ -146,38 +155,37 @@ contract ACLFlowTest is Test {
         checker.traceIsPermitted(editor, address(target));
     }
 
-    function testDirectRoleRevokedButGroupStillAllows() public {
-        // Grant stranger direct writer role plus group membership.
-        registry.grantRole(orgId, stranger, registry.ROLE_WRITER());
-        registry.setGroupRoleBits(orgId, groupId, registry.ROLE_WRITER());
-        registry.setGroupMember(orgId, groupId, stranger, true);
+    function testMultipleGroupMembershipRequiresAllSourcesRemoved() public {
+        // Stranger joins two writer groups.
+        registry.setGroupMember(orgId, writerGroupId, stranger, true);
+        registry.setGroupMember(orgId, backupWriterGroupId, stranger, true);
 
-        // Access allowed with both sources of permission.
         vm.prank(stranger);
         assertTrue(checker.isPermitted(stranger, address(target), ""));
 
-        // Revoke direct role, group membership should still allow access.
-        registry.revokeRole(orgId, stranger, registry.ROLE_WRITER());
+        // Removing one group still leaves access via the other.
+        registry.setGroupMember(orgId, writerGroupId, stranger, false);
         vm.prank(stranger);
         assertTrue(checker.isPermitted(stranger, address(target), ""));
 
-        // Once removed from the group, access must be denied.
-        registry.setGroupMember(orgId, groupId, stranger, false);
+        // Removing the final group revokes access.
+        registry.setGroupMember(orgId, backupWriterGroupId, stranger, false);
         vm.prank(stranger);
         assertFalse(checker.isPermitted(stranger, address(target), ""));
     }
 
-    function testGroupRemovalDoesNotAffectDirectRole() public {
-        // Stranger has a direct writer role and is also in the group.
-        registry.grantRole(orgId, stranger, registry.ROLE_WRITER());
-        registry.setGroupRoleBits(orgId, groupId, registry.ROLE_WRITER());
-        registry.setGroupMember(orgId, groupId, stranger, true);
-
+    function testGroupRoleBitUpdatesPropagate() public {
+        registry.setGroupMember(orgId, writerGroupId, stranger, true);
         vm.prank(stranger);
         assertTrue(checker.isPermitted(stranger, address(target), ""));
 
-        // Removing from the group should not impact the direct role.
-        registry.setGroupMember(orgId, groupId, stranger, false);
+        // Clearing the group's role bits should immediately block access.
+        registry.setGroupRoleBits(orgId, writerGroupId, 0);
+        vm.prank(stranger);
+        assertFalse(checker.isPermitted(stranger, address(target), ""));
+
+        // Restoring the role bits should re-enable access.
+        registry.setGroupRoleBits(orgId, writerGroupId, registry.ROLE_WRITER());
         vm.prank(stranger);
         assertTrue(checker.isPermitted(stranger, address(target), ""));
     }
@@ -190,6 +198,7 @@ contract ACLFlowTest is Test {
         registry.setOrgAdmin(otherOrg, owner, true);
         registry.bindContractToOrg(address(otherTarget), otherOrg);
         registry.setContractDefaultPolicy(address(otherTarget), registry.POLICY_WRITER());
+        registry.setGroupRoleBits(otherOrg, writerGroupId, registry.ROLE_WRITER());
 
         // writer role only exists in the original org; no roles in otherOrg.
         vm.prank(editor);
@@ -199,7 +208,7 @@ contract ACLFlowTest is Test {
         assertFalse(checker.isPermitted(editor, address(otherTarget), ""));
 
         // After granting writer role in otherOrg, access should succeed.
-        registry.grantRole(otherOrg, editor, registry.ROLE_WRITER());
+        registry.setGroupMember(otherOrg, writerGroupId, editor, true);
         vm.prank(editor);
         assertTrue(checker.isPermitted(editor, address(otherTarget), ""));
     }

@@ -4,7 +4,6 @@ pragma solidity ^0.8.23;
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-
 /// @title AccessControlRBACRegistry
 /// @notice Stores organisation membership, roles, group-role bundles, contract bindings and policies.
 ///         This contract holds the state for RBAC checks. A separate Checker contract can consult
@@ -68,22 +67,36 @@ contract AccessControlRBACRegistry is Initializable, OwnableUpgradeable, UUPSUpg
 
     // --- Contract Binding & Policy ---
     mapping(address => bytes32) public contractToOrg;
+    mapping(bytes32 => address[]) internal orgContracts;
+    mapping(bytes32 => mapping(address => uint256)) internal orgContractIndex; // index + 1
     mapping(address => uint8)   public requiredRoleDefault; // POLICY_*
 
     event ContractBound(address indexed target, bytes32 indexed orgId);
     event ContractUnbound(address indexed target);
+    event ContractRebound(address indexed target, bytes32 indexed previousOrgId, bytes32 indexed newOrgId);
     event ContractPolicySet(address indexed target, uint8 policy);
 
     function bindContractToOrg(address target, bytes32 orgId) external onlyOrgAdminOrOwner(orgId) {
         require(target != address(0), "ACL: bad target");
+        bytes32 previousOrg = contractToOrg[target];
+        if (previousOrg == orgId) {
+            return;
+        }
+        if (previousOrg != bytes32(0)) {
+            _removeOrgContract(previousOrg, target);
+            emit ContractRebound(target, previousOrg, orgId);
+        }
         contractToOrg[target] = orgId;
+        _addOrgContract(orgId, target);
         emit ContractBound(target, orgId);
     }
 
     function unbindContract(address target) external {
         bytes32 orgId = contractToOrg[target];
+        require(orgId != bytes32(0), "ACL: target not bound");
         require(msg.sender == owner() || isOrgAdmin[orgId][msg.sender], "ACL: not org admin");
         delete contractToOrg[target];
+        _removeOrgContract(orgId, target);
         emit ContractUnbound(target);
     }
 
@@ -96,9 +109,45 @@ contract AccessControlRBACRegistry is Initializable, OwnableUpgradeable, UUPSUpg
         emit ContractPolicySet(target, policy);
     }
 
+    function getOrgContractCount(bytes32 orgId) external view returns (uint256) {
+        return orgContracts[orgId].length;
+    }
+
+    function getOrgContractAt(bytes32 orgId, uint256 index) external view returns (address) {
+        return orgContracts[orgId][index];
+    }
+
+    function getOrgContracts(bytes32 orgId) external view returns (address[] memory) {
+        return orgContracts[orgId];
+    }
+
+    function _addOrgContract(bytes32 orgId, address target) internal {
+        if (orgContractIndex[orgId][target] != 0) {
+            return;
+        }
+        orgContractIndex[orgId][target] = orgContracts[orgId].length + 1;
+        orgContracts[orgId].push(target);
+    }
+
+    function _removeOrgContract(bytes32 orgId, address target) internal {
+        uint256 idxPlusOne = orgContractIndex[orgId][target];
+        if (idxPlusOne == 0) {
+            return;
+        }
+        uint256 idx = idxPlusOne - 1;
+        address[] storage contracts = orgContracts[orgId];
+        uint256 lastIndex = contracts.length - 1;
+        if (idx != lastIndex) {
+            address replacement = contracts[lastIndex];
+            contracts[idx] = replacement;
+            orgContractIndex[orgId][replacement] = idx + 1;
+        }
+        contracts.pop();
+        orgContractIndex[orgId][target] = 0;
+    }
+
     // --- Users, Groups, Roles ---
     mapping(bytes32 => mapping(address => uint256)) public effectiveRoles;
-    mapping(bytes32 => mapping(address => uint256)) public directRoles;
     mapping(bytes32 => mapping(bytes32 => uint256)) public groupRoleBits;
     mapping(bytes32 => mapping(bytes32 => mapping(address => bool))) public inGroup;
     // Track aggregated group-derived role bits and bidirectional membership lists.
@@ -113,25 +162,9 @@ contract AccessControlRBACRegistry is Initializable, OwnableUpgradeable, UUPSUpg
     event GroupMembershipSet(bytes32 indexed orgId, bytes32 indexed groupId, address indexed user, bool enabled);
 
     function _recomputeEffective(bytes32 orgId, address user) internal {
-        effectiveRoles[orgId][user] = directRoles[orgId][user] | groupDerivedRoles[orgId][user];
-    }
-
-    function setUserRoleBits(bytes32 orgId, address user, uint256 roleBits) external onlyOrgAdminOrOwner(orgId) {
-        directRoles[orgId][user] = roleBits;
-        _recomputeEffective(orgId, user);
-        emit UserRoleSet(orgId, user, roleBits);
-    }
-
-    function grantRole(bytes32 orgId, address user, uint256 roleBit) external onlyOrgAdminOrOwner(orgId) {
-        directRoles[orgId][user] |= roleBit;
-        _recomputeEffective(orgId, user);
-        emit UserRoleSet(orgId, user, directRoles[orgId][user]);
-    }
-
-    function revokeRole(bytes32 orgId, address user, uint256 roleBit) external onlyOrgAdminOrOwner(orgId) {
-        directRoles[orgId][user] &= ~roleBit;
-        _recomputeEffective(orgId, user);
-        emit UserRoleSet(orgId, user, directRoles[orgId][user]);
+        uint256 newBits = groupDerivedRoles[orgId][user];
+        effectiveRoles[orgId][user] = newBits;
+        emit UserRoleSet(orgId, user, newBits);
     }
 
     function setGroupRoleBits(bytes32 orgId, bytes32 groupId, uint256 roleBits) external onlyOrgAdminOrOwner(orgId) {

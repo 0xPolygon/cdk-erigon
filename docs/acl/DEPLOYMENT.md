@@ -40,7 +40,7 @@ Once the ACL stack is live you still need to bind the contracts you want to prot
 
 1. Deploy or identify the target contract(s) in your normal workflow.
 2. Choose an organisation (`orgId = keccak256(bytes(name))`) and decide which role (`POLICY_READER`, `POLICY_WRITER`, `POLICY_ADMIN`) gate access to that contract.
-3. Use the registry to bind and policy-control each contract. Example `cast` commands:
+3. Use the registry to bind and policy-control each contract, then grant access by placing users into role-bearing groups. Example `cast` commands:
 
    ```sh
    cast send --rpc-url $RPC --private-key $PK <registry> \
@@ -48,7 +48,9 @@ Once the ACL stack is live you still need to bind the contracts you want to prot
    cast send --rpc-url $RPC --private-key $PK <registry> \
      "setContractDefaultPolicy(address,uint8)" <contract-address> 2
    cast send --rpc-url $RPC --private-key $PK <registry> \
-     "grantRole(bytes32,address,uint256)" <orgId> <user-address> <role-bit>
+     "setGroupRoleBits(bytes32,bytes32,uint256)" <orgId> <groupId> <role-bit>
+   cast send --rpc-url $RPC --private-key $PK <registry> \
+     "setGroupMember(bytes32,bytes32,address,bool)" <orgId> <groupId> <user-address> true
    ```
 
 4. Optionally call `setCreatePermission(user, true)` for accounts that must deploy new contracts (CREATE/CREATE2 is also ACL’d).
