@@ -1,0 +1,43 @@
+name: ACL Erigon E2E
+
+on:
+  workflow_dispatch:
+
+jobs:
+  acl-e2e:
+    runs-on: ubuntu-22.04
+    env:
+      OWNER_KEY: 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      WRITER_KEY: 0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      STRANGER_KEY: 0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+      - name: Set Go toolchain
+        run: go env -w GOTOOLCHAIN=go1.25.0+auto
+      - name: Install dependencies
+        run: sudo apt update && sudo apt install -y build-essential lsof curl jq
+      - name: Build cdk-erigon
+        run: |
+          cd ./cdk-erigon
+          make -j$(nproc) cdk-erigon
+      - name: Install Foundry
+        run: |
+          curl -L https://foundry.paradigm.xyz | bash
+          source ~/.bashrc || true
+          foundryup
+      - name: Run ACL Erigon E2E
+        env:
+          OWNER_KEY: ${{ env.OWNER_KEY }}
+          WRITER_KEY: ${{ env.WRITER_KEY }}
+          STRANGER_KEY: ${{ env.STRANGER_KEY }}
+        run: |
+          source ~/.bashrc || true
+          chmod +x scripts/acl-erigon-e2e.sh
+          ./scripts/acl-erigon-e2e.sh

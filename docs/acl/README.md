@@ -5,8 +5,7 @@ Goal: Perimeter security for enterprise privacy. Only authorized subjects (sende
 ## Components
 
 - `core/state/contracts/acl/AccessControlFirewall.sol` — logic contract with bitmap-based selector allowlist plus optional calldata prefix mask/value constraints.
-- `core/state/contracts/acl/AdminUpgradeableProxy.sol` — minimal transparent upgradeable proxy (EIP‑1967 slots).
-- `core/state/contracts/acl/ProxyAdmin.sol` — admin controller for proxies (recommend multisig ownership).
+- `core/state/contracts/acl/AccessControlRBACRegistry.sol` / `AccessControlRBACChecker.sol` — UUPS upgradeable registry + checker pair that the node calls via an `ERC1967Proxy`.
 - `core/state/contracts/acl/IAccessControlFirewall.sol` — interface for integration.
 - `core/state/contracts/acl/CalldataMask.sol` — library for `(calldata & mask) == value` checks.
 
@@ -34,10 +33,9 @@ Goal: Perimeter security for enterprise privacy. Only authorized subjects (sende
 
 ## Deployment
 
-1. Deploy `AccessControlFirewall` logic contract.
-2. Deploy `ProxyAdmin` with organization owner (ideally Gnosis Safe).
-3. Deploy `AdminUpgradeableProxy` with logic, `ProxyAdmin` as admin, and initializer call data: `AccessControlFirewall.initialize(owner)`.
-4. Interact with the proxy address (not the logic) to manage permissions.
+1. Deploy the `AccessControlFirewall` (or `AccessControlRBACChecker`) logic contract.
+2. Deploy an `ERC1967Proxy` pointing at that implementation, encoding the initializer call data (`AccessControlFirewall.initialize(owner)` or the appropriate RBAC initializer). The implementation inherits `UUPSUpgradeable`, so `_authorizeUpgrade` ensures only the owner can upgrade.
+3. Interact with the proxy address (not the logic) to manage permissions.
 
 Example (pseudo):
 
@@ -86,8 +84,7 @@ These can be introduced without changing the bitmap core: permissions still map 
 
 ## Security Guidance
 
-- Run ACL through an upgradeable proxy managed by a multisig (`ProxyAdmin`).
+- Run ACL through an upgradeable proxy (ERC1967/UUPS) whose upgrade authority is a multisig owner.
 - Fail-closed at the node admission layer.
 - Use events to audit policy changes.
 - Keep constraints as short masks on calldata prefixes for gas efficiency and simplicity.
-

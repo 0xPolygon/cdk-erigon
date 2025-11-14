@@ -14,8 +14,7 @@ Vm constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
 import "acl/AccessControlRBACChecker.sol";
 import "acl/AccessControlRBACRegistry.sol";
-import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
-import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {ATarget, BTarget} from "../contracts/Targets.sol";
 
 contract DeployACL {
@@ -25,12 +24,15 @@ contract DeployACL {
 
         vm.startBroadcast(pk);
 
-        AccessControlRBACRegistry registry = new AccessControlRBACRegistry();
-        registry.initialize(owner);
-        AccessControlRBACChecker checker = new AccessControlRBACChecker();
-        ProxyAdmin proxyAdmin = new ProxyAdmin(owner);
-        bytes memory initData = abi.encodeWithSignature("initialize(address)", address(registry));
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(address(checker), address(proxyAdmin), initData);
+        AccessControlRBACRegistry registryImpl = new AccessControlRBACRegistry();
+        bytes memory registryInit = abi.encodeCall(AccessControlRBACRegistry.initialize, owner);
+        ERC1967Proxy registryProxy = new ERC1967Proxy(address(registryImpl), registryInit);
+        AccessControlRBACRegistry registry = AccessControlRBACRegistry(address(registryProxy));
+
+        AccessControlRBACChecker checkerImpl = new AccessControlRBACChecker();
+        bytes memory checkerInit = abi.encodeCall(AccessControlRBACChecker.initialize, address(registry));
+        ERC1967Proxy proxy = new ERC1967Proxy(address(checkerImpl), checkerInit);
+        AccessControlRBACChecker checker = AccessControlRBACChecker(address(proxy));
 
         ATarget a;
         BTarget b;
@@ -48,10 +50,10 @@ contract DeployACL {
         vm.stopBroadcast();
 
         string memory obj;
-        obj = vm.serializeAddress("acl", "proxy", address(proxy));
-        obj = vm.serializeAddress("acl", "logic", address(checker));
+        obj = vm.serializeAddress("acl", "proxy", address(checker));
+        obj = vm.serializeAddress("acl", "logic", address(checkerImpl));
         obj = vm.serializeAddress("acl", "registry", address(registry));
-        obj = vm.serializeAddress("acl", "admin", address(proxyAdmin));
+        obj = vm.serializeAddress("acl", "registryLogic", address(registryImpl));
         obj = vm.serializeAddress("acl", "A", address(a));
         obj = vm.serializeAddress("acl", "B", address(b));
         vm.writeJson(obj, "out/acl.addresses.json");

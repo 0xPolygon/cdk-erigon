@@ -6,7 +6,7 @@ This document describes how to deploy the RBAC-based ACL stack using OpenZeppeli
 
 - `AccessControlRBACRegistry` stores organisations, contracts, roles, groups and policies.
 - `AccessControlRBACChecker` is the read-only facade that the node `STATICCALL`s via `checkPermittedOrRevert`.
-- `ProxyAdmin` manages upgrades for the `TransparentUpgradeableProxy` that fronts the checker.
+- Both contracts are deployed behind `ERC1967Proxy` instances and implement the UUPS pattern, so upgrades are authorized directly by the on-chain owner (no `ProxyAdmin` indirection).
 
 ## Deployment Steps (Forge)
 
@@ -21,10 +21,9 @@ forge script script/deploy_prod.s.sol:DeployACL --broadcast --private-key $PK --
 
 The script:
 
-1. Deploys the registry and calls `initialize(owner)` so that `owner` becomes the administrator.
-2. Deploys the checker logic and initializes it with the registry address.
-3. Deploys an OpenZeppelin `TransparentUpgradeableProxy` whose implementation is the checker and whose admin is a `ProxyAdmin` contract (also owned by `owner`).
-4. Emits a JSON file with the deployed addresses at `out/acl.addresses.json` for automation.
+1. Deploys the registry implementation, wraps it in an `ERC1967Proxy`, and calls `initialize(owner)` so that `owner` becomes the administrator.
+2. Deploys the checker implementation, wraps it in an `ERC1967Proxy`, and initializes it with the registry proxy address.
+3. Emits a JSON file with the deployed addresses at `out/acl.addresses.json` for automation (`proxy` = checker proxy, `registry` = registry proxy, `logic`/`registryLogic` = implementations).
 
 > **Tip:** set `DEPLOY_SAMPLE_TARGETS=1` before running the script if you need the sample `ATarget`/`BTarget` contracts for local testing. In production you can leave it unset so no sample targets are deployed.
 
@@ -58,9 +57,11 @@ After these steps the transparent proxy will reject any call that violates the p
 
 ## Upgrades and ownership
 
-- Upgrade the checker logic by deploying a new `AccessControlRBACChecker` and calling `ProxyAdmin.upgradeAndCall(proxy, newImplementation, data)`.
-- Transfer ownership of the registry or proxy admin via their `transferOwnership` entry points (from OZ `OwnableUpgradeable`).
+- Upgrade the checker logic by deploying a new `AccessControlRBACChecker` and invoking `upgradeTo` (or `upgradeToAndCall`) via the proxy. `_authorizeUpgrade` restricts upgrades to the contract owner.
+- Transfer ownership of the registry or checker via their `transferOwnership` entry points (from OZ `OwnableUpgradeable` where applicable).
 
 ## Testing
 
 Run `forge test --profile default` from `zk/tests/acl` to exercise the ACL harness with the deployment script.
+
+For full-node coverage, the workflow `.github/workflows/acl-erigon-e2e.yml` builds `cdk-erigon`, deploys the RBAC stack via `core/state/contracts/acl/script/deploy_prod.s.sol`, configures org/policies, reruns the node with `--acl.enable --acl.address=<proxy>`, and sends writer/stranger transactions to verify enforcement.

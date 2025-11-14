@@ -2,6 +2,7 @@
 pragma solidity ^0.8.23;
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /// @title AccessControlRBACChecker
 /// @notice Read-only checker that consults an AccessControlRBACRegistry to answer
@@ -37,15 +38,34 @@ interface IAccessControlRBACRegistryView {
     function canCreate(address user) external view returns (bool);
 }
 
-contract AccessControlRBACChecker is Initializable {
+contract AccessControlRBACChecker is Initializable, UUPSUpgradeable {
+    uint64 internal constant REGISTRY_CALL_GAS = 50_000;
     // Transparent-proxy friendly initializer
     address public registry;
     event Initialized(address indexed registry);
+    event TraceToggled(bool enabled);
+    event CheckerTrace(
+        address indexed subject,
+        address indexed target,
+        bytes32 orgId,
+        uint8 policy,
+        uint256 roleBits,
+        bool permitted
+    );
+
+    bool public traceEnabled;
+    uint8 internal constant TRACE_POLICY_CREATE = type(uint8).max;
 
     function initialize(address registryAddr) external initializer {
         require(registryAddr != address(0), "ACL: bad registry");
         registry = registryAddr;
         emit Initialized(registryAddr);
+    }
+
+    function setTraceEnabled(bool enabled) external {
+        require(msg.sender == IAccessControlRBACRegistryView(registry).owner(), "ACL: not owner");
+        traceEnabled = enabled;
+        emit TraceToggled(enabled);
     }
 
     // OwnerBypass hook: the client queries owner() on the ACL address. We surface the registry owner.
@@ -64,22 +84,75 @@ contract AccessControlRBACChecker is Initializable {
         return true;
     }
 
+    function traceIsPermitted(address subject, address target) external returns (bool) {
+        (bytes32 orgId, uint8 policy, uint256 roleBits, bool permitted) = _computeDecision(subject, target);
+        if (traceEnabled) {
+            emit CheckerTrace(subject, target, orgId, policy, roleBits, permitted);
+        }
+        return permitted;
+    }
+
     function _isPermitted(address subject, address target) internal view returns (bool) {
-        IAccessControlRBACRegistryView R = IAccessControlRBACRegistryView(registry);
+        (, , , bool permitted) = _computeDecision(subject, target);
+        return permitted;
+    }
+
+    function _computeDecision(
+        address subject,
+        address target
+    ) internal view returns (bytes32 orgId, uint8 policy, uint256 roleBits, bool permitted) {
         if (target == address(0)) {
-            return R.canCreate(subject);
+            bool allowedCreate = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.canCreate.selector, subject)), (bool));
+            return (bytes32(0), TRACE_POLICY_CREATE, 0, allowedCreate);
         }
-        bytes32 orgId = R.contractToOrg(target);
-        if (!R.orgExists(orgId)) {
+        bytes32 resolvedOrg = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.contractToOrg.selector, target)), (bytes32));
+        if (!abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.orgExists.selector, resolvedOrg)), (bool))) {
             // Public by default if not bound to an existing org
-            return true;
+            uint8 policyPublic = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.POLICY_PUBLIC.selector)), (uint8));
+            return (resolvedOrg, policyPublic, 0, true);
         }
-        uint8 policy = R.requiredRoleDefault(target);
-        if (policy == R.POLICY_PUBLIC()) return true;
-        uint256 bits = R.effectiveRoles(orgId, subject);
-        if (policy == R.POLICY_READER()) return (bits & R.ROLE_READER()) != 0;
-        if (policy == R.POLICY_WRITER()) return (bits & R.ROLE_WRITER()) != 0;
-        if (policy == R.POLICY_ADMIN())  return (bits & R.ROLE_ADMIN())  != 0;
-        return false;
+        uint8 resolvedPolicy = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.requiredRoleDefault.selector, target)), (uint8));
+        uint8 policyPublicCache = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.POLICY_PUBLIC.selector)), (uint8));
+        if (resolvedPolicy == policyPublicCache) {
+            return (resolvedOrg, resolvedPolicy, 0, true);
+        }
+        uint256 bits = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.effectiveRoles.selector, resolvedOrg, subject)), (uint256));
+        bool allowed;
+        uint8 policyReader = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.POLICY_READER.selector)), (uint8));
+        uint8 policyWriter = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.POLICY_WRITER.selector)), (uint8));
+        uint8 policyAdmin = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.POLICY_ADMIN.selector)), (uint8));
+        uint256 roleReader = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.ROLE_READER.selector)), (uint256));
+        uint256 roleWriter = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.ROLE_WRITER.selector)), (uint256));
+        uint256 roleAdmin = abi.decode(_registryCall(abi.encodeWithSelector(IAccessControlRBACRegistryView.ROLE_ADMIN.selector)), (uint256));
+        if (resolvedPolicy == policyReader) {
+            allowed = (bits & roleReader) != 0;
+        } else if (resolvedPolicy == policyWriter) {
+            allowed = (bits & roleWriter) != 0;
+        } else if (resolvedPolicy == policyAdmin) {
+            allowed = (bits & roleAdmin) != 0;
+        } else {
+            allowed = false;
+        }
+        return (resolvedOrg, resolvedPolicy, bits, allowed);
+    }
+
+    function _registryCall(bytes memory data) internal view returns (bytes memory ret) {
+        address target = registry;
+        uint64 gasLimit = REGISTRY_CALL_GAS;
+        assembly {
+            let success := staticcall(gasLimit, target, add(data, 0x20), mload(data), 0, 0)
+            let size := returndatasize()
+            ret := mload(0x40)
+            mstore(ret, size)
+            returndatacopy(add(ret, 0x20), 0, size)
+            mstore(0x40, add(add(ret, 0x20), size))
+            if iszero(success) {
+                revert(add(ret, 0x20), size)
+            }
+        }
+    }
+
+    function _authorizeUpgrade(address /*newImplementation*/ ) internal view override {
+        require(msg.sender == IAccessControlRBACRegistryView(registry).owner(), "ACL: not owner");
     }
 }

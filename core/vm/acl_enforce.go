@@ -3,6 +3,7 @@ package vm
 import (
     libcommon "github.com/erigontech/erigon-lib/common"
     "github.com/erigontech/erigon-lib/log/v3"
+    "github.com/holiman/uint256"
 )
 
 // ACLCheckSelector is the 4-byte method selector for
@@ -65,6 +66,38 @@ func aclBuildOwnerCallData() []byte {
     return out
 }
 
+// eip1967ImplSlot is bytes32(uint256(keccak256('eip1967.proxy.implementation')) - 1)
+var eip1967ImplSlot = libcommon.HexToHash("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
+
+// aclImplementationAddress reads the EIP-1967 implementation address of the configured ACL proxy.
+func (evm *EVM) aclImplementationAddress() libcommon.Address {
+    var out uint256.Int
+    evm.intraBlockState.GetState(evm.config.ACL.Address, &eip1967ImplSlot, &out)
+    if out.IsZero() {
+        return libcommon.Address{}
+    }
+    b := out.Bytes32()
+    var impl libcommon.Address
+    copy(impl[:], b[12:32])
+    return impl
+}
+
+// aclRegistryAddress attempts to read storage slot 0 of the ACL proxy, which in our checker layout
+// holds `address public registry`. Since the checker runs via DELEGATECALL in the proxy, the storage
+// resides at the proxy address.
+func (evm *EVM) aclRegistryAddress() libcommon.Address {
+    var slot libcommon.Hash // zero slot
+    var out uint256.Int
+    evm.intraBlockState.GetState(evm.config.ACL.Address, &slot, &out)
+    if out.IsZero() {
+        return libcommon.Address{}
+    }
+    b := out.Bytes32()
+    var reg libcommon.Address
+    copy(reg[:], b[12:32])
+    return reg
+}
+
 func (evm *EVM) aclInBypassList(addr libcommon.Address) bool {
     if len(evm.config.ACL.Bypass) == 0 {
         return false
@@ -106,6 +139,10 @@ func (evm *EVM) aclIsOwner(subject libcommon.Address) bool {
 // Uses a temporary EVM with RestoreState to avoid mutating state or triggering nested ACL.
 func (evm *EVM) aclEnforce(target libcommon.Address, input []byte) error {
     if !evm.config.ACL.Enabled {
+        return nil
+    }
+    // Never gate direct calls to the ACL contract, its implementation (EIP-1967), or its registry.
+    if target == evm.config.ACL.Address || target == evm.aclImplementationAddress() || target == evm.aclRegistryAddress() {
         return nil
     }
     // Skip enforcement when origin is zero (simulation tools often use zero address)

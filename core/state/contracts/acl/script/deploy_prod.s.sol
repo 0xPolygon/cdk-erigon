@@ -15,8 +15,8 @@ Vm constant HEVM = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
 import {AccessControlRBACChecker} from "../AccessControlRBACChecker.sol";
 import {AccessControlRBACRegistry} from "../AccessControlRBACRegistry.sol";
-import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
-import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {Guard} from "../contracts/Guard.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployACL {
     function run() external {
@@ -25,32 +25,28 @@ contract DeployACL {
 
         HEVM.startBroadcast(pk);
 
-        // Deploy registry/checker and an OpenZeppelin proxy stack
-        AccessControlRBACRegistry registry = new AccessControlRBACRegistry();
-        registry.initialize(owner);
+        // Deploy registry/checker implementations and wrap them in ERC1967 (UUPS) proxies
+        AccessControlRBACRegistry registryImpl = new AccessControlRBACRegistry();
+        bytes memory registryInit = abi.encodeCall(AccessControlRBACRegistry.initialize, owner);
+        ERC1967Proxy registryProxy = new ERC1967Proxy(address(registryImpl), registryInit);
+        AccessControlRBACRegistry registry = AccessControlRBACRegistry(address(registryProxy));
 
-        AccessControlRBACChecker checker = new AccessControlRBACChecker();
+        AccessControlRBACChecker checkerImpl = new AccessControlRBACChecker();
+        bytes memory checkerInit = abi.encodeCall(AccessControlRBACChecker.initialize, address(registry));
+        ERC1967Proxy checkerProxy = new ERC1967Proxy(address(checkerImpl), checkerInit);
+        AccessControlRBACChecker checker = AccessControlRBACChecker(address(checkerProxy));
 
-        // Admin for the transparent proxy
-        ProxyAdmin proxyAdmin = new ProxyAdmin(owner);
-
-        // Encode initializer to link the checker with the registry
-        bytes memory initData = abi.encodeWithSignature("initialize(address)", address(registry));
-
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(checker),
-            address(proxyAdmin),
-            initData
-        );
+        Guard guard = new Guard();
 
         HEVM.stopBroadcast();
 
         // Persist addresses for the test stage
         string memory obj;
-        obj = HEVM.serializeAddress("acl", "proxy", address(proxy));
-        obj = HEVM.serializeAddress("acl", "logic", address(checker));
+        obj = HEVM.serializeAddress("acl", "proxy", address(checker));
+        obj = HEVM.serializeAddress("acl", "logic", address(checkerImpl));
         obj = HEVM.serializeAddress("acl", "registry", address(registry));
-        obj = HEVM.serializeAddress("acl", "admin", address(proxyAdmin));
+        obj = HEVM.serializeAddress("acl", "registryLogic", address(registryImpl));
+        obj = HEVM.serializeAddress("acl", "guard", address(guard));
         HEVM.writeJson(obj, "out/acl.addresses.json");
     }
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 
 	"github.com/erigontech/erigon-lib/kv/membatchwithdb"
 	"github.com/erigontech/erigon-lib/log/v3"
@@ -73,9 +74,14 @@ func (api *APIImpl) Call(ctx context.Context, args ethapi2.CallArgs, blockNrOrHa
 		return nil, err
 	}
 	header := block.HeaderNoCopy()
-	// Build vm.Config with ACL settings for eth_call simulation
-	vmCfg := vm.Config{}
-	api.aclRuntime().ApplyVM(&vmCfg)
+	opsTracer := NewOperationsTracer(ctx)
+	vmCfg := vm.Config{
+		Debug:  true,
+		Tracer: vm.NewMultiTracer(opsTracer, logger.NewJSONLogger(&logger.LogConfig{}, os.Stdout)),
+	}
+	if api.aclEnabled {
+		api.aclRuntime().ApplyVM(&vmCfg)
+	}
 	vmCfg.ReadOnly = true
 	vmCfg.RestoreState = true
 	log.Info("ACL sim eth_call", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
@@ -261,7 +267,9 @@ func (api *APIImpl) EstimateGas(ctx context.Context, argsOrNil *ethapi2.CallArgs
 		useCounters = false
 	}
 	vmCfg := vm.Config{}
-	api.aclRuntime().ApplyVM(&vmCfg)
+	if api.aclEnabled {
+		api.aclRuntime().ApplyVM(&vmCfg)
+	}
 	vmCfg.ReadOnly = true
 	vmCfg.RestoreState = true
 	log.Info("ACL sim estimateGas", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address, "failOpen", vmCfg.ACL.FailOpen)
