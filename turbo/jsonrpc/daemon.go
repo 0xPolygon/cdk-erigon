@@ -127,6 +127,13 @@ func APIList(db kv.RoDB, eth rpchelper.ApiBackend, txPool txpool.TxpoolClient, r
 				Service:   TraceAPI(traceImpl),
 				Version:   "1.0",
 			})
+		case "privacy":
+			list = append(list, rpc.API{
+				Namespace: "privacy",
+				Public:    true,
+				Service:   PrivacyAPI(NewPrivacyAPI(ethImpl)),
+				Version:   "1.0",
+			})
 		case "db": /* Deprecated */
 			list = append(list, rpc.API{
 				Namespace: "db",

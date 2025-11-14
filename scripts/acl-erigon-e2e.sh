@@ -12,6 +12,7 @@ WRITER_KEY=${WRITER_KEY:?}
 STRANGER_KEY=${STRANGER_KEY:?}
 NODE_PID=0
 CONFIG=$1
+REGISTRY_KIND=$(echo "${ACL_REGISTRY_KIND:-rbac}" | tr '[:upper:]' '[:lower:]')
 
 log() {
   echo "[$(date -u '+%H:%M:%S')] $*"
@@ -75,7 +76,7 @@ function deploy_acl() {
   popd
 }
 
-function configure_acl() {
+function configure_acl_rbac() {
   local registry=$1
   local guard=$2
   local org_id=$(cast keccak "acl.e2e")
@@ -106,6 +107,52 @@ function configure_acl() {
   cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "bindContractToOrg(address,bytes32)" "$registry" "$org_id"
   cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setContractDefaultPolicy(address,uint8)" "$registry" "$policy_admin"
   log "configured org $org_id with guard $guard, registry $registry, writer $writer_addr"
+}
+
+function configure_acl_claim() {
+  local registry=$1
+  local guard=$2
+  local org_id=$(cast keccak "acl.e2e")
+  local writer_addr=$(cast wallet address "$WRITER_KEY")
+  local owner_addr=$(cast wallet address "$OWNER_KEY")
+
+  local policy_writer
+  policy_writer=$(cast call --rpc-url "$RPC_URL" "$registry" "POLICY_WRITER()(uint8)")
+  local policy_admin
+  policy_admin=$(cast call --rpc-url "$RPC_URL" "$registry" "POLICY_ADMIN()(uint8)")
+
+  local claim_writer
+  claim_writer=$(cast call --rpc-url "$RPC_URL" "$registry" "CLAIM_WRITER()(bytes32)")
+  local claim_admin
+  claim_admin=$(cast call --rpc-url "$RPC_URL" "$registry" "CLAIM_ADMIN()(bytes32)")
+
+  log "configuring claim-based ACL registry $registry"
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "addOrg(bytes32)" "$org_id"
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setOrgAdmin(bytes32,address,bool)" "$org_id" "$owner_addr" true
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setOrgName(bytes32,string)" "$org_id" "acl.e2e"
+
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setUserOrg(bytes32,address)" "$org_id" "$owner_addr"
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setClaim(bytes32,address,bytes32,bool)" "$org_id" "$owner_addr" "$claim_admin" true
+
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setUserOrg(bytes32,address)" "$org_id" "$writer_addr"
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setClaim(bytes32,address,bytes32,bool)" "$org_id" "$writer_addr" "$claim_writer" true
+
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "bindContractToOrg(address,bytes32)" "$guard" "$org_id"
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setContractDefaultPolicy(address,uint8)" "$guard" "$policy_writer"
+
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "bindContractToOrg(address,bytes32)" "$registry" "$org_id"
+  cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setContractDefaultPolicy(address,uint8)" "$registry" "$policy_admin"
+  log "configured claim org $org_id with guard $guard, registry $registry, writer $writer_addr"
+}
+
+function configure_acl() {
+  local registry=$1
+  local guard=$2
+  if [[ "$REGISTRY_KIND" == "claim" ]]; then
+    configure_acl_claim "$registry" "$guard"
+  else
+    configure_acl_rbac "$registry" "$guard"
+  fi
 }
 
 function fund() {
@@ -141,6 +188,7 @@ PROXY=$(jq -r .proxy "$ACL_JSON")
 REGISTRY=$(jq -r .registry "$ACL_JSON")
 GUARD=$(jq -r .guard "$ACL_JSON")
 
+log "registry kind selected: $REGISTRY_KIND"
 configure_acl "$REGISTRY" "$GUARD"
 fund $(cast wallet address "$WRITER_KEY")
 fund $(cast wallet address "$STRANGER_KEY")
