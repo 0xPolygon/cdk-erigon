@@ -33,7 +33,6 @@ contract AccessControlClaimRegistry is Initializable, OwnableUpgradeable, UUPSUp
     // --- Organisations & Admins ---
     mapping(bytes32 => bool) public orgExists;
     mapping(bytes32 => string) public orgNames;
-    mapping(bytes32 => address) public orgPrimaryContract;
     bytes32[] internal orgIndex;
     mapping(bytes32 => bool) internal orgSeen;
     mapping(bytes32 => mapping(address => bool)) public isOrgAdmin;
@@ -112,9 +111,6 @@ contract AccessControlClaimRegistry is Initializable, OwnableUpgradeable, UUPSUp
         }
         contractToOrg[target] = orgId;
         _addOrgContract(orgId, target);
-        if (orgPrimaryContract[orgId] == address(0)) {
-            orgPrimaryContract[orgId] = target;
-        }
         emit ContractBound(target, orgId);
     }
 
@@ -124,14 +120,6 @@ contract AccessControlClaimRegistry is Initializable, OwnableUpgradeable, UUPSUp
         require(msg.sender == owner() || isOrgAdmin[orgId][msg.sender], "ACL: not org admin");
         delete contractToOrg[target];
         _removeOrgContract(orgId, target);
-        if (orgPrimaryContract[orgId] == target) {
-            address replacement = address(0);
-            address[] storage contracts = orgContracts[orgId];
-            if (contracts.length > 0) {
-                replacement = contracts[0];
-            }
-            orgPrimaryContract[orgId] = replacement;
-        }
         emit ContractUnbound(target);
     }
 

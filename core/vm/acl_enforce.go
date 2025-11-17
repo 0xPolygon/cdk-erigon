@@ -1,6 +1,7 @@
 package vm
 
 import (
+    abi "github.com/erigontech/erigon/accounts/abi"
     libcommon "github.com/erigontech/erigon-lib/common"
     "github.com/erigontech/erigon-lib/log/v3"
     "github.com/holiman/uint256"
@@ -169,18 +170,23 @@ func (evm *EVM) aclEnforce(target libcommon.Address, input []byte) error {
 	if ACLTrace != nil {
 		ACLTrace("before", evm.Origin, target, input, nil)
 	}
-	const gas uint64 = 500_000
-	snap := evm.intraBlockState.Snapshot()
+    const gas uint64 = 500_000
+    snap := evm.intraBlockState.Snapshot()
 	// prevent recursion during internal staticcall
     prevInternal := evm.config.ACL.Internal
     evm.config.ACL.Internal = true
-    _, _, err := evm.StaticCall(AccountRef(evm.Origin), evm.config.ACL.Address, data, gas)
+    ret, _, err := evm.StaticCall(AccountRef(evm.Origin), evm.config.ACL.Address, data, gas)
     evm.config.ACL.Internal = prevInternal
 	evm.intraBlockState.RevertToSnapshot(snap)
 	if ACLTrace != nil {
 		ACLTrace("after", evm.Origin, target, input, err)
 	}
     if err != nil {
+        if IsErrTypeRevert(err) && len(ret) > 0 {
+            if reason, decErr := abi.UnpackRevert(ret); decErr == nil {
+                log.Info("ACL enforce: revert reason", "reason", reason)
+            }
+        }
         log.Info("ACL enforce: denied", "err", err)
         if evm.config.ACL.FailOpen {
             return nil

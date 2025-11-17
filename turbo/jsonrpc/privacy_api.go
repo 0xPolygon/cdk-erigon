@@ -39,11 +39,10 @@ type privacyAPI struct {
 }
 
 type PrivacyOrg struct {
-	OrgID           common.Hash      `json:"orgId"`
-	Name            string           `json:"name"`
-	Exists          bool             `json:"exists"`
-	ContractAddress common.Address   `json:"contractAddress"`
-	Contracts       []common.Address `json:"contracts"`
+	OrgID     common.Hash      `json:"orgId"`
+	Name      string           `json:"name"`
+	Exists    bool             `json:"exists"`
+	Contracts []common.Address `json:"contracts"`
 }
 
 type PrivacyUserClaim struct {
@@ -161,13 +160,6 @@ func (api *privacyAPI) ListOrgs(ctx context.Context) ([]PrivacyOrg, error) {
 		if err := api.abi.UnpackIntoInterface(&exists, "orgExists", raw); err != nil {
 			return nil, err
 		}
-		var primary common.Address
-		if raw, err = api.callRegistry(ctx, "orgPrimaryContract", orgID); err != nil {
-			return nil, err
-		}
-		if err := api.abi.UnpackIntoInterface(&primary, "orgPrimaryContract", raw); err != nil {
-			return nil, err
-		}
 		name, err := api.resolveOrgName(ctx, orgID)
 		if err != nil {
 			return nil, err
@@ -177,11 +169,10 @@ func (api *privacyAPI) ListOrgs(ctx context.Context) ([]PrivacyOrg, error) {
 			return nil, err
 		}
 		orgs = append(orgs, PrivacyOrg{
-			OrgID:           orgID,
-			Name:            name,
-			Exists:          exists,
-			ContractAddress: primary,
-			Contracts:       contracts,
+			OrgID:     orgID,
+			Name:      name,
+			Exists:    exists,
+			Contracts: contracts,
 		})
 	}
 	return orgs, nil
@@ -282,7 +273,6 @@ const claimRegistryABI = `[
 	{"inputs":[{"internalType":"bytes32","name":"orgId","type":"bytes32"}],"name":"getOrgMembers","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
 	{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getUserClaimOrgs","outputs":[{"internalType":"bytes32[]","name":"","type":"bytes32[]"}],"stateMutability":"view","type":"function"},
 	{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"name":"orgExists","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-	{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"name":"orgPrimaryContract","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
 	{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"name":"orgNames","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
 	{"inputs":[{"internalType":"bytes32","name":"orgId","type":"bytes32"},{"internalType":"address","name":"user","type":"address"},{"internalType":"bytes32","name":"claimId","type":"bytes32"}],"name":"hasScopedClaim","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
 ]`

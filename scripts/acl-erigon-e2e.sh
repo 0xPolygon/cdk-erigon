@@ -13,6 +13,10 @@ STRANGER_KEY=${STRANGER_KEY:?}
 NODE_PID=0
 CONFIG=$1
 REGISTRY_KIND=$(echo "${ACL_REGISTRY_KIND:-rbac}" | tr '[:upper:]' '[:lower:]')
+NODE_LOG_FILE=${NODE_LOG_FILE:-/tmp/acl-node.log}
+CAST_BLOCK_ERR=${CAST_BLOCK_ERR:-/tmp/cast-block.err}
+FORGE_DEPLOY_LOG=${FORGE_DEPLOY_LOG:-/tmp/forge-deploy.log}
+STRANGER_LOG=${STRANGER_LOG:-/tmp/stranger.log}
 
 log() {
   echo "[$(date -u '+%H:%M:%S')] $*"
@@ -21,7 +25,7 @@ log() {
 function wait_rpc() {
   local prev_block=-1
   for i in {1..60}; do
-    if block=$(cast block-number -r "$RPC_URL" 2>/tmp/cast-block.err); then
+    if block=$(cast block-number -r "$RPC_URL" 2>"$CAST_BLOCK_ERR"); then
       block=${block:-0}
       if (( block > prev_block )); then
         if (( prev_block >= 0 )); then
@@ -31,27 +35,28 @@ function wait_rpc() {
         prev_block=$block
       fi
     else
-      log "waiting for rpc: cast block-number failed (see /tmp/cast-block.err)"
+      log "waiting for rpc: cast block-number failed (see $CAST_BLOCK_ERR)"
     fi
     sleep 1
   done
-  cat /tmp/acl-node.log >&2
-  if [[ -f /tmp/cast-block.err ]]; then
-    cat /tmp/cast-block.err >&2
+  cat "$NODE_LOG_FILE" >&2
+  if [[ -f "$CAST_BLOCK_ERR" ]]; then
+    cat "$CAST_BLOCK_ERR" >&2
   fi
   exit 1
 }
 
+function cleanup() {
+  log "cleaning previous run artifacts"
+  rm -rf "$DATADIR"
+  rm -f "$NODE_LOG_FILE" "$CAST_BLOCK_ERR" "$FORGE_DEPLOY_LOG" "$STRANGER_LOG"
+}
+
 function start_node() {
   local args="$1"
-  local clean="${2:-true}"
-  log "starting node with args: $args (clean=$clean)"
-  if [[ "$clean" == "true" ]]; then
-    log "resetting datadir $DATADIR"
-    rm -rf "$DATADIR"
-  fi
+  log "starting node with args: $args"
   mkdir -p "$DATADIR"
-  CDK_ERIGON_SEQUENCER=1 "$CDK/cdk-erigon" --config=$CONFIG --datadir="$DATADIR" $args >/tmp/acl-node.log 2>&1 &
+  ACL_TRACE=1 CDK_ERIGON_SEQUENCER=1 "$CDK/cdk-erigon" --config=$CONFIG --datadir="$DATADIR" $args >$NODE_LOG_FILE 2>&1 &
   NODE_PID=$!
   log "node pid $NODE_PID"
   wait_rpc
@@ -71,8 +76,11 @@ function deploy_acl() {
   log "deploying ACL stack"
   pushd "$ROOT/core/state/contracts/acl"
   mkdir -p out
-  forge script script/deploy_prod.s.sol:DeployACL --private-key "$OWNER_KEY" --rpc-url "$RPC_URL" --broadcast >/tmp/forge-deploy.log
-  log "deployment log available at /tmp/forge-deploy.log"
+  if [ -f "$FORGE_DEPLOY_LOG" ]; then
+    rm -f "$FORGE_DEPLOY_LOG"
+  fi
+  forge script script/deploy_prod.s.sol:DeployACL --private-key "$OWNER_KEY" --rpc-url "$RPC_URL" --broadcast >"$FORGE_DEPLOY_LOG"
+  log "deployment log available at $FORGE_DEPLOY_LOG"
   popd
 }
 
@@ -142,6 +150,26 @@ function configure_acl_claim() {
 
   cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "bindContractToOrg(address,bytes32)" "$registry" "$org_id"
   cast send --rpc-url "$RPC_URL" --private-key "$OWNER_KEY" "$registry" "setContractDefaultPolicy(address,uint8)" "$registry" "$policy_admin"
+
+  # sanity checks
+  local boundOrg
+  boundOrg=$(cast call --rpc-url "$RPC_URL" "$registry" "contractToOrg(address)(bytes32)" "$guard")
+  if [[ "$boundOrg" != "$org_id" ]]; then
+    log "guard not bound to org (expected $org_id, got $boundOrg)"
+    exit 1
+  fi
+  local effective
+  effective=$(cast call --rpc-url "$RPC_URL" "$registry" "effectiveRoles(bytes32,address)(uint256)" "$org_id" "$writer_addr")
+  if [[ "$effective" == "0x0" ]]; then
+    log "writer missing effective roles for org $org_id"
+    exit 1
+  fi
+  local hasWriterClaim
+  hasWriterClaim=$(cast call --rpc-url "$RPC_URL" "$registry" "hasScopedClaim(bytes32,address,bytes32)(bool)" "$org_id" "$writer_addr" "$claim_writer")
+  if [[ "$hasWriterClaim" != "true" ]]; then
+    log "writer missing claim in org $org_id"
+    exit 1
+  fi
   log "configured claim org $org_id with guard $guard, registry $registry, writer $writer_addr"
 }
 
@@ -165,14 +193,22 @@ function run_tests() {
   local guard=$1
   log "running writer access test"
   echo "> writer should succeed"
-  cast send --rpc-url "$RPC_URL" --private-key "$WRITER_KEY" --gas-limit 200000 "$guard" "write()"
+  # determine a safe gas price (fallback to legacy if 1559/tips look odd)
+  local gp
+  gp=$(cast gas-price -r "$RPC_URL" 2>/dev/null || echo 0)
+  if [[ -z "$gp" || "$gp" == "0x0" ]]; then
+    gp="0x3b9aca00" # 1 gwei fallback
+  fi
+  log "using gasPrice=$gp"
+  cast send --rpc-url "$RPC_URL" --private-key "$WRITER_KEY" --gas-limit 200000 --legacy --gas-price "$gp" "$guard" "write()"
   log "writer succeeded"
   echo "> stranger should fail"
   set +e
   log "running stranger access test"
-  if cast send --rpc-url "$RPC_URL" --private-key "$STRANGER_KEY" --gas-limit 200000 "$guard" "write()" >/tmp/stranger.log 2>&1; then
+
+  if cast send --rpc-url "$RPC_URL" --private-key "$STRANGER_KEY" --gas-limit 200000 "$guard" "write()" >"$STRANGER_LOG" 2>&1; then
     echo "Stranger unexpectedly succeeded" >&2
-    cat /tmp/stranger.log >&2
+    cat "$STRANGER_LOG" >&2
     exit 1
   fi
   set -e
@@ -181,7 +217,8 @@ function run_tests() {
 
 trap stop_node EXIT
 
-start_node "" true
+cleanup
+start_node ""
 deploy_acl
 ACL_JSON="$ROOT/core/state/contracts/acl/out/acl.addresses.json"
 PROXY=$(jq -r .proxy "$ACL_JSON")
@@ -189,14 +226,47 @@ REGISTRY=$(jq -r .registry "$ACL_JSON")
 GUARD=$(jq -r .guard "$ACL_JSON")
 
 log "registry kind selected: $REGISTRY_KIND"
+log "using ACL proxy $PROXY (registry $REGISTRY)"
 configure_acl "$REGISTRY" "$GUARD"
 fund $(cast wallet address "$WRITER_KEY")
 fund $(cast wallet address "$STRANGER_KEY")
 
 stop_node
 # "$CDK/cdk-erigon" --datadir "$DATADIR" --http.addr $HOST --http.port $PORT --http.api eth,net,web3 --acl.enable --acl.address "$PROXY" --acl.failopen=false >/tmp/acl-node.log 2>&1 &
-ACL_RUNTIME_ARGS="--acl.enable --acl.address=$PROXY --acl.failopen=false --acl.owner-bypass"
-start_node "$ACL_RUNTIME_ARGS" false
+ACL_RUNTIME_ARGS="--acl.enable --acl.address=$PROXY --acl.failopen=false --acl.owner-bypass" # Enable when needed and fixed
+start_node "$ACL_RUNTIME_ARGS"
+# start_node ""
 NODE_PID=$!
 wait_rpc
+writer_addr=$(cast wallet address "$WRITER_KEY")
+owner_addr=$(cast wallet address "$OWNER_KEY")
+log "ACL check writer→guard: $(cast call --rpc-url "$RPC_URL" "$PROXY" \
+    "isPermitted(address,address,bytes)(bool)" "$writer_addr" "$GUARD" 0x)"
+log "ACL check owner→guard: $(cast call --rpc-url "$RPC_URL" "$PROXY" \
+    "isPermitted(address,address,bytes)(bool)" "$owner_addr" "$GUARD" 0x)"
+
+org_id=$(cast keccak "acl.e2e")
+claim_writer=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "CLAIM_WRITER()(bytes32)")
+writer_claim=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" \
+    "hasScopedClaim(bytes32,address,bytes32)(bool)" "$org_id" "$writer_addr" "$claim_writer")
+log "writer claim status: $writer_claim"
+
+# extra diagnostics: inspect registry-side view used by runtime preflight
+policy_public=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "POLICY_PUBLIC()(uint8)")
+policy_reader=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "POLICY_READER()(uint8)")
+policy_writer=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "POLICY_WRITER()(uint8)")
+policy_admin=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "POLICY_ADMIN()(uint8)")
+role_reader=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "ROLE_READER()(uint256)")
+role_writer=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "ROLE_WRITER()(uint256)")
+role_admin=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "ROLE_ADMIN()(uint256)")
+
+bound_org=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "contractToOrg(address)(bytes32)" "$GUARD")
+default_policy=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "requiredRoleDefault(address)(uint8)" "$GUARD")
+eff_roles=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "effectiveRoles(bytes32,address)(uint256)" "$org_id" "$writer_addr")
+org_exists=$(cast call --rpc-url "$RPC_URL" "$REGISTRY" "orgExists(bytes32)(bool)" "$org_id")
+
+log "diag: orgExists=$org_exists boundOrg=$bound_org requiredRoleDefault(guard)=$default_policy"
+log "diag: policies public=$policy_public reader=$policy_reader writer=$policy_writer admin=$policy_admin"
+log "diag: roles reader=$role_reader writer=$role_writer admin=$role_admin effective(writer)=$eff_roles"
+
 run_tests "$GUARD"

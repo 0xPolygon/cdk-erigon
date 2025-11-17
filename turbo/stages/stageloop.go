@@ -510,6 +510,18 @@ func NewDefaultStages(ctx context.Context,
 		depositContract = cfg.Genesis.Config.DepositContract
 	}
 
+	// Build vm.Config from eth config (propagate ACL settings) for execution
+	vmCfg := &vm.Config{}
+	if cfg != nil && cfg.ACL.Enabled {
+		vmCfg.SetACL(vm.ACL{
+			Enabled:     true,
+			Address:     cfg.ACL.ContractAddress,
+			FailOpen:    cfg.ACL.FailOpen,
+			Bypass:      cfg.ACL.Bypass,
+			OwnerBypass: cfg.ACL.OwnerBypass,
+		})
+	}
+
 	return stagedsync.DefaultStages(ctx,
 		stagedsync.StageSnapshotsCfg(db, *controlServer.ChainConfig, cfg.Sync, dirs, blockRetire, snapDownloader, blockReader, notifications, cfg.HistoryV3, agg, cfg.InternalCL && cfg.CaplinConfig.Backfilling, cfg.CaplinConfig.BlobBackfilling, silkworm),
 		stagedsync.StageHeadersCfg(db, controlServer.Hd, controlServer.Bd, *controlServer.ChainConfig, cfg.Sync, controlServer.SendHeaderRequest, controlServer.PropagateNewBlockHashes, controlServer.Penalize, cfg.BatchSize, p2pCfg.NoDiscovery, blockReader, blockWriter, dirs.Tmp, notifications, loopBreakCheck),
@@ -524,7 +536,7 @@ func NewDefaultStages(ctx context.Context,
 			nil,
 			controlServer.ChainConfig,
 			controlServer.Engine,
-			&vm.Config{},
+			vmCfg,
 			notifications.Accumulator,
 			cfg.StateStream,
 			/*stateStream=*/ false,

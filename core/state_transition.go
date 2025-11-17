@@ -17,29 +17,31 @@
 package core
 
 import (
-    "bytes"
-    "errors"
-    "fmt"
-    "slices"
+	"bytes"
+	"errors"
+	"fmt"
+	"slices"
+	"time"
 
-    "github.com/holiman/uint256"
+	"github.com/holiman/uint256"
 
-    cmath "github.com/erigontech/erigon-lib/common/math"
-    "github.com/erigontech/erigon-lib/log/v3"
+	cmath "github.com/erigontech/erigon-lib/common/math"
+	"github.com/erigontech/erigon-lib/log/v3"
 
-    libcommon "github.com/erigontech/erigon-lib/common"
-    "github.com/erigontech/erigon-lib/common/fixedgas"
-    "github.com/erigontech/erigon-lib/txpool/txpoolcfg"
-    types2 "github.com/erigontech/erigon-lib/types"
+	libcommon "github.com/erigontech/erigon-lib/common"
+	"github.com/erigontech/erigon-lib/common/fixedgas"
+	"github.com/erigontech/erigon-lib/txpool/txpoolcfg"
+	types2 "github.com/erigontech/erigon-lib/types"
+	abi "github.com/erigontech/erigon/accounts/abi"
 
-    "github.com/erigontech/erigon-lib/crypto"
+	"github.com/erigontech/erigon-lib/crypto"
 
-    "github.com/erigontech/erigon/common/u256"
-    "github.com/erigontech/erigon/core/types"
-    "github.com/erigontech/erigon/core/vm"
-    "github.com/erigontech/erigon/core/vm/evmtypes"
-    "github.com/erigontech/erigon/params"
-    zktypes "github.com/erigontech/erigon/zk/types"
+	"github.com/erigontech/erigon/common/u256"
+	"github.com/erigontech/erigon/core/types"
+	"github.com/erigontech/erigon/core/vm"
+	"github.com/erigontech/erigon/core/vm/evmtypes"
+	"github.com/erigontech/erigon/params"
+	zktypes "github.com/erigontech/erigon/zk/types"
 )
 
 var emptyCodeHash = crypto.Keccak256Hash(nil)
@@ -392,48 +394,48 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 		if st.msg.From() == (libcommon.Address{}) {
 			goto ACL_PREFLIGHT_DONE
 		}
-        aclAddr := st.evm.Config().ACL.Address
-        // Resolve EIP-1967 implementation of the ACL proxy to avoid gating calls to it
-        var aclImpl libcommon.Address
-        {
-            // eip1967 impl slot
-            slot := libcommon.HexToHash("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
-            var out uint256.Int
-            st.evm.IntraBlockState().GetState(aclAddr, &slot, &out)
-            if !out.IsZero() {
-                b := out.Bytes32()
-                copy(aclImpl[:], b[12:32])
-            }
-        }
-        log.Info("ACL preflight: enabled", "acl", aclAddr, "failOpen", st.evm.Config().ACL.FailOpen, "from", st.msg.From(), "to", func() libcommon.Address {
-            if st.msg.To() != nil {
-                return *st.msg.To()
-            }
-            return libcommon.Address{}
-        }())
+		aclAddr := st.evm.Config().ACL.Address
+		// Resolve EIP-1967 implementation of the ACL proxy to avoid gating calls to it
+		var aclImpl libcommon.Address
+		{
+			// eip1967 impl slot
+			slot := libcommon.HexToHash("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
+			var out uint256.Int
+			st.evm.IntraBlockState().GetState(aclAddr, &slot, &out)
+			if !out.IsZero() {
+				b := out.Bytes32()
+				copy(aclImpl[:], b[12:32])
+			}
+		}
+		log.Info("ACL preflight: enabled", "acl", aclAddr, "failOpen", st.evm.Config().ACL.FailOpen, "from", st.msg.From(), "to", func() libcommon.Address {
+			if st.msg.To() != nil {
+				return *st.msg.To()
+			}
+			return libcommon.Address{}
+		}())
 		// Superuser bypass: explicit list or owner (if enabled)
 		if aclInBypassList(st.evm.Config().ACL.Bypass, st.msg.From()) || (st.evm.Config().ACL.OwnerBypass && aclIsOwnerPreflight(st, aclAddr, st.msg.From())) {
 			goto ACL_PREFLIGHT_DONE
 		}
 		// zero address means misconfigured; respect FailOpen if set
-        if aclAddr != (libcommon.Address{}) {
-            var target libcommon.Address
-            if st.msg.To() != nil {
-                target = *st.msg.To()
-            } else {
-                // contract creation -> target is zero address per ACL contract semantics
-                target = libcommon.Address{}
-            }
-            // If the external call itself targets the ACL contract (e.g. isPermitted/owner probes),
-            // skip preflight to avoid gating access to the ACL proxy and to prevent recursive checks.
-            if st.msg.To() != nil && (*st.msg.To() == aclAddr || *st.msg.To() == aclImpl) {
-                goto ACL_PREFLIGHT_DONE
-            }
-            // If we are calling the ACL contract itself (e.g. isPermitted/checkPermittedOrRevert),
-            // derive the intended target from calldata to avoid gating access to the ACL proxy.
-            if target == aclAddr {
-                data := st.msg.Data()
-                // ABI: (address subject, address target, bytes payload)
+		if aclAddr != (libcommon.Address{}) {
+			var target libcommon.Address
+			if st.msg.To() != nil {
+				target = *st.msg.To()
+			} else {
+				// contract creation -> target is zero address per ACL contract semantics
+				target = libcommon.Address{}
+			}
+			// If the external call itself targets the ACL contract (e.g. isPermitted/owner probes),
+			// skip preflight to avoid gating access to the ACL proxy and to prevent recursive checks.
+			if st.msg.To() != nil && (*st.msg.To() == aclAddr || *st.msg.To() == aclImpl) {
+				goto ACL_PREFLIGHT_DONE
+			}
+			// If we are calling the ACL contract itself (e.g. isPermitted/checkPermittedOrRevert),
+			// derive the intended target from calldata to avoid gating access to the ACL proxy.
+			if target == aclAddr {
+				data := st.msg.Data()
+				// ABI: (address subject, address target, bytes payload)
 				// head = 3 words after 4-byte selector; second address occupies bytes [4+32, 4+64)
 				if len(data) >= 4+64 {
 					var t libcommon.Address
@@ -443,22 +445,34 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 			}
 
 			log.Info("ACL target", "address", target, "aclAddr", aclAddr)
-            // Build calldata for checkPermittedOrRevert(address,address,bytes)
-            data := buildACLCheckCallData(st.msg.From(), target, st.msg.Data())
-            // Use a bounded gas stipend for the staticcall; this does not affect tx gasRemaining
-            const aclCallGas uint64 = 500_000
-            // Use a temporary EVM with RestoreState to avoid any state touches
-            cfg := st.evm.Config()
-            cfg.RestoreState = true
-            cfg.ReadOnly = true
-            // Disable ACL for the preflight to avoid recursion
-            cfg.ACL.Enabled = false
-            tmpEVM := vm.NewEVM(st.evm.Context, st.evm.TxContext, st.evm.IntraBlockState(), st.evm.ChainConfig(), cfg)
-            // Perform STATICCALL from the sender context
-            if vm.ACLTrace != nil { vm.ACLTrace("preflight-before", st.msg.From(), target, st.msg.Data(), nil) }
-            _, _, err := tmpEVM.StaticCall(vm.AccountRef(st.msg.From()), aclAddr, data, aclCallGas)
-            if vm.ACLTrace != nil { vm.ACLTrace("preflight-after", st.msg.From(), target, st.msg.Data(), err) }
+			// Build calldata for checkPermittedOrRevert(address,address,bytes)
+			data := buildACLCheckCallData(st.msg.From(), target, st.msg.Data())
+			// Use a bounded gas stipend for the staticcall; this does not affect tx gasRemaining
+			const aclCallGas uint64 = 1_000_000
+			// Use a temporary EVM with RestoreState to avoid any state touches
+			cfg := st.evm.Config()
+			cfg.RestoreState = true
+			cfg.ReadOnly = true
+			// Disable ACL for the preflight to avoid recursion
+			cfg.ACL.Enabled = false
+			tmpEVM := vm.NewEVM(st.evm.Context, st.evm.TxContext, st.evm.IntraBlockState(), st.evm.ChainConfig(), cfg)
+			// Perform STATICCALL from the sender context
+			timeStart := time.Now().Nanosecond()
+			if vm.ACLTrace != nil {
+				vm.ACLTrace("preflight-before", st.msg.From(), target, st.msg.Data(), nil)
+			}
+			ret, _, err := tmpEVM.StaticCall(vm.AccountRef(st.msg.From()), aclAddr, data, aclCallGas)
+			if vm.ACLTrace != nil {
+				vm.ACLTrace("preflight-after", st.msg.From(), target, st.msg.Data(), err)
+				log.Info("Spent on preflight:", "time", (time.Now().Nanosecond() - timeStart))
+			}
 			if err != nil {
+				// Try to decode revert reason for better diagnostics
+				if vm.IsErrTypeRevert(err) && len(ret) > 0 {
+					if reason, decErr := abi.UnpackRevert(ret); decErr == nil {
+						log.Info("ACL preflight: revert reason", "reason", reason)
+					}
+				}
 				log.Info("ACL preflight: denied", "err", err)
 				if st.evm.Config().ACL.FailOpen {
 					// Log at debug level if available; continue execution
