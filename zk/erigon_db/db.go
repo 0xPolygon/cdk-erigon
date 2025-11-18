@@ -67,6 +67,10 @@ func (db ErigonDb) WriteHeader(
 		h.WithdrawalsHash = &ethTypes.EmptyRootHash
 	}
 
+	if chainConfig.IsPrague(ts) {
+		h.ParentBeaconBlockRoot = &common.Hash{}
+	}
+
 	if !chainConfig.IsNormalcy(blockNo.Uint64()) {
 		h.GasLimit = gasLimit
 	}
