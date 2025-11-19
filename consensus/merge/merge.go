@@ -200,14 +200,10 @@ func (s *Merge) FinalizeAndAssemble(config *chain.Config, header *types.Header, 
 	if !misc.IsPoSHeader(header) {
 		return s.eth1Engine.FinalizeAndAssemble(config, header, state, txs, uncles, receipts, withdrawals, chain, syscall, call, logger)
 	}
-	header.RequestsHash = nil
 	outTxs, outReceipts, outRequests, err := s.Finalize(config, header, state, txs, uncles, receipts, withdrawals, chain, syscall, logger)
 
 	if err != nil {
 		return nil, nil, nil, nil, err
-	}
-	if config.IsPrague(header.Time) {
-		header.RequestsHash = outRequests.Hash()
 	}
 	return types.NewBlockForAsembling(header, outTxs, uncles, outReceipts, withdrawals), outTxs, outReceipts, outRequests, nil
 }

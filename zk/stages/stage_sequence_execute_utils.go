@@ -344,6 +344,13 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimest
 
 	if chainConfig.IsCancun(header.Time) {
 		header.ParentBeaconBlockRoot = &AllZeroHash
+		zero := uint64(0)
+		header.BlobGasUsed = &zero
+		header.ExcessBlobGas = &zero
+	}
+
+	if chainConfig.IsPrague(header.Time) {
+		header.RequestsHash = &types.EmptyRequestsHash
 	}
 
 	header.Coinbase = coinbase
