@@ -271,7 +271,7 @@ func (api *APIImpl) GetBlockByNumber(ctx context.Context, number rpc.BlockNumber
 	}
 
 	// workaround for sovereign FEP chains that need to populate this if cancun is enabled even
-	// though we don't have a beacon chain for them
+	// though we don't have a beacon chain for them - these fields aren't communicated
 	if chainCfg.IsCancun(b.Time()) {
 		response["parentBeaconBlockRoot"] = (common.Hash{}).String()
 	}
