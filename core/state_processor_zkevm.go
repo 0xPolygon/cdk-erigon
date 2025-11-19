@@ -120,10 +120,6 @@ func ApplyMessageWithTxContext(msg types.Message, txContext evmtypes.TxContext, 
 			contractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.GetNonce())
 		}
 
-		// [hack][zkevm] - ignore the bloom at this point due to a bug in zknode where the bloom is not included
-		// in the block during execution
-		//receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
-
 		// by the tx.
 		receipt = &types.Receipt{
 			Type:              tx.Type(),
@@ -135,6 +131,12 @@ func ApplyMessageWithTxContext(msg types.Message, txContext evmtypes.TxContext, 
 			Logs:              ibs.GetLogs(tx.Hash()),
 			BlockNumber:       blockNumber,
 			TransactionIndex:  uint(ibs.TxIndex()),
+		}
+
+		// [hack][zkevm] - ignore the bloom at this point due to a bug in zknode where the bloom is not included
+		// in the block during execution
+		if rules.IsLondon {
+			receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 		}
 	}
 
