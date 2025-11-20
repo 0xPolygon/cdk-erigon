@@ -135,7 +135,7 @@ func ApplyMessageWithTxContext(msg types.Message, txContext evmtypes.TxContext, 
 
 		// [hack][zkevm] - ignore the bloom at this point due to a bug in zknode where the bloom is not included
 		// in the block during execution
-		if rules.IsLondon {
+		if rules.IsFep {
 			receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 		}
 	}

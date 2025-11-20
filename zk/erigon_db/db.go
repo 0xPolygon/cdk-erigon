@@ -67,14 +67,14 @@ func (db ErigonDb) WriteHeader(
 		h.WithdrawalsHash = &ethTypes.EmptyRootHash
 	}
 
-	if chainConfig.IsCancun(ts) {
+	if chainConfig.IsFep(ts) && chainConfig.IsCancun(ts) {
 		h.ParentBeaconBlockRoot = &common.Hash{}
 		zero := uint64(0)
 		h.BlobGasUsed = &zero
 		h.ExcessBlobGas = &zero
 	}
 
-	if chainConfig.IsPrague(ts) {
+	if chainConfig.IsFep(ts) && chainConfig.IsPrague(ts) {
 		h.RequestsHash = &ethTypes.EmptyRequestsHash
 	}
 
