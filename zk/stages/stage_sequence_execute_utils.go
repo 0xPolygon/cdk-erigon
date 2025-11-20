@@ -342,14 +342,14 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimest
 		header.WithdrawalsHash = &EmptyWithdrawalsHash
 	}
 
-	if chainConfig.IsCancun(header.Time) {
+	if chainConfig.IsFep(header.Time) && chainConfig.IsCancun(header.Time) {
 		header.ParentBeaconBlockRoot = &AllZeroHash
 		zero := uint64(0)
 		header.BlobGasUsed = &zero
 		header.ExcessBlobGas = &zero
 	}
 
-	if chainConfig.IsPrague(header.Time) {
+	if chainConfig.IsFep(header.Time) && chainConfig.IsPrague(header.Time) {
 		header.RequestsHash = &types.EmptyRequestsHash
 	}
 

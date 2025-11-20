@@ -249,7 +249,7 @@ func (api *APIImpl) GetBlockByNumber(ctx context.Context, number rpc.BlockNumber
 
 	additionalFields["totalDifficulty"] = getTdField(td)
 
-	chainCfg, err := api.chainConfig(ctx, tx)
+	_, err = api.chainConfig(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -268,12 +268,6 @@ func (api *APIImpl) GetBlockByNumber(ctx context.Context, number rpc.BlockNumber
 		for _, field := range []string{"hash", "nonce", "miner"} {
 			response[field] = nil
 		}
-	}
-
-	// workaround for sovereign FEP chains that need to populate this if cancun is enabled even
-	// though we don't have a beacon chain for them - these fields aren't communicated
-	if chainCfg.IsCancun(b.Time()) {
-		response["parentBeaconBlockRoot"] = (common.Hash{}).String()
 	}
 
 	return response, err
