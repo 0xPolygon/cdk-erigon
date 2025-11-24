@@ -1235,10 +1235,9 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.txPool2DB,
 				decodedTxCache,
 			)
-			var txYielder sequencer.TxYielder = poolYielder
+			var depYielder *sequencer.DepositTransactionYielder
 			if backend.depositCache != nil {
-				depYielder := sequencer.NewDepositTransactionYielder(backend.depositCache)
-				txYielder = sequencer.NewCombinedTransactionYielder(depYielder, poolYielder)
+				depYielder = sequencer.NewDepositTransactionYielder(backend.depositCache)
 			}
 
 			backend.syncStages = stages2.NewSequencerZkStages(
@@ -1261,7 +1260,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				verifier,
 				l1InfoTreeUpdater,
 				hook,
-				txYielder,
+				poolYielder,
+				depYielder,
 			)
 
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder

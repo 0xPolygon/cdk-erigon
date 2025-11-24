@@ -35,6 +35,7 @@ const BLOCK_L1_INFO_TREE_INDEX_PROGRESS = "block_l1_info_tree_progress" // block
 const L1_INJECTED_BATCHES = "l1_injected_batches"                       // index increasing by 1 -> injected batch for the start of the chain
 const BLOCK_INFO_ROOTS = "block_info_roots"                             // block number -> block info root hash
 const BLOCK_L1_BLOCK_HASHES = "block_l1_block_hashes"                   // block number -> l1 block hash
+const BLOCK_DEPOSIT_L1_NUMBER = "block_deposit_l1_number"               // block number -> l1 block number that produced deposit txs
 const INTERMEDIATE_TX_STATEROOTS = "hermez_intermediate_tx_stateRoots"  // l2blockno -> stateRoot
 const BATCH_WITNESSES = "hermez_batch_witnesses"                        // batch number -> witness
 const BATCH_COUNTERS = "hermez_batch_counters"                          // block number -> counters
@@ -76,6 +77,7 @@ var HermezDbTables = []string{
 	L1_INJECTED_BATCHES,
 	BLOCK_INFO_ROOTS,
 	BLOCK_L1_BLOCK_HASHES,
+	BLOCK_DEPOSIT_L1_NUMBER,
 	INTERMEDIATE_TX_STATEROOTS,
 	BATCH_WITNESSES,
 	BATCH_COUNTERS,
@@ -979,6 +981,68 @@ func (db *HermezDb) DeleteBlockGlobalExitRoots(fromBlockNum, toBlockNum uint64) 
 
 func (db *HermezDb) DeleteBlockL1BlockHashes(fromBlockNum, toBlockNum uint64) error {
 	return db.deleteFromBucketWithUintKeysRange(BLOCK_L1_BLOCK_HASHES, fromBlockNum, toBlockNum)
+}
+
+func (db *HermezDb) WriteBlockDepositL1BlockNumber(l2BlockNo uint64, l1BlockNo uint64) error {
+	return db.tx.Put(BLOCK_DEPOSIT_L1_NUMBER, Uint64ToBytes(l2BlockNo), Uint64ToBytes(l1BlockNo))
+}
+
+func (db *HermezDbReader) GetBlockDepositL1BlockNumber(l2BlockNo uint64) (uint64, error) {
+	val, err := db.tx.GetOne(BLOCK_DEPOSIT_L1_NUMBER, Uint64ToBytes(l2BlockNo))
+	if err != nil {
+		return 0, err
+	}
+	if len(val) == 0 {
+		return 0, nil
+	}
+	return BytesToUint64(val), nil
+}
+
+func (db *HermezDbReader) GetLatestDepositL1BlockNumber(maxL2BlockNo uint64) (uint64, bool, error) {
+	c, err := db.tx.Cursor(BLOCK_DEPOSIT_L1_NUMBER)
+	if err != nil {
+		return 0, false, err
+	}
+	defer c.Close()
+
+	var k, v []byte
+	if maxL2BlockNo == math.MaxUint64 {
+		k, v, err = c.Last()
+		if err != nil {
+			return 0, false, err
+		}
+	} else {
+		seekKey := Uint64ToBytes(maxL2BlockNo + 1)
+		k, v, err = c.Seek(seekKey)
+		if err != nil {
+			return 0, false, err
+		}
+		if k == nil {
+			k, v, err = c.Last()
+			if err != nil {
+				return 0, false, err
+			}
+		} else if BytesToUint64(k) > maxL2BlockNo {
+			k, v, err = c.Prev()
+			if err != nil {
+				return 0, false, err
+			}
+		}
+	}
+	for ; k != nil; k, v, err = c.Prev() {
+		if err != nil {
+			return 0, false, err
+		}
+		l2Block := BytesToUint64(k)
+		if l2Block <= maxL2BlockNo {
+			return BytesToUint64(v), true, nil
+		}
+	}
+	return 0, false, nil
+}
+
+func (db *HermezDb) DeleteBlockDepositL1BlockNumbers(fromBlockNum, toBlockNum uint64) error {
+	return db.deleteFromBucketWithUintKeysRange(BLOCK_DEPOSIT_L1_NUMBER, fromBlockNum, toBlockNum)
 }
 
 func (db *HermezDb) DeleteBlockL1InfoTreeIndexes(fromBlockNum, toBlockNum uint64) error {

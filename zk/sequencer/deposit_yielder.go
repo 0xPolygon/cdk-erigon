@@ -1,104 +1,74 @@
 package sequencer
 
 import (
+	"fmt"
+
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/zk/deposits"
+	"github.com/holiman/uint256"
 )
 
-// Local interface matching stages.TxYielder to avoid circular import.
-type TxYielder interface {
-	YieldNextTransaction() (types.Transaction, uint8, bool)
-	AddMined(hash libcommon.Hash)
-	Discard(hash libcommon.Hash)
-	SetExecutionDetails(executionAt uint64, forkId uint64)
-	BeginYielding()
-	Cleanup()
-}
-
-// DepositTransactionYielder yields deposit-derived transactions from L1 logs.
-// Note: actual conversion to DepositTx will be added when deposit tx type is present.
+// DepositTransactionYielder exposes parsed deposit logs grouped per L1 block.
 type DepositTransactionYielder struct {
-	cache         *deposits.Cache
-	currentL1Hash libcommon.Hash
-	queue         []*deposits.Deposit
+	cache *deposits.Cache
 }
 
 func NewDepositTransactionYielder(cache *deposits.Cache) *DepositTransactionYielder {
 	return &DepositTransactionYielder{cache: cache}
 }
 
-// SetL1Origin selects which L1 block's deposits to yield.
-func (d *DepositTransactionYielder) SetL1Origin(l1Hash libcommon.Hash) {
-	d.currentL1Hash = l1Hash
-	d.queue = d.cache.Pop(l1Hash)
-}
-
-func (d *DepositTransactionYielder) YieldNextTransaction() (types.Transaction, uint8, bool) {
-	if len(d.queue) == 0 {
-		return nil, 0, false
+// NextBlock returns the next queued deposit block whose L1 block number is greater than after.
+func (d *DepositTransactionYielder) NextBlock(after uint64) *deposits.BlockDeposits {
+	if d == nil || d.cache == nil {
+		return nil
 	}
-	// TODO: convert deposit payload into real DepositTx when the type is added.
-	d.queue = d.queue[1:]
-	return nil, 0, false
+	return d.cache.PopNext(after)
 }
 
-func (d *DepositTransactionYielder) AddMined(_ libcommon.Hash)       {}
-func (d *DepositTransactionYielder) Discard(_ libcommon.Hash)        {}
-func (d *DepositTransactionYielder) SetExecutionDetails(_, _ uint64) {}
-func (d *DepositTransactionYielder) BeginYielding()                  {}
-func (d *DepositTransactionYielder) Cleanup()                        {}
-
-// CombinedTransactionYielder tries deposits first, then falls back to pool.
-type CombinedTransactionYielder struct {
-	deposits *DepositTransactionYielder
-	pool     TxYielder
-}
-
-func NewCombinedTransactionYielder(deposits *DepositTransactionYielder, pool TxYielder) *CombinedTransactionYielder {
-	return &CombinedTransactionYielder{deposits: deposits, pool: pool}
-}
-
-func (c *CombinedTransactionYielder) YieldNextTransaction() (types.Transaction, uint8, bool) {
-	if c.deposits != nil {
-		if tx, gas, ok := c.deposits.YieldNextTransaction(); ok {
-			return tx, gas, ok
+// BuildTransactions converts deposit payloads into typed deposit transactions.
+func (d *DepositTransactionYielder) BuildTransactions(block *deposits.BlockDeposits) ([]types.Transaction, error) {
+	if block == nil {
+		return nil, nil
+	}
+	txs := make([]types.Transaction, 0, len(block.Deposits))
+	for _, dep := range block.Deposits {
+		tx, err := buildDepositTransaction(dep)
+		if err != nil {
+			return nil, err
 		}
+		txs = append(txs, tx)
 	}
-	return c.pool.YieldNextTransaction()
+	return txs, nil
 }
 
-func (c *CombinedTransactionYielder) AddMined(h libcommon.Hash) {
-	if c.deposits != nil {
-		c.deposits.AddMined(h)
+func buildDepositTransaction(dep *deposits.Deposit) (*types.DepositTx, error) {
+	if dep == nil {
+		return nil, fmt.Errorf("nil deposit")
 	}
-	c.pool.AddMined(h)
-}
+	mint, overflow := uint256.FromBig(dep.Mint)
+	if overflow {
+		return nil, fmt.Errorf("deposit mint exceeds uint256 for source %s", dep.SourceHash.Hex())
+	}
+	value, overflow := uint256.FromBig(dep.Value)
+	if overflow {
+		return nil, fmt.Errorf("deposit value exceeds uint256 for source %s", dep.SourceHash.Hex())
+	}
 
-func (c *CombinedTransactionYielder) Discard(h libcommon.Hash) {
-	if c.deposits != nil {
-		c.deposits.Discard(h)
+	var to *libcommon.Address
+	if dep.To != nil {
+		addr := *dep.To
+		to = &addr
 	}
-	c.pool.Discard(h)
-}
 
-func (c *CombinedTransactionYielder) SetExecutionDetails(executionAt, forkId uint64) {
-	if c.deposits != nil {
-		c.deposits.SetExecutionDetails(executionAt, forkId)
-	}
-	c.pool.SetExecutionDetails(executionAt, forkId)
-}
-
-func (c *CombinedTransactionYielder) BeginYielding() {
-	if c.deposits != nil {
-		c.deposits.BeginYielding()
-	}
-	c.pool.BeginYielding()
-}
-
-func (c *CombinedTransactionYielder) Cleanup() {
-	if c.deposits != nil {
-		c.deposits.Cleanup()
-	}
-	c.pool.Cleanup()
+	return types.NewDepositTx(
+		dep.SourceHash,
+		dep.From,
+		to,
+		mint,
+		value,
+		dep.Gas,
+		dep.IsCreation,
+		dep.Data,
+	)
 }

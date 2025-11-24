@@ -2,6 +2,7 @@ package deposits
 
 import (
 	"math/big"
+	"sort"
 	"sync"
 
 	libcommon "github.com/erigontech/erigon-lib/common"
@@ -21,16 +22,23 @@ type Deposit struct {
 	Log        types.Log      // original log for reference
 }
 
-// Cache groups parsed deposits by their L1 block hash.
+type BlockDeposits struct {
+	L1BlockHash   libcommon.Hash
+	L1BlockNumber uint64
+	Deposits      []*Deposit
+}
+
+// Cache groups parsed deposits by their L1 block hash and preserves arrival order.
 type Cache struct {
 	mtx sync.Mutex
 	// key: L1 block hash
-	deps map[libcommon.Hash][]*Deposit
+	blocks map[libcommon.Hash]*BlockDeposits
+	order  []libcommon.Hash
 }
 
 func NewCache() *Cache {
 	return &Cache{
-		deps: make(map[libcommon.Hash][]*Deposit),
+		blocks: make(map[libcommon.Hash]*BlockDeposits),
 	}
 }
 
@@ -43,15 +51,38 @@ func (c *Cache) AddDeposits(deps []*Deposit) {
 	defer c.mtx.Unlock()
 	for _, d := range deps {
 		bh := libcommon.Hash(d.Log.BlockHash)
-		c.deps[bh] = append(c.deps[bh], d)
+		block, ok := c.blocks[bh]
+		if !ok {
+			block = &BlockDeposits{
+				L1BlockHash:   bh,
+				L1BlockNumber: d.Log.BlockNumber,
+			}
+			c.blocks[bh] = block
+			c.order = append(c.order, bh)
+		}
+		block.Deposits = append(block.Deposits, d)
 	}
 }
 
-// Pop returns and removes deposits for the given L1 block hash.
-func (c *Cache) Pop(l1Hash libcommon.Hash) []*Deposit {
+// PopNext returns deposits for the earliest queued L1 block whose block number is greater than afterBlockNumber.
+func (c *Cache) PopNext(afterBlockNumber uint64) *BlockDeposits {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	out := c.deps[l1Hash]
-	delete(c.deps, l1Hash)
-	return out
+	for len(c.order) > 0 {
+		hash := c.order[0]
+		c.order = c.order[1:]
+		block := c.blocks[hash]
+		delete(c.blocks, hash)
+		if block == nil {
+			continue
+		}
+		if block.L1BlockNumber <= afterBlockNumber {
+			continue
+		}
+		sort.Slice(block.Deposits, func(i, j int) bool {
+			return block.Deposits[i].Log.Index < block.Deposits[j].Log.Index
+		})
+		return block
+	}
+	return nil
 }
