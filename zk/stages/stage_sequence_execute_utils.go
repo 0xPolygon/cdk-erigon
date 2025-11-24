@@ -32,7 +32,6 @@ import (
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	verifier "github.com/erigontech/erigon/zk/legacy_executor_verifier"
-	"github.com/erigontech/erigon/zk/sequencer"
 	zktx "github.com/erigontech/erigon/zk/tx"
 	"github.com/erigontech/erigon/zk/txpool"
 	zktypes "github.com/erigontech/erigon/zk/types"
@@ -132,7 +131,7 @@ func StageSequenceBlocksCfg(
 	yieldSize uint16,
 	infoTreeUpdater *l1infotree.Updater,
 	doneHook DoneHook,
-	txYielder *sequencer.PoolTransactionYielder,
+	txYielder TxYielder,
 ) SequenceBlockCfg {
 
 	decodedTxCache := expirable.NewLRU[common.Hash, *types.Transaction](zk.SequencerDecodedTxCacheSize, nil, zk.SequencerDecodedTxCacheTTL)

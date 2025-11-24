@@ -112,7 +112,7 @@ func NewSequencerZkStages(ctx context.Context,
 	verifier *legacy_executor_verifier.LegacyExecutorVerifier,
 	infoTreeUpdater *l1infotree.Updater,
 	hook *Hook,
-	txYielder *sequencer.PoolTransactionYielder,
+	txYielder sequencer.TxYielder,
 ) []*stagedsync.Stage {
 	dirs := cfg.Dirs
 	blockReader := freezeblocks.NewBlockReader(snapshots, nil)
