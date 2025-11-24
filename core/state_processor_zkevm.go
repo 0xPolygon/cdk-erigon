@@ -36,6 +36,12 @@ import (
 func GetTxContext(config *chain.Config, engine consensus.EngineReader, ibs *state.IntraBlockState, header *types.Header, tx types.Transaction, evm *vm.EVM, effectiveGasPricePercentage uint8) (types.Message, evmtypes.TxContext, error) {
 	rules := evm.ChainRules()
 
+	// For deposit transactions, mint the L2 balance before building the message,
+	// so gas/value checks see the deposited funds.
+	if dep, ok := tx.(*types.DepositTx); ok {
+		ibs.AddBalance(dep.From, &dep.Mint)
+	}
+
 	msg, err := tx.AsMessage(*types.MakeSigner(config, header.Number.Uint64(), 0), header.BaseFee, rules)
 	if err != nil {
 		return types.Message{}, evmtypes.TxContext{}, err

@@ -1097,7 +1097,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			)
 			backend.depositSyncer.RunQueryBlocks(cfg.Zk.L1FirstBlock)
 			go func() {
-				for logs := range backend.depositSyncer.GetLogsChan() {
+				event := backend.depositSyncer.GetLogsChan(syncer.LogsModeOnCompletion)
+				for logs := range event.Logs {
 					if logs == nil {
 						continue
 					}

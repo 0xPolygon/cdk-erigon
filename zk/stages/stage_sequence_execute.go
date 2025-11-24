@@ -21,6 +21,7 @@ import (
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/sequencer"
 	zktx "github.com/erigontech/erigon/zk/tx"
+	zktypes "github.com/erigontech/erigon/zk/types"
 	"github.com/erigontech/erigon/zk/utils"
 )
 
@@ -404,13 +405,43 @@ func sequencingBatchStep(
 		}
 
 		parentRoot := parentBlock.Root()
-		if err := handleStateForNewBlockStarting(batchContext, ibs, blockNumber, batchState.batchNumber, header.Time, &parentRoot, l1TreeUpdate, shouldWriteGerToContract); err != nil {
+		if err := handleStateForNewBlockStarting(batchContext, ibs, batchState, blockNumber, batchState.batchNumber, header.Time, &parentRoot, l1TreeUpdate, shouldWriteGerToContract); err != nil {
 			return err
 		}
 
 		// start waiting for a new transaction to arrive
 		if !batchState.isAnyRecovery() {
 			log.Info(fmt.Sprintf("[%s] Waiting for txs from the pool...", logPrefix))
+		}
+
+		// If we have a deposit origin set for this block, try to include those deposits first.
+		// We fetch deposits whose L1 block number is greater than the last built block, to avoid
+		// duplicating across blocks within the same batch.
+		if cfg.depositYielder != nil {
+			latestL1BlockNumber, _, _ := batchContext.sdb.hermezDb.GetLatestDepositL1BlockNumber(executionAt) // TODO handle found and err
+			depBlock := cfg.depositYielder.NextBlock(latestL1BlockNumber)
+			if depBlock != nil {
+				// record origin for datastream
+				batchState.SetDepositOrigin(depBlock.L1BlockHash)
+				txs, err := cfg.depositYielder.BuildTransactions(depBlock)
+				if err != nil {
+					return err
+				}
+				for i, tx := range txs {
+					ib := i // capture index for tx hash context
+					ibs.SetTxContext(tx.Hash(), header.Hash(), ib)
+					// receipt, execResult, err := core.ApplyTransaction_zkevm(cfg.chainConfig, cfg.engine, evmForBlock(&blockContext, ibs, cfg, header, parentBlock, sdb, logger), ethBlockGasPool, ibs, state.NewNoopWriter(), header, tx, &gasUsed, zktypes.EFFECTIVE_GAS_PRICE_MAX_VAL.Uint64(), true)
+					effectiveGas := uint8(zktypes.EFFECTIVE_GAS_PRICE_MAX_VAL.Uint64()) // TODO - Use yielder's effective gas
+					backupDataSizeChecker := *blockDataSizeChecker
+					receipt, execResult, txCounters, anyOverflow, err := attemptAddTransaction(cfg, sdb, ibs, batchCounters, &blockContext, header, tx, effectiveGas, batchState.isL1Recovery(), batchState.forkId, l1TreeUpdateIndex, &backupDataSizeChecker, ethBlockGasPool)
+					_ = txCounters
+					_ = anyOverflow
+					if err != nil {
+						return fmt.Errorf("deposit tx failed: %w", err)
+					}
+					batchState.onAddedTransaction(tx, receipt, execResult, effectiveGas)
+				}
+			}
 		}
 
 		innerBreak := false

@@ -15,10 +15,10 @@ import (
 	"github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/core/vm"
 	"github.com/erigontech/erigon/core/vm/evmtypes"
+	"github.com/erigontech/erigon/zk/sequencer"
 	zktx "github.com/erigontech/erigon/zk/tx"
 	zktypes "github.com/erigontech/erigon/zk/types"
 	"github.com/erigontech/erigon/zk/utils"
-	"github.com/erigontech/erigon/zk/sequencer"
 )
 
 const (
@@ -87,7 +87,7 @@ func processInjectedInitialBatch(
 	header.Time = injectedBatch.Timestamp
 
 	parentRoot := parentBlock.Root()
-	if err = handleStateForNewBlockStarting(batchContext, ibs, injectedBatchBlockNumber,
+	if err = handleStateForNewBlockStarting(batchContext, ibs, batchState, injectedBatchBlockNumber,
 		injectedBatchBatchNumber, injectedBatch.Timestamp, &parentRoot, fakeL1TreeUpdate, true); err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func processEmptyInitialBatch(batchContext *BatchContext, batchState *BatchState
 	ibs := state.New(batchContext.sdb.stateReader)
 
 	parentRoot := parentBlock.Root()
-	if err = handleStateForNewBlockStarting(batchContext, ibs, injectedBatchBlockNumber, injectedBatchBatchNumber, timestamp, &parentRoot, nil, true); err != nil {
+	if err = handleStateForNewBlockStarting(batchContext, ibs, batchState, injectedBatchBlockNumber, injectedBatchBatchNumber, timestamp, &parentRoot, nil, true); err != nil {
 		return err
 	}
 
