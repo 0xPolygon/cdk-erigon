@@ -1,6 +1,8 @@
 package types
 
 import (
+	"math/big"
+
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/zk/datastream/proto/github.com/0xPolygonHermez/zkevm-node/state/datastream"
 	"google.golang.org/protobuf/proto"
@@ -44,7 +46,7 @@ type FullL2Block struct {
 	L2BlockNumber   uint64
 	Timestamp       int64
 	DeltaTimestamp  uint32
-	AllowFreeTxs    *bool
+	BaseFee         *big.Int
 	L1InfoTreeIndex uint32
 	GlobalExitRoot  libcommon.Hash
 	Coinbase        libcommon.Address
@@ -79,10 +81,9 @@ func UnmarshalL2Block(data []byte) (*FullL2Block, error) {
 
 // ConvertToFullL2Block converts the datastream.L2Block to types.FullL2Block
 func ConvertToFullL2Block(block *datastream.L2Block) *FullL2Block {
-	var allowPtr *bool
-	if block.AllowFreeTxs != nil {
-		v := block.GetAllowFreeTxs()
-		allowPtr = &v
+	var baseFee *big.Int
+	if len(block.GetBaseFee()) > 0 {
+		baseFee = new(big.Int).SetBytes(block.GetBaseFee())
 	}
 
 	return &FullL2Block{
@@ -99,6 +100,6 @@ func ConvertToFullL2Block(block *datastream.L2Block) *FullL2Block {
 		BlockGasLimit:   block.GetBlockGasLimit(),
 		BlockInfoRoot:   libcommon.BytesToHash(block.GetBlockInfoRoot()),
 		Debug:           ProcessDebug(block.GetDebug()),
-		AllowFreeTxs:    allowPtr,
+		BaseFee:         baseFee,
 	}
 }

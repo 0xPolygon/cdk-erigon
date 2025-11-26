@@ -274,16 +274,6 @@ func (api *BaseAPI) chainConfigWithGenesis(ctx context.Context, tx kv.Tx) (*chai
 	if err != nil {
 		return nil, nil, err
 	}
-	if cc != nil {
-		headHash := rawdb.ReadHeadHeaderHash(tx)
-		if headHash != (common.Hash{}) {
-			if headNumber := rawdb.ReadHeaderNumber(tx, headHash); headNumber != nil {
-				if allowFree, err := hermez_db.NewHermezDbReader(tx).GetBlockAllowFreeTransactions(*headNumber); err == nil {
-					cc.AllowFreeTransactions = allowFree
-				}
-			}
-		}
-	}
 	if cc != nil && genesisBlock != nil {
 		api._genesis.Store(genesisBlock)
 		api._chainConfig.Store(cc)

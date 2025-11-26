@@ -162,7 +162,7 @@ func (api *APIImpl) MaxPriorityFeePerGas(ctx context.Context) (*hexutil.Big, err
 				}
 				return (*hexutil.Big)(tip), nil
 			} else { // non-sequencer
-				if cc.AllowFreeTransactions {
+				if api.BaseAPI.gasless {
 					var price hexutil.Big
 					return &price, nil
 				}
@@ -277,7 +277,7 @@ func (api *APIImpl) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex,
 				}
 				return results, nil
 			} else {
-				if cc.AllowFreeTransactions {
+				if api.BaseAPI.gasless {
 					// return zeroed reward matrix
 					results.Reward = zeroRewardsMatrix(len(reward), len(rewardPercentiles))
 					return results, nil

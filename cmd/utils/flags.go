@@ -2611,6 +2611,8 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 		cfg.GenesisOverrides.OverridePmtEnabledBlock = flags.GlobalBig(ctx, OverridePmtEnabledBlockFlag.Name)
 	}
 
+	cfg.GenesisOverrides.OverrideBaseFeeMultipliers = core.GenesisBlockByChainName(chain).Config.BaseFeeChangeMultipliers
+
 	if ctx.IsSet(InternalConsensusFlag.Name) && clparams.EmbeddedSupported(cfg.NetworkID) {
 		cfg.InternalCL = ctx.Bool(InternalConsensusFlag.Name)
 	}

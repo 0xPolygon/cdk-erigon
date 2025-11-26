@@ -41,7 +41,7 @@ var (
 )
 
 type ErigonDb interface {
-	WriteHeader(batchNo *big.Int, blockHash common.Hash, stateRoot, txHash, parentHash common.Hash, coinbase common.Address, ts, gasLimit uint64, chainConfig *chain.Config) (*ethTypes.Header, error)
+	WriteHeader(batchNo *big.Int, blockHash common.Hash, stateRoot, txHash, parentHash common.Hash, coinbase common.Address, ts, gasLimit uint64, baseFee *big.Int, chainConfig *chain.Config) (*ethTypes.Header, error)
 	WriteBody(batchNo *big.Int, headerHash common.Hash, txs []ethTypes.Transaction) error
 }
 
@@ -54,7 +54,6 @@ type HermezDb interface {
 
 	DeleteReusedL1InfoTreeIndexes(fromBlockNum, toBlockNum uint64) error
 	DeleteBlockL1BlockHashes(fromBlockNum, toBlockNum uint64) error
-	DeleteBlockAllowFreeTransactions(fromBlockNum, toBlockNum uint64) error
 	WriteBlockL1InfoTreeIndex(blockNumber uint64, l1Index uint64) error
 	WriteBlockL1InfoTreeIndexProgress(blockNumber uint64, l1Index uint64) error
 }
@@ -547,10 +546,6 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 
 	if err := hermezDb.DeleteBlockL1BlockHashes(fromBlock, toBlock); err != nil {
 		return fmt.Errorf("DeleteBlockL1BlockHashes: %w", err)
-	}
-
-	if err := hermezDb.DeleteBlockAllowFreeTransactions(fromBlock, toBlock); err != nil {
-		return fmt.Errorf("DeleteBlockAllowFreeTransactions: %w", err)
 	}
 
 	if err = hermezDb.DeleteReusedL1InfoTreeIndexes(fromBlock, toBlock); err != nil {

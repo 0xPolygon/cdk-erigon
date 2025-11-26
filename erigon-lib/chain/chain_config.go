@@ -20,11 +20,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"sort"
 	"strconv"
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/fixedgas"
-	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 // this needs to always be in descending order
@@ -88,8 +88,6 @@ type Config struct {
 	// Optional EIP-4844 parameters (see also EIP-7691 & EIP-7840)
 	MinBlobGasPrice *uint64       `json:"minBlobGasPrice,omitempty"`
 	BlobSchedule    *BlobSchedule `json:"blobSchedule,omitempty"`
-	// BaseFeeChangeMultiplier scales the EIP-1559 base fee delta. Default is 1.
-	BaseFeeChangeMultiplier *float64 `json:"baseFeeChangeMultiplier,omitempty"`
 	// BaseFeeChangeMultipliers provides forkable multipliers keyed by block number.
 	BaseFeeChangeMultipliers map[string]float64 `json:"baseFeeChangeMultipliers,omitempty"`
 
@@ -392,16 +390,25 @@ func (c *Config) GetMinBlobGasPrice() uint64 {
 // GetBaseFeeChangeMultiplier returns the multiplier effective at the given block.
 // Order of precedence:
 //  1. BaseFeeChangeMultipliers map (forkable)
-//  2. BaseFeeChangeMultiplier (single value)
-//  3. Default of 1
+//  2. Default of 1
 func (c *Config) GetBaseFeeChangeMultiplier(number uint64) float64 {
 	if c != nil && len(c.BaseFeeChangeMultipliers) > 0 {
+		minKey := ^uint64(0)
+		for k := range c.BaseFeeChangeMultipliers {
+			keyUint, err := strconv.ParseUint(k, 10, 64)
+			if err != nil {
+				panic(err)
+			}
+			if keyUint < minKey {
+				minKey = keyUint
+			}
+		}
+		if number < minKey {
+			// before any forked entry, fall back to default
+			return 1
+		}
 		return borKeyValueConfigHelperFloat(c.BaseFeeChangeMultipliers, number)
 	}
-	if c != nil && c.BaseFeeChangeMultiplier != nil {
-		return *c.BaseFeeChangeMultiplier
-	}
-	log.Info("Default base fee multiplier ONE", "value", 1)
 	return 1
 }
 
@@ -645,6 +652,14 @@ func (c *Config) checkCompatible(newcfg *Config, head uint64) *ConfigCompatError
 	if incompatible(c.NormalcyBlock, newcfg.NormalcyBlock, head) {
 		return newCompatError("Normalcy fork block", c.NormalcyBlock, newcfg.NormalcyBlock)
 	}
+	if incompatible(c.PmtEnabledBlock, newcfg.PmtEnabledBlock, head) {
+		return newCompatError("PMTEnabled fork block", c.PmtEnabledBlock, newcfg.PmtEnabledBlock)
+	}
+
+	if conflictBlock, ok := baseFeeMultipliersIncompatible(c.BaseFeeChangeMultipliers, newcfg.BaseFeeChangeMultipliers, head); ok {
+		b := new(big.Int).SetUint64(conflictBlock)
+		return newCompatError("BaseFeeChangeMultipliers", b, b)
+	}
 
 	return nil
 }
@@ -742,6 +757,10 @@ func borKeyValueConfigHelperFloat(field map[string]float64, number uint64) float
 
 	keys := common.SortedKeys(fieldUint)
 
+	if len(keys) == 0 {
+		return 0
+	}
+
 	for i := 0; i < len(keys)-1; i++ {
 		if number >= keys[i] && number < keys[i+1] {
 			return fieldUint[keys[i]]
@@ -749,6 +768,70 @@ func borKeyValueConfigHelperFloat(field map[string]float64, number uint64) float
 	}
 
 	return fieldUint[keys[len(keys)-1]]
+}
+
+func baseFeeMultipliersIncompatible(oldMap, newMap map[string]float64, head uint64) (uint64, bool) {
+	oldParsed := parseMultiplierMap(oldMap)
+	newParsed := parseMultiplierMap(newMap)
+
+	keysSet := make(map[uint64]struct{})
+	for k := range oldParsed {
+		if k <= head {
+			keysSet[k] = struct{}{}
+		}
+	}
+	for k := range newParsed {
+		if k <= head {
+			keysSet[k] = struct{}{}
+		}
+	}
+	keysSet[head] = struct{}{}
+
+	keys := make([]uint64, 0, len(keysSet))
+	for k := range keysSet {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+	for _, k := range keys {
+		oldVal := baseFeeMultiplierAt(oldParsed, k)
+		newVal := baseFeeMultiplierAt(newParsed, k)
+		if oldVal != newVal {
+			return k, true
+		}
+	}
+	return 0, false
+}
+
+func parseMultiplierMap(m map[string]float64) map[uint64]float64 {
+	if len(m) == 0 {
+		return nil
+	}
+	res := make(map[uint64]float64, len(m))
+	for k, v := range m {
+		ku, err := strconv.ParseUint(k, 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		res[ku] = v
+	}
+	return res
+}
+
+func baseFeeMultiplierAt(m map[uint64]float64, number uint64) float64 {
+	if len(m) == 0 {
+		return 1
+	}
+	keys := common.SortedKeys(m)
+	if number < keys[0] {
+		return 1
+	}
+	for i := len(keys) - 1; i >= 0; i-- {
+		if number >= keys[i] {
+			return m[keys[i]]
+		}
+	}
+	return 1
 }
 
 // Rules is syntactic sugar over Config. It can be used for functions

@@ -40,17 +40,20 @@ func (db ErigonDb) WriteHeader(
 	blockHash common.Hash,
 	stateRoot, txHash, parentHash common.Hash,
 	coinbase common.Address,
-	ts, gasLimit uint64, chainConfig *chain.Config,
+	ts, gasLimit uint64, baseFee *big.Int, chainConfig *chain.Config,
 ) (*ethTypes.Header, error) {
 	parentHeader, err := db.GetHeader(blockNo.Uint64() - 1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get parent header: %w", err)
 	}
 
-	h := &ethTypes.Header{}
+	if baseFee == nil {
+		baseFee = new(big.Int)
+	}
 
+	h := &ethTypes.Header{}
 	if parentHeader != nil {
-		h = core.MakeEmptyHeader(parentHeader, chainConfig, ts, &gasLimit)
+		h = core.MakeEmptyHeaderWithBaseFee(parentHeader, chainConfig, ts, &gasLimit, baseFee)
 	} else {
 		h.Number = blockNo
 	}
@@ -62,10 +65,6 @@ func (db ErigonDb) WriteHeader(
 	h.UncleHash = sha3UncleHash
 	h.Extra = make([]byte, 0)
 	h.Time = ts
-
-	if chainConfig.IsShanghai(ts) {
-		h.WithdrawalsHash = &ethTypes.EmptyRootHash
-	}
 
 	if !chainConfig.IsNormalcy(blockNo.Uint64()) {
 		h.GasLimit = gasLimit

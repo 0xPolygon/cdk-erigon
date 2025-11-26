@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/binary"
+	"math/big"
 
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
@@ -40,8 +41,17 @@ func newL2BlockProto(
 	l1BlockHash libcommon.Hash,
 	minTimestamp uint64,
 	blockInfoRoot libcommon.Hash,
-	allowFreeTxs *bool,
+	baseFee *big.Int,
 ) *types.L2BlockProto {
+	var baseFeeBytes []byte
+	if baseFee != nil {
+		if baseFee.Sign() == 0 {
+			baseFeeBytes = []byte{0}
+		} else {
+			baseFeeBytes = baseFee.Bytes()
+		}
+	}
+
 	return &types.L2BlockProto{
 		L2Block: &datastream.L2Block{
 			Number:          block.NumberU64(),
@@ -56,7 +66,7 @@ func newL2BlockProto(
 			GlobalExitRoot:  ger.Bytes(),
 			Coinbase:        block.Coinbase().Bytes(),
 			BlockInfoRoot:   blockInfoRoot.Bytes(),
-			AllowFreeTxs:    allowFreeTxs,
+			BaseFee:         baseFeeBytes,
 		},
 	}
 }

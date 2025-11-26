@@ -24,7 +24,6 @@ import (
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/math"
 	"github.com/erigontech/erigon-lib/kv"
-	"github.com/erigontech/erigon-lib/log/v3"
 	"github.com/erigontech/erigon/polygon/bor/borcfg"
 
 	"github.com/erigontech/erigon/core/rawdb"
@@ -149,7 +148,6 @@ func CalcBaseFee(config *chain.Config, parent *types.Header) *big.Int {
 func getBaseFeeChangeMultiplier(config *chain.Config, number uint64) *big.Rat {
 	if config != nil {
 		if multiplier := config.GetBaseFeeChangeMultiplier(number); multiplier > 0 {
-			log.Info("getBaseFeeMultiplier:", "block", number, "multiplier", multiplier)
 			return new(big.Rat).SetFloat64(multiplier)
 		}
 	}

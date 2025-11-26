@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -17,7 +18,6 @@ import (
 	"github.com/erigontech/erigon-lib/kv/membatch"
 	"github.com/erigontech/erigon-lib/log/v3"
 
-	"github.com/erigontech/erigon/consensus/misc"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/zk/erigon_db"
 	"github.com/erigontech/erigon/zk/hermez_db"
@@ -296,17 +296,6 @@ func getExecRange(cfg ExecuteBlockCfg, tx kv.RwTx, stageProgress, toBlock uint64
 
 // gets the pre-execute values for a block and sets the previous block hash
 func getPreexecuteValues(cfg ExecuteBlockCfg, ctx context.Context, tx kv.RwTx, blockNum uint64, prevBlockHash common.Hash) (common.Hash, *types.Block, []common.Address, error) {
-	allowFreeTxs := false
-	hermezReader := hermez_db.NewHermezDbReader(tx)
-	if hermezReader != nil {
-		value, err := hermezReader.GetBlockAllowFreeTransactions(blockNum)
-		if err != nil {
-			return common.Hash{}, nil, nil, fmt.Errorf("GetBlockAllowFreeTransactions: %w", err)
-		}
-		allowFreeTxs = value
-	}
-
-	cfg.chainConfig.AllowFreeTransactions = allowFreeTxs
 	preExecuteHeaderHash, err := rawdb.ReadCanonicalHash(tx, blockNum)
 	if err != nil {
 		return common.Hash{}, nil, nil, fmt.Errorf("ReadCanonicalHash: %w", err)
@@ -324,11 +313,10 @@ func getPreexecuteValues(cfg ExecuteBlockCfg, ctx context.Context, tx kv.RwTx, b
 	block.HeaderNoCopy().ParentHash = prevBlockHash
 
 	if cfg.chainConfig.IsLondon(blockNum) {
-		parentHeader, err := cfg.blockReader.Header(ctx, tx, prevBlockHash, blockNum-1)
-		if err != nil {
-			return common.Hash{}, nil, nil, fmt.Errorf("cfg.blockReader.Header: %w", err)
+		if block.HeaderNoCopy().BaseFee == nil {
+			// Light/RPC mode: do not recompute, default to zero if absent
+			block.HeaderNoCopy().BaseFee = new(big.Int)
 		}
-		block.HeaderNoCopy().BaseFee = misc.CalcBaseFeeZk(cfg.chainConfig, parentHeader)
 	}
 
 	return preExecuteHeaderHash, block, senders, nil

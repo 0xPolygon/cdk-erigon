@@ -117,7 +117,9 @@ func TestCalcBaseFeeWithMultiplier(t *testing.T) {
 
 func TestCalcBaseFeeWithFractionMultiplier(t *testing.T) {
 	cfg := config()
-	cfg.BaseFeeChangeMultiplier = floatPtr(0.5)
+	cfg.BaseFeeChangeMultipliers = map[string]float64{
+		"0": 0.5,
+	}
 
 	parent := &types.Header{
 		Number:   big.NewInt(5), // child is block 6
@@ -128,10 +130,6 @@ func TestCalcBaseFeeWithFractionMultiplier(t *testing.T) {
 	if have, want := CalcBaseFeeZk(cfg, parent), big.NewInt(1006250000); have.Cmp(want) != 0 {
 		t.Errorf("have %d  want %d", have, want)
 	}
-}
-
-func floatPtr(v float64) *float64 {
-	return &v
 }
 
 // TestCalcBaseFee assumes all blocks are 1559-blocks

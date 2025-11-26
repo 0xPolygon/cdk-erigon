@@ -385,13 +385,7 @@ func (srv *ZkEVMDataStreamServer) WriteGenesisToStream(
 	batchBookmark := newBatchBookmarkEntryProto(genesis.NumberU64())
 	l2BlockBookmark := newL2BlockBookmarkEntryProto(genesis.NumberU64())
 
-	allowFreeTxs, err := reader.GetBlockAllowFreeTransactions(genesis.NumberU64())
-	if err != nil {
-		return err
-	}
-
-	// always include allow_free_txs for genesis explicitly
-	l2Block := newL2BlockProto(genesis, genesis.Hash().Bytes(), batchNo, ger, 0, 0, common.Hash{}, 0, common.Hash{}, &allowFreeTxs)
+	l2Block := newL2BlockProto(genesis, genesis.Hash().Bytes(), batchNo, ger, 0, 0, common.Hash{}, 0, common.Hash{}, genesis.BaseFee())
 	l2BlockEnd := newL2BlockEndProto(0)
 	batchStart := newBatchStartProto(batchNo, srv.chainId, GenesisForkId, datastream.BatchType_BATCH_TYPE_REGULAR)
 
