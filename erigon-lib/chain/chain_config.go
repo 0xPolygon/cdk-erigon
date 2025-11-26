@@ -24,6 +24,7 @@ import (
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/common/fixedgas"
+	"github.com/erigontech/erigon-lib/log/v3"
 )
 
 // this needs to always be in descending order
@@ -87,6 +88,10 @@ type Config struct {
 	// Optional EIP-4844 parameters (see also EIP-7691 & EIP-7840)
 	MinBlobGasPrice *uint64       `json:"minBlobGasPrice,omitempty"`
 	BlobSchedule    *BlobSchedule `json:"blobSchedule,omitempty"`
+	// BaseFeeChangeMultiplier scales the EIP-1559 base fee delta. Default is 1.
+	BaseFeeChangeMultiplier *float64 `json:"baseFeeChangeMultiplier,omitempty"`
+	// BaseFeeChangeMultipliers provides forkable multipliers keyed by block number.
+	BaseFeeChangeMultipliers map[string]float64 `json:"baseFeeChangeMultipliers,omitempty"`
 
 	// (Optional) governance contract where EIP-1559 fees will be sent to, which otherwise would be burnt since the London fork.
 	// A key corresponds to the block number, starting from which the fees are sent to the address (map value).
@@ -382,6 +387,22 @@ func (c *Config) GetMinBlobGasPrice() uint64 {
 		return *c.MinBlobGasPrice
 	}
 	return 1 // MIN_BLOB_GASPRICE (EIP-4844)
+}
+
+// GetBaseFeeChangeMultiplier returns the multiplier effective at the given block.
+// Order of precedence:
+//  1. BaseFeeChangeMultipliers map (forkable)
+//  2. BaseFeeChangeMultiplier (single value)
+//  3. Default of 1
+func (c *Config) GetBaseFeeChangeMultiplier(number uint64) float64 {
+	if c != nil && len(c.BaseFeeChangeMultipliers) > 0 {
+		return borKeyValueConfigHelperFloat(c.BaseFeeChangeMultipliers, number)
+	}
+	if c != nil && c.BaseFeeChangeMultiplier != nil {
+		return *c.BaseFeeChangeMultiplier
+	}
+	log.Info("Default base fee multiplier ONE", "value", 1)
+	return 1
 }
 
 func (c *Config) GetMaxBlobGasPerBlock(t uint64) uint64 {
@@ -690,6 +711,27 @@ func (c *CliqueConfig) String() string {
 
 func borKeyValueConfigHelper[T uint64 | common.Address](field map[string]T, number uint64) T {
 	fieldUint := make(map[uint64]T)
+	for k, v := range field {
+		keyUint, err := strconv.ParseUint(k, 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		fieldUint[keyUint] = v
+	}
+
+	keys := common.SortedKeys(fieldUint)
+
+	for i := 0; i < len(keys)-1; i++ {
+		if number >= keys[i] && number < keys[i+1] {
+			return fieldUint[keys[i]]
+		}
+	}
+
+	return fieldUint[keys[len(keys)-1]]
+}
+
+func borKeyValueConfigHelperFloat(field map[string]float64, number uint64) float64 {
+	fieldUint := make(map[uint64]float64)
 	for k, v := range field {
 		keyUint, err := strconv.ParseUint(k, 10, 64)
 		if err != nil {
