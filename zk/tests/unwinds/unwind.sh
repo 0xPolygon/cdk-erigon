@@ -127,6 +127,7 @@ different_files=(
     "CallToIndex.txt"
     "bad_tx_hashes_lookup.txt"
     "DbInfo.txt"
+    "block_precise_timestamps.txt"
 )
 
 is_in_array() {
