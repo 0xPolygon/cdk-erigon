@@ -21,7 +21,7 @@ RPC_LOG="$(pwd)/e2e-basefee/rpc.log"
 DATASTREAM_PORT=7003
 TORRENT_PORT=7005
 DIAG_PORT=7010
-AUTHRPC_PORT=8551
+AUTHRPC_PORT=8552
 PRIVATE_API_ADDR="127.0.0.1:8558"
 
 if [[ ! -f "$CONFIG_YAML" ]]; then
@@ -103,6 +103,7 @@ start_rpc() {
     --private.api.addr="$PRIVATE_API_ADDR"
     --zkevm.l2-sequencer-rpc-url="$SEQ_RPC_URL"
     --zkevm.l2-datastreamer-url="0.0.0.0:7003"
+    --ws=false
   )
   echo "[start_rpc] args: ${args[*]}" >&2
   "$BIN" "${args[@]}" >"$RPC_LOG" 2>&1 &

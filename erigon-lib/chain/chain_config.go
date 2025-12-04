@@ -725,7 +725,7 @@ func (c *CliqueConfig) String() string {
 }
 
 func borKeyValueConfigHelper[T uint64 | common.Address](field map[string]T, number uint64) T {
-	fieldUint := make(map[uint64]T)
+	fieldUint := make(map[uint64]T, len(field))
 	for k, v := range field {
 		keyUint, err := strconv.ParseUint(k, 10, 64)
 		if err != nil {
@@ -746,7 +746,7 @@ func borKeyValueConfigHelper[T uint64 | common.Address](field map[string]T, numb
 }
 
 func borKeyValueConfigHelperFloat(field map[string]float64, number uint64) float64 {
-	fieldUint := make(map[uint64]float64)
+	fieldUint := make(map[uint64]float64, len(field))
 	for k, v := range field {
 		keyUint, err := strconv.ParseUint(k, 10, 64)
 		if err != nil {
@@ -774,7 +774,7 @@ func baseFeeMultipliersIncompatible(oldMap, newMap map[string]float64, head uint
 	oldParsed := parseMultiplierMap(oldMap)
 	newParsed := parseMultiplierMap(newMap)
 
-	keysSet := make(map[uint64]struct{})
+	keysSet := make(map[uint64]struct{}, len(oldParsed)+len(newParsed)+1)
 	for k := range oldParsed {
 		if k <= head {
 			keysSet[k] = struct{}{}

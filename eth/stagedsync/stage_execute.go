@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"runtime"
 	"time"
@@ -36,6 +35,7 @@ import (
 	"github.com/erigontech/erigon-lib/wrap"
 	"github.com/erigontech/erigon/common/changeset"
 	"github.com/erigontech/erigon/consensus"
+	"github.com/erigontech/erigon/consensus/misc"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/erigontech/erigon/core/state"
@@ -515,8 +515,12 @@ Loop:
 
 		if cfg.chainConfig.IsLondon(blockNum) {
 			if header.BaseFee == nil {
-				// Light/RPC mode: do not recompute, default to zero if absent
-				header.BaseFee = new(big.Int)
+				// Old datastream did not send basefee, calculate it
+				parentHeader, err := cfg.blockReader.Header(ctx, txc.Tx, header.ParentHash, blockNum-1)
+				if err != nil {
+					return err
+				}
+				header.BaseFee = misc.CalcBaseFeeZk(cfg.chainConfig, parentHeader)
 			}
 		}
 

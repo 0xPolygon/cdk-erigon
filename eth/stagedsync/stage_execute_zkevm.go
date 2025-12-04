@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/c2h5oh/datasize"
@@ -18,6 +17,7 @@ import (
 	"github.com/erigontech/erigon-lib/kv/membatch"
 	"github.com/erigontech/erigon-lib/log/v3"
 
+	"github.com/erigontech/erigon/consensus/misc"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/zk/erigon_db"
 	"github.com/erigontech/erigon/zk/hermez_db"
@@ -314,8 +314,12 @@ func getPreexecuteValues(cfg ExecuteBlockCfg, ctx context.Context, tx kv.RwTx, b
 
 	if cfg.chainConfig.IsLondon(blockNum) {
 		if block.HeaderNoCopy().BaseFee == nil {
-			// Light/RPC mode: do not recompute, default to zero if absent
-			block.HeaderNoCopy().BaseFee = new(big.Int)
+			// Old datastream did not send basefee, calculate it
+			parentHeader, err := cfg.blockReader.Header(ctx, tx, prevBlockHash, blockNum-1)
+			if err != nil {
+				return common.Hash{}, nil, nil, fmt.Errorf("cfg.blockReader.Header: %w", err)
+			}
+			block.HeaderNoCopy().BaseFee = misc.CalcBaseFeeZk(cfg.chainConfig, parentHeader)
 		}
 	}
 

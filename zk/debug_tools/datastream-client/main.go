@@ -70,8 +70,12 @@ func processEntry(entry interface{}) {
 	case *types.BatchEnd:
 		fmt.Printf("Batch End: Number=%d, StateRoot=%x\n", e.Number, e.StateRoot)
 	case *types.FullL2Block:
-		fmt.Printf("Block: Number=%d, Hash=%x, Batch=%d\n",
-			e.L2BlockNumber, e.L2Blockhash, e.BatchNumber)
+		baseFee := "nil"
+		if e.BaseFee != nil {
+			baseFee = e.BaseFee.String()
+		}
+		fmt.Printf("Block: Number=%d, Hash=%x, Batch=%d\n, BaseFee=%s\n",
+			e.L2BlockNumber, e.L2Blockhash, e.BatchNumber, baseFee)
 	case *types.GerUpdate:
 		fmt.Printf("GER Update: Batch=%d, GER=%x\n",
 			e.BatchNumber, e.GlobalExitRoot)
