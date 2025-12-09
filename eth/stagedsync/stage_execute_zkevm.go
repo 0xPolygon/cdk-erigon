@@ -313,12 +313,12 @@ func getPreexecuteValues(cfg ExecuteBlockCfg, ctx context.Context, tx kv.RwTx, b
 	block.HeaderNoCopy().ParentHash = prevBlockHash
 
 	if cfg.chainConfig.IsLondon(blockNum) {
-		if block.HeaderNoCopy().BaseFee == nil {
-			// Old datastream did not send basefee, calculate it
-			parentHeader, err := cfg.blockReader.Header(ctx, tx, prevBlockHash, blockNum-1)
-			if err != nil {
-				return common.Hash{}, nil, nil, fmt.Errorf("cfg.blockReader.Header: %w", err)
-			}
+		parentHeader, err := cfg.blockReader.Header(ctx, tx, prevBlockHash, blockNum-1)
+		if err != nil {
+			return common.Hash{}, nil, nil, fmt.Errorf("cfg.blockReader.Header: %w", err)
+		}
+		if block.HeaderNoCopy().BaseFee.Cmp(misc.RecomputeBaseFeeSentinel) == 0 {
+			// Sentinel set at ingest: recompute now using real parent gasUsed
 			block.HeaderNoCopy().BaseFee = misc.CalcBaseFeeZk(cfg.chainConfig, parentHeader)
 		}
 	}

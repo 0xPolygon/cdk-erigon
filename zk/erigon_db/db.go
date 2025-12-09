@@ -8,6 +8,7 @@ import (
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
 
+	"github.com/erigontech/erigon/consensus/misc"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
 	ethTypes "github.com/erigontech/erigon/core/types"
@@ -50,7 +51,8 @@ func (db ErigonDb) WriteHeader(
 	h := &ethTypes.Header{}
 	if parentHeader != nil {
 		if baseFee == nil {
-			h = core.MakeEmptyHeader(parentHeader, chainConfig, ts, &gasLimit)
+			// Mark basefee for recomputation during execution; avoid computing with parent.GasUsed=0 here.
+			h = core.MakeEmptyHeaderWithBaseFee(parentHeader, chainConfig, ts, &gasLimit, misc.RecomputeBaseFeeSentinel)
 		} else {
 			h = core.MakeEmptyHeaderWithBaseFee(parentHeader, chainConfig, ts, &gasLimit, baseFee)
 		}

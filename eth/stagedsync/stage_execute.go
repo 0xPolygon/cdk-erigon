@@ -514,12 +514,13 @@ Loop:
 		}
 
 		if cfg.chainConfig.IsLondon(blockNum) {
-			if header.BaseFee == nil {
-				// Old datastream did not send basefee, calculate it
-				parentHeader, err := cfg.blockReader.Header(ctx, txc.Tx, header.ParentHash, blockNum-1)
-				if err != nil {
-					return err
-				}
+			parentHeader, err := cfg.blockReader.Header(ctx, txc.Tx, header.ParentHash, blockNum-1)
+			if err != nil {
+				return err
+			}
+
+			if header.BaseFee.Cmp(misc.RecomputeBaseFeeSentinel) == 0 {
+				// Sentinel set at ingest: recompute now using real parent gasUsed
 				header.BaseFee = misc.CalcBaseFeeZk(cfg.chainConfig, parentHeader)
 			}
 		}
