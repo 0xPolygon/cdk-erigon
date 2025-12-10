@@ -2,13 +2,19 @@ name: Unwinds tests type-1 PMT
 on:
   pull_request:
     branches:
-      - project/pp2
+      - zkevm
+      - zkevm-2.60
+      - stable/**
+      - project/**
+      - release/**
   workflow_dispatch:
 
 jobs:
   unwind-tests-type-1:
     runs-on: ubuntu-22.04
-
+    env:
+      # Dummy key used for testing purposes only
+      PRIVATE_KEY: "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625"
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4
@@ -18,13 +24,16 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: '1.25'
-          
+
       - name: Set Go toolchain
         run: go env -w GOTOOLCHAIN=go1.25.0+auto
 
       - name: Install dependencies on Linux
         if: runner.os == 'Linux'
         run: sudo apt update && sudo apt install -y build-essential lsof
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Build
         run: |
@@ -43,10 +52,4 @@ jobs:
         run: |
           cd ./cdk-erigon
           chmod +x ./zk/tests/unwinds/unwind.sh
-          dsDir=dynamic-integration8-normalcy-pmt-prague
-          dsFile=dynamic-integration8-normalcy-pmt-prague.tar.gz
-          firstStop=678
-          secondStop=1000
-          unwindToBatch=18
-          smtV2Only=false
-          ./zk/tests/unwinds/unwind.sh $dsDir $dsFile $firstStop $secondStop $unwindToBatch $smtV2Only
+          ./zk/tests/unwinds/unwind.sh

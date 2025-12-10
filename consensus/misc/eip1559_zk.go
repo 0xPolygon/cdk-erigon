@@ -34,3 +34,8 @@ func CalcBaseFeeZk(config *chain.Config, parent *types.Header) *big.Int {
 
 	return CalcBaseFee(config, parent)
 }
+
+// RecomputeBaseFeeSentinel is a special value used to mark headers whose basefee
+// must be recomputed at execution time (e.g. when datastream did not provide it).
+// We use uint256 max as a sentinel; realistic basefees will never reach it.
+var RecomputeBaseFeeSentinel = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))

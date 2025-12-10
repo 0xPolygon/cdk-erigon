@@ -578,7 +578,7 @@ func CalcHashRootForTests(tx kv.RwTx, header *types.Header, histV4 bool) (hashRo
 	}
 }
 
-func MakeEmptyHeader(parent *types.Header, chainConfig *chain.Config, timestamp uint64, targetGasLimit *uint64) *types.Header {
+func makeEmptyHeader(parent *types.Header, chainConfig *chain.Config, timestamp uint64, targetGasLimit *uint64, baseFee *big.Int) *types.Header {
 	header := types.NewEmptyHeaderForAssembling()
 	header.Root = parent.Root
 	header.ParentHash = parent.Hash()
@@ -589,7 +589,7 @@ func MakeEmptyHeader(parent *types.Header, chainConfig *chain.Config, timestamp 
 	parentGasLimit := parent.GasLimit
 	// Set baseFee and GasLimit if we are on an EIP-1559 chain
 	if chainConfig.IsLondon(header.Number.Uint64()) {
-		header.BaseFee = misc.CalcBaseFeeZk(chainConfig, parent)
+		header.BaseFee = baseFee
 		if !chainConfig.IsLondon(parent.Number.Uint64()) {
 			parentGasLimit = parent.GasLimit * params.ElasticityMultiplier
 		}
@@ -600,6 +600,10 @@ func MakeEmptyHeader(parent *types.Header, chainConfig *chain.Config, timestamp 
 		header.GasLimit = parentGasLimit
 	}
 
+	if chainConfig.IsShanghai(header.Time) {
+		header.WithdrawalsHash = &types.EmptyRootHash
+	}
+
 	if chainConfig.IsCancun(header.Time) {
 		excessBlobGas := misc.CalcExcessBlobGas(chainConfig, parent, header.Time)
 		header.ExcessBlobGas = &excessBlobGas
@@ -607,6 +611,14 @@ func MakeEmptyHeader(parent *types.Header, chainConfig *chain.Config, timestamp 
 	}
 
 	return header
+}
+
+func MakeEmptyHeader(parent *types.Header, chainConfig *chain.Config, timestamp uint64, targetGasLimit *uint64) *types.Header {
+	return makeEmptyHeader(parent, chainConfig, timestamp, targetGasLimit, misc.CalcBaseFeeZk(chainConfig, parent))
+}
+
+func MakeEmptyHeaderWithBaseFee(parent *types.Header, chainConfig *chain.Config, timestamp uint64, targetGasLimit *uint64, baseFee *big.Int) *types.Header {
+	return makeEmptyHeader(parent, chainConfig, timestamp, targetGasLimit, baseFee)
 }
 
 func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.IntraBlockState, engine consensus.Engine) *types.Header {

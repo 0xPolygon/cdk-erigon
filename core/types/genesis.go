@@ -75,12 +75,13 @@ type Genesis struct {
 // GenesisOverrides allows to override the hard fork switch-over blocks and times.
 // Used in L2 chains where eth hard forks are enabled after a genesis that fully disabled them.
 type GenesisOverrides struct {
-	OverridePragueTime      *big.Int `toml:",omitempty"`
-	OverrideCancunTime      *big.Int `toml:",omitempty"`
-	OverrideNormalcyBlock   *big.Int `toml:",omitempty"`
-	OverrideLondonBlock     *big.Int `toml:",omitempty"`
-	OverrideShanghaiTime    *big.Int `toml:",omitempty"`
-	OverridePmtEnabledBlock *big.Int `toml:",omitempty"`
+	OverridePragueTime         *big.Int           `toml:",omitempty"`
+	OverrideCancunTime         *big.Int           `toml:",omitempty"`
+	OverrideNormalcyBlock      *big.Int           `toml:",omitempty"`
+	OverrideLondonBlock        *big.Int           `toml:",omitempty"`
+	OverrideShanghaiTime       *big.Int           `toml:",omitempty"`
+	OverridePmtEnabledBlock    *big.Int           `toml:",omitempty"`
+	OverrideBaseFeeMultipliers map[string]float64 `toml:",omitempty"`
 }
 
 type AuRaSeal struct {

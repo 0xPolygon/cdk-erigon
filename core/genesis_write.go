@@ -122,6 +122,9 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrides *types.Gene
 			if overrides.OverridePmtEnabledBlock != nil {
 				config.PmtEnabledBlock = overrides.OverridePmtEnabledBlock
 			}
+			if overrides.OverrideBaseFeeMultipliers != nil {
+				config.BaseFeeChangeMultipliers = overrides.OverrideBaseFeeMultipliers
+			}
 		}
 	}
 
@@ -196,6 +199,7 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrides *types.Gene
 		newCfg = storedCfg
 		applyOverrides(newCfg)
 	}
+
 	// Check config compatibility and write the config. Compatibility errors
 	// are returned to the caller unless we're already at block zero.
 	height := rawdb.ReadHeaderNumber(tx, rawdb.ReadHeadHeaderHash(tx))

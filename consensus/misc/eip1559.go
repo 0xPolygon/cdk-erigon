@@ -106,9 +106,11 @@ func CalcBaseFee(config *chain.Config, parent *types.Header) *big.Int {
 	}
 
 	var (
+		childNumber              = parent.Number.Uint64() + 1
 		parentGasTarget          = parent.GasLimit / params.ElasticityMultiplier
 		parentGasTargetBig       = new(big.Int).SetUint64(parentGasTarget)
 		baseFeeChangeDenominator = new(big.Int).SetUint64(getBaseFeeChangeDenominator(config.Bor, parent.Number.Uint64()))
+		baseFeeChangeMultiplier  = getBaseFeeChangeMultiplier(config, childNumber)
 	)
 	// If the parent gasUsed is the same as the target, the baseFee remains unchanged.
 	if parent.GasUsed == parentGasTarget {
@@ -124,6 +126,8 @@ func CalcBaseFee(config *chain.Config, parent *types.Header) *big.Int {
 			common.Big1,
 		)
 
+		baseFeeDelta = applyBaseFeeMultiplier(baseFeeDelta, baseFeeChangeMultiplier, true /*enforceMinOne*/)
+
 		return x.Add(parent.BaseFee, baseFeeDelta)
 	} else {
 		// Otherwise if the parent block used less gas than its target, the baseFee should decrease.
@@ -132,11 +136,40 @@ func CalcBaseFee(config *chain.Config, parent *types.Header) *big.Int {
 		y := x.Div(x, parentGasTargetBig)
 		baseFeeDelta := x.Div(y, baseFeeChangeDenominator)
 
+		baseFeeDelta = applyBaseFeeMultiplier(baseFeeDelta, baseFeeChangeMultiplier, false /*enforceMinOne*/)
+
 		return math.BigMax(
 			x.Sub(parent.BaseFee, baseFeeDelta),
 			common.Big0,
 		)
 	}
+}
+
+func getBaseFeeChangeMultiplier(config *chain.Config, number uint64) *big.Rat {
+	if config != nil {
+		if multiplier := config.GetBaseFeeChangeMultiplier(number); multiplier > 0 {
+			return new(big.Rat).SetFloat64(multiplier)
+		}
+	}
+	return new(big.Rat).SetInt64(1)
+}
+
+func applyBaseFeeMultiplier(delta *big.Int, multiplier *big.Rat, enforceMinOne bool) *big.Int {
+	if delta == nil {
+		return nil
+	}
+	if multiplier == nil {
+		return delta
+	}
+
+	num := new(big.Int).Mul(delta, multiplier.Num())
+	res := num.Quo(num, multiplier.Denom())
+
+	if enforceMinOne && res.Sign() == 0 && multiplier.Sign() > 0 {
+		return common.Big1
+	}
+
+	return res
 }
 
 func getBaseFeeChangeDenominator(borConfig chain.BorConfig, number uint64) uint64 {

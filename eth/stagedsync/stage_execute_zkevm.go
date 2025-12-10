@@ -317,7 +317,10 @@ func getPreexecuteValues(cfg ExecuteBlockCfg, ctx context.Context, tx kv.RwTx, b
 		if err != nil {
 			return common.Hash{}, nil, nil, fmt.Errorf("cfg.blockReader.Header: %w", err)
 		}
-		block.HeaderNoCopy().BaseFee = misc.CalcBaseFeeZk(cfg.chainConfig, parentHeader)
+		if block.HeaderNoCopy().BaseFee.Cmp(misc.RecomputeBaseFeeSentinel) == 0 {
+			// Sentinel set at ingest: recompute now using real parent gasUsed
+			block.HeaderNoCopy().BaseFee = misc.CalcBaseFeeZk(cfg.chainConfig, parentHeader)
+		}
 	}
 
 	return preExecuteHeaderHash, block, senders, nil
