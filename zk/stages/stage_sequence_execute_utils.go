@@ -31,8 +31,8 @@ import (
 	"github.com/erigontech/erigon/zk/datastream/server"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
-	verifier "github.com/erigontech/erigon/zk/legacy_executor_verifier"
 	"github.com/erigontech/erigon/zk/sequencer"
+	verifier "github.com/erigontech/erigon/zk/legacy_executor_verifier"
 	zktx "github.com/erigontech/erigon/zk/tx"
 	"github.com/erigontech/erigon/zk/txpool"
 	zktypes "github.com/erigontech/erigon/zk/types"
@@ -100,6 +100,7 @@ type SequenceBlockCfg struct {
 	doneHook       DoneHook
 
 	txYielder TxYielder
+	depositYielder *sequencer.DepositTransactionYielder
 }
 
 func StageSequenceBlocksCfg(
@@ -132,7 +133,8 @@ func StageSequenceBlocksCfg(
 	yieldSize uint16,
 	infoTreeUpdater *l1infotree.Updater,
 	doneHook DoneHook,
-	txYielder *sequencer.PoolTransactionYielder,
+	txYielder TxYielder,
+	depositYielder *sequencer.DepositTransactionYielder,
 ) SequenceBlockCfg {
 
 	decodedTxCache := expirable.NewLRU[common.Hash, *types.Transaction](zk.SequencerDecodedTxCacheSize, nil, zk.SequencerDecodedTxCacheTTL)
@@ -167,6 +169,7 @@ func StageSequenceBlocksCfg(
 		decodedTxCache:   decodedTxCache,
 		doneHook:         doneHook,
 		txYielder:        txYielder,
+		depositYielder:   depositYielder,
 	}
 }
 

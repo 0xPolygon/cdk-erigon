@@ -119,6 +119,10 @@ func UnwindSequenceExecutionStageDbWrites(ctx context.Context, u *stagedsync.Unw
 		return fmt.Errorf("truncate block l1 block hash error: %v", err)
 	}
 	// only seq
+	if err := hermezDb.DeleteBlockDepositL1BlockNumbers(u.UnwindPoint+1, s.BlockNumber); err != nil {
+		return fmt.Errorf("truncate block deposit l1 block number error: %v", err)
+	}
+	// only seq
 	if err := hermezDb.DeleteBlockL1InfoTreeIndexes(u.UnwindPoint+1, s.BlockNumber); err != nil {
 		return fmt.Errorf("truncate block l1 info tree index error: %v", err)
 	}

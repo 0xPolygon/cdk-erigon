@@ -53,6 +53,7 @@ const (
 	DynamicFeeTxType
 	BlobTxType
 	SetCodeTxType
+	DepositTxType
 )
 
 // Transaction is an Ethereum transaction.
@@ -195,6 +196,8 @@ func UnmarshalTransactionFromBinary(data []byte, blobTxnsAreWrappedWithBlobs boo
 		}
 	case SetCodeTxType:
 		t = &SetCodeTransaction{}
+	case DepositTxType:
+		t = &DepositTx{}
 	default:
 		if data[0] >= 0x80 {
 			// Tx is type legacy which is RLP encoded

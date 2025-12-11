@@ -26,6 +26,7 @@ import (
 func handleStateForNewBlockStarting(
 	batchContext *BatchContext,
 	ibs *state.IntraBlockState,
+	batchState *BatchState,
 	blockNumber uint64,
 	batchNumber uint64,
 	timestamp uint64,
@@ -37,6 +38,16 @@ func handleStateForNewBlockStarting(
 	hermezDb := batchContext.sdb.hermezDb
 
 	ibs.PreExecuteStateSet(chainConfig, blockNumber, timestamp, stateRoot)
+
+	// If the batch state carries an L1 origin for deposits, persist it to the DB
+	// so datastream/RPC can reconstruct the origin deterministically.
+	if batchState != nil {
+		if origin := batchState.DepositOrigin(); origin != (common.Hash{}) {
+			if err := hermezDb.WriteBlockL1BlockHash(blockNumber, origin); err != nil {
+				return err
+			}
+		}
+	}
 
 	// handle writing to the ger manager contract but only if the index is above 0
 	// block 1 is a special case as it's the injected batch, so we always need to check the GER/L1 block hash

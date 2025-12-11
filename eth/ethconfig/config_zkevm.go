@@ -28,6 +28,7 @@ type Zk struct {
 	AddressRollup                          common.Address
 	AddressZkevm                           common.Address
 	AddressGerManager                      common.Address
+	DepositContractAddress                 common.Address
 	L1ContractAddressCheck                 bool
 	L1ContractAddressRetrieve              bool
 	L1RollupId                             uint64

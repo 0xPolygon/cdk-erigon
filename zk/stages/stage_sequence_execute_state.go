@@ -44,6 +44,7 @@ type BatchState struct {
 	batchNumber                   uint64
 	hasExecutorForThisBatch       bool
 	hasAnyTransactionsInThisBatch bool
+	depositL1Origin               common.Hash
 	builtBlocks                   []uint64
 	yieldedTransactions           mapset.Set[[32]byte]
 	blockState                    *BlockState
@@ -182,6 +183,16 @@ func (bs *BatchState) newOverflowTransaction() {
 
 func (bs *BatchState) reachedOverflowTransactionLimit() bool {
 	return bs.overflowTransactions >= maximumOverflowTransactionAttempts
+}
+
+// SetDepositOrigin records the L1 block hash to associate with the current L2 block for deposits.
+func (bs *BatchState) SetDepositOrigin(origin common.Hash) {
+	bs.depositL1Origin = origin
+}
+
+// DepositOrigin returns the configured deposit L1 block hash (zero if unset).
+func (bs *BatchState) DepositOrigin() common.Hash {
+	return bs.depositL1Origin
 }
 
 // TYPE BATCH L1 RECOVERY DATA

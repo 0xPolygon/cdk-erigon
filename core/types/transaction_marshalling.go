@@ -46,6 +46,11 @@ type txJSON struct {
 	Commitments BlobKzgs  `json:"commitments,omitempty"`
 	Proofs      KZGProofs `json:"proofs,omitempty"`
 
+	// Deposit transaction fields:
+	SourceHash *libcommon.Hash `json:"sourceHash,omitempty"`
+	Mint       *hexutil.Big    `json:"mint,omitempty"`
+	IsSystemTx *bool           `json:"isSystemTx,omitempty"`
+
 	// Only used for encoding:
 	Hash libcommon.Hash `json:"hash"`
 }
@@ -193,6 +198,25 @@ func (tx *BlobTxWrapper) MarshalJSON() ([]byte, error) {
 	return json.Marshal(enc)
 }
 
+func (tx *DepositTx) MarshalJSON() ([]byte, error) {
+	var enc txJSON
+	enc.Hash = tx.Hash()
+	enc.Type = hexutil.Uint64(tx.Type())
+	enc.SourceHash = &tx.SourceHash
+	enc.Nonce = nil
+	enc.Gas = (*hexutil.Uint64)(&tx.Gas)
+	enc.GasPrice = (*hexutil.Big)(tx.gasPrice.ToBig())
+	enc.FeeCap = (*hexutil.Big)(tx.feeCap.ToBig())
+	enc.Tip = (*hexutil.Big)(tx.tip.ToBig())
+	enc.Value = (*hexutil.Big)(tx.Value.ToBig())
+	enc.Data = (*hexutility.Bytes)(&tx.Data)
+	enc.To = tx.To
+	enc.Mint = (*hexutil.Big)(tx.Mint.ToBig())
+	isSystem := true
+	enc.IsSystemTx = &isSystem
+	return json.Marshal(&enc)
+}
+
 func UnmarshalTransactionFromJSON(input []byte) (Transaction, error) {
 	var p fastjson.Parser
 	v, err := p.ParseBytes(input)
@@ -238,6 +262,8 @@ func UnmarshalTransactionFromJSON(input []byte) (Transaction, error) {
 			return nil, err
 		}
 		return tx, nil
+	case DepositTxType:
+		return nil, errors.New("deposit transactions cannot be submitted via JSON")
 	default:
 		return nil, fmt.Errorf("unknown transaction type: %v", txType)
 	}

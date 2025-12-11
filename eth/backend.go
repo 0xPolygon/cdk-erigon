@@ -128,6 +128,7 @@ import (
 	"github.com/erigontech/erigon/zk/contracts"
 	"github.com/erigontech/erigon/zk/datastream/client"
 	"github.com/erigontech/erigon/zk/datastream/server"
+	"github.com/erigontech/erigon/zk/deposits"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	"github.com/erigontech/erigon/zk/legacy_executor_verifier"
@@ -226,6 +227,8 @@ type Ethereum struct {
 	// zk
 	streamServer    server.StreamServer
 	l1Syncer        *syncer.L1Syncer
+	depositSyncer   *syncer.L1Syncer
+	depositCache    *deposits.Cache
 	etherManClients []*etherman.Client
 
 	preStartTasks *PreStartTasks
@@ -1078,6 +1081,41 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			ethermanClients[i] = c.EthClient
 		}
 
+		// Optional deposit log syncer (Optimism-style TransactionDeposited events)
+		if (cfg.Zk.DepositContractAddress != libcommon.Address{}) {
+			depositTopic := deposits.DepositEventABIHash
+			backend.depositCache = deposits.NewCache()
+			backend.depositSyncer = syncer.NewL1Syncer(
+				ctx,
+				ethermanClients,
+				[]libcommon.Address{cfg.Zk.DepositContractAddress},
+				[][]libcommon.Hash{{depositTopic}},
+				cfg.L1BlockRange,
+				cfg.L1QueryDelay,
+				cfg.L1HighestBlockType,
+				cfg.Zk.L1FirstBlock,
+			)
+			backend.depositSyncer.RunQueryBlocks(cfg.Zk.L1FirstBlock)
+			go func() {
+				event := backend.depositSyncer.GetLogsChan(syncer.LogsModeOnCompletion)
+				for logs := range event.Logs {
+					if logs == nil {
+						continue
+					}
+					var deps []*deposits.Deposit
+					for i := range logs {
+						dep, err := deposits.UnmarshalDepositLog(&logs[i])
+						if err != nil {
+							log.Warn("failed to parse deposit log", "err", err, "tx", logs[i].TxHash.String(), "idx", logs[i].Index)
+							continue
+						}
+						deps = append(deps, dep)
+					}
+					backend.depositCache.AddDeposits(deps)
+				}
+			}()
+		}
+
 		seqVerSyncer := syncer.NewL1Syncer(
 			ctx,
 			ethermanClients,
@@ -1190,7 +1228,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			yieldSize := uint16(cfg.YieldSize)
 
-			txYielder := sequencer.NewPoolTransactionYielder(
+			poolYielder := sequencer.NewPoolTransactionYielder(
 				ctx,
 				*cfg.Zk,
 				backend.txPool2,
@@ -1198,6 +1236,10 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				backend.txPool2DB,
 				decodedTxCache,
 			)
+			var depYielder *sequencer.DepositTransactionYielder
+			if backend.depositCache != nil {
+				depYielder = sequencer.NewDepositTransactionYielder(backend.depositCache)
+			}
 
 			backend.syncStages = stages2.NewSequencerZkStages(
 				backend.sentryCtx,
@@ -1219,7 +1261,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				verifier,
 				l1InfoTreeUpdater,
 				hook,
-				txYielder,
+				poolYielder,
+				depYielder,
 			)
 
 			backend.syncUnwindOrder = zkStages.ZkSequencerUnwindOrder
