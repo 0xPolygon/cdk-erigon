@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/bits"
+	"runtime"
 	"slices"
 	"sync/atomic"
 
@@ -134,9 +135,7 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 		}
 
 		if to > s.BlockNumber {
-			unwindTo := (to + s.BlockNumber) / 2 // Binary search for the correct block, biased to the lower numbers
-			logger.Warn("Unwinding due to incorrect root hash", "to", unwindTo)
-			u.UnwindTo(unwindTo, BadBlock(headerHash, fmt.Errorf("incorrect root hash")))
+			panic(fmt.Sprintf("[%s] Wrong trie root of block %d: %x, expected (from header): %x. Block hash: %x", logPrefix, to, root, expectedRootHash, headerHash))
 		}
 	} else if err = s.Update(tx, to); err != nil {
 		return trie.EmptyRoot, err
@@ -598,6 +597,11 @@ func IncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, to
 			return trie.EmptyRoot, err
 		}
 	}
+
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	logger.Info(fmt.Sprintf("[%s] [SR-DEBUG] PMT Increment intermediate hashes finished promotion", logPrefix), "retainListSize", rl.Len(), "allocMB", memStats.Alloc/1024/1024, "headAllocMB", memStats.HeapAlloc/1024/1024, "heapObjects", memStats.HeapObjects, "numGC", memStats.NumGC)
+
 	accTrieCollector := etl.NewCollector(logPrefix, cfg.tmpDir, etl.NewSortableBuffer(etl.BufferOptimalSize), logger)
 	defer accTrieCollector.Close()
 	accTrieCollectorFunc := accountTrieCollector(accTrieCollector)
@@ -607,6 +611,7 @@ func IncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, to
 	stTrieCollectorFunc := storageTrieCollector(stTrieCollector)
 
 	loader := trie.NewFlatDBTrieLoader(logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false)
+
 	hash, err := loader.CalcTrieRoot(db, quit)
 	if err != nil {
 		return trie.EmptyRoot, err
