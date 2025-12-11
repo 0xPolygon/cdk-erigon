@@ -2,6 +2,7 @@ package state
 
 import (
 	"errors"
+	"github.com/erigontech/erigon-lib/log/v3"
 
 	"github.com/erigontech/erigon-lib/chain"
 	libcommon "github.com/erigontech/erigon-lib/common"
@@ -135,6 +136,7 @@ func (sdb *IntraBlockState) SyncerPreExecuteStateSet(
 		//save ger with l1blockhash - but only in the case that the l1 info tree index hasn't been
 		// re-used.  If it has been re-used we never write this to the contract storage
 		if !reUsedL1InfoTreeIndex && blockGer != nil && *blockGer != emptyHash {
+			log.Info("[Pre-Execute] [SR-DEBUG] Writing Global Exit Root L1 block hash to state DB", "ger", blockGer.String(), "l1BlockHash", l1BlockHash.String())
 			sdb.WriteGerManagerL1BlockHash(chainConfig, blockNumber, *blockGer, *l1BlockHash)
 		}
 	} else {
@@ -148,6 +150,7 @@ func (sdb *IntraBlockState) SyncerPreExecuteStateSet(
 
 		for _, ger := range *gerUpdates {
 			//save ger
+			log.Info("[Pre-Execute] [SR-DEBUG] Writing Global Exit Root timestamp to state DB", "ger", ger.GlobalExitRoot.String(), "timestamp", ger.Timestamp)
 			sdb.WriteGlobalExitRootTimestamp(ger.GlobalExitRoot, ger.Timestamp)
 		}
 

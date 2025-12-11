@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/erigontech/erigon/consensus/misc"
@@ -33,6 +34,8 @@ type TxYielder interface {
 	SetExecutionDetails(executionAt uint64, forkId uint64)
 	Requeue(txs []types.Transaction)
 }
+
+var regenPmtOnce sync.Once
 
 func SpawnSequencingStage(
 	s *stagedsync.StageState,
@@ -125,6 +128,19 @@ func sequencingBatchStep(
 	executionAt, err := s.ExecutionAt(sdb.tx)
 	if err != nil {
 		return err
+	}
+
+	if cfg.zk.ForcePMTInterhashesRegenOnRestart {
+		if cfg.chainConfig.IsPmtEnabled(executionAt) {
+			log.Info(fmt.Sprintf("[%s] [SR-DEBUG] Forcing PMT interhashes regeneration as per configuration", logPrefix))
+			regenPmtOnce.Do(func() {
+				if err = sequencerRegentIntermediateHashesPMT(ctx, s, sdb.tx, cfg); err != nil {
+					panic(fmt.Sprintf("failed to regen PMT interhashes: %v", err))
+				}
+			})
+		} else {
+			log.Warn(fmt.Sprintf("[%s] [SR-DEBUG] Not regenerating PMT as zkevm.force-pmt-interhashes-regen-on-restart is set but PMT is not being used", logPrefix))
+		}
 	}
 
 	lastBatch, err := stages.GetStageProgress(sdb.tx, stages.HighestSeenBatchNumber)

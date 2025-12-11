@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/binary"
 	"errors"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"math/big"
 
 	"github.com/erigontech/erigon-lib/common"
@@ -57,6 +58,7 @@ func WriteGlobalExitRoot(stateReader state.StateReader, stateWriter state.Writer
 	}
 
 	// write global exit root to state
+	log.Info("[SR-DEBUG] Writing Global Exit Root to state", "ger", ger.String(), "timestamp", timestamp)
 	if err := stateWriter.WriteAccountStorage(addr, uint64(1), &gerp, emptyUint256, headerTime); err != nil {
 		return err
 	}
