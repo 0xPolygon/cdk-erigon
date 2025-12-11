@@ -54,6 +54,6 @@ type DataStreamServer interface {
 }
 
 type DataStreamServerFactory interface {
-	CreateStreamServer(port uint16, version uint8, systemID uint64, streamType datastreamer.StreamType, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config) (StreamServer, error)
+	CreateStreamServer(port uint16, systemID uint64, streamType datastreamer.StreamType, fileName string, writeTimeout time.Duration, inactivityTimeout time.Duration, inactivityCheckInterval time.Duration, cfg *dslog.Config) (StreamServer, error)
 	CreateDataStreamServer(stream StreamServer, chainId uint64) DataStreamServer
 }

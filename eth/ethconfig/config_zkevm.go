@@ -12,9 +12,13 @@ type Zk struct {
 	L2ChainId                              uint64
 	L2RpcUrl                               string
 	L2DataStreamerUrl                      string
+	L2NatsUrl                              string
 	L2DataStreamerMaxEntryChan             uint64
 	L2DataStreamerUseTLS                   bool
 	L2DataStreamerTimeout                  time.Duration
+	DataStreamNATSEnable                   bool
+	DataStreamNatsHost                     string
+	DataStreamNatsPort                     int
 	L2ShortCircuitToVerifiedBatch          bool
 	L1SyncStartBlock                       uint64
 	BlobRecovery                           bool

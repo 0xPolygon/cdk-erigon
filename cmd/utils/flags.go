@@ -442,6 +442,11 @@ var (
 		Usage: "L2 datastreamer endpoint",
 		Value: "",
 	}
+	L2NatsURLFlag = cli.StringFlag{
+		Name:  "zkevm.l2-nats-url",
+		Usage: "L2 NATS datastreamer endpoint",
+		Value: "",
+	}
 	L2DataStreamerMaxEntryChanFlag = cli.Uint64Flag{
 		Name:  "zkevm.l2-datastreamer-max-entrychan",
 		Usage: "L2 datastreamer max entry channel size",
@@ -456,6 +461,21 @@ var (
 		Name:  "zkevm.l2-datastreamer-timeout",
 		Usage: "The time to wait for data to arrive from the stream before reporting an error (0s doesn't check)",
 		Value: "3s",
+	}
+	DataStreamNatsEnableFlag = cli.BoolFlag{
+		Name:  "zkevm.data-stream-nats",
+		Usage: "enable nats datastream (true/false)",
+		Value: false,
+	}
+	DataStreamNatsHostFlag = cli.StringFlag{
+		Name:  "zkevm.data-stream-nats-host",
+		Usage: "address to expose nats endpoint",
+		Value: "",
+	}
+	DataStreamNatsPortFlag = cli.StringFlag{
+		Name:  "zkevm.data-stream-nats-port",
+		Usage: "port to expose nats endpoint",
+		Value: "",
 	}
 	L2ShortCircuitToVerifiedBatchFlag = cli.BoolFlag{
 		Name:  "zkevm.l2-short-circuit-to-verified-batch",

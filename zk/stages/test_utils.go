@@ -19,6 +19,11 @@ type TestDatastreamClient struct {
 	isStarted             bool
 }
 
+func (c *TestDatastreamClient) ExecutePerFile(bookmark *types.BookmarkProto, function func(file *types.FileEntry) error) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func NewTestDatastreamClient(fullL2Blocks []types.FullL2Block, gerUpdates []types.GerUpdate) *TestDatastreamClient {
 	client := &TestDatastreamClient{
 		fullL2Blocks: fullL2Blocks,

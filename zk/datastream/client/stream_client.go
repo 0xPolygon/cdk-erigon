@@ -87,7 +87,20 @@ const (
 
 // Creates a new client fo datastream
 // server must be in format "url:port"
-func NewClient(ctx context.Context, server string, useTLS bool, checkTimeout time.Duration, latestDownloadedForkId uint16, maxEntryChanSize uint64) *StreamClient {
+func NewClient(ctx context.Context, server string, useTLS bool, checkTimeout time.Duration, latestDownloadedForkId uint16, maxEntryChanSize uint64) types.DatastreamClient {
+	c := NewStreamClient(ctx, server, useTLS, checkTimeout, latestDownloadedForkId, maxEntryChanSize)
+
+	// Extract hostname from server address (removing port if present)
+	host, _, err := net.SplitHostPort(c.server)
+	if err != nil {
+		host = c.server // If no port was specified, use the full server string
+	}
+	c.tlsConfig.ServerName = host
+
+	return c
+}
+
+func NewStreamClient(ctx context.Context, server string, useTLS bool, checkTimeout time.Duration, latestDownloadedForkId uint16, maxEntryChanSize uint64) *StreamClient {
 	c := &StreamClient{
 		ctx:              ctx,
 		checkTimeout:     checkTimeout,
@@ -101,14 +114,6 @@ func NewClient(ctx context.Context, server string, useTLS bool, checkTimeout tim
 		tlsConfig:        &tls.Config{},
 		allowStops:       true,
 	}
-
-	// Extract hostname from server address (removing port if present)
-	host, _, err := net.SplitHostPort(c.server)
-	if err != nil {
-		host = c.server // If no port was specified, use the full server string
-	}
-	c.tlsConfig.ServerName = host
-
 	return c
 }
 

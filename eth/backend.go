@@ -127,7 +127,9 @@ import (
 	"github.com/erigontech/erigon/turbo/stages/headerdownload"
 	"github.com/erigontech/erigon/zk/contracts"
 	"github.com/erigontech/erigon/zk/datastream/client"
+	"github.com/erigontech/erigon/zk/datastream/natsstream"
 	"github.com/erigontech/erigon/zk/datastream/server"
+	dstypes "github.com/erigontech/erigon/zk/datastream/types"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	"github.com/erigontech/erigon/zk/legacy_executor_verifier"
@@ -143,7 +145,7 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
-var dataStreamServerFactory = server.NewZkEVMDataStreamServerFactory()
+var dataStreamServerFactory server.DataStreamServerFactory = server.NewZkEVMDataStreamServerFactory()
 
 // Config contains the configuration options of the ETH protocol.
 // Deprecated: use ethconfig.Config instead.
@@ -227,6 +229,8 @@ type Ethereum struct {
 	streamServer    server.StreamServer
 	l1Syncer        *syncer.L1Syncer
 	etherManClients []*etherman.Client
+
+	natsManager *natsstream.Manager
 
 	preStartTasks *PreStartTasks
 
@@ -988,6 +992,31 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			backend.config.GasPriceHistoryCount,
 		)
 
+		if backend.config.DataStreamNATSEnable {
+			log.Info("Starting NATS data streaming server")
+			natsConfig := natsstream.Config{
+				Host:             config.DataStreamNatsHost,
+				Port:             config.DataStreamNatsPort,
+				ServerName:       fmt.Sprintf("erigon-nats-chain-%d", config.NetworkID),
+				ClusterName:      fmt.Sprintf("erigon-cluster-chain-%d", config.NetworkID),
+				JetStreamEnabled: true,
+				StorageDir:       filepath.Join(stack.Config().Dirs.DataDir, "nats-data"),
+				Debug:            config.LogLevel >= log.LvlDebug,
+				Trace:            config.LogLevel >= log.LvlTrace,
+			}
+			backend.natsManager = natsstream.NewManager(natsConfig, logger)
+
+			if err := backend.natsManager.Start(); err != nil {
+				log.Error(err.Error())
+			}
+		} else if config.Zk.L2NatsUrl != "" {
+			log.Info("Configuring NATS client-only mode", "remoteURL", config.Zk.L2NatsUrl)
+			backend.natsManager = natsstream.NewManager(natsstream.Config{}, logger)
+			if err := backend.natsManager.ConnectRemote(config.Zk.L2NatsUrl); err != nil {
+				log.Error("Failed to configure NATS client mode", "error", err)
+			}
+		}
+
 		// zkevm: create a data stream server if we have the appropriate config for one.  This will be started on the call to Init
 		// alongside the http server
 		httpCfg := stack.Config().Http
@@ -999,7 +1028,13 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				Outputs:     nil,
 			}
 
-			// todo [zkevm] read the stream version from config and figure out what system id is used for
+			if backend.natsManager != nil {
+				dataStreamServerFactory = natsstream.NewNATSDataStreamServerFactory(
+					dataStreamServerFactory,
+					backend.natsManager,
+					logger)
+			}
+
 			backend.streamServer, err = dataStreamServerFactory.CreateStreamServer(uint16(httpCfg.DataStreamPort), 1, datastreamer.StreamType(1), file, httpCfg.DataStreamWriteTimeout, httpCfg.DataStreamInactivityTimeout, httpCfg.DataStreamInactivityCheckInterval, logConfig)
 			if err != nil {
 				return nil, err
@@ -1010,7 +1045,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			// 0 we can just set the datastream progress to 0 also which will force a re-population of the stream
 			latestHeader := backend.streamServer.GetHeader()
 			if latestHeader.TotalEntries == 0 {
-				log.Info("[dataStream] setting the stream progress to 0")
+				log.Info("[dataStream] flagging for prewarm")
 				backend.preStartTasks.WarmUpDataStream = true
 			}
 		}
@@ -1239,7 +1274,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			if err != nil {
 				return nil, err
 			}
-			streamClient := initDataStreamClient(ctx, cfg.Zk, uint16(latestForkId))
+			streamClient := initDataStreamClient(ctx, cfg.Zk, backend.natsManager, uint16(latestForkId))
 
 			backend.syncStages = stages2.NewDefaultZkStages(
 				backend.sentryCtx,
@@ -1325,7 +1360,21 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Clien
 }
 
 // creates a datastream client with default parameters
-func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk, latestForkId uint16) *client.StreamClient {
+func initDataStreamClient(ctx context.Context, cfg *ethconfig.Zk, manager *natsstream.Manager, latestForkId uint16) dstypes.DatastreamClient {
+	if cfg.L2NatsUrl != "" {
+		// Use NATS client with L2NatsUrl
+		log.Info("Using NATS for datastream client", "url", cfg.L2NatsUrl)
+
+		return natsstream.CreateNATSDatastreamClient(
+			ctx,
+			manager,
+			cfg.L2NatsUrl,
+			cfg.L2DataStreamerUseTLS,
+			cfg.L2DataStreamerTimeout,
+			cfg.L2DataStreamerMaxEntryChan,
+		)
+	}
+	// Default to regular stream client
 	return client.NewClient(ctx, cfg.L2DataStreamerUrl, cfg.L2DataStreamerUseTLS, cfg.L2DataStreamerTimeout, latestForkId, cfg.L2DataStreamerMaxEntryChan)
 }
 
@@ -2025,6 +2074,10 @@ func (s *Ethereum) Stop() error {
 	s.chainDB.Close()
 
 	s.gasTracker.Stop()
+
+	if s.natsManager != nil {
+		s.natsManager.Stop()
+	}
 
 	if s.silkwormRPCDaemonService != nil {
 		if err := s.silkwormRPCDaemonService.Stop(); err != nil {
