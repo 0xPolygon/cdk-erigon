@@ -323,7 +323,7 @@ func (api *PrivateDebugAPIImpl) TraceCall(ctx context.Context, args ethapi.CallA
 	}
 
 	var stateReader state.StateReader
-	if config == nil || isLatest {
+	if config == nil || isLatest || config.Reexec == nil {
 		stateReader, err = rpchelper.CreateStateReader(ctx, dbtx, blockNrOrHash, 0, api.filters, api.stateCache, api.historyV3(dbtx), chainConfig.ChainName)
 	} else {
 		stateReader, err = rpchelper.CreateHistoryStateReader(dbtx, blockNumber, int(*config.Reexec), api.historyV3(dbtx), chainConfig.ChainName)
