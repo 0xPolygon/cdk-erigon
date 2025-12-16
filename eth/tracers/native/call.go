@@ -190,6 +190,10 @@ func (t *callTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, sco
 	if atomic.LoadUint32(&t.interrupt) > 0 {
 		return
 	}
+	// Defensive check: ensure callstack is not empty before accessing it
+	if len(t.callstack) == 0 {
+		return
+	}
 	switch op {
 	case vm.LOG0, vm.LOG1, vm.LOG2, vm.LOG3, vm.LOG4:
 		size := int(op - vm.LOG0)
@@ -275,7 +279,10 @@ func (t *callTracer) CaptureExit(output []byte, gasUsed uint64, err error) {
 
 	call.GasUsed = gasUsed
 	call.processOutput(output, err)
-	t.callstack[size-1].Calls = append(t.callstack[size-1].Calls, call)
+	// Defensive check: ensure callstack is not empty before appending
+	if size > 0 {
+		t.callstack[size-1].Calls = append(t.callstack[size-1].Calls, call)
+	}
 }
 
 func (t *callTracer) CaptureTxStart(gasLimit uint64) {
@@ -368,7 +375,11 @@ func fixLogIndexGap(cf *callFrame, cumulativeGaps []uint64) {
 	}
 	if len(cf.Logs) > 0 {
 		for i := range cf.Logs {
-			cf.Logs[i].Index -= cumulativeGaps[cf.Logs[i].Index]
+			// Defensive check: ensure log index is within bounds
+			logIdx := cf.Logs[i].Index
+			if logIdx < uint64(len(cumulativeGaps)) {
+				cf.Logs[i].Index -= cumulativeGaps[logIdx]
+			}
 		}
 	}
 	for i := range cf.Calls {
