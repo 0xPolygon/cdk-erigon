@@ -383,7 +383,7 @@ func TestGetBatchByNumber(t *testing.T) {
 
 	l1Syncer := syncer.NewL1Syncer(
 		ctx,
-		[]syncer.IEtherman{EthermanMock},
+		EthermanMock,
 		[]common.Address{},
 		[][]common.Hash{},
 		10,
@@ -663,7 +663,7 @@ func TestGetExitRootsByGER(t *testing.T) {
 
 	l1Syncer := syncer.NewL1Syncer(
 		ctx,
-		[]syncer.IEtherman{EthermanMock},
+		EthermanMock,
 		[]common.Address{},
 		[][]common.Hash{},
 		10,
@@ -739,7 +739,7 @@ func TestLatestGlobalExitRoot(t *testing.T) {
 
 	l1Syncer := syncer.NewL1Syncer(
 		ctx,
-		[]syncer.IEtherman{EthermanMock},
+		EthermanMock,
 		[]common.Address{},
 		[][]common.Hash{},
 		10,

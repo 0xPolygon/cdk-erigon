@@ -90,6 +90,7 @@ require (
 	github.com/psilva261/timsort/v2 v2.0.1
 	github.com/quasilyte/go-ruleguard/dsl v0.3.22
 	github.com/rs/cors v1.11.0
+	github.com/sony/gobreaker/v2 v2.3.0
 	github.com/spf13/afero v1.10.0
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5

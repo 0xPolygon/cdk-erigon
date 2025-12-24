@@ -8,11 +8,12 @@ import (
 
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon/cmd/rpcdaemon/cli"
+	"github.com/erigontech/erigon/eth"
+	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/rpc"
 	"github.com/erigontech/erigon/turbo/debug"
-
-	"github.com/erigontech/erigon/eth/ethconfig"
 	"github.com/erigontech/erigon/turbo/jsonrpc"
+	"github.com/erigontech/erigon/zk/ethermanpool"
 	"github.com/spf13/cobra"
 
 	_ "github.com/erigontech/erigon/core/snaptype"        //hack
@@ -38,7 +39,14 @@ func main() {
 		ethConfig := ethconfig.Defaults
 		ethConfig.L2RpcUrl = cfg.L2RpcUrl
 
-		gasTracker := jsonrpc.NewRecurringL1GasPriceTracker(ethConfig.AllowFreeTransactions, ethConfig.GasPriceFactor, ethConfig.DefaultGasPrice, ethConfig.MaxGasPrice, ethConfig.L1RpcUrl, ethConfig.GasPriceCheckFrequency, ethConfig.GasPriceHistoryCount)
+		// Create etherman clients for L1 gas price tracking
+		// Note: L2 chain name is not needed for rpcdaemon since we only use it for L1 gas price tracking
+		// The etherman client constructor requires it, so we pass a dummy value
+		ethermanClients := eth.NewEthermanClients(&ethConfig, "dummyChainName", ethConfig.L1RpcUrl)
+		poolConfig := ethermanpool.DefaultEthermanPoolConfig()
+		ethermanPool := ethermanpool.NewEthermanPool(ethermanClients, poolConfig)
+
+		gasTracker := jsonrpc.NewRecurringL1GasPriceTracker(ethConfig.AllowFreeTransactions, ethConfig.GasPriceFactor, ethConfig.DefaultGasPrice, ethConfig.MaxGasPrice, ethermanPool, ethConfig.GasPriceCheckFrequency, ethConfig.GasPriceHistoryCount)
 		gasTracker.Start()
 		defer gasTracker.Stop()
 

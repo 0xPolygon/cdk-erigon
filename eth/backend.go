@@ -128,6 +128,7 @@ import (
 	"github.com/erigontech/erigon/zk/contracts"
 	"github.com/erigontech/erigon/zk/datastream/client"
 	"github.com/erigontech/erigon/zk/datastream/server"
+	"github.com/erigontech/erigon/zk/ethermanpool"
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/l1infotree"
 	"github.com/erigontech/erigon/zk/legacy_executor_verifier"
@@ -224,9 +225,8 @@ type Ethereum struct {
 	logger         log.Logger
 
 	// zk
-	streamServer    server.StreamServer
-	l1Syncer        *syncer.L1Syncer
-	etherManClients []*etherman.Client
+	streamServer server.StreamServer
+	l1Syncer     *syncer.L1Syncer
 
 	preStartTasks *PreStartTasks
 
@@ -977,17 +977,6 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 	}
 
 	if backend.config.Zk != nil {
-		// setup the gas tracker and start it
-		backend.gasTracker = jsonrpc.NewRecurringL1GasPriceTracker(
-			backend.config.AllowFreeTransactions,
-			backend.config.GasPriceFactor,
-			backend.config.DefaultGasPrice,
-			backend.config.MaxGasPrice,
-			backend.config.L1RpcUrl,
-			backend.config.GasPriceCheckFrequency,
-			backend.config.GasPriceHistoryCount,
-		)
-
 		// zkevm: create a data stream server if we have the appropriate config for one.  This will be started on the call to Init
 		// alongside the http server
 		httpCfg := stack.Config().Http
@@ -1029,12 +1018,23 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		backend.chainConfig.EffectiveGasPriceForErc20Transfer = cfg.EffectiveGasPriceForErc20Transfer
 		backend.chainConfig.EffectiveGasPriceForContractInvocation = cfg.EffectiveGasPriceForContractInvocation
 		backend.chainConfig.EffectiveGasPriceForContractDeployment = cfg.EffectiveGasPriceForContractDeployment
-		l1Urls := strings.Split(cfg.L1RpcUrl, ",")
+		// Create etherman clients for the pool
+		ethermanClients := NewEthermanClients(cfg, chainConfig.ChainName, cfg.L1RpcUrl)
 
-		backend.etherManClients = make([]*etherman.Client, len(l1Urls))
-		for i, url := range l1Urls {
-			backend.etherManClients[i] = newEtherMan(cfg, chainConfig.ChainName, url)
-		}
+		// Create etherman pool for resilience (circuit breakers, failover)
+		poolConfig := ethermanpool.DefaultEthermanPoolConfig()
+		ethermanPool := ethermanpool.NewEthermanPool(ethermanClients, poolConfig)
+
+		// setup the gas tracker with etherman pool for resilient L1 price fetching
+		backend.gasTracker = jsonrpc.NewRecurringL1GasPriceTracker(
+			backend.config.AllowFreeTransactions,
+			backend.config.GasPriceFactor,
+			backend.config.DefaultGasPrice,
+			backend.config.MaxGasPrice,
+			ethermanPool, // Uses resilient pool instead of raw URL
+			backend.config.GasPriceCheckFrequency,
+			backend.config.GasPriceHistoryCount,
+		)
 
 		isSequencer := sequencer.IsSequencer()
 
@@ -1073,14 +1073,9 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			l1Contracts = seqAndVerifL1Contracts
 		}
 
-		ethermanClients := make([]syncer.IEtherman, len(backend.etherManClients))
-		for i, c := range backend.etherManClients {
-			ethermanClients[i] = c.EthClient
-		}
-
 		seqVerSyncer := syncer.NewL1Syncer(
 			ctx,
-			ethermanClients,
+			ethermanPool,
 			seqAndVerifL1Contracts,
 			seqAndVerifTopics,
 			cfg.L1BlockRange,
@@ -1091,7 +1086,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		backend.l1Syncer = syncer.NewL1Syncer(
 			ctx,
-			ethermanClients,
+			ethermanPool,
 			l1Contracts,
 			l1Topics,
 			cfg.L1BlockRange,
@@ -1107,7 +1102,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 		l1InfoTreeSyncer := syncer.NewL1Syncer(
 			ctx,
-			ethermanClients,
+			ethermanPool,
 			[]libcommon.Address{cfg.AddressGerManager},
 			[][]libcommon.Hash{{contracts.UpdateL1InfoTreeTopic, contracts.UpdateL1InfoTreeV2Topic}},
 			cfg.L1BlockRange,
@@ -1171,7 +1166,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 			l1BlockSyncer := syncer.NewL1Syncer(
 				ctx,
-				ethermanClients,
+				ethermanPool,
 				[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup},
 				[][]libcommon.Hash{{
 					contracts.SequenceBatchesTopicEtrog,
@@ -1322,6 +1317,19 @@ func newEtherMan(cfg *ethconfig.Config, l2ChainName, url string) *etherman.Clien
 		panic(err)
 	}
 	return em
+}
+
+// NewEthermanClients creates a slice of IEtherman clients from L1 RPC URLs.
+// This function can be used to create etherman clients for use with EthermanPool.
+// It takes a comma-separated string of URLs and splits them, creating one client per URL.
+func NewEthermanClients(cfg *ethconfig.Config, l2ChainName string, l1RpcUrl string) []ethermanpool.IEtherman {
+	l1Urls := strings.Split(l1RpcUrl, ",")
+	ethermanClients := make([]ethermanpool.IEtherman, len(l1Urls))
+	for i, url := range l1Urls {
+		client := newEtherMan(cfg, l2ChainName, url)
+		ethermanClients[i] = client
+	}
+	return ethermanClients
 }
 
 // creates a datastream client with default parameters

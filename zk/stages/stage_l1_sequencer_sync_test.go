@@ -262,7 +262,7 @@ func TestSpawnL1SequencerSyncStage(t *testing.T) {
 
 	EthermanMock.EXPECT().FilterLogs(gomock.Any(), filterQuery).Return(filteredLogs, nil).AnyTimes()
 
-	l1Syncer := syncer.NewL1Syncer(ctx, []syncer.IEtherman{EthermanMock}, l1ContractAddresses, l1ContractTopics, 10, 1, "latest", 0)
+	l1Syncer := syncer.NewL1Syncer(ctx, EthermanMock, l1ContractAddresses, l1ContractTopics, 10, 1, "latest", 0)
 	zkCfg := &ethconfig.Zk{
 		L1RollupId:                  uint64(99999),
 		L1FirstBlock:                l1FirstBlock.Uint64(),

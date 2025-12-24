@@ -21,16 +21,16 @@ import (
 
 	ethTypes "github.com/erigontech/erigon/core/types"
 	"github.com/erigontech/erigon/rpc"
+	"github.com/erigontech/erigon/zk/ethermanpool"
 )
 
 const (
 	batchWorkers      = 4
-	getLogsMaxRetry   = 20
 	logsChannelSize   = 100
 	filterLogsTimeout = 60 * time.Second
 	// max workers used when halving and querying subranges
 	subrangeWorkers    = 4
-	headerFetchTimeout = 10 * time.Second
+	headerFetchTimeout = 20 * time.Second
 	maxBatch           = 100
 )
 
@@ -52,17 +52,7 @@ const (
 	sequencedBatchesMapSignature    = "0xb4d63f58"
 )
 
-//go:generate mockgen -typed=true -destination=./mocks/etherman_mock.go -package=mocks . IEtherman
-
-type IEtherman interface {
-	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethTypes.Header, error)
-	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethTypes.Block, error)
-	FilterLogs(ctx context.Context, query ethereum.FilterQuery) ([]ethTypes.Log, error)
-	CallContract(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error)
-	TransactionByHash(ctx context.Context, hash common.Hash) (ethTypes.Transaction, bool, error)
-	TransactionReceipt(ctx context.Context, txHash common.Hash) (*ethTypes.Receipt, error)
-	StorageAt(ctx context.Context, account common.Address, key common.Hash, blockNumber *big.Int) ([]byte, error)
-}
+//go:generate mockgen -typed=true -destination=./mocks/etherman_mock.go -package=mocks github.com/erigontech/erigon/zk/ethermanpool IEtherman
 
 type fetchJob struct {
 	From uint64
@@ -73,11 +63,6 @@ type jobResult struct {
 	Size  uint64
 	Error error
 	Logs  []ethTypes.Log
-}
-
-// Optional interface for batch header retrieval, implemented by some clients.
-type headerBatcher interface {
-	HeadersByNumbers(ctx context.Context, numbers []*big.Int) ([]*ethTypes.Header, error)
 }
 
 type LogEvent struct {
@@ -95,9 +80,7 @@ const (
 
 type L1Syncer struct {
 	ctx                 context.Context
-	etherMans           []IEtherman
-	ethermanIndex       uint8
-	ethermanMtx         *sync.Mutex
+	etherman            ethermanpool.IEtherman
 	l1ContractAddresses []common.Address
 	topics              [][]common.Hash
 	blockRange          uint64
@@ -126,13 +109,11 @@ type L1Syncer struct {
 	fetchHeaders     bool
 }
 
-func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay uint64, highestBlockType string, firstL1Block uint64) *L1Syncer {
+func NewL1Syncer(ctx context.Context, etherman ethermanpool.IEtherman, l1ContractAddresses []common.Address, topics [][]common.Hash, blockRange, queryDelay uint64, highestBlockType string, firstL1Block uint64) *L1Syncer {
 	headersCache := expirable.NewLRU[uint64, *ethTypes.Header](int(blockRange), nil, time.Minute*10)
 	return &L1Syncer{
 		ctx:                 ctx,
-		etherMans:           etherMans,
-		ethermanIndex:       0,
-		ethermanMtx:         &sync.Mutex{},
+		etherman:            etherman,
 		l1ContractAddresses: l1ContractAddresses,
 		topics:              topics,
 		blockRange:          blockRange,
@@ -145,15 +126,13 @@ func NewL1Syncer(ctx context.Context, etherMans []IEtherman, l1ContractAddresses
 	}
 }
 
-func (s *L1Syncer) getNextEtherman() IEtherman {
-	s.ethermanMtx.Lock()
-	defer s.ethermanMtx.Unlock()
-
-	// Use modulo to ensure the index wraps around automatically
-	etherman := s.etherMans[s.ethermanIndex%uint8(len(s.etherMans))]
-	s.ethermanIndex++
-
-	return etherman
+// clientCount returns the number of underlying clients if available.
+// Falls back to 1 for single-client implementations.
+func (s *L1Syncer) clientCount() int {
+	if multi, ok := s.etherman.(ethermanpool.IMultiEtherman); ok {
+		return multi.ClientCount()
+	}
+	return 1
 }
 
 func (s *L1Syncer) IsSyncStarted() bool {
@@ -269,11 +248,6 @@ func (s *L1Syncer) RunQueryBlocks(from uint64) {
 }
 
 func (s *L1Syncer) GetHeader(number uint64) (*ethTypes.Header, error) {
-	em := s.getNextEtherman()
-	return s.getHeader(em, number)
-}
-
-func (s *L1Syncer) getHeader(em IEtherman, number uint64) (*ethTypes.Header, error) {
 	if header, ok := s.headersCache.Get(number); ok {
 		return header, nil
 	}
@@ -283,7 +257,7 @@ func (s *L1Syncer) getHeader(em IEtherman, number uint64) (*ethTypes.Header, err
 		// Add a timeout to avoid hanging indefinitely on slow/backed-up L1
 		ctx, cancel := context.WithTimeout(s.ctx, headerFetchTimeout)
 		defer cancel()
-		header, err := em.HeaderByNumber(ctx, new(big.Int).SetUint64(number))
+		header, err := s.etherman.HeaderByNumber(ctx, new(big.Int).SetUint64(number))
 		if err != nil {
 			return nil, err
 		}
@@ -298,13 +272,11 @@ func (s *L1Syncer) getHeader(em IEtherman, number uint64) (*ethTypes.Header, err
 }
 
 func (s *L1Syncer) GetBlock(number uint64) (*ethTypes.Block, error) {
-	em := s.getNextEtherman()
-	return em.BlockByNumber(s.ctx, new(big.Int).SetUint64(number))
+	return s.etherman.BlockByNumber(s.ctx, new(big.Int).SetUint64(number))
 }
 
 func (s *L1Syncer) GetTransaction(hash common.Hash) (ethTypes.Transaction, bool, error) {
-	em := s.getNextEtherman()
-	return em.TransactionByHash(s.ctx, hash)
+	return s.etherman.TransactionByHash(s.ctx, hash)
 }
 
 func (s *L1Syncer) GetPreElderberryAccInputHash(ctx context.Context, addr *common.Address, batchNum uint64) (common.Hash, error) {
@@ -328,13 +300,12 @@ func (s *L1Syncer) GetElderberryAccInputHash(ctx context.Context, addr *common.A
 }
 
 func (s *L1Syncer) GetL1BlockTimeStampByTxHash(ctx context.Context, txHash common.Hash) (uint64, error) {
-	em := s.getNextEtherman()
-	r, err := em.TransactionReceipt(ctx, txHash)
+	r, err := s.etherman.TransactionReceipt(ctx, txHash)
 	if err != nil {
 		return 0, err
 	}
 
-	header, err := s.getHeader(em, r.BlockNumber.Uint64())
+	header, err := s.GetHeader(r.BlockNumber.Uint64())
 	if err != nil {
 		return 0, err
 	}
@@ -386,7 +357,7 @@ func (s *L1Syncer) l1QueryHeaders(logs []ethTypes.Log) error {
 	backoffStrategy.Multiplier = GetHeaderBackoffMultiplier // Just need randomization
 	backoffStrategy.MaxInterval = 20 * time.Second
 
-	process := func(em IEtherman) {
+	process := func() {
 		for {
 			bn, ok := <-logQueue
 			if !ok {
@@ -397,23 +368,20 @@ func (s *L1Syncer) l1QueryHeaders(logs []ethTypes.Log) error {
 				wg.Done()
 				continue
 			}
-			header, err := s.getHeader(em, bn)
+			_, err := s.GetHeader(bn)
 			if err != nil {
 				time.Sleep(backoffStrategy.NextBackOff())
 				logQueue <- bn
 				continue
 			}
-			s.headersCache.Add(bn, header)
 			wg.Done()
 		}
 	}
 
-	// launch the workers - some endpoints might be faster than others so will consume more of the queue
-	// but, we really don't care about that.  We want the data as fast as possible
-	mans := s.etherMans
-	workers := max(len(mans), batchWorkers)
+	// launch the workers - multiply by client count for better parallelism
+	workers := max(s.clientCount(), batchWorkers)
 	for i := 0; i < workers; i++ {
-		go process(mans[i%len(mans)])
+		go process()
 	}
 
 	wg.Wait()
@@ -426,15 +394,10 @@ func (s *L1Syncer) l1QueryHeadersBatch(bns []uint64) ([]uint64, error) {
 		return nil, nil
 	}
 
-	// Gather batch-capable ethermans
-	batchers := make([]headerBatcher, 0, len(s.etherMans))
-	for _, em := range s.etherMans {
-		if b, ok := em.(headerBatcher); ok {
-			batchers = append(batchers, b)
-		}
-	}
-	if len(batchers) == 0 {
-		// No batch support: let caller fallback to per-header
+	// Check if etherman implements HeaderBatcher for batch retrieval
+	batcher, ok := s.etherman.(ethermanpool.HeaderBatcher)
+	if !ok {
+		// Fallback: no batch support, return all as missing
 		return bns, nil
 	}
 
@@ -455,8 +418,8 @@ func (s *L1Syncer) l1QueryHeadersBatch(bns []uint64) ([]uint64, error) {
 	abortCh := make(chan struct{})
 	var abortOnce sync.Once
 
-	// Worker function processing chunked jobs using specific batcher
-	worker := func(b headerBatcher) {
+	// Worker function processing chunked jobs
+	worker := func() {
 		// Backoff strategy for 429/ratelimit on this worker
 		bo := backoff.NewExponentialBackOff()
 		bo.Multiplier = GetLogsBackoffMultiplier
@@ -494,13 +457,12 @@ func (s *L1Syncer) l1QueryHeadersBatch(bns []uint64) ([]uint64, error) {
 					}
 
 					ctx, cancel := context.WithTimeout(s.ctx, headerFetchTimeout)
-					heads, err := b.HeadersByNumbers(ctx, req)
+					heads, err := batcher.HeadersByNumbers(ctx, req)
 					cancel()
 
 					if err != nil {
-						lower := strings.ToLower(err.Error())
-						is429 := strings.Contains(lower, "429") || strings.Contains(lower, "too many") || strings.Contains(lower, "rate limit")
-						if is429 {
+						// Check for 429 rate limit errors
+						if ethermanpool.Is429Error(err) {
 							// backoff for 429; abort globally if we've reached Stop
 							d := bo.NextBackOff()
 							if d == backoff.Stop {
@@ -539,13 +501,12 @@ func (s *L1Syncer) l1QueryHeadersBatch(bns []uint64) ([]uint64, error) {
 		}
 	}
 
-	// Start workers on all batch-capable ethermans
+	// Start workers - multiply by client count for better parallelism
 	var wg sync.WaitGroup
-	workers := max(len(batchers), batchWorkers)
+	workers := max(s.clientCount(), batchWorkers)
 	for i := 0; i < workers; i++ {
-		b := batchers[i%len(batchers)]
 		wg.Add(1)
-		go func(bb headerBatcher) { defer wg.Done(); worker(bb) }(b)
+		go func() { defer wg.Done(); worker() }()
 	}
 
 	// Wait for workers to drain jobs or abort
@@ -562,8 +523,6 @@ func (s *L1Syncer) l1QueryHeadersBatch(bns []uint64) ([]uint64, error) {
 }
 
 func (s *L1Syncer) getLatestL1Block() (uint64, error) {
-	em := s.getNextEtherman()
-
 	var blockNumber *big.Int
 
 	switch s.highestBlockType {
@@ -575,8 +534,9 @@ func (s *L1Syncer) getLatestL1Block() (uint64, error) {
 		blockNumber = nil
 	}
 
-	latestBlock, err := em.BlockByNumber(s.ctx, blockNumber)
+	latestBlock, err := s.etherman.BlockByNumber(s.ctx, blockNumber)
 	if err != nil {
+		log.Error("L1 syncer: BlockByNumber failed", "err", err, "blockType", s.highestBlockType)
 		return 0, err
 	}
 
@@ -621,7 +581,8 @@ func (s *L1Syncer) queryBlocks(startBlock, endBlock uint64) (numLogs uint64, err
 	results := make(chan jobResult, len(fetches))
 	defer close(results)
 
-	workers := min(batchWorkers, len(fetches))
+	// Multiply workers by client count for better parallelism
+	workers := min(batchWorkers*s.clientCount(), len(fetches))
 	wg.Add(workers)
 	for i := 0; i < workers; i++ {
 		go s.getSequencedLogs(jobs, results, stop, &wg)
@@ -721,9 +682,8 @@ func (s *L1Syncer) getSequencedLogs(jobs <-chan fetchJob, results chan jobResult
 					break LOOP
 				}
 				// First attempt: try the entire range with a timeout
-				em := s.getNextEtherman()
 				callCtx, cancel := context.WithTimeout(s.ctx, filterLogsTimeout)
-				logs, err = em.FilterLogs(callCtx, query)
+				logs, err = s.etherman.FilterLogs(callCtx, query)
 				cancel()
 				if err != nil {
 					// Check if err is 429 Too Many Requests
@@ -786,8 +746,7 @@ func (s *L1Syncer) fetchLogsWithHalving(ctx context.Context, baseQuery ethereum.
 		q.ToBlock = new(big.Int).SetUint64(t)
 		cctx, cancel := context.WithTimeout(ctx, filterLogsTimeout)
 		defer cancel()
-		em := s.getNextEtherman()
-		return em.FilterLogs(cctx, q)
+		return s.etherman.FilterLogs(cctx, q)
 	}
 
 	worker := func() {
@@ -899,9 +858,7 @@ func (s *L1Syncer) callSequencedBatchesMap(ctx context.Context, addr *common.Add
 	mapKey := keccak256.Hash(common.FromHex(mapKeyHex))
 	mkh := common.BytesToHash(mapKey)
 
-	em := s.getNextEtherman()
-
-	resp, err := em.StorageAt(ctx, *addr, mkh, nil)
+	resp, err := s.etherman.StorageAt(ctx, *addr, mkh, nil)
 	if err != nil {
 		return
 	}
@@ -920,8 +877,7 @@ func (s *L1Syncer) callGetRollupSequencedBatches(ctx context.Context, addr *comm
 	rollupID := fmt.Sprintf("%064x", rollupId)
 	batchNumber := fmt.Sprintf("%064x", batchNum)
 
-	em := s.getNextEtherman()
-	resp, err := em.CallContract(ctx, ethereum.CallMsg{
+	resp, err := s.etherman.CallContract(ctx, ethereum.CallMsg{
 		To:   addr,
 		Data: common.FromHex(rollupSequencedBatchesSignature + rollupID + batchNumber),
 	}, nil)
@@ -960,8 +916,7 @@ func (s *L1Syncer) CallTrustedSequencer(ctx context.Context, addr *common.Addres
 }
 
 func (s *L1Syncer) callGetAddress(ctx context.Context, addr *common.Address, data string) (common.Address, error) {
-	em := s.getNextEtherman()
-	resp, err := em.CallContract(ctx, ethereum.CallMsg{
+	resp, err := s.etherman.CallContract(ctx, ethereum.CallMsg{
 		To:   addr,
 		Data: common.FromHex(data),
 	}, nil)
@@ -978,8 +933,7 @@ func (s *L1Syncer) callGetAddress(ctx context.Context, addr *common.Address, dat
 }
 
 func (s *L1Syncer) CheckL1BlockFinalized(blockNo uint64) (finalized bool, finalizedBn uint64, err error) {
-	em := s.getNextEtherman()
-	block, err := em.BlockByNumber(s.ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+	block, err := s.etherman.BlockByNumber(s.ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 	if err != nil {
 		return false, 0, err
 	}
@@ -988,28 +942,16 @@ func (s *L1Syncer) CheckL1BlockFinalized(blockNo uint64) (finalized bool, finali
 }
 
 func (s *L1Syncer) QueryForRootLog(to uint64) (*ethTypes.Log, error) {
-	var logs []ethTypes.Log
-	var err error
-	retry := 0
-	for {
-		em := s.getNextEtherman()
-		query := ethereum.FilterQuery{
-			FromBlock: new(big.Int).SetUint64(s.firstL1Block),
-			ToBlock:   new(big.Int).SetUint64(to),
-			Addresses: s.l1ContractAddresses,
-			Topics:    s.topics,
-		}
-		logs, err = em.FilterLogs(s.ctx, query)
-		if err != nil {
-			log.Debug("QueryForRootLog retry error", "err", err)
-			retry++
-			if retry > 5 {
-				return nil, err
-			}
-			time.Sleep(time.Duration(retry*2) * time.Second)
-			continue
-		}
-		break
+	query := ethereum.FilterQuery{
+		FromBlock: new(big.Int).SetUint64(s.firstL1Block),
+		ToBlock:   new(big.Int).SetUint64(to),
+		Addresses: s.l1ContractAddresses,
+		Topics:    s.topics,
+	}
+	// Pool handles retries internally via circuit breaker
+	logs, err := s.etherman.FilterLogs(s.ctx, query)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(logs) != 2 {
