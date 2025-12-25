@@ -9,6 +9,7 @@ import (
 	"github.com/erigontech/erigon/zk/hermez_db"
 	"github.com/erigontech/erigon/zk/tx"
 	"github.com/erigontech/erigon/zkevm/jsonrpc/client"
+	"time"
 )
 
 type OffChainBlob struct {
@@ -21,16 +22,23 @@ type OffChainBlob struct {
 }
 
 type BlobInput struct {
-	BatchNumber    string         `json:"batchNumber"`
-	Coinbase       common.Address `json:"coinbase"`
-	LimitTimestamp string         `json:"limitTimestamp"`
-	BatchL2Data    string         `json:"batchL2Data"`
+	BatchNumber    string            `json:"batchNumber"`
+	Coinbase       common.Address    `json:"coinbase"`
+	LimitTimestamp string            `json:"limitTimestamp"`
+	BaseFeeChanges map[string]string `json:"baseFeeChanges,omitempty"`
+	BatchL2Data    string            `json:"batchL2Data"`
 }
 
 func GetOffChainBlobs(url string, limit, offset uint64) ([]*OffChainBlob, bool, error) {
-	res, err := client.JSONRPCCall(url, "data_getOffChainBlobs", limit, offset)
+	c := client.NewClientWithOpts(url, client.WithMaxRetries(5, 10*time.Second))
+	res, err := c.Call("data_getOffChainBlobs", limit, offset)
 	if err != nil {
 		return nil, false, err
+	}
+
+	// we have reached the end of the blobs
+	if res.Result == nil {
+		return nil, true, nil
 	}
 
 	var ocb []*OffChainBlob

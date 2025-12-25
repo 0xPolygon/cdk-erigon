@@ -4,21 +4,53 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/erigontech/erigon-lib/log/v3"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/erigontech/erigon/zkevm/jsonrpc/types"
 )
 
 // Client defines typed wrappers for the zkEVM RPC API.
 type Client struct {
-	url string
+	url  string
+	opts *opts
 }
 
 // NewClient creates an instance of client
 func NewClient(url string) *Client {
 	return &Client{
 		url: url,
+	}
+}
+
+type opts struct {
+	maxRetries int
+	retryDelay time.Duration
+}
+
+type Option func(*opts)
+
+func (fn Option) apply(opt *opts) {
+	fn(opt)
+}
+
+func WithMaxRetries(maxRetries int, interval time.Duration) Option {
+	return func(o *opts) {
+		o.maxRetries = maxRetries
+		o.retryDelay = interval
+	}
+}
+
+func NewClientWithOpts(url string, options ...Option) *Client {
+	o := &opts{}
+	for _, opt := range options {
+		opt.apply(o)
+	}
+	return &Client{
+		url:  url,
+		opts: o,
 	}
 }
 
@@ -29,6 +61,42 @@ type HTTPError struct {
 
 func (e *HTTPError) Error() string {
 	return fmt.Sprintf("invalid status code, expected: %d, found: %d", http.StatusOK, e.StatusCode)
+}
+
+func (c *Client) Call(method string, parameters ...interface{}) (types.Response, error) {
+	if c.opts == nil {
+		return JSONRPCCall(c.url, method, parameters...)
+	}
+
+	var res types.Response
+	var err error
+	for i := 0; i <= c.opts.maxRetries; i++ {
+		res, err = JSONRPCCall(c.url, method, parameters...)
+		if err == nil {
+			return res, nil
+		}
+		log.Warn("JSONRPC call failed, retrying...", "method", method, "error", err, "attempt", i+1, "maxRetries", c.opts.maxRetries, "retryDelay", c.opts.retryDelay)
+		time.Sleep(c.opts.retryDelay)
+	}
+	return res, err
+}
+
+func (c *Client) BatchCall(methods []string, parameterGroups ...[]interface{}) ([]types.Response, error) {
+	if c.opts == nil {
+		return JSONRPCBatchCall(c.url, methods, parameterGroups...)
+	}
+
+	var res []types.Response
+	var err error
+	for i := 0; i <= c.opts.maxRetries; i++ {
+		res, err = JSONRPCBatchCall(c.url, methods, parameterGroups...)
+		if err == nil {
+			return res, nil
+		}
+		log.Warn("JSONRPC call failed, retrying...", "methods", methods, "error", err, "attempt", i+1, "maxRetries", c.opts.maxRetries, "retryDelay", c.opts.retryDelay)
+		time.Sleep(c.opts.retryDelay)
+	}
+	return res, err
 }
 
 // JSONRPCCall executes a 2.0 JSON RPC HTTP Post Request to the provided URL with
@@ -65,7 +133,6 @@ func JSONRPCCall(url, method string, parameters ...interface{}) (types.Response,
 	}
 
 	httpReq.Header.Add("Content-type", "application/json")
-
 	httpRes, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		return types.Response{}, err
