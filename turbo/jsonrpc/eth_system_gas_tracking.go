@@ -1,18 +1,16 @@
 package jsonrpc
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"math/big"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/erigontech/erigon-lib/log/v3"
-	"github.com/erigontech/erigon/cmd/utils"
+	"github.com/erigontech/erigon/zk/ethermanpool"
 	"github.com/erigontech/erigon/zkevm/encoding"
-	"github.com/erigontech/erigon/zkevm/jsonrpc/client"
 )
 
 type L1GasPrice struct {
@@ -35,7 +33,7 @@ type RecurringL1GasPriceTracker struct {
 	latestPrice     *big.Int
 	lowestPrice     *big.Int
 	priceHistory    []*big.Int
-	rpcUrl          string
+	etherman        ethermanpool.IEtherman
 	frequency       time.Duration
 	totalCount      uint64
 	stop            chan struct{}
@@ -50,7 +48,7 @@ func NewRecurringL1GasPriceTracker(
 	gasPriceFactor float64,
 	defaultGasPrice uint64,
 	maxGasPrice uint64,
-	rpcUrl string,
+	etherman ethermanpool.IEtherman,
 	frequency time.Duration,
 	totalCount uint64,
 ) *RecurringL1GasPriceTracker {
@@ -64,7 +62,7 @@ func NewRecurringL1GasPriceTracker(
 		gasPriceFactor:  gasPriceFactor,
 		defaultGasPrice: defaultGasPrice,
 		maxGasPrice:     maxGasPrice,
-		rpcUrl:          rpcUrl,
+		etherman:        etherman,
 		frequency:       frequency,
 		stop:            make(chan struct{}),
 		latestMtx:       &sync.Mutex{},
@@ -192,31 +190,12 @@ func (t *RecurringL1GasPriceTracker) Stop() {
 }
 
 func (t *RecurringL1GasPriceTracker) fetchLatestL1Price() (*big.Int, error) {
-	res, err := client.JSONRPCCall(t.rpcUrl, "eth_gasPrice")
+	ctx := context.Background()
+	price, err := t.etherman.SuggestedGasPrice(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	if res.Error != nil {
-		if strings.Contains(res.Error.Message, t.rpcUrl) {
-			replacement := fmt.Sprintf("<%s>", utils.L1RpcUrlFlag.Name)
-			res.Error.Message = strings.ReplaceAll(res.Error.Message, t.rpcUrl, replacement)
-		}
-		return nil, fmt.Errorf("RPC error response: %s", res.Error.Message)
-	}
-
-	var resultString string
-	if err := json.Unmarshal(res.Result, &resultString); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal result: %v", err)
-	}
-
-	price, ok := big.NewInt(0).SetString(resultString[2:], 16)
-	if !ok {
-		return nil, fmt.Errorf("failed to convert result to big.Int")
-	}
-
 	t.lastFetch = time.Now()
-
 	return price, nil
 }
 
