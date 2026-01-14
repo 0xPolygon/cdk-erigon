@@ -50,6 +50,7 @@ func Test_RecurringL1GasPriceTracker_newLowestPrice(t *testing.T) {
 			tracker := &RecurringL1GasPriceTracker{
 				lowestMtx:    &sync.Mutex{},
 				latestMtx:    &sync.Mutex{},
+				historyMtx:   &sync.Mutex{},
 				priceHistory: tc.history,
 				totalCount:   tc.totalCount,
 			}
