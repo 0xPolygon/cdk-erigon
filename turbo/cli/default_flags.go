@@ -181,6 +181,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.OverrideLondonBlockFlag,
 	&utils.OverrideShanghaiTimeFlag,
 	&utils.OverridePmtEnabledBlockFlag,
+	&utils.OverrideSovereignModeBlockFlag,
 
 	&utils.LightClientDiscoveryAddrFlag,
 	&utils.LightClientDiscoveryPortFlag,
