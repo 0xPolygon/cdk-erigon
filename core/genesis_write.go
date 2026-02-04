@@ -125,6 +125,9 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrides *types.Gene
 			if overrides.OverrideBaseFeeMultipliers != nil {
 				config.BaseFeeChangeMultipliers = overrides.OverrideBaseFeeMultipliers
 			}
+			if overrides.OverrideSovereignModeBlock != nil {
+				config.SovereignModeBlock = overrides.OverrideSovereignModeBlock
+			}
 		}
 	}
 

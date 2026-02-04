@@ -139,6 +139,10 @@ var (
 		Name:  "override.pmtenabledblock",
 		Usage: "Manually specify the block for the PMT enabled",
 	}
+	OverrideSovereignModeBlockFlag = flags.BigFlag{
+		Name:  "override.sovereignmodeblock",
+		Usage: "Manually specify the block for the Sovereign Mode enabled",
+	}
 	TrustedSetupFile = cli.StringFlag{
 		Name:  "trusted-setup-file",
 		Usage: "Absolute path to trusted_setup.json file",
@@ -2614,6 +2618,10 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 
 	if ctx.IsSet(OverridePmtEnabledBlockFlag.Name) {
 		cfg.GenesisOverrides.OverridePmtEnabledBlock = flags.GlobalBig(ctx, OverridePmtEnabledBlockFlag.Name)
+	}
+
+	if ctx.IsSet(OverrideSovereignModeBlockFlag.Name) {
+		cfg.GenesisOverrides.OverrideSovereignModeBlock = flags.GlobalBig(ctx, OverrideSovereignModeBlockFlag.Name)
 	}
 
 	cfg.GenesisOverrides.OverrideBaseFeeMultipliers = core.GenesisBlockByChainName(chain).Config.BaseFeeChangeMultipliers
