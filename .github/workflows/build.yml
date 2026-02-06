@@ -13,11 +13,6 @@ permissions:
   packages: write
 
 env:
-  # Docker Hub credentials
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-  # Docker Hub image name
-  IMAGE_NAME: hermeznetwork/cdk-erigon
   # GHCR image name
   GHCR_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/cdk-erigon
 
@@ -75,12 +70,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -88,7 +77,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push AMD64 image (Docker Hub + GHCR)
+      - name: Build and push AMD64 image (GHCR)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -96,7 +85,6 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}-amd64
             ${{ needs.prepare.outputs.ghcr_image_name }}:${{ needs.prepare.outputs.version }}-amd64
 
   build-arm64:
@@ -112,12 +100,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -125,7 +107,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push ARM64 image (Docker Hub + GHCR)
+      - name: Build and push ARM64 image (GHCR)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -133,7 +115,6 @@ jobs:
           push: true
           platforms: linux/arm64
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}-arm64
             ${{ needs.prepare.outputs.ghcr_image_name }}:${{ needs.prepare.outputs.version }}-arm64
 
   create-and-push-manifest:
@@ -143,32 +124,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create and push manifest (Docker Hub)
-        run: |
-          docker buildx imagetools create \
-            --tag ${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }} \
-            ${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}-amd64 \
-            ${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}-arm64
-
-          if [ "${{ needs.prepare.outputs.latest_tag }}" == "true" ]; then
-            docker buildx imagetools create \
-              --tag ${{ env.IMAGE_NAME }}:latest \
-              ${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}-amd64 \
-              ${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}-arm64
-          fi
 
       - name: Create and push manifest (GHCR)
         run: |

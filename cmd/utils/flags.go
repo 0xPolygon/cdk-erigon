@@ -987,6 +987,11 @@ var (
 		Usage: "Only use SMT v2 for state changes",
 		Value: true,
 	}
+	ForcePMTInterhashesRegenOnRestart = cli.BoolFlag{
+		Name:  "zkevm.force-pmt-interhashes-regen-on-restart",
+		Usage: "Force regeneration of PMT interhashes on node restart",
+		Value: false,
+	}
 	SequencerBlockGasLimit = cli.Uint64Flag{
 		Name:  "zkevm.sequencer-block-gas-limit",
 		Usage: "The gas limit of the sequencer block.  Default (0) means no limit.",
@@ -2610,6 +2615,8 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	if ctx.IsSet(OverridePmtEnabledBlockFlag.Name) {
 		cfg.GenesisOverrides.OverridePmtEnabledBlock = flags.GlobalBig(ctx, OverridePmtEnabledBlockFlag.Name)
 	}
+
+	cfg.GenesisOverrides.OverrideBaseFeeMultipliers = core.GenesisBlockByChainName(chain).Config.BaseFeeChangeMultipliers
 
 	if ctx.IsSet(InternalConsensusFlag.Name) && clparams.EmbeddedSupported(cfg.NetworkID) {
 		cfg.InternalCL = ctx.Bool(InternalConsensusFlag.Name)

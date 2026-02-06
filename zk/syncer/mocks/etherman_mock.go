@@ -317,3 +317,42 @@ func (c *MockIEthermanTransactionReceiptCall) DoAndReturn(f func(context.Context
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
+
+// SuggestedGasPrice mocks base method.
+func (m *MockIEtherman) SuggestedGasPrice(ctx context.Context) (*big.Int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SuggestedGasPrice", ctx)
+	ret0, _ := ret[0].(*big.Int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SuggestedGasPrice indicates an expected call of SuggestedGasPrice.
+func (mr *MockIEthermanMockRecorder) SuggestedGasPrice(ctx any) *MockIEthermanSuggestedGasPriceCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SuggestedGasPrice", reflect.TypeOf((*MockIEtherman)(nil).SuggestedGasPrice), ctx)
+	return &MockIEthermanSuggestedGasPriceCall{Call: call}
+}
+
+// MockIEthermanSuggestedGasPriceCall wrap *gomock.Call
+type MockIEthermanSuggestedGasPriceCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockIEthermanSuggestedGasPriceCall) Return(arg0 *big.Int, arg1 error) *MockIEthermanSuggestedGasPriceCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockIEthermanSuggestedGasPriceCall) Do(f func(context.Context) (*big.Int, error)) *MockIEthermanSuggestedGasPriceCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockIEthermanSuggestedGasPriceCall) DoAndReturn(f func(context.Context) (*big.Int, error)) *MockIEthermanSuggestedGasPriceCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}

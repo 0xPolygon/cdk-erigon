@@ -2,10 +2,11 @@ package server
 
 import (
 	"fmt"
-	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
-	dslog "github.com/gateway-fm/zkevm-data-streamer/log"
 	"sync"
 	"time"
+
+	"github.com/gateway-fm/zkevm-data-streamer/datastreamer"
+	dslog "github.com/gateway-fm/zkevm-data-streamer/log"
 
 	libcommon "github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
@@ -338,7 +339,7 @@ func createFullBlockStreamEntriesProto(
 	}
 
 	// L2 BLOCK
-	entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot))
+	entries.Add(newL2BlockProto(block, block.Hash().Bytes(), batchNumber, ger, uint32(deltaTimestamp), uint32(l1InfoIndex), l1BlockHash, l1InfoTreeMinTimestamps[l1InfoIndex], blockInfoRoot, block.BaseFee()))
 
 	var transaction DataStreamEntryProto
 	isEtrog := forkId <= EtrogBatchNumber

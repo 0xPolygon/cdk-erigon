@@ -856,6 +856,12 @@ func (etherMan *Client) HeaderByNumber(ctx context.Context, number *big.Int) (*t
 	return etherMan.EthClient.HeaderByNumber(ctx, number)
 }
 
+// BlockByNumber returns a block from the current canonical chain. If number is nil,
+// the latest known block is returned. Supports special block numbers like finalized, safe.
+func (etherMan *Client) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*types.Block, error) {
+	return etherMan.EthClient.BlockByNumber(ctx, blockNumber)
+}
+
 // EthBlockByNumber function retrieves the ethereum block information by ethereum block number.
 func (etherMan *Client) EthBlockByNumber(ctx context.Context, blockNumber uint64) (*types.Block, error) {
 	block, err := etherMan.EthClient.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
@@ -909,6 +915,32 @@ func (etherMan *Client) GetTx(ctx context.Context, txHash common.Hash) (types.Tr
 // GetTxReceipt function gets ethereum tx receipt
 func (etherMan *Client) GetTxReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
 	return etherMan.EthClient.TransactionReceipt(ctx, txHash)
+}
+
+// FilterLogs executes a filter query.
+func (etherMan *Client) FilterLogs(ctx context.Context, query ethereum.FilterQuery) ([]types.Log, error) {
+	return etherMan.EthClient.FilterLogs(ctx, query)
+}
+
+// CallContract executes a message call transaction, which is directly executed in the VM
+// of the node, but never mined into the blockchain.
+func (etherMan *Client) CallContract(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+	return etherMan.EthClient.CallContract(ctx, msg, blockNumber)
+}
+
+// StorageAt returns the value of key in the contract storage of the given account.
+func (etherMan *Client) StorageAt(ctx context.Context, account common.Address, key common.Hash, blockNumber *big.Int) ([]byte, error) {
+	return etherMan.EthClient.StorageAt(ctx, account, key, blockNumber)
+}
+
+// TransactionByHash returns the transaction with the given hash. Alias for GetTx.
+func (etherMan *Client) TransactionByHash(ctx context.Context, hash common.Hash) (types.Transaction, bool, error) {
+	return etherMan.GetTx(ctx, hash)
+}
+
+// TransactionReceipt returns the receipt of a transaction by transaction hash. Alias for GetTxReceipt.
+func (etherMan *Client) TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
+	return etherMan.GetTxReceipt(ctx, txHash)
 }
 
 // ApproveMatic function allow to approve tokens in matic smc

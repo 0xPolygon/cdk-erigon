@@ -565,9 +565,19 @@ func (h *handler) runMethod(ctx context.Context, msg *jsonrpcMessage, callb *cal
 		stream.WriteMore()
 	}
 	stream.WriteObjectField("result")
+	// Record buffer position before calling the method, so we can truncate on error
+	bufferPosBeforeCall := len(stream.Buffer())
 	_, err := callb.call(ctx, msg.Method, args, stream)
 	if err != nil {
-		writeNilIfNotPresent(stream)
+		// On error, truncate buffer back to position after "result:" and write null
+		// This prevents partial results from being concatenated with error responses
+		// which would create invalid JSON-RPC (can't have both result data and error)
+		currentBuffer := stream.Buffer()
+		if len(currentBuffer) > bufferPosBeforeCall {
+			// Reset stream buffer to position before the call
+			stream.SetBuffer(currentBuffer[:bufferPosBeforeCall])
+		}
+		stream.WriteNil()
 		stream.WriteMore()
 		HandleError(err, stream)
 	}
@@ -576,50 +586,6 @@ func (h *handler) runMethod(ctx context.Context, msg *jsonrpcMessage, callb *cal
 	return nil
 }
 
-var nullAsBytes = []byte{110, 117, 108, 108}
-
-// there are many avenues that could lead to an error being handled in runMethod, so we need to check
-// if nil has already been written to the stream before writing it again here
-func writeNilIfNotPresent(stream *jsoniter.Stream) {
-	if stream == nil {
-		return
-	}
-	b := stream.Buffer()
-	hasNil := true
-	if len(b) >= 4 {
-		b = b[len(b)-4:]
-		for i, v := range nullAsBytes {
-			if v != b[i] {
-				hasNil = false
-				break
-			}
-		}
-	} else {
-		hasNil = false
-	}
-	if hasNil {
-		// not needed
-		return
-	}
-
-	var validJsonEnd bool
-	if len(b) > 0 {
-		// assumption is that api call handlers would write valid json in case of errors
-		// we are not guaranteed that they did write valid json if last elem is "}" or "]"
-		// since we don't check json nested-ness
-		// however appending "null" after "}" or "]" does not help much either
-		lastIdx := len(b) - 1
-		validJsonEnd = b[lastIdx] == '}' || b[lastIdx] == ']'
-	}
-	if validJsonEnd {
-		// not needed
-		return
-	}
-
-	// does not have nil ending
-	// does not have valid json
-	stream.WriteNil()
-}
 
 // unsubscribe is the callback function for all *_unsubscribe calls.
 func (h *handler) unsubscribe(ctx context.Context, id ID) (bool, error) {

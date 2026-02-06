@@ -8,6 +8,7 @@ import (
 	"github.com/erigontech/erigon-lib/common"
 	"github.com/erigontech/erigon-lib/kv"
 
+	"github.com/erigontech/erigon/consensus/misc"
 	"github.com/erigontech/erigon/core"
 	"github.com/erigontech/erigon/core/rawdb"
 	ethTypes "github.com/erigontech/erigon/core/types"
@@ -40,7 +41,7 @@ func (db ErigonDb) WriteHeader(
 	blockHash common.Hash,
 	stateRoot, txHash, parentHash common.Hash,
 	coinbase common.Address,
-	ts, gasLimit uint64, chainConfig *chain.Config,
+	ts, gasLimit uint64, baseFee *big.Int, chainConfig *chain.Config,
 ) (*ethTypes.Header, error) {
 	parentHeader, err := db.GetHeader(blockNo.Uint64() - 1)
 	if err != nil {
@@ -48,9 +49,13 @@ func (db ErigonDb) WriteHeader(
 	}
 
 	h := &ethTypes.Header{}
-
 	if parentHeader != nil {
-		h = core.MakeEmptyHeader(parentHeader, chainConfig, ts, &gasLimit)
+		if baseFee == nil {
+			// Mark basefee for recomputation during execution; avoid computing with parent.GasUsed=0 here.
+			h = core.MakeEmptyHeaderWithBaseFee(parentHeader, chainConfig, ts, &gasLimit, misc.RecomputeBaseFeeSentinel)
+		} else {
+			h = core.MakeEmptyHeaderWithBaseFee(parentHeader, chainConfig, ts, &gasLimit, baseFee)
+		}
 	} else {
 		h.Number = blockNo
 	}
@@ -62,10 +67,6 @@ func (db ErigonDb) WriteHeader(
 	h.UncleHash = sha3UncleHash
 	h.Extra = make([]byte, 0)
 	h.Time = ts
-
-	if chainConfig.IsShanghai(ts) {
-		h.WithdrawalsHash = &ethTypes.EmptyRootHash
-	}
 
 	if !chainConfig.IsNormalcy(blockNo.Uint64()) {
 		h.GasLimit = gasLimit

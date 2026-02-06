@@ -518,7 +518,11 @@ Loop:
 			if err != nil {
 				return err
 			}
-			header.BaseFee = misc.CalcBaseFeeZk(cfg.chainConfig, parentHeader)
+
+			if header.BaseFee.Cmp(misc.RecomputeBaseFeeSentinel) == 0 {
+				// Sentinel set at ingest: recompute now using real parent gasUsed
+				header.BaseFee = misc.CalcBaseFeeZk(cfg.chainConfig, parentHeader)
+			}
 		}
 
 		lastLogTx += uint64(block.Transactions().Len())

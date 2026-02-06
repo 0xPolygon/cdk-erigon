@@ -383,7 +383,7 @@ func TestGetBatchByNumber(t *testing.T) {
 
 	l1Syncer := syncer.NewL1Syncer(
 		ctx,
-		[]syncer.IEtherman{EthermanMock},
+		EthermanMock,
 		[]common.Address{},
 		[][]common.Hash{},
 		10,
@@ -450,7 +450,7 @@ func TestGetBatchByNumber(t *testing.T) {
 	}
 
 	for i := 0; i < 4; i++ {
-		_, err := erigonDB.WriteHeader(big.NewInt(int64(i+1)), hashes[i], stateRoots[i], txsRoot[i], parentHashes[i], coinBase, times[i], gasLimits[i], params.TestChainConfig)
+		_, err := erigonDB.WriteHeader(big.NewInt(int64(i+1)), hashes[i], stateRoots[i], txsRoot[i], parentHashes[i], coinBase, times[i], gasLimits[i], big.NewInt(0), params.TestChainConfig)
 		assert.NoError(err)
 		err = erigonDB.WriteBody(big.NewInt(int64(i+1)), hashes[i], txs[i])
 		assert.NoError(err)
@@ -592,16 +592,16 @@ func TestGetBatchDataByNumber(t *testing.T) {
 	assert.NoError(err)
 
 	for i := 0; i < 4; i++ {
-		_, err := erigonDB.WriteHeader(big.NewInt(int64(i+1)), hashes[i], stateRoots[i], txsRoot[i], parentHashes[i], coinBase, times[i], gasLimits[i], params.TestChainConfig)
+		_, err := erigonDB.WriteHeader(big.NewInt(int64(i+1)), hashes[i], stateRoots[i], txsRoot[i], parentHashes[i], coinBase, times[i], gasLimits[i], big.NewInt(0), params.TestChainConfig)
 		assert.NoError(err)
 		err = erigonDB.WriteBody(big.NewInt(int64(i+1)), hashes[i], txs[i])
 		assert.NoError(err)
 	}
-	_, err = erigonDB.WriteHeader(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), common.HexToHash("0x57ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7bf47"), common.HexToHash("0x67ddb9a356813c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba57"), common.HexToHash("0x87ddb9a356812c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba68"), coinBase, 1714427021, 1125899906842624, params.TestChainConfig)
+	_, err = erigonDB.WriteHeader(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), common.HexToHash("0x57ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7bf47"), common.HexToHash("0x67ddb9a356813c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba57"), common.HexToHash("0x87ddb9a356812c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba68"), coinBase, 1714427021, 1125899906842624, big.NewInt(0), params.TestChainConfig)
 	assert.NoError(err)
 	err = erigonDB.WriteBody(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), []types.Transaction{})
 	assert.NoError(err)
-	_, err = erigonDB.WriteHeader(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), common.HexToHash("0x37ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba43"), common.HexToHash("0x87ddb9a356815c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba56"), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba48"), coinBase, 1714427024, 1125899906842624, params.TestChainConfig)
+	_, err = erigonDB.WriteHeader(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), common.HexToHash("0x37ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba43"), common.HexToHash("0x87ddb9a356815c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba56"), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba48"), coinBase, 1714427024, 1125899906842624, big.NewInt(0), params.TestChainConfig)
 	assert.NoError(err)
 	err = erigonDB.WriteBody(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), []types.Transaction{})
 	assert.NoError(err)
@@ -663,7 +663,7 @@ func TestGetExitRootsByGER(t *testing.T) {
 
 	l1Syncer := syncer.NewL1Syncer(
 		ctx,
-		[]syncer.IEtherman{EthermanMock},
+		EthermanMock,
 		[]common.Address{},
 		[][]common.Hash{},
 		10,
@@ -739,7 +739,7 @@ func TestLatestGlobalExitRoot(t *testing.T) {
 
 	l1Syncer := syncer.NewL1Syncer(
 		ctx,
-		[]syncer.IEtherman{EthermanMock},
+		EthermanMock,
 		[]common.Address{},
 		[][]common.Hash{},
 		10,
@@ -990,16 +990,16 @@ func TestGetFullBlockByNumber(t *testing.T) {
 	assert.NoError(err)
 
 	for i := 0; i < 4; i++ {
-		_, err := erigonDB.WriteHeader(big.NewInt(int64(i+1)), hashes[i], stateRoots[i], txsRoot[i], parentHashes[i], coinBase, times[i], gasLimits[i], params.TestChainConfig)
+		_, err := erigonDB.WriteHeader(big.NewInt(int64(i+1)), hashes[i], stateRoots[i], txsRoot[i], parentHashes[i], coinBase, times[i], gasLimits[i], big.NewInt(0), params.TestChainConfig)
 		assert.NoError(err)
 		err = erigonDB.WriteBody(big.NewInt(int64(i+1)), hashes[i], txs[i])
 		assert.NoError(err)
 	}
-	_, err = erigonDB.WriteHeader(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), common.HexToHash("0x57ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7bf47"), common.HexToHash("0x67ddb9a356813c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba57"), common.HexToHash("0x87ddb9a356812c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba68"), coinBase, 1714427021, 1125899906842624, params.TestChainConfig)
+	_, err = erigonDB.WriteHeader(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), common.HexToHash("0x57ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7bf47"), common.HexToHash("0x67ddb9a356813c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba57"), common.HexToHash("0x87ddb9a356812c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba68"), coinBase, 1714427021, 1125899906842624, big.NewInt(0), params.TestChainConfig)
 	assert.NoError(err)
 	err = erigonDB.WriteBody(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), []types.Transaction{})
 	assert.NoError(err)
-	_, err = erigonDB.WriteHeader(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), common.HexToHash("0x37ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba43"), common.HexToHash("0x87ddb9a356815c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba56"), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba48"), coinBase, 1714427024, 1125899906842624, params.TestChainConfig)
+	_, err = erigonDB.WriteHeader(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), common.HexToHash("0x37ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba43"), common.HexToHash("0x87ddb9a356815c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba56"), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba48"), coinBase, 1714427024, 1125899906842624, big.NewInt(0), params.TestChainConfig)
 	assert.NoError(err)
 	err = erigonDB.WriteBody(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), []types.Transaction{})
 	assert.NoError(err)
@@ -1164,16 +1164,16 @@ func TestGetFullBlockByHash(t *testing.T) {
 	assert.NoError(err)
 
 	for i := 0; i < 4; i++ {
-		_, err := erigonDB.WriteHeader(big.NewInt(int64(i+1)), hashes[i], stateRoots[i], txsRoot[i], parentHashes[i], coinBase, times[i], gasLimits[i], params.TestChainConfig)
+		_, err := erigonDB.WriteHeader(big.NewInt(int64(i+1)), hashes[i], stateRoots[i], txsRoot[i], parentHashes[i], coinBase, times[i], gasLimits[i], big.NewInt(0), params.TestChainConfig)
 		assert.NoError(err)
 		err = erigonDB.WriteBody(big.NewInt(int64(i+1)), hashes[i], txs[i])
 		assert.NoError(err)
 	}
-	_, err = erigonDB.WriteHeader(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), common.HexToHash("0x57ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7bf47"), common.HexToHash("0x67ddb9a356813c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba57"), common.HexToHash("0x87ddb9a356812c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba68"), coinBase, 1714427021, 1125899906842624, params.TestChainConfig)
+	_, err = erigonDB.WriteHeader(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), common.HexToHash("0x57ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7bf47"), common.HexToHash("0x67ddb9a356813c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba57"), common.HexToHash("0x87ddb9a356812c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba68"), coinBase, 1714427021, 1125899906842624, big.NewInt(0), params.TestChainConfig)
 	assert.NoError(err)
 	err = erigonDB.WriteBody(big.NewInt(8), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba01"), []types.Transaction{})
 	assert.NoError(err)
-	_, err = erigonDB.WriteHeader(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), common.HexToHash("0x37ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba43"), common.HexToHash("0x87ddb9a356815c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba56"), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba48"), coinBase, 1714427024, 1125899906842624, params.TestChainConfig)
+	_, err = erigonDB.WriteHeader(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), common.HexToHash("0x37ddb9a336815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba43"), common.HexToHash("0x87ddb9a356815c3f4c1026b6dec5df3124afbadb485c9ba5a3e3398a04b7ba56"), common.HexToHash("0x67ddb9a356815c3fac1026b6dec5df31245fbadb485c9ba5a3e3398a04b7ba48"), coinBase, 1714427024, 1125899906842624, big.NewInt(0), params.TestChainConfig)
 	assert.NoError(err)
 	err = erigonDB.WriteBody(big.NewInt(9), common.HexToHash("0x27ddb9a356815c3fac1026b6dec5df3124afbadb485c9ba5a3e3398a84b7ba81"), []types.Transaction{})
 	assert.NoError(err)

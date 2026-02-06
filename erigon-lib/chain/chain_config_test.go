@@ -84,6 +84,29 @@ func TestNilBlobSchedule(t *testing.T) {
 	assert.Equal(t, uint64(5007716), b.BaseFeeUpdateFraction(isPrague))
 }
 
+func TestGetBaseFeeChangeMultiplier(t *testing.T) {
+	cfg := &Config{}
+
+	// default
+	assert.Equal(t, float64(1), cfg.GetBaseFeeChangeMultiplier(0))
+
+	cfg.BaseFeeChangeMultipliers = map[string]float64{
+		"0":  1,
+		"10": 2,
+	}
+	assert.Equal(t, float64(1), cfg.GetBaseFeeChangeMultiplier(0))
+	assert.Equal(t, float64(1), cfg.GetBaseFeeChangeMultiplier(9))
+	assert.Equal(t, float64(2), cfg.GetBaseFeeChangeMultiplier(10))
+	assert.Equal(t, float64(2), cfg.GetBaseFeeChangeMultiplier(11))
+
+	// map present, below lowest key uses default
+	cfg.BaseFeeChangeMultipliers = map[string]float64{
+		"10": 3,
+	}
+	assert.Equal(t, float64(1), cfg.GetBaseFeeChangeMultiplier(0))
+	assert.Equal(t, float64(3), cfg.GetBaseFeeChangeMultiplier(10))
+}
+
 func TestIsForked(t *testing.T) {
 	tests := map[string]struct {
 		s        *big.Int

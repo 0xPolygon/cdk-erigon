@@ -1,4 +1,4 @@
 # .github/CODEOWNERS
-* @revitteth @hexoscott @mandrigin @eduadiez
+* @revitteth @mandrigin @eduadiez
 zk/datastream @ppttf
 zk/stages @ppttf

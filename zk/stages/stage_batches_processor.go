@@ -26,7 +26,7 @@ var (
 )
 
 type ProcessorErigonDb interface {
-	WriteHeader(batchNo *big.Int, blockHash common.Hash, stateRoot, txHash, parentHash common.Hash, coinbase common.Address, ts, gasLimit uint64, chainConfig *chain.Config) (*ethTypes.Header, error)
+	WriteHeader(batchNo *big.Int, blockHash common.Hash, stateRoot, txHash, parentHash common.Hash, coinbase common.Address, ts, gasLimit uint64, baseFee *big.Int, chainConfig *chain.Config) (*ethTypes.Header, error)
 	WriteBody(batchNo *big.Int, headerHash common.Hash, txs []ethTypes.Transaction) error
 	ReadCanonicalHash(L2BlockNumber uint64) (common.Hash, error)
 }
@@ -390,7 +390,7 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 		gasLimit = p.miningConfig.GasLimit
 	}
 
-	if _, err := p.eriDb.WriteHeader(bn, l2Block.L2Blockhash, l2Block.StateRoot, txHash, l2Block.ParentHash, l2Block.Coinbase, uint64(l2Block.Timestamp), gasLimit, p.chainConfig); err != nil {
+	if _, err := p.eriDb.WriteHeader(bn, l2Block.L2Blockhash, l2Block.StateRoot, txHash, l2Block.ParentHash, l2Block.Coinbase, uint64(l2Block.Timestamp), gasLimit, l2Block.BaseFee, p.chainConfig); err != nil {
 		return fmt.Errorf("write header error: %w", err)
 	}
 
