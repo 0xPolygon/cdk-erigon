@@ -84,8 +84,9 @@ type BatchesProcessor struct {
 	highestVerifiedBatch uint64
 	lastBlockRoot,
 	lastBlockHash common.Hash
-	chainConfig  *chain.Config
-	miningConfig *params.MiningConfig
+	chainConfig   *chain.Config
+	miningConfig  *params.MiningConfig
+	fixBlockHash  bool // RPC-only: recompute block hash from header instead of using datastream hash
 }
 
 func NewBatchesProcessor(
@@ -101,6 +102,7 @@ func NewBatchesProcessor(
 	chainConfig *chain.Config,
 	miningConfig *params.MiningConfig,
 	unwindFn func(uint64) (uint64, error),
+	fixBlockHash bool,
 ) (*BatchesProcessor, error) {
 	highestVerifiedBatch, err := stages.GetStageProgress(tx, stages.L1VerificationsBatchNo)
 	if err != nil {
@@ -134,6 +136,7 @@ func NewBatchesProcessor(
 		unwindFn:             unwindFn,
 		chainConfig:          chainConfig,
 		miningConfig:         miningConfig,
+		fixBlockHash:         fixBlockHash,
 	}, nil
 }
 
@@ -316,11 +319,6 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 	}
 	/////// END DEBUG BISECTION ///////
 
-	// store our finalized state if this batch matches the highest verified batch number on the L1
-	if blockEntry.BatchNumber == p.highestVerifiedBatch {
-		rawdb.WriteForkchoiceFinalized(p.tx, blockEntry.L2Blockhash)
-	}
-
 	if p.lastBlockHash != emptyHash {
 		blockEntry.ParentHash = p.lastBlockHash
 	} else {
@@ -334,6 +332,12 @@ func (p *BatchesProcessor) processFullBlock(blockEntry *types.FullL2Block) (endL
 
 	if err := p.writeL2Block(blockEntry); err != nil {
 		return false, fmt.Errorf("writeL2Block error: %w", err)
+	}
+
+	// store our finalized state if this batch matches the highest verified batch number on the L1
+	// (after writeL2Block so l2Block.L2Blockhash reflects any hash correction)
+	if blockEntry.BatchNumber == p.highestVerifiedBatch {
+		rawdb.WriteForkchoiceFinalized(p.tx, blockEntry.L2Blockhash)
 	}
 
 	p.dsQueryClient.GetProgressAtomic().Store(blockEntry.L2BlockNumber)
@@ -390,8 +394,39 @@ func (p *BatchesProcessor) writeL2Block(l2Block *types.FullL2Block) error {
 		gasLimit = p.miningConfig.GasLimit
 	}
 
-	if _, err := p.eriDb.WriteHeader(bn, l2Block.L2Blockhash, l2Block.StateRoot, txHash, l2Block.ParentHash, l2Block.Coinbase, uint64(l2Block.Timestamp), gasLimit, l2Block.BaseFee, p.chainConfig); err != nil {
+	header, err := p.eriDb.WriteHeader(bn, l2Block.L2Blockhash, l2Block.StateRoot, txHash, l2Block.ParentHash, l2Block.Coinbase, uint64(l2Block.Timestamp), gasLimit, l2Block.BaseFee, p.chainConfig)
+	if err != nil {
 		return fmt.Errorf("write header error: %w", err)
+	}
+
+	// Only compare hashes when the datastream provided the real baseFee.
+	// When baseFee is nil, the header contains RecomputeBaseFeeSentinel (2^256-1)
+	// which gets corrected later at the execution stage. Computing header.Hash()
+	// with the sentinel would produce an incorrect hash.
+	if l2Block.BaseFee != nil {
+		computedHash := header.Hash()
+		if computedHash != l2Block.L2Blockhash {
+			if p.fixBlockHash {
+				log.Warn(fmt.Sprintf("[%s] Block hash mismatch: recomputed from header differs from datastream hash, overwriting with computed hash", p.logPrefix),
+					"blockNo", l2Block.L2BlockNumber,
+					"dsHash", l2Block.L2Blockhash,
+					"computedHash", computedHash,
+				)
+				if err := rawdb.WriteCanonicalHash(p.tx, computedHash, l2Block.L2BlockNumber); err != nil {
+					return fmt.Errorf("failed to overwrite canonical hash for block %d: %w", l2Block.L2BlockNumber, err)
+				}
+				if err := rawdb.WriteHeaderWithhash(p.tx, computedHash, header); err != nil {
+					return fmt.Errorf("failed to overwrite header for block %d: %w", l2Block.L2BlockNumber, err)
+				}
+				l2Block.L2Blockhash = computedHash
+			} else {
+				panic(fmt.Sprintf(
+					"block hash mismatch at block %d: datastream hash %s != computed hash %s. "+
+						"If this is an RPC node that needs hash correction, restart with --zkevm.fix-block-hash=true",
+					l2Block.L2BlockNumber, l2Block.L2Blockhash.String(), computedHash.String(),
+				))
+			}
+		}
 	}
 
 	didStoreGer := false

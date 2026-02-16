@@ -345,6 +345,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		ForcePMTInterhashesRegenOnRestart:      ctx.Bool(utils.ForcePMTInterhashesRegenOnRestart.Name),
 		SequencerBlockGasLimit:                 ctx.Uint64(utils.SequencerBlockGasLimit.Name),
 		PessimisticForkNumber:                  ctx.Uint64(utils.PessimisticForkNumber.Name),
+		FixBlockHash:                           ctx.Bool(utils.FixBlockHash.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

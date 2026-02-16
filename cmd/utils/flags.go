@@ -1006,6 +1006,11 @@ var (
 		Usage: "The fork number to use for networks launched as PP networks with no FEP history. Default 12.",
 		Value: 12,
 	}
+	FixBlockHash = cli.BoolFlag{
+		Name:  "zkevm.fix-block-hash",
+		Usage: "RPC only: recompute block hash from the constructed header and use it instead of the datastream hash. Enable this for a one-time resync to fix stale canonical hashes from pre-v2.65 sequencer bugs. When disabled (default), a hash mismatch will panic as a safety assertion.",
+		Value: false,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",

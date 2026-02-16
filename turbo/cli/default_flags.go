@@ -352,4 +352,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.ForcePMTInterhashesRegenOnRestart,
 	&utils.SequencerBlockGasLimit,
 	&utils.PessimisticForkNumber,
+	&utils.FixBlockHash,
 }
