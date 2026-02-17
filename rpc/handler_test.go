@@ -30,8 +30,11 @@ func TestHandlerDoesNotDoubleWriteNull(t *testing.T) {
 			expected: `{"jsonrpc":"2.0","id":1,"result":{}}`,
 		},
 		"err_with_valid_json": {
-			params:   []byte("[4]"),
-			expected: `{"jsonrpc":"2.0","id":1,"result":{"structLogs":[]},"error":{"code":-32000,"message":"id 4"}}`,
+			params: []byte("[4]"),
+			// Per JSON-RPC 2.0 spec, if there's an error, result MUST be null.
+			// Previously this allowed partial results to be concatenated with errors,
+			// which created invalid JSON-RPC responses.
+			expected: `{"jsonrpc":"2.0","id":1,"result":null,"error":{"code":-32000,"message":"id 4"}}`,
 		},
 	}
 
