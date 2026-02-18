@@ -158,7 +158,12 @@ Loop:
 		}
 
 		// exec loop variables
-		header := block.HeaderNoCopy()
+		var header *types.Header
+		if cfg.zk.MutableRPCHeaders {
+			header = block.MutableHeaderNoCopy()
+		} else {
+			header = block.HeaderNoCopy()
+		}
 		header.GasUsed = uint64(execRs.GasUsed)
 		header.ReceiptHash = types.DeriveSha(execRs.Receipts)
 		header.Bloom = execRs.Bloom

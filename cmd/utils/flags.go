@@ -139,6 +139,10 @@ var (
 		Name:  "override.pmtenabledblock",
 		Usage: "Manually specify the block for the PMT enabled",
 	}
+	OverrideSovereignModeBlockFlag = flags.BigFlag{
+		Name:  "override.sovereignmodeblock",
+		Usage: "Manually specify the block for the Sovereign Mode enabled",
+	}
 	TrustedSetupFile = cli.StringFlag{
 		Name:  "trusted-setup-file",
 		Usage: "Absolute path to trusted_setup.json file",
@@ -1001,6 +1005,11 @@ var (
 		Name:  "zkevm.pessimistic-fork-number",
 		Usage: "The fork number to use for networks launched as PP networks with no FEP history. Default 12.",
 		Value: 12,
+	}
+	MutableRPCHeaders = cli.BoolFlag{
+		Name:  "zkevm.mutable-rpc-headers",
+		Usage: "Enable mutable RPC headers, this will allow block hash recalculation from the RLP rather than trusting the canonical hash",
+		Value: false,
 	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
@@ -2614,6 +2623,10 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 
 	if ctx.IsSet(OverridePmtEnabledBlockFlag.Name) {
 		cfg.GenesisOverrides.OverridePmtEnabledBlock = flags.GlobalBig(ctx, OverridePmtEnabledBlockFlag.Name)
+	}
+
+	if ctx.IsSet(OverrideSovereignModeBlockFlag.Name) {
+		cfg.GenesisOverrides.OverrideSovereignModeBlock = flags.GlobalBig(ctx, OverrideSovereignModeBlockFlag.Name)
 	}
 
 	cfg.GenesisOverrides.OverrideBaseFeeMultipliers = core.GenesisBlockByChainName(chain).Config.BaseFeeChangeMultipliers
