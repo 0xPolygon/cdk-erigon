@@ -1006,6 +1006,11 @@ var (
 		Usage: "The fork number to use for networks launched as PP networks with no FEP history. Default 12.",
 		Value: 12,
 	}
+	MutableRPCHeaders = cli.BoolFlag{
+		Name:  "zkevm.mutable-rpc-headers",
+		Usage: "Enable mutable RPC headers, this will allow block hash recalculation from the RLP rather than trusting the canonical hash",
+		Value: false,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",
