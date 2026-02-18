@@ -37,6 +37,7 @@ runs:
       with:
         docker_username: ${{ env.DOCKERHUB_USERNAME }}
         docker_token: ${{ env.DOCKERHUB_TOKEN }}
+        pull_images_from_gcr: "false"
 
     - name: Upgrade Kurtosis CLI
       if: env.SKIP_ENCLAVE_SETUP != 'true'

@@ -23,6 +23,10 @@ runs:
 
     - name: Install Kurtosis CDK tools
       uses: ./kurtosis-cdk/.github/actions/kurtosis-pre-run
+      with:
+        docker_username: ${{ env.DOCKERHUB_USERNAME }}
+        docker_token: ${{ env.DOCKERHUB_TOKEN }}
+        pull_images_from_gcr: "false"
 
     - name: Upgrade Kurtosis CLI
       shell: bash
