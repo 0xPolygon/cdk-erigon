@@ -39,6 +39,14 @@ runs:
         docker_token: ${{ env.DOCKERHUB_TOKEN }}
         pull_images_from_gcr: "false"
 
+    - name: Upgrade Kurtosis CLI
+      if: env.SKIP_ENCLAVE_SETUP != 'true'
+      shell: bash
+      run: |
+        sudo apt update
+        sudo apt install -y kurtosis-cli=1.14.1
+        kurtosis version
+
     - name: Install Foundry
       if: env.SKIP_ENCLAVE_SETUP != 'true'
       uses: foundry-rs/foundry-toolchain@v1
