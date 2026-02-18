@@ -3,7 +3,6 @@ name: Hive EEST tests
 on:
   push:
     branches:
-      - release/*
       - pectra_e2
   workflow_dispatch:
 

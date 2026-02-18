@@ -3,7 +3,6 @@ name: Test Hive
 on:
   push:
     branches:
-        - release/*
         - pectra_e2
   schedule:
     - cron: "0 05 * * *" # daily at 5 am UTC

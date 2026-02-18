@@ -524,6 +524,7 @@ const (
 	BATCH_WITNESSES                   = "hermez_batch_witnesses"            // batch number -> witness
 	BATCH_COUNTERS                    = "hermez_batch_counters"
 	L1_BATCH_DATA                     = "l1_batch_data"                   // batch number -> l1 batch data from transaction call data
+	RECOVERY_BLOCK_BASE_FEE           = "recovery_block_base_fee"         // block number -> base fee
 	REUSED_L1_INFO_TREE_INDEX         = "reused_l1_info_tree_index"       // block number => const 1
 	LATEST_USED_GER                   = "latest_used_ger"                 // batch number -> GER latest used GER
 	BATCH_BLOCKS                      = "batch_blocks"                    // batch number -> block numbers (concatenated together)
@@ -777,6 +778,7 @@ var ChaindataTables = []string{
 	BATCH_WITNESSES,
 	BATCH_COUNTERS,
 	L1_BATCH_DATA,
+	RECOVERY_BLOCK_BASE_FEE,
 	REUSED_L1_INFO_TREE_INDEX,
 	LATEST_USED_GER,
 	BATCH_BLOCKS,

@@ -39,6 +39,7 @@ type RecurringL1GasPriceTracker struct {
 	stop            chan struct{}
 	latestMtx       *sync.Mutex
 	lowestMtx       *sync.Mutex
+	historyMtx      *sync.Mutex
 	running         bool
 	lastFetch       time.Time
 }
@@ -67,6 +68,7 @@ func NewRecurringL1GasPriceTracker(
 		stop:            make(chan struct{}),
 		latestMtx:       &sync.Mutex{},
 		lowestMtx:       &sync.Mutex{},
+		historyMtx:      &sync.Mutex{},
 		totalCount:      totalCount,
 	}
 }
@@ -74,6 +76,10 @@ func NewRecurringL1GasPriceTracker(
 func (t *RecurringL1GasPriceTracker) setLatestPrice(price *big.Int) {
 	t.latestMtx.Lock()
 	defer t.latestMtx.Unlock()
+
+	if price == nil {
+		return
+	}
 
 	t.latestPrice = new(big.Int).Set(price)
 }
@@ -118,6 +124,10 @@ func (t *RecurringL1GasPriceTracker) GetLowestPrice() *big.Int {
 func (t *RecurringL1GasPriceTracker) setLowestPrice(price *big.Int) {
 	t.lowestMtx.Lock()
 	defer t.lowestMtx.Unlock()
+
+	if price == nil {
+		return
+	}
 
 	t.lowestPrice = new(big.Int).Set(price)
 }
@@ -195,11 +205,15 @@ func (t *RecurringL1GasPriceTracker) fetchLatestL1Price() (*big.Int, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	t.lastFetch = time.Now()
 	return price, nil
 }
 
 func (t *RecurringL1GasPriceTracker) applyFactor(price *big.Int) (*big.Int, error) {
+	if price == nil {
+		return nil, fmt.Errorf("price cannot be nil")
+	}
 	// Apply factor to calculate l2 gasPrice
 	factor := big.NewFloat(0).SetFloat64(t.gasPriceFactor)
 	res := new(big.Float).Mul(factor, big.NewFloat(0).SetInt(price))
@@ -239,19 +253,47 @@ func (t *RecurringL1GasPriceTracker) applyFactor(price *big.Int) (*big.Int, erro
 }
 
 func (t *RecurringL1GasPriceTracker) calculateAndStoreNewLowestPrice(newPrice *big.Int) {
+	if newPrice == nil {
+		return
+	}
+
+	t.historyMtx.Lock()
 	t.priceHistory = append(t.priceHistory, newPrice)
 	if len(t.priceHistory) > int(t.totalCount) {
 		t.priceHistory = t.priceHistory[len(t.priceHistory)-int(t.totalCount):]
 	}
 
 	// now figure out the lowest price in all of the history by iterating over the priceHistory
+	if len(t.priceHistory) == 0 {
+		t.historyMtx.Unlock()
+		return
+	}
+
 	lowestPrice := t.priceHistory[0]
 
-	for _, price := range t.priceHistory {
-		if price.Cmp(lowestPrice) == -1 {
-			lowestPrice = price
+	if lowestPrice == nil {
+		// Filter out nil values and find the first non-nil price
+		for _, price := range t.priceHistory {
+			if price != nil {
+				lowestPrice = price
+				break
+			}
+		}
+		if lowestPrice == nil {
+			t.historyMtx.Unlock()
+			return
+
 		}
 	}
 
-	t.setLowestPrice(lowestPrice)
+	for _, price := range t.priceHistory {
+		if price != nil && price.Cmp(lowestPrice) == -1 {
+			lowestPrice = price
+		}
+	}
+	// Make a copy before releasing the lock to avoid issues if another goroutine modifies the slice
+	lowestPriceCopy := new(big.Int).Set(lowestPrice)
+	t.historyMtx.Unlock()
+
+	t.setLowestPrice(lowestPriceCopy)
 }
