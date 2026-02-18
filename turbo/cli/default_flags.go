@@ -181,6 +181,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.OverrideLondonBlockFlag,
 	&utils.OverrideShanghaiTimeFlag,
 	&utils.OverridePmtEnabledBlockFlag,
+	&utils.OverrideSovereignModeBlockFlag,
 
 	&utils.LightClientDiscoveryAddrFlag,
 	&utils.LightClientDiscoveryPortFlag,
@@ -351,4 +352,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.ForcePMTInterhashesRegenOnRestart,
 	&utils.SequencerBlockGasLimit,
 	&utils.PessimisticForkNumber,
+	&utils.MutableRPCHeaders,
 }

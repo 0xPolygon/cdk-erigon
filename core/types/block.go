@@ -1264,6 +1264,12 @@ func (b *Block) RequestsHash() *libcommon.Hash          { return b.header.Reques
 func (b *Block) Header() *Header       { return CopyHeader(b.header) }
 func (b *Block) HeaderNoCopy() *Header { return b.header }
 
+func (b *Block) MutableHeaderNoCopy() *Header {
+	header := b.header
+	header.mutable = true
+	return header
+}
+
 // Body returns the non-header content of the block.
 func (b *Block) Body() *Body {
 	bd := &Body{Transactions: b.transactions, Uncles: b.uncles, Withdrawals: b.withdrawals}

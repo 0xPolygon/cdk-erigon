@@ -138,6 +138,7 @@ type Zk struct {
 	ForcePMTInterhashesRegenOnRestart bool
 	SequencerBlockGasLimit            uint64
 	PessimisticForkNumber             uint64
+	MutableRPCHeaders                 bool
 }
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {

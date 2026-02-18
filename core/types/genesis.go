@@ -82,6 +82,7 @@ type GenesisOverrides struct {
 	OverrideShanghaiTime       *big.Int           `toml:",omitempty"`
 	OverridePmtEnabledBlock    *big.Int           `toml:",omitempty"`
 	OverrideBaseFeeMultipliers map[string]float64 `toml:",omitempty"`
+	OverrideSovereignModeBlock *big.Int           `toml:",omitempty"`
 }
 
 type AuRaSeal struct {

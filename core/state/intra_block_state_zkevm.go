@@ -2,6 +2,7 @@ package state
 
 import (
 	"errors"
+
 	"github.com/erigontech/erigon-lib/log/v3"
 
 	"github.com/erigontech/erigon-lib/chain"
@@ -106,6 +107,7 @@ func (sdb *IntraBlockState) SyncerPreExecuteStateSet(
 	reUsedL1InfoTreeIndex bool,
 ) {
 	if chainConfig.IsSovereignModeEnabled(blockNumber) {
+		log.Info("[Pre-Execute] [GER] Sovereign mode enabled, skipping PreExecuteStateSet", "blockNum", blockNumber)
 		// in debug we return early here, no out of EVM state changes
 		return
 	}
@@ -136,7 +138,6 @@ func (sdb *IntraBlockState) SyncerPreExecuteStateSet(
 		//save ger with l1blockhash - but only in the case that the l1 info tree index hasn't been
 		// re-used.  If it has been re-used we never write this to the contract storage
 		if !reUsedL1InfoTreeIndex && blockGer != nil && *blockGer != emptyHash {
-			log.Info("[Pre-Execute] [SR-DEBUG] Writing Global Exit Root L1 block hash to state DB", "ger", blockGer.String(), "l1BlockHash", l1BlockHash.String())
 			sdb.WriteGerManagerL1BlockHash(chainConfig, blockNumber, *blockGer, *l1BlockHash)
 		}
 	} else {
@@ -150,7 +151,7 @@ func (sdb *IntraBlockState) SyncerPreExecuteStateSet(
 
 		for _, ger := range *gerUpdates {
 			//save ger
-			log.Info("[Pre-Execute] [SR-DEBUG] Writing Global Exit Root timestamp to state DB", "ger", ger.GlobalExitRoot.String(), "timestamp", ger.Timestamp)
+			log.Info("[Pre-Execute] [GER] Writing Global Exit Root timestamp to state DB", "ger", ger.GlobalExitRoot.String(), "timestamp", ger.Timestamp)
 			sdb.WriteGlobalExitRootTimestamp(ger.GlobalExitRoot, ger.Timestamp)
 		}
 
@@ -243,8 +244,11 @@ func (sdb *IntraBlockState) ReadGerManagerL1BlockHash(ger libcommon.Hash) libcom
 
 func (sdb *IntraBlockState) WriteGerManagerL1BlockHash(chainConfig *chain.Config, blockNumber uint64, ger, l1BlockHash libcommon.Hash) {
 	if chainConfig.IsSovereignModeEnabled(blockNumber) {
+		log.Info("[Pre-Execute] [GER] Sovereign mode enabled, skipping writing Global Exit Root L1 block hash to state DB", "blockNum", blockNumber, "ger", ger, "l1BlockHash", l1BlockHash.String())
 		return
 	}
+
+	log.Info("[Pre-Execute] [GER] Writing Global Exit Root L1 block hash to state DB", "blockNum", blockNumber, "ger", ger, "l1BlockHash", l1BlockHash.String())
 
 	d1 := common.LeftPadBytes(ger.Bytes(), 32)
 	d2 := common.LeftPadBytes(GLOBAL_EXIT_ROOT_STORAGE_POS.Bytes(), 32)
