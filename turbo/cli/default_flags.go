@@ -353,4 +353,5 @@ var DefaultFlags = []cli.Flag{
 	&utils.SequencerBlockGasLimit,
 	&utils.PessimisticForkNumber,
 	&utils.MutableRPCHeaders,
+	&utils.SyncSequencerL1Data,
 }

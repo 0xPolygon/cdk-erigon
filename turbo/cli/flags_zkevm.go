@@ -346,6 +346,7 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 		SequencerBlockGasLimit:                 ctx.Uint64(utils.SequencerBlockGasLimit.Name),
 		PessimisticForkNumber:                  ctx.Uint64(utils.PessimisticForkNumber.Name),
 		MutableRPCHeaders:                      ctx.Bool(utils.MutableRPCHeaders.Name),
+		SyncSequencerL1Data:                    ctx.Bool(utils.SyncSequencerL1Data.Name),
 	}
 
 	utils2.EnableTimer(cfg.DebugTimers)

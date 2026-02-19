@@ -39,6 +39,7 @@ func NewDefaultZkStages(ctx context.Context,
 	datastreamClient zkStages.DatastreamClient,
 	dataStreamServer server.DataStreamServer,
 	infoTreeUpdater *l1infotree.Updater,
+	sequencerL1Syncer *syncer.L1Syncer,
 ) []*stagedsync.Stage {
 	dirs := cfg.Dirs
 	blockWriter := blockio.NewBlockWriter(cfg.HistoryV3)
@@ -53,6 +54,7 @@ func NewDefaultZkStages(ctx context.Context,
 
 	return zkStages.DefaultZkStages(ctx,
 		zkStages.StageL1SyncerCfg(db, l1Syncer, cfg.Zk),
+		zkStages.StageL1SequencerSyncCfg(db, cfg.Zk, sequencerL1Syncer),
 		zkStages.StageL1InfoTreeCfg(db, cfg.Zk, controlServer.ChainConfig, infoTreeUpdater),
 		zkStages.StageBatchesCfg(db, datastreamClient, cfg.Zk, controlServer.ChainConfig, &cfg.Miner),
 		zkStages.StageDataStreamCatchupCfg(dataStreamServer, db, cfg.Genesis.Config.ChainID.Uint64()),
