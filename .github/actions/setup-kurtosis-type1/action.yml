@@ -30,6 +30,8 @@ runs:
       shell: bash
       run: |
         sed -i 's#leovct/toolbox:0.0.8#europe-west2-docker.pkg.dev/prj-polygonlabs-devtools-dev/public/toolbox:0.0.12#g' ./kurtosis-cdk/src/package_io/constants.star
+        # Redirect Vector to GHCR to avoid Docker Hub rate limits
+        grep -r "timberio/vector" ./kurtosis-cdk | xargs -I {} sed -i 's#timberio/vector#ghcr.io/vectordotdev/vector#g' {} || true
 
     - name: Install Kurtosis CDK tools
       if: env.SKIP_ENCLAVE_SETUP != 'true'
@@ -121,7 +123,7 @@ runs:
         echo '  deploy_op_succinct: false' >> params.yml
         echo 'args:' >> params.yml
         echo '  cdk_erigon_node_image: cdk-erigon-type1:local' >> params.yml
-        echo '  el-1-geth-lighthouse: ethpandaops/lighthouse@sha256:4902d9e4a6b6b8d4c136ea54f0e51582a32f356f3dec7194a1adee13ed2d662e' >> params.yml
+        echo '  el-1-geth-lighthouse: ghcr.io/ethpandaops/lighthouse@sha256:4902d9e4a6b6b8d4c136ea54f0e51582a32f356f3dec7194a1adee13ed2d662e' >> params.yml
         echo '  consensus_contract_type: pessimistic' >> params.yml
         echo '  pp_vkey_hash: 0x00d6e4bdab9cac75a50d58262bb4e60b3107a6b61131ccdff649576c624b6fb7' >> params.yml
         echo '  agglayer_prover_primary_prover: mock-prover' >> params.yml
@@ -146,4 +148,4 @@ runs:
       working-directory: ./kurtosis-cdk
       shell: bash
       run: |
-        kurtosis run --enclave cdk-v1 --args-file params.yml --image-download always .
+        kurtosis run --enclave cdk-v1 --args-file params.yml .
