@@ -20,8 +20,8 @@ runs:
       shell: bash
       run: |
         sed -i 's#leovct/toolbox:0.0.8#europe-west2-docker.pkg.dev/prj-polygonlabs-devtools-dev/public/toolbox:0.0.12#g' ./kurtosis-cdk/src/package_io/constants.star
-        # Redirect Vector to GHCR to avoid Docker Hub rate limits
-        grep -r "timberio/vector" ./kurtosis-cdk | xargs -I {} sed -i 's#timberio/vector#ghcr.io/vectordotdev/vector#g' {} || true
+        sed -i 's#ethereum/client-go:v1.16.9#ghcr.io/ethpandaops/geth:master#g' ./kurtosis-cdk/src/package_io/constants.star
+        sed -i 's#timberio/vector:0.45.0-debian#ghcr.io/vectordotdev/vector:0.45.0-debian#g' ./kurtosis-cdk/src/package_io/constants.star
 
     - name: Install Kurtosis CDK tools
       uses: ./kurtosis-cdk/.github/actions/kurtosis-pre-run
@@ -64,20 +64,6 @@ runs:
         echo "Disk usage after cleanup:"
         df -h
 
-    - name: Pre-pull and tag images to avoid Docker Hub
-      shell: bash
-      run: |
-        # Pre-pull Vector from GHCR and tag as timberio/vector to bypass engine pull
-        docker pull --platform linux/amd64 ghcr.io/vectordotdev/vector:0.45.0-debian || true
-        docker tag ghcr.io/vectordotdev/vector:0.45.0-debian timberio/vector:0.45.0-debian || true
-        
-        # Pre-pull Kurtosis engine components
-        docker pull --platform linux/amd64 ghcr.io/kurtosistech/engine:1.14.1 || true
-        docker tag ghcr.io/kurtosistech/engine:1.14.1 kurtosistech/engine:1.14.1 || true
-        
-        # Pre-pull Geth and tag to avoid Docker Hub
-        docker pull --platform linux/amd64 ghcr.io/ethpandaops/geth:latest || true
-        docker tag ghcr.io/ethpandaops/geth:latest ethereum/client-go:latest || true
 
     - name: Build docker image
       working-directory: ./cdk-erigon
