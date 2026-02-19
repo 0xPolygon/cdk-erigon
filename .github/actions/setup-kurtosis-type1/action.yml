@@ -80,6 +80,21 @@ runs:
         echo "Disk usage after cleanup:"
         df -h
 
+    - name: Pre-pull and tag images to avoid Docker Hub
+      shell: bash
+      run: |
+        # Pre-pull Vector from GHCR and tag as timberio/vector to bypass engine pull
+        docker pull ghcr.io/vectordotdev/vector:0.45.0-debian || true
+        docker tag ghcr.io/vectordotdev/vector:0.45.0-debian timberio/vector:0.45.0-debian || true
+        
+        # Pre-pull Kurtosis engine components
+        docker pull ghcr.io/kurtosis-tech/kurtosis-engine:1.14.1 || true
+        docker tag ghcr.io/kurtosis-tech/kurtosis-engine:1.14.1 kurtosistech/engine:1.14.1 || true
+        
+        # Pre-pull Geth and tag to avoid Docker Hub
+        docker pull ghcr.io/ethpandaops/geth:master || true
+        docker tag ghcr.io/ethpandaops/geth:master ethereum/client-go:latest || true
+
     - name: Build docker image
       working-directory: ${{ github.workspace }}
       shell: bash
