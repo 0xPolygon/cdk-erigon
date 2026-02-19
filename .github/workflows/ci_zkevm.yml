@@ -91,10 +91,13 @@ jobs:
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Setup kurtosis
         uses: ./.github/actions/setup-kurtosis
-
-
       - name: Run process with CPU monitoring
         working-directory: ./cdk-erigon
         run: |
@@ -187,7 +190,11 @@ jobs:
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4
-
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Setup kurtosis
         uses: ./.github/actions/setup-kurtosis-type1
 
@@ -260,7 +267,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: cdk-erigon
-
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Checkout kurtosis-cdk
         uses: actions/checkout@v4
       - name: Setup kurtosis
