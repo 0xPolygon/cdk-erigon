@@ -152,21 +152,31 @@ func detectMigrations(tx kv.Tx, res *ConfigResult) {
 		return
 	}
 
+	head, _ := getDBHead(tx)
+
 	// 1. Check for SMT -> PMT migration
 	if cc.PmtEnabledBlock != nil && cc.PmtEnabledBlock.Uint64() > 0 {
+		status := "AVAILABLE"
+		if head >= cc.PmtEnabledBlock.Uint64() {
+			status = "COMPLETED"
+		}
 		res.Violations = append(res.Violations, ConfigViolation{
 			Level:   "info",
-			Code:    "MIGRATION_AVAILABLE",
-			Message: fmt.Sprintf("Path: SMT -> PMT (Type-1). Activation block: %d", cc.PmtEnabledBlock.Uint64()),
+			Code:    fmt.Sprintf("MIGRATION_%s", status),
+			Message: fmt.Sprintf("Path: SMT -> PMT (Type-1). Activation: %d (Current: %d)", cc.PmtEnabledBlock.Uint64(), head),
 		})
 	}
 
 	// 2. Check for Sovereign Mode migration
 	if cc.SovereignModeBlock != nil && cc.SovereignModeBlock.Uint64() > 0 {
+		status := "AVAILABLE"
+		if head >= cc.SovereignModeBlock.Uint64() {
+			status = "COMPLETED"
+		}
 		res.Violations = append(res.Violations, ConfigViolation{
 			Level:   "info",
-			Code:    "MIGRATION_AVAILABLE",
-			Message: fmt.Sprintf("Path: FEP -> Sovereign. Activation block: %d", cc.SovereignModeBlock.Uint64()),
+			Code:    fmt.Sprintf("MIGRATION_%s", status),
+			Message: fmt.Sprintf("Path: FEP -> Sovereign. Activation: %d (Current: %d)", cc.SovereignModeBlock.Uint64(), head),
 		})
 	}
 
@@ -174,7 +184,7 @@ func detectMigrations(tx kv.Tx, res *ConfigResult) {
 		res.Violations = append(res.Violations, ConfigViolation{
 			Level:   "info",
 			Code:    "NO_MIGRATIONS",
-			Message: "No available upgrade paths discovered in ChainConfig.",
+			Message: "No upgrade paths discovered in ChainConfig for this network.",
 		})
 	}
 }

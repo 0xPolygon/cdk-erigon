@@ -431,6 +431,11 @@ var (
 		Usage: "API's offered over the HTTP-RPC interface",
 		Value: "eth,erigon,engine",
 	}
+	ZkEvmModeFlag = cli.StringFlag{
+		Name:  "zkevm.mode",
+		Usage: "ZK-EVM operation mode (FEP, PP, Sovereign, Type-1)",
+		Value: "",
+	}
 	L2ChainIdFlag = cli.Uint64Flag{
 		Name:  "zkevm.l2-chain-id",
 		Usage: "L2 chain ID",

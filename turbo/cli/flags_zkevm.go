@@ -394,3 +394,24 @@ func ApplyFlagsForZkConfig(ctx *cli.Context, cfg *ethconfig.Config) {
 	checkFlag(utils.L1ContractAddressRetrieveFlag.Name, cfg.L1ContractAddressCheck)
 	verifyAddressFlag(utils.L2DataStreamerUrlFlag.Name, cfg.L2DataStreamerUrl)
 }
+
+func ApplyZkEvmProfiles(ctx *cli.Context) {
+	mode := ctx.String(utils.ZkEvmModeFlag.Name)
+	if mode == "" {
+		return
+	}
+
+	log.Info("Applying ZK-EVM Profile", "mode", mode)
+
+	switch mode {
+	case "Type-1":
+		_ = ctx.Set(utils.SkipSmt.Name, "true")
+		_ = ctx.Set(utils.SimultaneousPmtAndSmt.Name, "true")
+	case "FEP":
+		_ = ctx.Set(utils.WitnessFullFlag.Name, "true")
+	case "PP":
+		_ = ctx.Set(utils.WitnessFullFlag.Name, "false")
+	case "Sovereign":
+		// Sovereign specific defaults if any
+	}
+}

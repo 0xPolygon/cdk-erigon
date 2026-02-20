@@ -8,6 +8,7 @@ import (
 	"github.com/erigontech/erigon-lib/kv"
 	"github.com/erigontech/erigon-lib/kv/mdbx"
 	"github.com/erigontech/erigon-lib/log/v3"
+	"github.com/erigontech/erigon/core/rawdb"
 )
 
 func openDB(dataDir string) (kv.RwDB, error) {
@@ -25,7 +26,16 @@ func openDB(dataDir string) (kv.RwDB, error) {
 }
 
 func getDBHead(tx kv.Tx) (uint64, error) {
-	// Dummy implementation for now, will be populated with actual logic
-	// to fetch the highest block number from the DB.
-	return 0, nil
+	head, err := rawdb.ReadCanonicalHash(tx, 0) // Just to ensure we have markers
+	if err != nil {
+		return 0, err
+	}
+	_ = head
+
+	// Read the actual head from the stage progress or headers
+	progress := rawdb.ReadHeaderNumber(tx, rawdb.ReadHeadHeaderHash(tx))
+	if progress == nil {
+		return 0, nil
+	}
+	return *progress, nil
 }
