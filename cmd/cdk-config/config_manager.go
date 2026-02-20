@@ -153,12 +153,15 @@ func detectMigrations(tx kv.Tx, res *ConfigResult) {
 	}
 
 	head, _ := getDBHead(tx)
+	pendingFound := false
 
 	// 1. Check for SMT -> PMT migration
 	if cc.PmtEnabledBlock != nil && cc.PmtEnabledBlock.Uint64() > 0 {
 		status := "AVAILABLE"
 		if head >= cc.PmtEnabledBlock.Uint64() {
 			status = "COMPLETED"
+		} else {
+			pendingFound = true
 		}
 		res.Violations = append(res.Violations, ConfigViolation{
 			Level:   "info",
@@ -172,6 +175,8 @@ func detectMigrations(tx kv.Tx, res *ConfigResult) {
 		status := "AVAILABLE"
 		if head >= cc.SovereignModeBlock.Uint64() {
 			status = "COMPLETED"
+		} else {
+			pendingFound = true
 		}
 		res.Violations = append(res.Violations, ConfigViolation{
 			Level:   "info",
@@ -185,6 +190,12 @@ func detectMigrations(tx kv.Tx, res *ConfigResult) {
 			Level:   "info",
 			Code:    "NO_MIGRATIONS",
 			Message: "No upgrade paths discovered in ChainConfig for this network.",
+		})
+	} else if !pendingFound {
+		res.Violations = append(res.Violations, ConfigViolation{
+			Level:   "info",
+			Code:    "ALL_MIGRATIONS_COMPLETED",
+			Message: "No further pending upgrades discovered for the current chain state.",
 		})
 	}
 }
