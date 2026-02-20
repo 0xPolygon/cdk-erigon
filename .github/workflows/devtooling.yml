@@ -3,7 +3,7 @@ name: Devtooling tests
 on:
   schedule:
     - cron: '0 0 * * *'  # Runs every night at midnight UTC
-  
+
 env:
   DEVTOOLING_IMAGE: xavierromero/devtooling:20241210
 
@@ -15,6 +15,12 @@ jobs:
     steps:
       - name: Checkout cdk-erigon
         uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Setup kurtosis
         uses: ./.github/actions/setup-kurtosis

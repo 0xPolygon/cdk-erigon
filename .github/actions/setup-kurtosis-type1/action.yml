@@ -30,6 +30,7 @@ runs:
       shell: bash
       run: |
         sed -i 's#leovct/toolbox:0.0.8#europe-west2-docker.pkg.dev/prj-polygonlabs-devtools-dev/public/toolbox:0.0.12#g' ./kurtosis-cdk/src/package_io/constants.star
+        sed -i 's#timberio/vector:0.45.0-debian#ghcr.io/vectordotdev/vector:0.45.0-debian#g' ./kurtosis-cdk/src/package_io/constants.star
 
     - name: Install Kurtosis CDK tools
       if: env.SKIP_ENCLAVE_SETUP != 'true'
@@ -77,6 +78,7 @@ runs:
         docker system prune -af
         echo "Disk usage after cleanup:"
         df -h
+
 
     - name: Build docker image
       working-directory: ${{ github.workspace }}
@@ -146,4 +148,4 @@ runs:
       working-directory: ./kurtosis-cdk
       shell: bash
       run: |
-        kurtosis run --enclave cdk-v1 --args-file params.yml --image-download always .
+        kurtosis run --enclave cdk-v1 --args-file params.yml .

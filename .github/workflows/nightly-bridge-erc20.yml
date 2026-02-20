@@ -22,7 +22,12 @@ jobs:
     steps:
       - name: Clone bridge repository
         run:  git clone --recurse-submodules -j8 https://github.com/0xPolygonHermez/zkevm-bridge-service.git -b feature/test_bridge_messages_real_network-v2  bridge
-        
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build docker image
         run: |
           cd bridge
@@ -45,4 +50,4 @@ jobs:
           L2BridgeAddr="${{ matrix.bridge_addr }}"
           EOF
           docker run  --volume "./tmp/:/config/" --env BRIDGE_TEST_CONFIG_FILE=/config/test.toml bridge-e2e-realnetwork-erc20
-        
+
