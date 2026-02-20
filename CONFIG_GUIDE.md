@@ -52,7 +52,14 @@ Once the node has started and synced past the activation block, lean out your co
     ```bash
     ./cdk-config doctor --config config.yaml --datadir /path/to/data
     ```
-    *Why?* Once the migration is healthy and finished, the tool will suggest removing transitional flags (like `zkevm.simultaneous-pmt-and-smt`) to keep your configuration clean and performant.
+### Phase 5: Deep Audit (Optional)
+For high-assurance environments or after major fork activations (e.g., SMT -> PMT), perform a data integrity check.
+
+1.  **Integrity Check**: Verify block header compliance.
+    ```bash
+    ./cdk-config verify-evm --datadir /path/to/data --limit 1000
+    ```
+    *Why?* While `doctor` checks the configuration, `verify-evm` checks the **actual data**. It ensures the blocks produced/received are 100% compliant with the network's consensus rules.
 
 ---
 
