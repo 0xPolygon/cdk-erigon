@@ -59,6 +59,9 @@ func runErigon(cliCtx *cli.Context) error {
 		}
 	}
 
+	// Apply ZK-EVM profiles (e.g., Type-1, FEP) to override/set defaults
+	erigoncli.ApplyZkEvmProfiles(cliCtx)
+
 	// initializing the node and providing the current git commit there
 	log.Info("Build info", "git_branch", params.GitBranch, "git_tag", params.GitTag, "git_commit", params.GitCommit)
 

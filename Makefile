@@ -149,6 +149,7 @@ COMMANDS += evm
 COMMANDS += sentinel
 COMMANDS += acl
 COMMANDS += relay
+COMMANDS += cdk-config
 
 # build each command using %.cmd rule
 $(COMMANDS): %: %.cmd

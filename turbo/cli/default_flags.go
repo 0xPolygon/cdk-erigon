@@ -189,7 +189,7 @@ var DefaultFlags = []cli.Flag{
 	&utils.SentinelAddrFlag,
 	&utils.SentinelPortFlag,
 	&utils.YieldSizeFlag,
-
+	&utils.ZkEvmModeFlag,
 	&utils.L2ChainIdFlag,
 	&utils.L2RpcUrlFlag,
 	&utils.L2DataStreamerUrlFlag,
