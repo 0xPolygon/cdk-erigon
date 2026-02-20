@@ -91,6 +91,12 @@ func diagnoseDB(tx kv.Tx, cfg map[string]interface{}, res *ConfigResult) {
 			return
 		}
 
+		val, ok := cfg["zkevm.simultaneous-pmt-and-smt"]
+		simPMT := false
+		if ok {
+			simPMT = val.(bool)
+		}
+
 		head, _ := getDBHead(tx)
 
 		// If we are well past the PMT block, check if PMT state actually exists
@@ -101,15 +107,16 @@ func diagnoseDB(tx kv.Tx, cfg map[string]interface{}, res *ConfigResult) {
 			hasPMT := true // Simplified for now, could check specific buckets
 
 			if hasPMT {
-				// No need to warn about simultaneous build if we are already done and healthy
+				// Migration is done and healthy. Check if we can clean up simultaneous flags.
+				if simPMT {
+					res.Violations = append(res.Violations, ConfigViolation{
+						Level:   "info",
+						Code:    "PMT_CLEANUP_SUGGESTED",
+						Message: fmt.Sprintf("PMT migration at block %d is complete and healthy. You can now safely disable 'zkevm.simultaneous-pmt-and-smt' to lean out your config.", pmtBlock),
+					})
+				}
 				return
 			}
-		}
-
-		val, ok := cfg["zkevm.simultaneous-pmt-and-smt"]
-		simPMT := false
-		if ok {
-			simPMT = val.(bool)
 		}
 
 		if !simPMT {

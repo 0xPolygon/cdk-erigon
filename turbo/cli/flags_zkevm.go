@@ -403,14 +403,24 @@ func ApplyZkEvmProfiles(ctx *cli.Context) {
 
 	log.Info("Applying ZK-EVM Profile", "mode", mode)
 
+	setWithWarning := func(flagName string, value string) {
+		if ctx.IsSet(flagName) {
+			current := ctx.String(flagName)
+			if current != value {
+				log.Warn("🚨 Configuration override", "profile", mode, "flag", flagName, "manual_value", current, "profile_value", value)
+			}
+		}
+		_ = ctx.Set(flagName, value)
+	}
+
 	switch mode {
 	case "Type-1":
-		_ = ctx.Set(utils.SkipSmt.Name, "true")
-		_ = ctx.Set(utils.SimultaneousPmtAndSmt.Name, "true")
+		setWithWarning(utils.SkipSmt.Name, "true")
+		setWithWarning(utils.SimultaneousPmtAndSmt.Name, "true")
 	case "FEP":
-		_ = ctx.Set(utils.WitnessFullFlag.Name, "true")
+		setWithWarning(utils.WitnessFullFlag.Name, "true")
 	case "PP":
-		_ = ctx.Set(utils.WitnessFullFlag.Name, "false")
+		setWithWarning(utils.WitnessFullFlag.Name, "false")
 	case "Sovereign":
 		// Sovereign specific defaults if any
 	}

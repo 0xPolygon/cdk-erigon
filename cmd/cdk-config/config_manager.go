@@ -194,9 +194,18 @@ func detectMigrations(tx kv.Tx, res *ConfigResult) {
 	} else if !pendingFound {
 		res.Violations = append(res.Violations, ConfigViolation{
 			Level:   "info",
-			Code:    "ALL_MIGRATIONS_COMPLETED",
-			Message: "No further pending upgrades discovered for the current chain state.",
+			Code:    "MIGRATIONS_COMPLETED",
+			Message: "All discovered upgrade paths are already active in the DB.",
 		})
+
+		// Check if we are in the "Cleanup" phase (Type-1 but potentially still having sim flags)
+		if cc.PmtEnabledBlock != nil && head > cc.PmtEnabledBlock.Uint64() {
+			res.Violations = append(res.Violations, ConfigViolation{
+				Level:   "info",
+				Code:    "CLEANUP_PHASE",
+				Message: "Strategy: Run 'cdk-config doctor' to see recommended post-migration flag cleanups.",
+			})
+		}
 	}
 }
 
