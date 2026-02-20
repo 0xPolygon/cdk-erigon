@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/erigontech/erigon-lib/kv"
+	"github.com/erigontech/erigon/core/rawdb"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 )
@@ -109,19 +112,71 @@ func RunConfigListMigrations(ctx *cli.Context) error {
 		return fmt.Errorf("--datadir is required")
 	}
 
-	res := ConfigResult{Status: "OK"}
-
 	db, err := openDB(dataDir)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	// Logic to detect migrations based on DB...
-	// (Implement DetectMigrations logic here)
+	tx, err := db.BeginRo(context.Background())
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res := ConfigResult{Status: "OK"}
+	detectMigrations(tx, &res)
 
 	printResult(res, format)
 	return nil
+}
+
+func detectMigrations(tx kv.Tx, res *ConfigResult) {
+	genesisHash, err := rawdb.ReadCanonicalHash(tx, 0)
+	if err != nil {
+		res.Violations = append(res.Violations, ConfigViolation{
+			Level:   "error",
+			Code:    "DB_GENESIS_ERROR",
+			Message: fmt.Sprintf("Failed to read genesis: %v", err),
+		})
+		return
+	}
+
+	cc, err := rawdb.ReadChainConfig(tx, genesisHash)
+	if err != nil {
+		res.Violations = append(res.Violations, ConfigViolation{
+			Level:   "error",
+			Code:    "CHAIN_CONFIG_ERROR",
+			Message: fmt.Sprintf("Failed to read chain config: %v", err),
+		})
+		return
+	}
+
+	// 1. Check for SMT -> PMT migration
+	if cc.PmtEnabledBlock != nil && cc.PmtEnabledBlock.Uint64() > 0 {
+		res.Violations = append(res.Violations, ConfigViolation{
+			Level:   "info",
+			Code:    "MIGRATION_AVAILABLE",
+			Message: fmt.Sprintf("Path: SMT -> PMT (Type-1). Activation block: %d", cc.PmtEnabledBlock.Uint64()),
+		})
+	}
+
+	// 2. Check for Sovereign Mode migration
+	if cc.SovereignModeBlock != nil && cc.SovereignModeBlock.Uint64() > 0 {
+		res.Violations = append(res.Violations, ConfigViolation{
+			Level:   "info",
+			Code:    "MIGRATION_AVAILABLE",
+			Message: fmt.Sprintf("Path: FEP -> Sovereign. Activation block: %d", cc.SovereignModeBlock.Uint64()),
+		})
+	}
+
+	if len(res.Violations) == 0 {
+		res.Violations = append(res.Violations, ConfigViolation{
+			Level:   "info",
+			Code:    "NO_MIGRATIONS",
+			Message: "No available upgrade paths discovered in ChainConfig.",
+		})
+	}
 }
 
 func loadConfig(filePath string) (map[string]interface{}, error) {
