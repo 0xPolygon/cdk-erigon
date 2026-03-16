@@ -1,0 +1,58 @@
+name: Resequence tests
+permissions:
+  contents: read
+on:
+  pull_request:
+    branches:
+      - zkevm
+      - zkevm-2.60
+      - stable/**
+      - project/**
+      - release/**
+  workflow_dispatch:
+
+jobs:
+  resequence-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        da-mode: [ "rollup" ]
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - name: Checkout cdk-erigon
+        uses: actions/checkout@v4
+
+      - name: Setup kurtosis type-1 PMT
+        uses: ./.github/actions/setup-kurtosis-type1
+
+      - name: Ensure jq is installed
+        run: |
+          if ! command -v jq &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+      - name: Run resequence tests
+        working-directory: ./cdk-erigon
+        run: |
+          chmod +x ./.github/scripts/test_resequence.sh
+          ./.github/scripts/test_resequence.sh
+
+      - name: Prepare logs
+        working-directory: ./kurtosis-cdk
+        if: failure()
+        run: |
+          mkdir -p ci_logs
+          cd ci_logs
+          kurtosis service logs cdk-v1 cdk-erigon-rpc-001 --all > cdk-erigon-rpc-001.log
+          kurtosis service logs cdk-v1 cdk-erigon-sequencer-001 --all > cdk-erigon-sequencer-001.log
+          kurtosis service logs cdk-v1 cdk-node-001 --all > cdk-node-001.log
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-resequence-${{ github.run_id }}
+          path: ./kurtosis-cdk/ci_logs
+

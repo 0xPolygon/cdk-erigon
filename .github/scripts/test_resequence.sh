@@ -1,18 +1,41 @@
 #!/bin/bash
 
 get_latest_l2_batch() {
+    local rpc_url
+    rpc_url=$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)
+    if [[ $? -ne 0 ]]; then
+        echo "Error: Failed to get RPC URL from kurtosis" >&2
+        return 1
+    fi
+    echo "RPC URL: $rpc_url" >&2
+
     local latest_block
-    latest_block=$(cast block latest --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)" | grep "number" | awk '{print $2}')
+    latest_block=$(cast block latest --rpc-url "$rpc_url" | grep "number" | awk '{print $2}')
+    if [[ $? -ne 0 || -z "$latest_block" ]]; then
+        echo "Error: Failed to get latest block (cast block latest failed)" >&2
+        echo "RPC URL was: $rpc_url" >&2
+        return 1
+    fi
+    echo "Latest block: $latest_block" >&2
 
     local latest_batch
-    latest_batch=$(cast rpc zkevm_batchNumberByBlockNumber "$latest_block" --rpc-url "$(kurtosis port print cdk-v1 cdk-erigon-sequencer-001 rpc)" | sed 's/^"//;s/"$//')
+    latest_batch=$(cast rpc zkevm_batchNumberByBlockNumber "$latest_block" --rpc-url "$rpc_url" | sed 's/^"//;s/"$//')
+    if [[ $? -ne 0 ]]; then
+        echo "Error: Failed to call zkevm_batchNumberByBlockNumber RPC" >&2
+        echo "Block number was: $latest_block" >&2
+        echo "RPC URL was: $rpc_url" >&2
+        return 1
+    fi
 
     if [[ -z "$latest_batch" ]]; then
-        echo "Error: Failed to get latest batch number" >&2
+        echo "Error: Failed to get latest batch number (empty response)" >&2
+        echo "Block number was: $latest_block" >&2
+        echo "RPC URL was: $rpc_url" >&2
         return 1
     fi
 
     latest_batch_dec=$((latest_batch))
+    echo "Latest batch (decimal): $latest_batch_dec" >&2
 
     echo "$latest_batch_dec"
 }
