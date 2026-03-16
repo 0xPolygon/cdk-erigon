@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/holiman/uint256"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/erigontech/erigon-lib/common/fixedgas"
 	"github.com/erigontech/erigon-lib/txpool/txpoolcfg"
 	types2 "github.com/erigontech/erigon-lib/types"
+	abi "github.com/erigontech/erigon/accounts/abi"
 
 	"github.com/erigontech/erigon-lib/crypto"
 
@@ -386,6 +388,105 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 	// 5. there is no overflow when calculating intrinsic gas
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
+	// ACL preflight: optionally check admission against on-chain ACL before any state changes
+	if st.evm.Config().ACL.Enabled {
+		// Skip ACL preflight for simulation calls with zero-origin (common in tooling / ENS lookups)
+		if st.msg.From() == (libcommon.Address{}) {
+			goto ACL_PREFLIGHT_DONE
+		}
+		aclAddr := st.evm.Config().ACL.Address
+		// Resolve EIP-1967 implementation of the ACL proxy to avoid gating calls to it
+		var aclImpl libcommon.Address
+		{
+			// eip1967 impl slot
+			slot := libcommon.HexToHash("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
+			var out uint256.Int
+			st.evm.IntraBlockState().GetState(aclAddr, &slot, &out)
+			if !out.IsZero() {
+				b := out.Bytes32()
+				copy(aclImpl[:], b[12:32])
+			}
+		}
+		log.Info("ACL preflight: enabled", "acl", aclAddr, "failOpen", st.evm.Config().ACL.FailOpen, "from", st.msg.From(), "to", func() libcommon.Address {
+			if st.msg.To() != nil {
+				return *st.msg.To()
+			}
+			return libcommon.Address{}
+		}())
+		// Superuser bypass: explicit list or owner (if enabled)
+		if aclInBypassList(st.evm.Config().ACL.Bypass, st.msg.From()) || (st.evm.Config().ACL.OwnerBypass && aclIsOwnerPreflight(st, aclAddr, st.msg.From())) {
+			goto ACL_PREFLIGHT_DONE
+		}
+		// zero address means misconfigured; respect FailOpen if set
+		if aclAddr != (libcommon.Address{}) {
+			var target libcommon.Address
+			if st.msg.To() != nil {
+				target = *st.msg.To()
+			} else {
+				// contract creation -> target is zero address per ACL contract semantics
+				target = libcommon.Address{}
+			}
+			// If the external call itself targets the ACL contract (e.g. isPermitted/owner probes),
+			// skip preflight to avoid gating access to the ACL proxy and to prevent recursive checks.
+			if st.msg.To() != nil && (*st.msg.To() == aclAddr || *st.msg.To() == aclImpl) {
+				goto ACL_PREFLIGHT_DONE
+			}
+			// If we are calling the ACL contract itself (e.g. isPermitted/checkPermittedOrRevert),
+			// derive the intended target from calldata to avoid gating access to the ACL proxy.
+			if target == aclAddr {
+				data := st.msg.Data()
+				// ABI: (address subject, address target, bytes payload)
+				// head = 3 words after 4-byte selector; second address occupies bytes [4+32, 4+64)
+				if len(data) >= 4+64 {
+					var t libcommon.Address
+					copy(t[:], data[4+32+12:4+64])
+					target = t
+				}
+			}
+
+			log.Info("ACL target", "address", target, "aclAddr", aclAddr)
+			// Build calldata for checkPermittedOrRevert(address,address,bytes)
+			data := buildACLCheckCallData(st.msg.From(), target, st.msg.Data())
+			// Use a bounded gas stipend for the staticcall; this does not affect tx gasRemaining
+			const aclCallGas uint64 = 1_000_000
+			// Use a temporary EVM with RestoreState to avoid any state touches
+			cfg := st.evm.Config()
+			cfg.RestoreState = true
+			cfg.ReadOnly = true
+			// Disable ACL for the preflight to avoid recursion
+			cfg.ACL.Enabled = false
+			tmpEVM := vm.NewEVM(st.evm.Context, st.evm.TxContext, st.evm.IntraBlockState(), st.evm.ChainConfig(), cfg)
+			// Perform STATICCALL from the sender context
+			timeStart := time.Now().Nanosecond()
+			if vm.ACLTrace != nil {
+				vm.ACLTrace("preflight-before", st.msg.From(), target, st.msg.Data(), nil)
+			}
+			ret, _, err := tmpEVM.StaticCall(vm.AccountRef(st.msg.From()), aclAddr, data, aclCallGas)
+			if vm.ACLTrace != nil {
+				vm.ACLTrace("preflight-after", st.msg.From(), target, st.msg.Data(), err)
+				log.Info("Spent on preflight:", "time", (time.Now().Nanosecond() - timeStart))
+			}
+			if err != nil {
+				// Try to decode revert reason for better diagnostics
+				if vm.IsErrTypeRevert(err) && len(ret) > 0 {
+					if reason, decErr := abi.UnpackRevert(ret); decErr == nil {
+						log.Info("ACL preflight: revert reason", "reason", reason)
+					}
+				}
+				log.Info("ACL preflight: denied", "err", err)
+				if st.evm.Config().ACL.FailOpen {
+					// Log at debug level if available; continue execution
+				} else {
+					return nil, fmt.Errorf("ACL denied: %w", err)
+				}
+			}
+			log.Info("ACL preflight: allowed")
+		} else if !st.evm.Config().ACL.FailOpen {
+			return nil, fmt.Errorf("ACL misconfigured: empty contract address")
+		}
+	}
+ACL_PREFLIGHT_DONE:
+
 	// Check clauses 1-3 and 6, buy gas if everything is correct
 	if err := st.preCheck(gasBailout); err != nil {
 		return nil, err
@@ -575,6 +676,92 @@ func (st *StateTransition) TransitionDb(refunds bool, gasBailout bool) (*evmtype
 	}
 
 	return result, nil
+}
+
+// buildACLCheckCallData ABI-encodes call data for
+// checkPermittedOrRevert(address,address,bytes)
+func buildACLCheckCallData(subject, target libcommon.Address, payload []byte) []byte {
+	// Head: 3 * 32 bytes, Tail: 32 (len) + padded payload
+	// Offsets are measured from after the 4-byte selector.
+	// function selector from vm.ACLCheckSelector
+	headWords := 3
+	headSize := 32 * headWords
+	tailLen := 32 + ((len(payload)+31)/32)*32
+	total := 4 + headSize + tailLen
+	out := make([]byte, total)
+	// selector
+	s := vm.ACLCheckSelector
+	out[0] = byte(s >> 24)
+	out[1] = byte(s >> 16)
+	out[2] = byte(s >> 8)
+	out[3] = byte(s)
+	// subject (left-padded to 32)
+	copy(out[4+12:4+32], subject.Bytes())
+	// target
+	copy(out[4+32+12:4+64], target.Bytes())
+	// offset for bytes data = headSize
+	// write big-endian uint256(headSize)
+	off := uint64(headSize)
+	for i := 0; i < 8; i++ {
+		out[4+64+31-i] = byte(off)
+		off >>= 8
+	}
+	// tail start
+	tailStart := 4 + headSize
+	// length
+	l := uint64(len(payload))
+	for i := 0; i < 8; i++ {
+		out[tailStart+31-i] = byte(l)
+		l >>= 8
+	}
+	// data
+	copy(out[tailStart+32:], payload)
+	return out
+}
+
+// buildOwnerCallData ABI-encodes owner()
+func buildOwnerCallData() []byte {
+	out := make([]byte, 4)
+	// selector: keccak256("owner()")[:4] == 0x8da5cb5b
+	s := vm.ACLOwnerSelector
+	out[0] = byte(s >> 24)
+	out[1] = byte(s >> 16)
+	out[2] = byte(s >> 8)
+	out[3] = byte(s)
+	return out
+}
+
+func aclInBypassList(list []libcommon.Address, addr libcommon.Address) bool {
+	if len(list) == 0 {
+		return false
+	}
+	for _, a := range list {
+		if a == addr {
+			return true
+		}
+	}
+	return false
+}
+
+// aclIsOwnerPreflight resolves owner() of the ACL proxy and compares to subject.
+func aclIsOwnerPreflight(st *StateTransition, aclAddr, subject libcommon.Address) bool {
+	if aclAddr == (libcommon.Address{}) {
+		return false
+	}
+	data := buildOwnerCallData()
+	const gas uint64 = 50_000
+	cfg := st.evm.Config()
+	cfg.RestoreState = true
+	cfg.ReadOnly = true
+	cfg.ACL.Enabled = false
+	tmpEVM := vm.NewEVM(st.evm.Context, st.evm.TxContext, st.evm.IntraBlockState(), st.evm.ChainConfig(), cfg)
+	ret, _, err := tmpEVM.StaticCall(vm.AccountRef(st.msg.From()), aclAddr, data, gas)
+	if err != nil || len(ret) < 32 {
+		return false
+	}
+	var owner libcommon.Address
+	copy(owner[:], ret[12:32])
+	return owner == subject
 }
 
 func (st *StateTransition) refundGas() {

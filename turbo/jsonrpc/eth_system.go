@@ -2,6 +2,7 @@ package jsonrpc
 
 import (
 	"context"
+	"math"
 	"math/big"
 
 	"github.com/erigontech/erigon-lib/chain"
@@ -202,6 +203,18 @@ func (api *APIImpl) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex,
 	oldest, reward, baseFee, gasUsed, blobBaseFee, blobGasUsedRatio, err := oracle.FeeHistory(ctx, int(blockCount), lastBlock, rewardPercentiles)
 	if err != nil {
 		return nil, err
+	}
+	for i := range gasUsed {
+		if math.IsNaN(gasUsed[i]) || math.IsInf(gasUsed[i], 0) {
+			gasUsed[i] = 0
+		}
+	}
+	if blobGasUsedRatio != nil {
+		for i := range blobGasUsedRatio {
+			if math.IsNaN(blobGasUsedRatio[i]) || math.IsInf(blobGasUsedRatio[i], 0) {
+				blobGasUsedRatio[i] = 0
+			}
+		}
 	}
 
 	// By default, use oracle-provided values

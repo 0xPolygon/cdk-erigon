@@ -223,6 +223,32 @@ var (
 		Usage: "Max allowed total number of blobs (within type-3 txs) per account",
 		Value: txpoolcfg.DefaultConfig.BlobSlots,
 	}
+
+	// ACL firewall flags (MVP)
+	ACLEnabledFlag = cli.BoolFlag{
+		Name:  "acl.enable",
+		Usage: "Enable on-chain ACL firewall for top-level transactions",
+		Value: false,
+	}
+	ACLAddressFlag = cli.StringFlag{
+		Name:  "acl.address",
+		Usage: "ACL proxy contract address (EIP-1967 transparent proxy)",
+		Value: "",
+	}
+	ACLFailOpenFlag = cli.BoolFlag{
+		Name:  "acl.failopen",
+		Usage: "Bypass ACL check on call failure (not recommended)",
+		Value: false,
+	}
+	ACLBypassFlag = cli.StringSliceFlag{
+		Name:  "acl.bypass",
+		Usage: "Address(es) with ACL superuser bypass (comma-separated or repeated)",
+	}
+	ACLOwnerBypassFlag = cli.BoolFlag{
+		Name:  "acl.owner-bypass",
+		Usage: "Treat ACL owner() as superuser (bypass)",
+		Value: false,
+	}
 	TxPoolTotalBlobPoolLimit = cli.Uint64Flag{
 		Name:  "txpool.totalblobpoollimit",
 		Usage: "Total limit of number of all blobs in txs within the txpool",
@@ -2529,6 +2555,24 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 			cfg.EthDiscoveryURLs = libcommon.CliString2Array(urls)
 		}
 	}
+
+	// ACL firewall configuration
+	cfg.ACL.Enabled = ctx.Bool(ACLEnabledFlag.Name)
+	if addr := ctx.String(ACLAddressFlag.Name); addr != "" {
+		cfg.ACL.ContractAddress = libcommon.HexToAddress(addr)
+	}
+	cfg.ACL.FailOpen = ctx.Bool(ACLFailOpenFlag.Name)
+	// ACL superuser bypass configuration
+	if ctx.IsSet(ACLBypassFlag.Name) {
+		addrs := ctx.StringSlice(ACLBypassFlag.Name)
+		for _, s := range addrs {
+			if s == "" {
+				continue
+			}
+			cfg.ACL.Bypass = append(cfg.ACL.Bypass, libcommon.HexToAddress(s))
+		}
+	}
+	cfg.ACL.OwnerBypass = ctx.Bool(ACLOwnerBypassFlag.Name)
 	// Override any default configs for hard coded networks.
 	chain = ctx.String(ChainFlag.Name)
 	if strings.HasPrefix(chain, "dynamic") {
@@ -2709,6 +2753,18 @@ func LogActiveZkevmFlags(logger log.Logger, ctx *cli.Context) {
 				continue
 			}
 			logger.Info("[Flags] Zkevm flag set from config", "name", flagName, "value", ctx.Generic(flagName))
+		}
+	}
+}
+
+// LogActiveACLFlags prints any acl.* flags that are set (via CLI or config file)
+// on startup, mirroring the ZkEVM flag logging behaviour. This helps verify
+// that ACL enforcement is configured as expected (enable/address/failopen).
+func LogActiveACLFlags(logger log.Logger, ctx *cli.Context) {
+	for _, flag := range ctx.App.Flags {
+		flagName := flag.Names()[0]
+		if strings.HasPrefix(flagName, "acl.") && ctx.IsSet(flagName) {
+			logger.Info("[Flags] ACL flag set from config", "name", flagName, "value", ctx.Generic(flagName))
 		}
 	}
 }

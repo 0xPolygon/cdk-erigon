@@ -1,0 +1,23 @@
+[profile.default]
+src = "."
+out = "out"
+test = "test"
+script = "script"
+libs = [
+    "../../core/state/contracts/acl",
+    "../../../core/state/contracts/acl",
+    "../../../lib/openzeppelin-contracts",
+    "../../../lib/openzeppelin-contracts-upgradeable"
+]
+solc_version = "0.8.23"
+evm_version = "paris"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+remappings = [
+    "acl/=../../../core/state/contracts/acl/"
+]
+
+fs_permissions = [
+  { access = "read-write", path = "./out" }
+]

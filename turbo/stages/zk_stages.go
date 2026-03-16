@@ -51,6 +51,18 @@ func NewDefaultZkStages(ctx context.Context,
 	// Hence we run it in the test mode.
 	runInTestMode := cfg.ImportMode
 
+	// Build vm.Config from eth config (propagate ACL settings) for RPC execution path
+	vmCfg := &vm.Config{}
+	if cfg != nil && cfg.ACL.Enabled {
+		vmCfg.SetACL(vm.ACL{
+			Enabled:     true,
+			Address:     cfg.ACL.ContractAddress,
+			FailOpen:    cfg.ACL.FailOpen,
+			Bypass:      cfg.ACL.Bypass,
+			OwnerBypass: cfg.ACL.OwnerBypass,
+		})
+	}
+
 	return zkStages.DefaultZkStages(ctx,
 		zkStages.StageL1SyncerCfg(db, l1Syncer, cfg.Zk),
 		zkStages.StageL1InfoTreeCfg(db, cfg.Zk, controlServer.ChainConfig, infoTreeUpdater),
@@ -65,7 +77,7 @@ func NewDefaultZkStages(ctx context.Context,
 			nil,
 			controlServer.ChainConfig,
 			controlServer.Engine,
-			&vm.Config{},
+			vmCfg,
 			notifications.Accumulator,
 			cfg.StateStream,
 			/*stateStream=*/ false,
@@ -124,6 +136,19 @@ func NewSequencerZkStages(ctx context.Context,
 	hashStateCfg := stagedsync.StageHashStateCfg(db, dirs, cfg.HistoryV3, agg)
 	zkIntersCfg := zkStages.StageZkInterHashesCfg(db, !cfg.DebugDisableStateRootCheck, true, false, dirs.Tmp, blockReader, controlServer.Hd, cfg.HistoryV3, agg, cfg.Zk)
 
+	// Build ZkConfig from vm.Config (propagate ACL) for Sequencer path
+	base := vm.Config{}
+	if cfg != nil && cfg.ACL.Enabled {
+		base.SetACL(vm.ACL{
+			Enabled:     true,
+			Address:     cfg.ACL.ContractAddress,
+			FailOpen:    cfg.ACL.FailOpen,
+			Bypass:      cfg.ACL.Bypass,
+			OwnerBypass: cfg.ACL.OwnerBypass,
+		})
+	}
+	zkVmCfg := vm.NewZkConfig(base, nil)
+
 	return zkStages.SequencerZkStages(ctx,
 		zkStages.StageL1SyncerCfg(db, l1Syncer, cfg.Zk),
 		zkStages.StageL1SequencerSyncCfg(db, cfg.Zk, sequencerStageSyncer),
@@ -137,7 +162,7 @@ func NewSequencerZkStages(ctx context.Context,
 			nil,
 			controlServer.ChainConfig,
 			controlServer.Engine,
-			&vm.ZkConfig{},
+			&zkVmCfg,
 			notifications.Accumulator,
 			cfg.StateStream,
 			/*stateStream=*/ false,

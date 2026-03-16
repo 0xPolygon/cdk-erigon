@@ -86,6 +86,8 @@ type SimulatedBackend struct {
 	rmLogsFeed event.Feed
 	chainFeed  event.Feed
 	logsFeed   event.Feed
+
+	vmConfig vm.Config // optional EVM config overrides (e.g., ACL)
 }
 
 // NewSimulatedBackend creates a new binding backend using a simulated blockchain
@@ -137,6 +139,18 @@ func (b *SimulatedBackend) Close() {
 		b.pendingReaderTx.Rollback()
 	}
 	b.m.Close()
+}
+
+// PendingReceiptByHash returns the receipt from the current pending block if present.
+func (b *SimulatedBackend) PendingReceiptByHash(txHash libcommon.Hash) (*types.Receipt, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, r := range b.pendingReceipts {
+		if r.TxHash == txHash {
+			return r, true
+		}
+	}
+	return nil, false
 }
 
 // Commit imports all the pending transactions as a single block and starts a
@@ -724,7 +738,8 @@ func (b *SimulatedBackend) callContract(_ context.Context, call ethereum.CallMsg
 	evmContext := core.NewEVMBlockContext(header, core.GetHashFn(header, b.getHeader), b.m.Engine, nil, b.m.ChainConfig)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
-	vmEnv := vm.NewEVM(evmContext, txContext, statedb, b.m.ChainConfig, vm.Config{})
+	cfg := b.vmConfig
+	vmEnv := vm.NewEVM(evmContext, txContext, statedb, b.m.ChainConfig, cfg)
 	gasPool := new(core.GasPool).AddGas(math.MaxUint64).AddBlobGas(math.MaxUint64)
 
 	return core.NewStateTransition(vmEnv, msg, gasPool).TransitionDb(true /* refunds */, false /* gasBailout */)
@@ -754,7 +769,7 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx types.Transac
 		&b.pendingHeader.Coinbase, b.gasPool,
 		b.pendingState, state.NewNoopWriter(),
 		b.pendingHeader, tx,
-		&b.pendingHeader.GasUsed, b.pendingHeader.BlobGasUsed, vm.Config{}, 0); err != nil {
+		&b.pendingHeader.GasUsed, b.pendingHeader.BlobGasUsed, b.vmConfig, 0); err != nil {
 		return err
 	}
 	//fmt.Printf("==== Start producing block %d\n", (b.prependBlock.NumberU64() + 1))
@@ -773,6 +788,70 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx types.Transac
 	b.pendingHeader = chain.Headers[0]
 	return nil
 }
+
+// SendTransactionZk executes the transaction using the zkEVM path (ApplyTransaction_zkevm)
+// and appends it to the pending block and receipts, similar to SendTransaction.
+// It uses the current vmConfig set via SetVMConfig.
+func (b *SimulatedBackend) SendTransactionZk(ctx context.Context, tx types.Transaction) (*types.Receipt, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	// Check transaction validity.
+	signer := types.MakeSigner(b.m.ChainConfig, b.pendingBlock.NumberU64(), b.pendingBlock.Time())
+	sender, senderErr := tx.Sender(*signer)
+	if senderErr != nil {
+		return nil, fmt.Errorf("invalid transaction: %w", senderErr)
+	}
+	nonce := b.pendingState.GetNonce(sender)
+	if tx.GetNonce() != nonce {
+		return nil, fmt.Errorf("invalid transaction nonce: got %d, want %d", tx.GetNonce(), nonce)
+	}
+
+	b.pendingState.SetTxContext(tx.Hash(), libcommon.Hash{}, len(b.pendingBlock.Transactions()))
+
+	// Build zkEVM
+	header := b.pendingHeader
+	blockCtx := core.NewEVMBlockContext(header, core.GetHashFn(header, b.getHeader), b.m.Engine, nil, b.m.ChainConfig)
+	zkCfg := vm.NewZkConfig(b.vmConfig, nil)
+	evmEnv := vm.NewZkEVM(blockCtx, evmtypes.TxContext{}, b.pendingState, b.m.ChainConfig, zkCfg)
+
+	// Apply via zk path
+	usedGasPtr := &b.pendingHeader.GasUsed
+	receipt, _, err := core.ApplyTransaction_zkevm(
+		b.m.ChainConfig,
+		b.m.Engine,
+		evmEnv,
+		b.gasPool,
+		b.pendingState,
+		state.NewNoopWriter(),
+		header,
+		tx,
+		usedGasPtr,
+		0, /* effectiveGasPricePercentage */
+		true,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Rebuild pending block including this tx
+	chain, err := core.GenerateChain(b.m.ChainConfig, b.prependBlock, b.m.Engine, b.m.DB, 1, func(number int, block *core.BlockGen) {
+		for _, tx := range b.pendingBlock.Transactions() {
+			block.AddTxWithChain(b.getHeader, b.m.Engine, tx)
+		}
+		block.AddTxWithChain(b.getHeader, b.m.Engine, tx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	b.pendingBlock = chain.Blocks[0]
+	b.pendingReceipts = chain.Receipts[0]
+	b.pendingHeader = chain.Headers[0]
+	return receipt, nil
+}
+
+// SetVMConfig overrides the default vm.Config used for execution (e.g., to enable ACL).
+func (b *SimulatedBackend) SetVMConfig(cfg vm.Config) { b.vmConfig = cfg }
 
 // FilterLogs executes a log filter operation, blocking during execution and
 // returning all the results in one batch.

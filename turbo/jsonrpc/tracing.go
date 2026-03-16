@@ -112,6 +112,10 @@ func (api *PrivateDebugAPIImpl) traceBlock_deprecated(ctx context.Context, block
 	rules := chainConfig.Rules(block.NumberU64(), block.Time())
 	stream.WriteArrayStart()
 
+	// Build base vm.Config to propagate ACL settings into PrepareForTxExecution
+	baseVM := vm.Config{}
+	ACLFromConfig(api.config).ApplyVM(&baseVM)
+
 	borTx := rawdb.ReadBorTransactionForBlock(tx, block.NumberU64())
 	txns := block.Transactions()
 
@@ -156,7 +160,7 @@ func (api *PrivateDebugAPIImpl) traceBlock_deprecated(ctx context.Context, block
 		} else {
 			txnHash = txn.Hash()
 		}
-		evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(chainConfig, &vm.Config{}, &blockCtx, hermezReader, ibs, block, &txnHash, idx)
+		evm, effectiveGasPricePercentage, err := core.PrepareForTxExecution(chainConfig, &baseVM, &blockCtx, hermezReader, ibs, block, &txnHash, idx)
 		if err != nil {
 			stream.WriteNil()
 			return err
@@ -209,6 +213,12 @@ func (api *PrivateDebugAPIImpl) traceBlock_deprecated(ctx context.Context, block
 
 // TraceTransaction implements debug_traceTransaction. Returns Geth style transaction traces.
 func (api *PrivateDebugAPIImpl) TraceTransaction(ctx context.Context, hash common.Hash, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {
+	// Print ACL flags for debug trace path (log even if config is nil)
+	if api.config != nil {
+		log.Info("ACL debug TraceTransaction", "enabled", api.config.ACL.Enabled, "address", api.config.ACL.ContractAddress, "failOpen", api.config.ACL.FailOpen)
+	} else {
+		log.Info("ACL debug TraceTransaction", "enabled", false, "address", common.Address{}, "failOpen", false)
+	}
 	tx, err := api.db.BeginRo(ctx)
 	if err != nil {
 		stream.WriteNil()
@@ -361,8 +371,11 @@ func (api *PrivateDebugAPIImpl) TraceCall(ctx context.Context, args ethapi.CallA
 
 	blockCtx := transactions.NewEVMBlockContext(engine, header, blockNrOrHash.RequireCanonical, dbtx, api._blockReader, chainConfig)
 	txCtx := core.NewEVMTxContext(msg)
-	// Trace the transaction and return
-	return transactions.TraceTx(ctx, msg, blockCtx, txCtx, ibs, config, chainConfig, stream, api.evmCallTimeout)
+	// Trace the transaction and return with ACL config
+	vmCfg := vm.Config{}
+	ACLFromConfig(api.config).ApplyVM(&vmCfg)
+	log.Info("ACL sim TraceCall", "enabled", vmCfg.ACL.Enabled, "address", vmCfg.ACL.Address)
+	return transactions.TraceTxWithVMConfig(ctx, msg, blockCtx, txCtx, ibs, config, chainConfig, stream, api.evmCallTimeout, vmCfg)
 }
 
 func (api *PrivateDebugAPIImpl) TraceCallMany_deprecated(ctx context.Context, bundles []Bundle, simulateContext StateContext, config *tracers.TraceConfig_ZkEvm, stream *jsoniter.Stream) error {

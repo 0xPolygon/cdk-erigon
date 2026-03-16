@@ -40,6 +40,26 @@ func DoCall(
 	headerReader services.HeaderReader,
 	callTimeout time.Duration,
 ) (*evmtypes.ExecutionResult, error) {
+	return DoCallWithVMConfig(ctx, engine, args, tx, blockNrOrHash, header, overrides, gasCap, chainConfig, stateReader, headerReader, callTimeout, vm.Config{})
+}
+
+// DoCallWithVMConfig is like DoCall but allows the caller to pass a base vm.Config
+// (e.g., to propagate ACL settings). NoBaseFee is forced to true for eth_call semantics.
+func DoCallWithVMConfig(
+	ctx context.Context,
+	engine consensus.EngineReader,
+	args ethapi2.CallArgs,
+	tx kv.Tx,
+	blockNrOrHash rpc.BlockNumberOrHash,
+	header *types.Header,
+	overrides *ethapi2.StateOverrides,
+	gasCap uint64,
+	chainConfig *chain.Config,
+	stateReader state.StateReader,
+	headerReader services.HeaderReader,
+	callTimeout time.Duration,
+	baseVM vm.Config,
+) (*evmtypes.ExecutionResult, error) {
 	// todo: Pending state is only known by the miner
 	/*
 		if blockNrOrHash.BlockNumber != nil && *blockNrOrHash.BlockNumber == rpc.PendingBlockNumber {
@@ -48,6 +68,7 @@ func DoCall(
 		}
 	*/
 
+	log.Info("ACL sim DoCall", "enabled", baseVM.ACL.Enabled, "address", baseVM.ACL.Address, "failOpen", baseVM.ACL.FailOpen)
 	state := state.New(stateReader)
 
 	// Override the fields of specified contracts before execution.
@@ -86,7 +107,11 @@ func DoCall(
 	blockCtx := NewEVMBlockContext(engine, header, blockNrOrHash.RequireCanonical, tx, headerReader, chainConfig)
 	txCtx := core.NewEVMTxContext(msg)
 
-	evm := vm.NewEVM(blockCtx, txCtx, state, chainConfig, vm.Config{NoBaseFee: true})
+	baseVM.NoBaseFee = true
+	// Mark as read-only simulation and restore state to avoid persisting changes
+	baseVM.ReadOnly = true
+	baseVM.RestoreState = true
+	evm := vm.NewEVM(blockCtx, txCtx, state, chainConfig, baseVM)
 
 	// Wait for the context to be done and cancel the evm. Even if the
 	// EVM has finished, cancelling may be done (repeatedly)
@@ -196,6 +221,7 @@ func NewReusableCaller(
 	callTimeout time.Duration,
 	VirtualCountersSmtReduction float64,
 	useCounters bool,
+	baseVM vm.Config,
 ) (*ReusableCaller, error) {
 	ibs := state.New(stateReader)
 
@@ -263,7 +289,8 @@ func NewReusableCaller(
 		counterCollector = txCounters.ExecutionCounters()
 	}
 
-	zkVmConfig := vm.NewZkConfig(vm.Config{NoBaseFee: true}, counterCollector)
+	baseVM.NoBaseFee = true
+	zkVmConfig := vm.NewZkConfig(baseVM, counterCollector)
 	evm := vm.NewZkEVM(blockCtx, txCtx, ibs, chainConfig, zkVmConfig)
 
 	return &ReusableCaller{

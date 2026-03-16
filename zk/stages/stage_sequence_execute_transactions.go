@@ -138,6 +138,22 @@ func attemptAddTransaction(
 	// set the counter collector on the config so that we can gather info during the execution
 	cfg.zkVmConfig.CounterCollector = txCounters.ExecutionCounters()
 
+	// Diagnostic: log ACL flags and selector seen by sequencer exec path
+	var sel uint32
+	input := transaction.GetData()
+	if len(input) >= 4 {
+		sel = uint32(input[0])<<24 | uint32(input[1])<<16 | uint32(input[2])<<8 | uint32(input[3])
+	}
+	// try recover sender for logging (best-effort)
+	sender, _ := transaction.GetSender()
+	if sender == (common.Address{}) {
+		signer := types.MakeSigner(cfg.chainConfig, header.Number.Uint64(), header.Time)
+		if s, err := transaction.Sender(*signer); err == nil {
+			sender = s
+		}
+	}
+	log.Info("ACL seq exec tx", "enabled", cfg.zkVmConfig.Config.ACL.Enabled, "address", cfg.zkVmConfig.Config.ACL.Address, "failOpen", cfg.zkVmConfig.Config.ACL.FailOpen, "from", sender, "to", transaction.GetTo(), "selector", sel)
+
 	// TODO: possibly inject zero tracer here!
 
 	snapshot := ibs.Snapshot()
