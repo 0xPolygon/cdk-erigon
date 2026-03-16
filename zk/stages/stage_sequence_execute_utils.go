@@ -52,6 +52,7 @@ var (
 	noop                 = state.NewNoopWriter()
 	SpecialZeroIndexHash = common.HexToHash("0x27AE5BA08D7291C96C8CBDDCC148BF48A6D68C7974B94356F53754EF6171D757")
 	EmptyWithdrawalsHash = common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+	AllZeroHash          = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
 )
 
 type HasChangeSetWriter interface {
@@ -339,6 +340,17 @@ func prepareHeader(tx kv.RwTx, previousBlockNumber, deltaTimestamp, forcedTimest
 
 	if chainConfig.IsShanghai(header.Time) {
 		header.WithdrawalsHash = &EmptyWithdrawalsHash
+	}
+
+	if chainConfig.IsFep(header.Time) && chainConfig.IsCancun(header.Time) {
+		header.ParentBeaconBlockRoot = &AllZeroHash
+		zero := uint64(0)
+		header.BlobGasUsed = &zero
+		header.ExcessBlobGas = &zero
+	}
+
+	if chainConfig.IsFep(header.Time) && chainConfig.IsPrague(header.Time) {
+		header.RequestsHash = &types.EmptyRequestsHash
 	}
 
 	header.Coinbase = coinbase

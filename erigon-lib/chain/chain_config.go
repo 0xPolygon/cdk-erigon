@@ -136,6 +136,10 @@ type Config struct {
 	// used for sovereign chains, will turn off IBS interaction for info tree / GER / etc.
 	// this option should only be used in conjunction with normalcy.
 	SovereignModeBlock *big.Int `json:"sovereignModeBlock,omitempty"`
+
+	// used to turn off some of the zkevm features so that we can sync a vanilla reth node against
+	// erigon with matching hashes etc.
+	FepTime *big.Int `json:"fepTime,omitempty"`
 }
 
 type BlobConfig struct {
@@ -342,6 +346,12 @@ func (c *Config) IsGrayGlacier(num uint64) bool {
 // IsShanghai returns whether time is either equal to the Shanghai fork time or greater.
 func (c *Config) IsShanghai(time uint64) bool {
 	return isForked(c.ShanghaiTime, time)
+}
+
+// IsFep checks if the chain has made the FEP fork to enable a reth node to sync from it
+// and return mock info in the block headers for cancun and prague.
+func (c *Config) IsFep(time uint64) bool {
+	return isForked(c.FepTime, time)
 }
 
 // IsAgra returns whether num is either equal to the Agra fork block or greater.
@@ -851,6 +861,7 @@ type Rules struct {
 	IsPmtEnabled                                                                                                                                         bool
 	IsType1                                                                                                                                              bool
 	IsForkID4, IsForkID5Dragonfruit, IsForkID6IncaBerry, IsForkID7Etrog, IsForkID8Elderberry, IsForkId10, IsForkId11, IsForkID12Banana, IsForkID13Durian bool
+	IsFep                                                                                                                                                bool
 }
 
 // Rules ensures c's ChainID is not nil and returns a new Rules instance
@@ -889,6 +900,7 @@ func (c *Config) Rules(num uint64, time uint64) *Rules {
 		IsForkId11:           c.IsForkID11(num),
 		IsForkID12Banana:     c.IsForkID12Banana(num),
 		IsForkID13Durian:     c.IsForkID13Durian(num),
+		IsFep:                c.IsFep(time),
 	}
 }
 

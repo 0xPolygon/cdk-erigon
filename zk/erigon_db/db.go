@@ -68,6 +68,21 @@ func (db ErigonDb) WriteHeader(
 	h.Extra = make([]byte, 0)
 	h.Time = ts
 
+	if chainConfig.IsShanghai(ts) {
+		h.WithdrawalsHash = &ethTypes.EmptyRootHash
+	}
+
+	if chainConfig.IsFep(ts) && chainConfig.IsCancun(ts) {
+		h.ParentBeaconBlockRoot = &common.Hash{}
+		zero := uint64(0)
+		h.BlobGasUsed = &zero
+		h.ExcessBlobGas = &zero
+	}
+
+	if chainConfig.IsFep(ts) && chainConfig.IsPrague(ts) {
+		h.RequestsHash = &ethTypes.EmptyRequestsHash
+	}
+
 	if !chainConfig.IsNormalcy(blockNo.Uint64()) {
 		h.GasLimit = gasLimit
 	}
