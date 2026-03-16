@@ -93,7 +93,7 @@ func NewSentry(ctx context.Context, chain string, snapshotLocation string, peerC
 		return nil, err
 	}
 
-	config := sync.NewDefaultTorrentClientConfig(chain, snapshotLocation, logger)
+	config := sync.NewDefaultTorrentClientConfig(chain, snapshotLocation, logger, sync.RandomTorrentPort)
 	downloader, err := sync.NewTorrentClient(config)
 
 	if err != nil {

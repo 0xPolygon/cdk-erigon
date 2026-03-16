@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
     make BUILD_TAGS=nosqlite,noboltdb,nosilkworm cdk-erigon
 
-FROM docker.io/library/alpine:latest
+FROM docker.io/library/alpine:3.20
 
 # install required runtime libs, along with some helpers for debugging
 RUN apk add --no-cache ca-certificates libstdc++ tzdata

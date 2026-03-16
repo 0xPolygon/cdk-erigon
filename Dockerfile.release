@@ -1,6 +1,6 @@
-ARG RELEASE_DOCKER_BASE_IMAGE="alpine:latest" \
-    CI_CD_MAIN_BUILDER_IMAGE="golang:1.24-bookworm" \
-    CI_CD_MAIN_TARGET_BASE_IMAGE="alpine:latest" \
+ARG RELEASE_DOCKER_BASE_IMAGE="alpine:3.20" \
+    CI_CD_MAIN_BUILDER_IMAGE="golang:1.25-bookworm" \
+    CI_CD_MAIN_TARGET_BASE_IMAGE="alpine:3.20" \
     UID_ERIGON=1000 \
     GID_ERIGON=1000 \
     EXPOSED_PORTS="8545 \
@@ -108,5 +108,5 @@ USER ${USER}
 EXPOSE ${EXPOSED_PORTS}
 
 
-ENTRYPOINT [ "/usr/local/bincdk-/erigon" ]
+ENTRYPOINT [ "/usr/local/bin/cdk-erigon" ]
 ### End of CI-CD : main branch docker image publishing for each new commit id

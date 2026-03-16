@@ -57,7 +57,7 @@ func NewHeimdall(ctx context.Context, chain string, snapshotLocation string, log
 
 	activeBorSnapshots := freezeblocks.NewBorRoSnapshots(ethconfig.Defaults.Snapshot, torrentDir, 0, logger)
 
-	config := sync.NewDefaultTorrentClientConfig(chain, snapshotLocation, logger)
+	config := sync.NewDefaultTorrentClientConfig(chain, snapshotLocation, logger, sync.RandomTorrentPort)
 	downloader, err := sync.NewTorrentClient(config)
 	if err != nil {
 		return HeimdallSimulator{}, err

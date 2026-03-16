@@ -163,14 +163,26 @@ func NewTorrentClientConfigFromCobra(cliCtx *cli.Context, chain string) CreateNe
 	}
 }
 
-func NewDefaultTorrentClientConfig(chain string, torrentDir string, logger log.Logger) CreateNewTorrentClientConfig {
+// RandomTorrentPort signals to use a random OS-assigned port (useful for tests)
+const RandomTorrentPort = -1
+
+// NewDefaultTorrentClientConfig creates a torrent client config with defaults from CLI flags.
+// Pass RandomTorrentPort (-1) to let the OS assign a random available port (useful for tests).
+// Pass 0 to use the default port from CLI flags (42069).
+func NewDefaultTorrentClientConfig(chain string, torrentDir string, logger log.Logger, port int) CreateNewTorrentClientConfig {
+	torrentPort := port
+	if torrentPort == RandomTorrentPort {
+		torrentPort = 0 // port 0 tells the OS to assign a random available port
+	} else if torrentPort == 0 {
+		torrentPort = utils.TorrentPortFlag.Value
+	}
 	return CreateNewTorrentClientConfig{
 		Chain:        chain,
 		WebSeeds:     utils.WebSeedsFlag.Value,
 		DownloadRate: utils.TorrentDownloadRateFlag.Value,
 		UploadRate:   utils.TorrentUploadRateFlag.Value,
 		Verbosity:    utils.TorrentVerbosityFlag.Value,
-		TorrentPort:  utils.TorrentPortFlag.Value,
+		TorrentPort:  torrentPort,
 		ConnsPerFile: utils.TorrentConnsPerFileFlag.Value,
 		DisableIPv6:  utils.DisableIPV6.Value,
 		DisableIPv4:  utils.DisableIPV4.Value,
