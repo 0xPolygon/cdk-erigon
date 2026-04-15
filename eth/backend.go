@@ -1236,6 +1236,27 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 			}
 			streamClient := initDataStreamClient(ctx, cfg.Zk, uint16(latestForkId))
 
+			var sequencerL1Syncer *syncer.L1Syncer
+			if cfg.Zk.SyncSequencerL1Data {
+				sequencerL1Syncer = syncer.NewL1Syncer(
+					ctx,
+					ethermanPool,
+					[]libcommon.Address{cfg.AddressZkevm, cfg.AddressRollup},
+					[][]libcommon.Hash{{
+						contracts.InitialSequenceBatchesTopic,
+						contracts.AddNewRollupTypeTopic,
+						contracts.AddNewRollupTypeTopicBanana,
+						contracts.CreateNewRollupTopic,
+						contracts.UpdateRollupTopic,
+					}},
+					cfg.L1BlockRange,
+					cfg.L1QueryDelay,
+					cfg.L1HighestBlockType,
+					cfg.Zk.L1FirstBlock,
+				)
+				log.Info("Sequencer L1 data sync enabled for RPC node")
+			}
+
 			backend.syncStages = stages2.NewDefaultZkStages(
 				backend.sentryCtx,
 				backend.chainDB,
@@ -1251,6 +1272,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				streamClient,
 				dataStreamServer,
 				l1InfoTreeUpdater,
+				sequencerL1Syncer,
 			)
 
 			backend.syncUnwindOrder = zkStages.ZkUnwindOrder

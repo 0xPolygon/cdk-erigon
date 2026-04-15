@@ -1011,6 +1011,11 @@ var (
 		Usage: "Enable mutable RPC headers, this will allow block hash recalculation from the RLP rather than trusting the canonical hash",
 		Value: false,
 	}
+	SyncSequencerL1Data = cli.BoolFlag{
+		Name:  "zkevm.sync-sequencer-l1-data",
+		Usage: "Sync sequencer-specific L1 data (fork history, rollup types) on RPC nodes for sequencer promotion readiness",
+		Value: false,
+	}
 	ACLPrintHistory = cli.IntFlag{
 		Name:  "acl.print-history",
 		Usage: "Number of entries to print from the ACL history on node start up",

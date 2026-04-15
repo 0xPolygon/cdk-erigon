@@ -46,6 +46,11 @@ func SpawnL1SequencerSyncStage(
 	log.Info(fmt.Sprintf("[%s] Starting L1 Sequencer sync stage", logPrefix))
 	defer log.Info(fmt.Sprintf("[%s] Finished L1 Sequencer sync stage", logPrefix))
 
+	if cfg.syncer == nil {
+		log.Info(fmt.Sprintf("[%s] L1 Sequencer sync skipped - no syncer configured", logPrefix))
+		return nil
+	}
+
 	freshTx := tx == nil
 	if freshTx {
 		var err error

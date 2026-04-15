@@ -139,6 +139,7 @@ type Zk struct {
 	SequencerBlockGasLimit            uint64
 	PessimisticForkNumber             uint64
 	MutableRPCHeaders                 bool
+	SyncSequencerL1Data               bool
 }
 
 func (c *Zk) ShouldCountersBeUnlimited(l1Recovery bool) bool {

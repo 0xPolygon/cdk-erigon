@@ -170,6 +170,7 @@ func newSyncZk(ctx context.Context, db kv.RwDB) (consensus.Engine, *vm.Config, *
 			nil,
 			nil,
 			nil,
+			nil,
 			nil)
 	}
 
