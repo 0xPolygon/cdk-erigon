@@ -944,7 +944,22 @@ func (api *ZkEvmAPIImpl) populateBlockDetail(
 		return types.Block{}, err
 	}
 
-	return convertBlockToRpcBlock(baseBlock, receipts, senders, effectiveGasPricePercentages, fullTx)
+	// attempt to fetch precise timestamp (nanoseconds) stored by sequencer
+	preciseTs, err := hermezReader.GetBlockPreciseTimestamp(baseBlock.NumberU64())
+	if err != nil {
+		return types.Block{}, err
+	}
+
+	rpcBlock, err := convertBlockToRpcBlock(baseBlock, receipts, senders, effectiveGasPricePercentages, fullTx)
+	if err != nil {
+		return types.Block{}, err
+	}
+	if preciseTs != 0 {
+		v := types.ArgUint64(preciseTs)
+		rpcBlock.TimestampNano = &v
+	}
+
+	return rpcBlock, nil
 }
 
 // GetBroadcastURI returns the URI of the broadcaster - the trusted sequencer

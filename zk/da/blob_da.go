@@ -24,6 +24,7 @@ type BlobInput struct {
 	BatchNumber    string         `json:"batchNumber"`
 	Coinbase       common.Address `json:"coinbase"`
 	LimitTimestamp string         `json:"limitTimestamp"`
+	GER            common.Hash    `json:"globalExitRoot"`
 	BatchL2Data    string         `json:"batchL2Data"`
 }
 
@@ -100,7 +101,12 @@ func CreateL1BatchDataFromBlobInput(hermezDb *hermez_db.HermezDb, input BlobInpu
 
 	// we have a new root
 	if highestIndexUsed > 0 {
-		irt.Set(uint64(highestIndexUsed))
+		newL1InfoRoot, err := hermezDb.GetL1InfoRootByIndex(uint64(highestIndexUsed))
+		if err != nil {
+			return 0, nil, fmt.Errorf("GetL1InfoRootByIndex failed for index %d: %w", highestIndexUsed, err)
+		}
+
+		irt.Set(newL1InfoRoot)
 	}
 
 	// coinbase + l1InfoRoot + limitTimestamp + batchData
@@ -121,15 +127,12 @@ func CreateL1BatchDataFromBlobInput(hermezDb *hermez_db.HermezDb, input BlobInpu
 }
 
 type InfoRootTracker struct {
-	infoRoot     common.Hash
-	indexToRoots map[uint64]common.Hash
+	infoRoot common.Hash
 }
 
-func NewInfoRootTracker(indexToRoots map[uint64]common.Hash) *InfoRootTracker {
-	initialRoot := indexToRoots[0]
+func NewInfoRootTracker(root common.Hash) *InfoRootTracker {
 	return &InfoRootTracker{
-		infoRoot:     initialRoot,
-		indexToRoots: indexToRoots,
+		infoRoot: root,
 	}
 }
 
@@ -137,6 +140,6 @@ func (i *InfoRootTracker) Get() common.Hash {
 	return i.infoRoot
 }
 
-func (i *InfoRootTracker) Set(index uint64) {
-	i.infoRoot = i.indexToRoots[index]
+func (i *InfoRootTracker) Set(h common.Hash) {
+	i.infoRoot = h
 }

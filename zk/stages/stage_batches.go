@@ -548,6 +548,10 @@ func UnwindBatchesStage(u *stagedsync.UnwindState, tx kv.RwTx, cfg BatchesCfg, c
 		return fmt.Errorf("DeleteBlockL1BlockHashes: %w", err)
 	}
 
+	if err := hermezDb.DeleteBlockPreciseTimestamps(fromBlock, toBlock); err != nil {
+		return fmt.Errorf("DeleteBlockPreciseTimestamps: %w", err)
+	}
+
 	if err = hermezDb.DeleteReusedL1InfoTreeIndexes(fromBlock, toBlock); err != nil {
 		return fmt.Errorf("DeleteReusedL1InfoTreeIndexes: %w", err)
 	}

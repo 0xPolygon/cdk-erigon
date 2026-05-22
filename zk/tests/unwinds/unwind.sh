@@ -757,6 +757,7 @@ different_files=(
     "CallToIndex.txt"
     "bad_tx_hashes_lookup.txt"
     "DbInfo.txt"
+    "block_precise_timestamps.txt"
 )
 
 compare_dumps "$dataPath/${firstStop}" "$dataPath/${firstStop}-unwound" "Unwind Check" "${different_files[@]}"
